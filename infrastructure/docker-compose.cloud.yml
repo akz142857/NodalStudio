@@ -1,0 +1,40 @@
+services:
+  cloud-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: nodalstudio_cloud
+      POSTGRES_USER: nodalstudio
+      POSTGRES_PASSWORD: local-cloud-only
+    volumes:
+      - nodalstudio-cloud-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nodalstudio -d nodalstudio_cloud"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  cloud-api:
+    build:
+      context: ..
+      dockerfile: apps/cloud-api/Dockerfile
+    environment:
+      DATABASE_URL: postgres://nodalstudio:local-cloud-only@cloud-db:5432/nodalstudio_cloud
+      BIND_ADDRESS: 0.0.0.0:8080
+      BOOTSTRAP_SECRET: local-development-bootstrap-secret-change-me
+    depends_on:
+      cloud-db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        VITE_CLOUD_API_URL: /api
+    ports:
+      - "8088:80"
+    depends_on:
+      - cloud-api
+
+volumes:
+  nodalstudio-cloud-db:

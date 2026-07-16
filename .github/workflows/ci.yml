@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build:web
+
+  rust:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: clippy,rustfmt
+      - uses: swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: swatinem/rust-cache@v2
+      - run: docker compose -f infrastructure/docker-compose.test.yml up -d --wait
+      - name: Run PostgreSQL introspection integration test
+        env:
+          TEST_DATABASE_URL: postgres://nodalstudio:nodalstudio@127.0.0.1:55432/nodalstudio_test
+        run: cargo test -p postgres-adapter --test introspection
+      - if: always()
+        run: docker compose -f infrastructure/docker-compose.test.yml down
+
+  mysql-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: swatinem/rust-cache@v2
+      - run: docker compose -f infrastructure/docker-compose.mysql.yml up -d --wait
+      - name: Run MySQL introspection integration test
+        env:
+          TEST_MYSQL_DATABASE_URL: mysql://nodalstudio:nodalstudio@127.0.0.1:53306/nodalstudio_test
+        run: cargo test -p mysql-adapter --test introspection
+      - if: always()
+        run: docker compose -f infrastructure/docker-compose.mysql.yml down
+
+  cloud-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: nodalstudio_cloud_test
+          POSTGRES_USER: nodalstudio
+          POSTGRES_PASSWORD: nodalstudio
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U nodalstudio -d nodalstudio_cloud_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: swatinem/rust-cache@v2
+      - name: Run Cloud concurrency and sharing integration test
+        env:
+          TEST_CLOUD_DATABASE_URL: postgres://nodalstudio:nodalstudio@127.0.0.1:55433/nodalstudio_cloud_test
+        run: cargo test -p nodalstudio-cloud-api --test cloud_workflows
+
+  desktop-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - name: Build unsigned macOS application bundle
+        run: pnpm --filter @nodalstudio/desktop tauri build --bundles app
+      - name: Verify application bundle
+        run: test -d target/release/bundle/macos/Nodal Studio.app

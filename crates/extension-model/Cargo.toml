@@ -1,0 +1,17 @@
+[package]
+name = "extension-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chrono.workspace = true
+schema-diff = { path = "../schema-diff" }
+schema-model = { path = "../schema-model" }
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

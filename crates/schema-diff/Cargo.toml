@@ -1,0 +1,16 @@
+[package]
+name = "schema-diff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chrono.workspace = true
+schema-model = { path = "../schema-model" }
+serde.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true
+

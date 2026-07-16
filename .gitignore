@@ -1,0 +1,61 @@
+# ==========================================
+# Nodal Studio Project Git Ignore Settings
+# ==========================================
+
+# --- Dependencies & Package Managers ---
+node_modules/
+.pnpm-store/
+jspm_packages/
+web_modules/
+
+# --- Build & Distribution Artifacts ---
+target/
+dist/
+out/
+build/
+*.tsbuildinfo
+apps/desktop/src-tauri/gen/
+
+# --- Logs, Debug & Coverage ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+coverage/
+.nyc_output/
+.eslintcache
+
+# --- Environment & Secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+config/macos-release.env
+
+# --- Operating System Files ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- IDEs & Editors ---
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*~
+
+# --- Local/Internal Project Notes ---
+.private-docs/

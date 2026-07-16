@@ -1,0 +1,64 @@
+[workspace]
+resolver = "2"
+members = [
+  "apps/desktop/src-tauri",
+  "apps/cloud-api",
+  "crates/schema-model",
+  "crates/settings-model",
+  "crates/schema-diff",
+  "crates/semantic-model",
+  "crates/ai-context",
+  "crates/ai-provider",
+  "crates/code-analysis",
+  "crates/extension-model",
+  "crates/git-workspace",
+  "crates/mysql-adapter",
+  "crates/postgres-adapter",
+  "crates/project-model",
+  "crates/project-graph",
+  "crates/project-scanner",
+  "crates/query-engine",
+  "crates/snapshot-store",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.95"
+
+[workspace.dependencies]
+axum = "0.8.8"
+chrono = { version = "0.4.42", features = ["serde"] }
+hex = "0.4.3"
+keyring = { version = "3.6.3", features = ["apple-native"] }
+reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls-native-roots"] }
+semver = "1.0.27"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+sha2 = "0.10.9"
+sqlparser = "0.62.0"
+sqlx = { version = "0.9.0", default-features = false, features = ["chrono", "json", "macros", "migrate", "mysql", "postgres", "runtime-tokio", "sqlite", "tls-rustls-ring-native-roots", "uuid"] }
+tauri = "2.10.2"
+tauri-build = "2.5.6"
+thiserror = "2.0.18"
+tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio-util = "0.7.18"
+tower = { version = "0.5.3", features = ["limit"] }
+tower-http = { version = "0.6.8", features = ["timeout"] }
+tree-sitter = "0.26.10"
+tree-sitter-go = "0.25.0"
+tree-sitter-java = "0.23.5"
+tree-sitter-python = "0.25.0"
+tree-sitter-rust = "0.24.2"
+tree-sitter-typescript = "0.23.2"
+uuid = { version = "1.22.0", features = ["serde", "v4"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"

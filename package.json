@@ -1,0 +1,20 @@
+{
+  "name": "nodalstudio",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "pnpm --filter @nodalstudio/frontend build",
+    "build:web": "pnpm --filter @nodalstudio/frontend build",
+    "dev": "pnpm --filter @nodalstudio/frontend dev",
+    "dev:desktop": "pnpm --filter @nodalstudio/desktop tauri dev",
+    "lint": "pnpm --filter @nodalstudio/frontend lint",
+    "release:macos": "./Scripts/build_macos_release.sh",
+    "test": "pnpm --filter @nodalstudio/frontend test",
+    "typecheck": "pnpm --filter @nodalstudio/frontend typecheck",
+    "tauri": "pnpm --filter @nodalstudio/desktop tauri"
+  }
+}

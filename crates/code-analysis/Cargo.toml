@@ -1,0 +1,23 @@
+[package]
+name = "code-analysis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hex.workspace = true
+project-model = { path = "../project-model" }
+schema-model = { path = "../schema-model" }
+sha2.workspace = true
+thiserror.workspace = true
+tree-sitter.workspace = true
+tree-sitter-go.workspace = true
+tree-sitter-java.workspace = true
+tree-sitter-python.workspace = true
+tree-sitter-rust.workspace = true
+tree-sitter-typescript.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

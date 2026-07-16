@@ -1,0 +1,28 @@
+[package]
+name = "nodalstudio-cloud-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axum.workspace = true
+chrono.workspace = true
+project-model = { path = "../../crates/project-model" }
+schema-diff = { path = "../../crates/schema-diff" }
+schema-model = { path = "../../crates/schema-model" }
+semantic-model = { path = "../../crates/semantic-model" }
+settings-model = { path = "../../crates/settings-model" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+
+[lints]
+workspace = true

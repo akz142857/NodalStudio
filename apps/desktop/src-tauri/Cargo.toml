@@ -1,0 +1,47 @@
+[package]
+name = "nodalstudio-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "nodalstudio_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+ai-context = { path = "../../../crates/ai-context" }
+ai-provider = { path = "../../../crates/ai-provider" }
+code-analysis = { path = "../../../crates/code-analysis" }
+chrono.workspace = true
+extension-model = { path = "../../../crates/extension-model" }
+git-workspace = { path = "../../../crates/git-workspace" }
+keyring.workspace = true
+mysql-adapter = { path = "../../../crates/mysql-adapter" }
+postgres-adapter = { path = "../../../crates/postgres-adapter" }
+project-model = { path = "../../../crates/project-model" }
+project-graph = { path = "../../../crates/project-graph" }
+project-scanner = { path = "../../../crates/project-scanner" }
+query-engine = { path = "../../../crates/query-engine" }
+reqwest.workspace = true
+schema-diff = { path = "../../../crates/schema-diff" }
+schema-model = { path = "../../../crates/schema-model" }
+semver.workspace = true
+settings-model = { path = "../../../crates/settings-model" }
+semantic-model = { path = "../../../crates/semantic-model" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+snapshot-store = { path = "../../../crates/snapshot-store" }
+sqlx.workspace = true
+tauri.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+uuid.workspace = true
+tauri-plugin-dialog = "2"
+
+[lints]
+workspace = true

@@ -1,0 +1,17 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: nodalstudio_test
+      MYSQL_USER: nodalstudio
+      MYSQL_PASSWORD: nodalstudio
+      MYSQL_ROOT_PASSWORD: root-only-for-fixture
+    ports:
+      - "53306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot-only-for-fixture"]
+      interval: 2s
+      timeout: 5s
+      retries: 40
+    volumes:
+      - ../fixtures/mysql/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
