@@ -35,6 +35,9 @@ coverage/
 *.p8
 *.p12
 config/macos-release.env
+config/macos-appstore.env
+apps/desktop/src-tauri/.appstore/
+private_keys/
 
 # --- Operating System Files ---
 # macOS

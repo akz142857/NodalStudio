@@ -96,6 +96,53 @@ pnpm release:macos
 The private `config/macos-release.env`, `.p12`, `.p8`, and password values must
 never be committed to Git.
 
+### Mac App Store package
+
+The App Store build is separate from the notarized Developer ID DMG. It enables
+App Sandbox, embeds the Mac App Store provisioning profile, signs the `.app`
+with the distribution identity contained in that profile, and signs the final
+`.pkg` with a Mac Installer Distribution identity.
+
+Create the private configuration:
+
+```bash
+cp config/macos-appstore.env.example config/macos-appstore.env
+chmod 600 config/macos-appstore.env
+```
+
+Set the provisioning profile path, Team ID, Bundle ID, and monotonically
+increasing `APP_BUILD_NUMBER`. Installed Keychain identities are selected
+automatically. Optional `.p12` paths can instead be configured for temporary
+import during the build.
+
+Validate all local prerequisites without building:
+
+```bash
+./Scripts/build_macos_appstore.sh --check
+```
+
+Build a signed `.pkg` for manual upload with Transporter:
+
+```bash
+pnpm release:macos:appstore
+```
+
+When App Store Connect API credentials are configured, build and upload in one
+command:
+
+```bash
+./Scripts/build_macos_appstore.sh --upload
+```
+
+The checked-in export-compliance declaration assumes the app uses only exempt,
+standard encryption such as TLS. Change `Info.appstore.plist` and answer App
+Store Connect's export-compliance questions accordingly if non-exempt encryption
+is introduced.
+
+The Sandbox grants outgoing network access and read/write access to files and
+folders explicitly selected by the user. Persistent access after relaunch must
+be tested separately because macOS may require security-scoped bookmarks.
+
 ## Cloud API and read-only Web viewer
 
 The optional cloud stack stores schema metadata only. Start PostgreSQL, the

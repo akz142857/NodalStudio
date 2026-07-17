@@ -132,14 +132,27 @@ validate_signing_identity() {
   local identities identity
   identities="$(security find-identity -v -p codesigning)"
   if [[ "$APPLE_SIGNING_IDENTITY" == "auto" ]]; then
-    local matches=()
+    local matches=() match_count=0
     while IFS= read -r identity; do
-      [[ -n "$identity" ]] && matches+=("$identity")
+      [[ -n "$identity" ]] || continue
+      local duplicate=false existing
+      if [[ "$match_count" -gt 0 ]]; then
+        for existing in "${matches[@]}"; do
+          if [[ "$existing" == "$identity" ]]; then
+            duplicate=true
+            break
+          fi
+        done
+      fi
+      if [[ "$duplicate" != "true" ]]; then
+        matches[$match_count]="$identity"
+        match_count=$((match_count + 1))
+      fi
     done < <(
       printf '%s\n' "$identities" |
         sed -n 's/^[^"]*"\(Developer ID Application:[^"]*\)".*/\1/p'
     )
-    case "${#matches[@]}" in
+    case "$match_count" in
       0)
         fail "No Developer ID Application identity is available in Keychain. Install it or configure APPLE_CERTIFICATE_PATH with a .p12."
         ;;
@@ -218,11 +231,11 @@ for command in cargo codesign git node pnpm rustup security shasum spctl uuidgen
   require_command "$command"
 done
 
-if [[ "$REQUIRE_CLEAN_GIT" == "true" && -n "$(git status --porcelain)" ]]; then
+if [[ "$CHECK_ONLY" != "true" && "$REQUIRE_CLEAN_GIT" == "true" && -n "$(git status --porcelain)" ]]; then
   fail "Git working tree is not clean. Commit or stash changes, or set REQUIRE_CLEAN_GIT=false."
 fi
 
-NODE_MAJOR="$(node -p 'process.versions.node.split(\".\")[0]')"
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 if [[ "$NODE_MAJOR" != "24" ]]; then
   echo "warning: Node.js 24 is recommended; current version is $(node --version)" >&2
 fi

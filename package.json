@@ -13,6 +13,7 @@
     "dev:desktop": "pnpm --filter @nodalstudio/desktop tauri dev",
     "lint": "pnpm --filter @nodalstudio/frontend lint",
     "release:macos": "./Scripts/build_macos_release.sh",
+    "release:macos:appstore": "./Scripts/build_macos_appstore.sh",
     "test": "pnpm --filter @nodalstudio/frontend test",
     "typecheck": "pnpm --filter @nodalstudio/frontend typecheck",
     "tauri": "pnpm --filter @nodalstudio/desktop tauri"
