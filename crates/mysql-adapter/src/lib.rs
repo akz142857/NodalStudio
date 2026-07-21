@@ -69,6 +69,12 @@ impl MySqlConnectionOptions {
 pub enum MySqlAdapterError {
     #[error("MySQL query failed: {0}")]
     Database(#[from] sqlx::Error),
+    #[error("unable to read MySQL {stage} metadata: {source}")]
+    Metadata {
+        stage: &'static str,
+        #[source]
+        source: sqlx::Error,
+    },
     #[error("failed to canonicalize MySQL snapshot: {0}")]
     Canonicalization(#[from] schema_model::SchemaModelError),
     #[error("MySQL metadata referenced unknown table {0}")]
@@ -120,12 +126,24 @@ pub async fn inspect_schema(
     let database = test_connection(pool).await?;
     let schema_name = database.name.clone();
     let mut schema = SchemaDefinition::empty(&schema_name);
-    load_tables(pool, &mut schema).await?;
-    load_columns(pool, &mut schema).await?;
-    load_primary_keys(pool, &mut schema).await?;
-    load_foreign_keys(pool, &mut schema).await?;
-    load_indexes(pool, &mut schema).await?;
-    load_views(pool, &mut schema).await?;
+    load_tables(pool, &mut schema)
+        .await
+        .map_err(|error| metadata_error("table", error))?;
+    load_columns(pool, &mut schema)
+        .await
+        .map_err(|error| metadata_error("column", error))?;
+    load_primary_keys(pool, &mut schema)
+        .await
+        .map_err(|error| metadata_error("primary key", error))?;
+    load_foreign_keys(pool, &mut schema)
+        .await
+        .map_err(|error| metadata_error("foreign key", error))?;
+    load_indexes(pool, &mut schema)
+        .await
+        .map_err(|error| metadata_error("index", error))?;
+    load_views(pool, &mut schema)
+        .await
+        .map_err(|error| metadata_error("view", error))?;
     let mut snapshot = DatabaseSnapshot::new(source_id, database, vec![schema]);
     snapshot.canonicalize()?;
     Ok(snapshot)
@@ -266,7 +284,8 @@ async fn load_indexes(
                 primary: name == "PRIMARY",
                 predicate: None,
             });
-        entry.columns.push(row.try_get("column_name")?);
+        let column_name: Option<String> = row.try_get("column_name")?;
+        entry.columns.push(index_part(column_name));
     }
     for ((table, _), index) in grouped {
         table_mut(schema, &table)?.indexes.push(index);
@@ -307,6 +326,18 @@ fn table_mut<'a>(
 fn non_empty(value: String) -> Option<String> {
     (!value.trim().is_empty()).then_some(value)
 }
+fn index_part(column_name: Option<String>) -> String {
+    // MySQL 8.0.13+ reports NULL here for functional key parts. The expression
+    // is not available on older servers, so retain a stable placeholder rather
+    // than failing the entire schema capture.
+    column_name.unwrap_or_else(|| "(expression)".into())
+}
+fn metadata_error(stage: &'static str, error: MySqlAdapterError) -> MySqlAdapterError {
+    match error {
+        MySqlAdapterError::Database(source) => MySqlAdapterError::Metadata { stage, source },
+        other => other,
+    }
+}
 fn parse_action(value: &str) -> Result<ReferentialAction, MySqlAdapterError> {
     match value {
         "NO ACTION" => Ok(ReferentialAction::NoAction),
@@ -330,5 +361,10 @@ mod tests {
     fn removes_empty_catalog_comments() {
         assert_eq!(non_empty("  ".into()), None);
         assert_eq!(non_empty("Accounts".into()).as_deref(), Some("Accounts"));
+    }
+    #[test]
+    fn keeps_functional_index_parts_without_a_column_name() {
+        assert_eq!(index_part(None), "(expression)");
+        assert_eq!(index_part(Some("email".into())), "email");
     }
 }

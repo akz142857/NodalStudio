@@ -702,12 +702,21 @@ export function App() {
         }
       >
         <aside className="sidebar" hidden={!leftPanel.expanded}>
-          <h2>Data source</h2>
           <ConnectionPanel
             key={`${settings.app.connectionDefaults.databaseEngine}:${settings.app.connectionDefaults.sslMode}`}
             enabled={runtime.data?.kind === "desktop"}
             platform={platform}
             onSnapshot={handleCapture}
+            onSourceDeleted={(sourceId) => {
+              setDataSources((current) => current.filter((source) => source.id !== sourceId));
+              if (snapshot?.sourceId === sourceId) {
+                setSnapshot(undefined);
+                setChangeSet(undefined);
+                setSelectedTable(undefined);
+                setSemantics(emptySemantics);
+                setSavedView(undefined);
+              }
+            }}
             defaultDatabaseType={settings.app.connectionDefaults.databaseEngine}
             defaultSslMode={settings.app.connectionDefaults.sslMode}
           />

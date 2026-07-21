@@ -1406,7 +1406,6 @@ fieldset.settings-card {
 .connection-panel {
   display: grid;
   gap: 10px;
-  margin-top: 16px;
 }
 
 .connection-panel label {
@@ -1434,13 +1433,56 @@ fieldset.settings-card {
 
 .connection-stack {
   display: grid;
-  gap: 14px;
+  gap: 10px;
+}
+
+.connection-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.connection-heading h2 {
+  margin: 0;
+}
+
+.connection-heading .create-connection-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 8px;
+  border: 1px solid #3e4856;
+  border-radius: 6px;
+  color: #dfe5ed;
+  background: #252b34;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.connection-heading .create-connection-button:hover {
+  border-color: #66cf7d;
+  color: #7de490;
+}
+
+.connection-heading .create-connection-button:disabled {
+  opacity: .45;
+}
+
+.connection-heading .create-connection-button span {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font-size: 12px;
 }
 
 .connection-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 76px;
   gap: 8px;
+}
+
+.connection-credentials-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .connection-panel label {
@@ -1451,33 +1493,185 @@ fieldset.settings-card {
 .saved-sources {
   display: grid;
   gap: 6px;
-  margin-top: 14px;
 }
 
-.saved-sources button {
+.saved-source {
   display: grid;
-  gap: 3px;
-  padding: 9px 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   border: 1px solid #373e49;
   border-radius: 6px;
-  text-align: left;
   color: #dfe3e9;
   background: #1d2128;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 
-.saved-sources button:hover {
+.saved-source:hover,
+.saved-source:focus-within {
   border-color: #66cf7d;
+  background: #20262d;
 }
 
-.saved-sources strong {
+.source-open-button {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+}
+
+.source-edit-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  margin-right: 6px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #929cab;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.saved-source:hover .source-edit-button,
+.source-edit-button:focus-visible {
+  opacity: 1;
+}
+
+.source-edit-button:hover,
+.source-edit-button:focus-visible {
+  border-color: #414b58;
+  color: #e5eaf1;
+  background: #303741;
+}
+
+.source-open-button strong {
   font-size: 11px;
 }
 
-.saved-sources span {
+.source-open-button span {
   overflow: hidden;
   color: #7f8998;
   font-size: 9px;
   text-overflow: ellipsis;
+}
+
+.empty-data-source {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px dashed #39424f;
+  border-radius: 8px;
+  text-align: left;
+  color: #dfe3e9;
+  background: #1a1e25;
+}
+
+.empty-data-source:hover {
+  border-color: #66cf7d;
+}
+
+.empty-data-source span,
+.connection-note {
+  margin: 0;
+  color: #818b9a;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.connection-dialog-backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(5 8 13 / 68%);
+  backdrop-filter: blur(3px);
+}
+
+.connection-dialog {
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid #414b59;
+  border-radius: 12px;
+  color: #e9edf3;
+  background: #191d24;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 52%);
+}
+
+.connection-dialog > header,
+.connection-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.connection-dialog h2 {
+  margin: 3px 0 0;
+  font-size: 18px;
+}
+
+.dialog-eyebrow {
+  color: #77e08a;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.dialog-description {
+  margin: 8px 0 16px;
+  color: #8f99a8;
+  font-size: 11px;
+}
+
+.dialog-close-button {
+  border: 0;
+  color: #98a2b1;
+  background: transparent;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.connection-dialog footer {
+  padding-top: 4px;
+}
+
+.connection-dialog footer > div {
+  display: flex;
+  gap: 8px;
+}
+
+.connection-dialog footer button {
+  min-width: 104px;
+}
+
+.connection-dialog footer .secondary-button {
+  border: 1px solid #3e4754;
+  color: #c8ced8;
+  background: #252b34;
+}
+
+.connection-dialog footer .delete-source-button {
+  min-width: 0;
+  padding-inline: 0;
+  color: #ff929d;
+  background: transparent;
+}
+
+.connection-dialog footer .delete-source-button:hover {
+  color: #ffb0b8;
+  text-decoration: underline;
 }
 
 .connection-panel button {
@@ -1502,12 +1696,19 @@ fieldset.settings-card {
   line-height: 1.45;
 }
 
-.connection-panel .success-message {
+.connection-status.success-message {
+  margin: 0;
   color: #77e08a;
+  font-size: 10px;
+  line-height: 1.45;
 }
 
-.connection-panel .error-message {
+.connection-panel .error-message,
+.connection-status.error-message {
+  margin: 0;
   color: #ff8d8d;
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .history-panel {
@@ -2815,6 +3016,9 @@ fieldset.settings-card {
 .relationship-manager-empty p { margin: 0; font-size: 9px; }
 
 @media (max-width: 640px) {
+  .connection-dialog-backdrop { padding: 8px; }
+  .connection-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 16px; }
+  .connection-credentials-row { grid-template-columns: minmax(0, 1fr); }
   .relationship-manager-backdrop { padding: 8px; }
   .relationship-manager { width: calc(100vw - 16px); height: calc(100vh - 16px); }
   .relationship-manager > header,

@@ -5965,6 +5965,9 @@ fn safe_mysql_error(error: mysql_adapter::MySqlAdapterError) -> String {
         mysql_adapter::MySqlAdapterError::Database(_) => {
             "Unable to connect to MySQL or read its schema metadata.".into()
         }
+        mysql_adapter::MySqlAdapterError::Metadata { stage, .. } => {
+            format!("Connected to MySQL, but unable to read its {stage} metadata.")
+        }
         other => other.to_string(),
     }
 }
