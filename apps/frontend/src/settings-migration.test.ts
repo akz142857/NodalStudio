@@ -8,6 +8,7 @@ describe("legacy settings migration", () => {
   it("moves panel, AI, Cloud, and Git preferences through the platform once", async () => {
     const sourceId = "source";
     const initial = defaultEffectiveSettings(sourceId);
+    Object.assign(initial.app.general, { lastViewMode: "system" });
     localStorage.setItem(
       "sqlaieditor.workspace.leftPanel",
       JSON.stringify({ expanded: false, width: 340 }),
@@ -36,6 +37,7 @@ describe("legacy settings migration", () => {
 
     expect(migrated.app.appearance.leftSidebarExpanded).toBe(false);
     expect(migrated.app.appearance.leftSidebarWidth).toBe(340);
+    expect(migrated.app.general.lastViewMode).toBe("explore");
     expect(migrated.source?.ai.enabled).toBe(true);
     expect(migrated.source?.cloud.endpoint).toBe("https://cloud.example");
     expect(migrated.source?.cloud.baseVersion).toBe(7);

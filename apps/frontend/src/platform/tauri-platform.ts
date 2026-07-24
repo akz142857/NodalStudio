@@ -7,7 +7,6 @@ import type {
   CaptureSnapshotResult,
   DataSourceProfile,
   ConnectionTestResult,
-  CodeUsageResult,
   DatabaseSnapshot,
   DomainGroup,
   DriftReport,
@@ -16,14 +15,11 @@ import type {
   ExportGitWorkspaceResult,
   ImportGitWorkspaceResult,
   IgnoredRelationshipInference,
-  LocalProject,
   LogicalRelationship,
   ObjectAnnotation,
   RuntimeInfo,
   QueryExecutionResult,
   QueryHistoryEntry,
-  ProjectScan,
-  ProjectGraphSnapshot,
   SchemaChangeSet,
   SemanticBundle,
   SavedView,
@@ -33,6 +29,7 @@ import type {
   SaveDomainGroupInput,
   SaveViewInput,
   SnapshotSummary,
+  VerifyAndRefreshDataSourceResult,
   RelationshipEndpoint,
   RelationshipValidation,
   SyncProjectInput,
@@ -86,6 +83,10 @@ export class TauriPlatform implements NodalStudioPlatform {
 
   testPostgresConnection(input: SaveDataSourceInput): Promise<ConnectionTestResult> {
     return invoke<ConnectionTestResult>("test_postgres_connection", { input });
+  }
+
+  verifyAndRefreshDataSource(input: SaveDataSourceInput): Promise<VerifyAndRefreshDataSourceResult> {
+    return invoke<VerifyAndRefreshDataSourceResult>("verify_and_refresh_data_source", { input });
   }
 
   capturePostgresSnapshot(sourceId: string, trigger: "manual" | "background" = "manual"): Promise<CaptureSnapshotResult> {
@@ -221,62 +222,6 @@ export class TauriPlatform implements NodalStudioPlatform {
   saveCodeLineage(sourceId: string, links: CodeLineageLink[]): Promise<void> {
     return invoke<void>("save_code_lineage", { input: { sourceId, links } });
   }
-
-  addLocalProject(input: { rootPath: string; name?: string; databaseSourceIds: string[] }): Promise<LocalProject> {
-    return invoke<LocalProject>("add_local_project", { input });
-  }
-  cloneRemoteProject(input: { remoteUrl: string; name?: string; databaseSourceIds: string[] }): Promise<LocalProject> { return invoke("clone_remote_project", { input }); }
-  selectProjectDirectory(): Promise<string | null> { return invoke("select_project_directory"); }
-
-  listLocalProjects(): Promise<LocalProject[]> {
-    return invoke<LocalProject[]>("list_local_projects");
-  }
-  setProjectBindings(projectId: string, databaseSourceIds: string[]): Promise<LocalProject> { return invoke("set_project_bindings", { input: { projectId, databaseSourceIds } }); }
-
-  removeLocalProject(projectId: string, deleteManagedCache = false): Promise<void> {
-    return invoke<void>("remove_local_project", { input: { projectId, deleteManagedCache } });
-  }
-
-  startProjectScan(projectId: string): Promise<ProjectScan> {
-    return invoke<ProjectScan>("start_project_scan", { input: { projectId } });
-  }
-
-  cancelProjectScan(scanId: string): Promise<boolean> {
-    return invoke<boolean>("cancel_project_scan", { input: { scanId } });
-  }
-
-  getProjectScanStatus(scanId: string): Promise<ProjectScan | null> {
-    return invoke<ProjectScan | null>("get_project_scan_status", { input: { scanId } });
-  }
-
-  listProjectScans(projectId: string): Promise<ProjectScan[]> {
-    return invoke<ProjectScan[]>("list_project_scans", { input: { projectId } });
-  }
-
-  getProjectGraph(scanId: string): Promise<ProjectGraphSnapshot> {
-    return invoke<ProjectGraphSnapshot>("get_project_graph", { input: { scanId } });
-  }
-
-  getDatabaseCodeUsage(sourceId: string, objectKey: import("./types").ObjectKey): Promise<CodeUsageResult> {
-    return invoke<CodeUsageResult>("get_database_code_usage", { input: { sourceId, objectKey } });
-  }
-  getChangeImpact(sourceId: string, objectKeys: import("./types").ObjectKey[], maxDepth = 4): Promise<import("./types").ImpactPath[]> { return invoke("get_change_impact", { input: { sourceId, objectKeys, maxDepth } }); }
-  openCodeLocation(projectId: string, relativePath: string, line?: number | null): Promise<void> { return invoke("open_code_location", { input: { projectId, relativePath, line: line ?? null } }); }
-
-  listModelConnections(): Promise<import("./types").ModelConnection[]> { return invoke("list_model_connections"); }
-  saveModelConnection(connection: import("./types").ModelConnection): Promise<import("./types").ModelConnection> { return invoke("save_model_connection", { input: { connection } }); }
-  deleteModelConnection(connectionId: string): Promise<void> { return invoke("delete_model_connection", { input: { connectionId } }); }
-  saveModelCredential(connectionId: string, secret: string): Promise<import("./types").ModelConnection> { return invoke("save_model_credential", { input: { connectionId, secret } }); }
-  getModelRoutes(): Promise<import("./types").ModelRoute[]> { return invoke("get_model_routes"); }
-  saveModelRoute(route: import("./types").ModelRoute): Promise<import("./types").ModelRoute> { return invoke("save_model_route", { input: { route } }); }
-  deleteModelRoute(role: import("./types").ModelRole): Promise<void> { return invoke("delete_model_route", { input: { role } }); }
-  previewModelFallback(role: import("./types").ModelRole, containsSourceExcerpts: boolean, containsUncommittedCode: boolean): Promise<import("./types").ModelFallbackStep[]> { return invoke("preview_model_fallback", { input: { role, containsSourceExcerpts, containsUncommittedCode } }); }
-  testModelConnection(connectionId: string): Promise<{ connectionId: string; testedAt: string; networkUsed: boolean }> { return invoke("test_model_connection", { input: { connectionId } }); }
-  previewAiProjectContext(scanId: string): Promise<import("./types").AiProjectContextPreview> { return invoke("preview_ai_project_context", { input: { scanId } }); }
-  runAiProjectAnalysis(scanId: string): Promise<import("./types").AiRelationCandidate[]> { return invoke("run_ai_project_analysis", { input: { scanId } }); }
-  listAiCandidates(scanId: string): Promise<import("./types").AiRelationCandidate[]> { return invoke("list_ai_candidates", { input: { scanId } }); }
-  listAiUsageEvents(): Promise<import("./types").AiUsageEvent[]> { return invoke("list_ai_usage_events"); }
-  reviewAiCandidate(scanId: string, candidateId: string, decision: "confirmed" | "rejected"): Promise<import("./types").AiRelationCandidate> { return invoke("review_ai_candidate", { input: { scanId, candidateId, decision } }); }
 
   exportGitWorkspace(
     sourceId: string,

@@ -12,13 +12,9 @@ export function getPlatform(): NodalStudioPlatform {
 
 export type {
   AiExplanation,
-  AiProjectContextPreview,
-  AiRelationCandidate,
-  AiUsageEvent,
   CloudViewBundle,
   ChangeProvenance,
   CodeLineageLink,
-  CodeUsageResult,
   CaptureSnapshotResult,
   DataSourceProfile,
   DatabaseInfo,
@@ -31,13 +27,9 @@ export type {
   ExportGitWorkspaceResult,
   ImportGitWorkspaceResult,
   IgnoredRelationshipInference,
-  LocalProject,
   LogicalRelationship,
   LogicalRelationshipOrigin,
   LogicalRelationshipStatus,
-  ModelConnection,
-  ModelRole,
-  ModelRoute,
   ObjectAnnotation,
   ObjectKey,
   QueryCell,
@@ -49,12 +41,6 @@ export type {
   RelationshipCardinality,
   RelationshipEndpoint,
   RelationshipValidation,
-  ProjectScan,
-  ProjectScanStatus,
-  ProjectNode,
-  ProjectNodeKind,
-  ProjectEdge,
-  ProjectGraphSnapshot,
   SchemaChangeSet,
   SchemaOperation,
   SemanticBundle,
@@ -70,6 +56,7 @@ export type {
   SyncProjectInput,
   SyncProjectResult,
   TableDefinition,
+  VerifyAndRefreshDataSourceResult,
 } from "./types";
 export type * from "./settings-types";
 export { defaultAppSettings, defaultDataSourceSettings, defaultEffectiveSettings, defaultProjectSettings } from "./settings-defaults";

@@ -134,9 +134,15 @@ export interface DataSourceProfile {
 }
 
 export interface CaptureSnapshotResult {
-  snapshot: DatabaseSnapshot;
-  stored: boolean;
-  changeSet: SchemaChangeSet | null;
+    snapshot: DatabaseSnapshot;
+    stored: boolean;
+    changeSet: SchemaChangeSet | null;
+}
+
+export interface VerifyAndRefreshDataSourceResult {
+  profile: DataSourceProfile;
+  connection: ConnectionTestResult;
+  capture: CaptureSnapshotResult;
 }
 
 export interface ObjectAnnotation {
@@ -298,7 +304,6 @@ export interface CloudViewBundle {
   savedViews: SavedView[];
   layout: CanvasLayout | null;
   logicalRelationships?: LogicalRelationship[];
-  projectGraphs: SharedProjectGraph[];
   baseVersion: number;
 }
 
@@ -360,110 +365,6 @@ export interface CodeLineageLink {
   line: number | null;
   confidence: "declared" | "convention" | "inferred";
 }
-
-export interface LocalProject {
-  id: string;
-  name: string;
-  rootPath: string;
-  repositoryKind: "directory" | "git";
-  remoteUrl: string | null;
-  managedCache: boolean;
-  databaseSourceIds: string[];
-  createdAt: string;
-}
-
-export type ProjectScanStatus =
-  | "queued"
-  | "discovering"
-  | "parsing"
-  | "matching"
-  | "aiAnalysis"
-  | "reviewRequired"
-  | "ready"
-  | "cancelled"
-  | "failed";
-
-export interface ProjectScan {
-  id: string;
-  projectId: string;
-  branch: string | null;
-  commitSha: string | null;
-  dirty: boolean;
-  status: ProjectScanStatus;
-  analyzerVersions: Record<string, string>;
-  startedAt: string;
-  completedAt: string | null;
-}
-
-export type ProjectNodeKind =
-  | "project" | "module" | "file" | "symbol" | "page" | "endpoint"
-  | "service" | "repository" | "ormModel" | "query" | "migration" | "table" | "column";
-
-export interface ProjectNode {
-  id: string;
-  projectId: string;
-  kind: ProjectNodeKind;
-  name: string;
-  qualifiedName: string;
-  relativePath: string | null;
-  line: number | null;
-  databaseObject: ObjectKey | null;
-  attributes: Record<string, string>;
-}
-
-export interface EdgeEvidence {
-  id: string;
-  projectId: string;
-  relativePath: string;
-  startLine: number | null;
-  endLine: number | null;
-  symbol: string | null;
-  analyzer: string;
-  excerptHash: string | null;
-  explanation: string | null;
-}
-
-export interface ProjectEdge {
-  id: string;
-  sourceId: string;
-  targetId: string;
-  kind: "contains" | "imports" | "calls" | "handles" | "reads" | "writes" | "joins" | "mapsTo" | "returns" | "changes" | "triggers";
-  certainty: "declared" | "static" | "convention" | "aiInferred" | "humanConfirmed";
-  reviewStatus: "notRequired" | "pending" | "confirmed" | "rejected" | "stale";
-  evidence: EdgeEvidence[];
-  scanId: string;
-}
-
-export interface ProjectGraphSnapshot {
-  scanId: string;
-  nodes: ProjectNode[];
-  edges: ProjectEdge[];
-}
-
-export interface SharedProjectGraph {
-  projectId: string;
-  projectName: string;
-  scan: ProjectScan;
-  nodes: ProjectNode[];
-  edges: ProjectEdge[];
-}
-
-export interface CodeUsageResult {
-  nodes: ProjectNode[];
-  edges: ProjectEdge[];
-}
-
-export type ProviderKind = "offline" | "openAiCompatible";
-export type ModelRole = "analysis" | "explanation" | "embedding";
-export interface ModelCapabilities { chat: boolean; structuredOutput: boolean; toolCalling: boolean; embeddings: boolean; codeAnalysis: boolean; local: boolean; maxContextTokens: number | null; }
-export interface ModelConnection { id: string; name: string; provider: ProviderKind; endpoint: string | null; model: string; credentialRef: string | null; capabilities: ModelCapabilities; privacy: { allowUncommittedCode: boolean; allowSourceExcerpts: boolean; remote: boolean }; enabled: boolean; }
-export interface ModelRoute { role: ModelRole; primaryConnectionId: string; fallbackConnectionIds: string[]; }
-export type AiCandidateStatus = "pending" | "confirmed" | "rejected" | "stale";
-export interface AiRelationCandidate { id: string; scanId: string; connectionId: string; model: string; proposedEdge: ProjectEdge; explanation: string; status: AiCandidateStatus; createdAt: string; reviewedAt: string | null; }
-export interface AiProjectContextPreview { scanId: string; connectionId: string | null; provider: ProviderKind | null; model: string | null; networkUsed: boolean; nodeCount: number; edgeCount: number; evidenceCount: number; requestCount: number; maxRequestNodes: number; sourceExcerpts: number; uncommittedCodeIncluded: boolean; }
-export interface AiUsageEvent { id: string; role: ModelRole; connectionId: string; provider: ProviderKind; model: string; startedAt: string; completedAt: string; inputTokens: number | null; outputTokens: number | null; fallbackFrom: string | null; status: string; fileCount: number; snippetCount: number; privacyPolicyVersion: number; }
-export interface ImpactPath { target: ObjectKey; nodeIds: string[]; edgeIds: string[]; potential: boolean; }
-export interface ModelFallbackStep { connectionId: string; name: string; eligible: boolean; local: boolean; }
 
 export interface SaveAnnotationInput {
   sourceId: string;
@@ -608,6 +509,7 @@ export interface NodalStudioPlatform {
   duplicateDataSource(sourceId: string): Promise<DataSourceProfile>;
   saveDataSource(input: SaveDataSourceInput): Promise<DataSourceProfile>;
   testPostgresConnection(input: SaveDataSourceInput): Promise<ConnectionTestResult>;
+  verifyAndRefreshDataSource(input: SaveDataSourceInput): Promise<VerifyAndRefreshDataSourceResult>;
   capturePostgresSnapshot(sourceId: string, trigger?: "manual" | "background"): Promise<CaptureSnapshotResult>;
   listSnapshots(sourceId: string): Promise<SnapshotSummary[]>;
   getSnapshot(snapshotId: string): Promise<DatabaseSnapshot>;
@@ -652,34 +554,6 @@ export interface NodalStudioPlatform {
     input: Omit<ChangeProvenance, "recordedAt">,
   ): Promise<ChangeProvenance>;
   saveCodeLineage(sourceId: string, links: CodeLineageLink[]): Promise<void>;
-  addLocalProject(input: { rootPath: string; name?: string; databaseSourceIds: string[] }): Promise<LocalProject>;
-  cloneRemoteProject(input: { remoteUrl: string; name?: string; databaseSourceIds: string[] }): Promise<LocalProject>;
-  selectProjectDirectory(): Promise<string | null>;
-  listLocalProjects(): Promise<LocalProject[]>;
-  setProjectBindings(projectId: string, databaseSourceIds: string[]): Promise<LocalProject>;
-  removeLocalProject(projectId: string, deleteManagedCache?: boolean): Promise<void>;
-  startProjectScan(projectId: string): Promise<ProjectScan>;
-  cancelProjectScan(scanId: string): Promise<boolean>;
-  getProjectScanStatus(scanId: string): Promise<ProjectScan | null>;
-  listProjectScans(projectId: string): Promise<ProjectScan[]>;
-  getProjectGraph(scanId: string): Promise<ProjectGraphSnapshot>;
-  getDatabaseCodeUsage(sourceId: string, objectKey: ObjectKey): Promise<CodeUsageResult>;
-  getChangeImpact(sourceId: string, objectKeys: ObjectKey[], maxDepth?: number): Promise<ImpactPath[]>;
-  openCodeLocation(projectId: string, relativePath: string, line?: number | null): Promise<void>;
-  listModelConnections(): Promise<ModelConnection[]>;
-  saveModelConnection(connection: ModelConnection): Promise<ModelConnection>;
-  deleteModelConnection(connectionId: string): Promise<void>;
-  saveModelCredential(connectionId: string, secret: string): Promise<ModelConnection>;
-  getModelRoutes(): Promise<ModelRoute[]>;
-  saveModelRoute(route: ModelRoute): Promise<ModelRoute>;
-  deleteModelRoute(role: ModelRole): Promise<void>;
-  previewModelFallback(role: ModelRole, containsSourceExcerpts: boolean, containsUncommittedCode: boolean): Promise<ModelFallbackStep[]>;
-  testModelConnection(connectionId: string): Promise<{ connectionId: string; testedAt: string; networkUsed: boolean }>;
-  previewAiProjectContext(scanId: string): Promise<AiProjectContextPreview>;
-  runAiProjectAnalysis(scanId: string): Promise<AiRelationCandidate[]>;
-  listAiCandidates(scanId: string): Promise<AiRelationCandidate[]>;
-  listAiUsageEvents(): Promise<AiUsageEvent[]>;
-  reviewAiCandidate(scanId: string, candidateId: string, decision: "confirmed" | "rejected"): Promise<AiRelationCandidate>;
   exportGitWorkspace(
     sourceId: string,
     repositoryPath: string,

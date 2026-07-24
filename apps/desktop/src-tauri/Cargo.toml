@@ -14,17 +14,12 @@ tauri-build.workspace = true
 
 [dependencies]
 ai-context = { path = "../../../crates/ai-context" }
-ai-provider = { path = "../../../crates/ai-provider" }
-code-analysis = { path = "../../../crates/code-analysis" }
 chrono.workspace = true
 extension-model = { path = "../../../crates/extension-model" }
 git-workspace = { path = "../../../crates/git-workspace" }
 keyring.workspace = true
 mysql-adapter = { path = "../../../crates/mysql-adapter" }
 postgres-adapter = { path = "../../../crates/postgres-adapter" }
-project-model = { path = "../../../crates/project-model" }
-project-graph = { path = "../../../crates/project-graph" }
-project-scanner = { path = "../../../crates/project-scanner" }
 query-engine = { path = "../../../crates/query-engine" }
 reqwest.workspace = true
 schema-diff = { path = "../../../crates/schema-diff" }
@@ -41,7 +36,6 @@ tauri.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
-tauri-plugin-dialog = "2"
 
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
 import type { EffectiveSettings, NodalStudioPlatform } from "./platform";
 
-const LEGACY_MIGRATION_VERSION = 2;
+const LEGACY_MIGRATION_VERSION = 3;
 
 function readObject(key: string): Record<string, unknown> | null {
   try {
@@ -37,6 +37,9 @@ export async function migrateLegacySettings(
     if (typeof left?.width === "number") app.appearance.leftSidebarWidth = left.width;
     if (typeof right?.expanded === "boolean") app.appearance.rightSidebarExpanded = right.expanded;
     if (typeof right?.width === "number") app.appearance.rightSidebarWidth = right.width;
+    if ((app.general.lastViewMode as string) === "system") {
+      app.general.lastViewMode = "explore";
+    }
     app.legacyStorageMigrationVersion = LEGACY_MIGRATION_VERSION;
     await platform.updateAppSettings(app);
     localStorage.removeItem("sqlaieditor.workspace.leftPanel");

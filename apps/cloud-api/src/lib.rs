@@ -15,7 +15,6 @@ use axum::{
     routing::{get, post},
 };
 use chrono::{DateTime, Utc};
-use project_model::SharedProjectGraph;
 use schema_diff::SchemaChangeSet;
 use schema_model::{DatabaseSnapshot, LogicalRelationship};
 use semantic_model::{CanvasLayout, DomainGroup, ObjectAnnotation, SavedView};
@@ -69,8 +68,6 @@ pub struct SyncBundle {
     pub logical_relationships: Vec<LogicalRelationship>,
     pub layout: Option<CanvasLayout>,
     pub project_settings: Option<ProjectSettings>,
-    #[serde(default)]
-    pub project_graphs: Vec<SharedProjectGraph>,
     pub base_version: i64,
 }
 
@@ -981,7 +978,6 @@ mod tests {
             logical_relationships: Vec::new(),
             layout: None,
             project_settings: None,
-            project_graphs: Vec::new(),
             base_version: 0,
         };
         let first = compute_sync_bundle_fingerprint(&bundle).expect("fingerprint");
@@ -995,14 +991,6 @@ mod tests {
             compute_sync_bundle_fingerprint(&bundle).expect("fingerprint"),
             first
         );
-    }
-
-    #[test]
-    fn rejects_local_source_locations_but_accepts_redacted_fields() {
-        let leaked = serde_json::json!({ "projectGraphs": [{ "nodes": [{ "relativePath": "src/orders.rs" }] }] });
-        let redacted = serde_json::json!({ "projectGraphs": [{ "nodes": [{ "relativePath": null, "excerptHash": null }] }] });
-        assert!(validate_sync_payload(&leaked).is_err());
-        assert!(validate_sync_payload(&redacted).is_ok());
     }
 
     #[tokio::test]

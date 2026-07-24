@@ -8,7 +8,6 @@ rust-version.workspace = true
 [dependencies]
 axum.workspace = true
 chrono.workspace = true
-project-model = { path = "../../crates/project-model" }
 schema-diff = { path = "../../crates/schema-diff" }
 schema-model = { path = "../../crates/schema-model" }
 semantic-model = { path = "../../crates/semantic-model" }

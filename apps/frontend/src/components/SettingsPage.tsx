@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ModelConnectionsSettings } from "./ModelConnectionsSettings";
 import {
   defaultAppSettings,
   defaultProjectSettings,
@@ -25,7 +24,6 @@ const categories = [
   ["general", "General", "language theme startup date time"],
   ["appearance", "Appearance", "density font sidebar inspector motion contrast"],
   ["canvas", "Canvas & ER", "field foreign key index relation layout comment"],
-  ["code-analysis", "Code Analysis", "local project repository scan gitignore source privacy"],
   ["data-sources", "Data Sources", "database refresh timeout ssl connection"],
   ["history", "History & Storage", "snapshot retention backup cache disk"],
   ["git", "Git", "repository merge driver conflict fingerprint"],
@@ -322,25 +320,6 @@ export function SettingsPage({
             </SettingsSection>
           ) : null}
 
-          {visibleCategory === "code-analysis" ? (
-            <SettingsSection title="Code Analysis" description="Local repository scanning, incremental indexing, and source privacy boundaries.">
-              <StatusCard status={app.codeAnalysis.enabled ? "Enabled" : "Off"} label="Source files stay local unless a later AI request is explicitly previewed and allowed." />
-              <ToggleRow label="Enable local code analysis" description="Disabling keeps existing results but prevents new scans." checked={app.codeAnalysis.enabled} onChange={(enabled) => void saveApp({ ...app, codeAnalysis: { ...app.codeAnalysis, enabled } })} />
-              <ToggleRow label="Automatic incremental scans" description="Scan changed files after an already-bound project is reopened." checked={app.codeAnalysis.autoScan} onChange={(autoScan) => void saveApp({ ...app, codeAnalysis: { ...app.codeAnalysis, autoScan } })} />
-              <ToggleRow label="Respect .gitignore" checked={app.codeAnalysis.includeGitignore} onChange={(includeGitignore) => void saveApp({ ...app, codeAnalysis: { ...app.codeAnalysis, includeGitignore } })} />
-              <ToggleRow label="Respect .nodalstudioignore" checked={app.codeAnalysis.includeNodalStudioIgnore} onChange={(includeNodalStudioIgnore) => void saveApp({ ...app, codeAnalysis: { ...app.codeAnalysis, includeNodalStudioIgnore } })} />
-              <NumberRow label="Maximum source file size" value={app.codeAnalysis.maxFileBytes} min={65536} max={10485760} unit="bytes" onChange={(maxFileBytes) => void saveApp({ ...app, codeAnalysis: { ...app.codeAnalysis, maxFileBytes } })} />
-              <SelectRow label="Open code with" value={app.codeAnalysis.editor} onChange={(editor) => void saveApp({ ...app, codeAnalysis: { ...app.codeAnalysis, editor: editor as AppSettings["codeAnalysis"]["editor"] } })} options={[["systemDefault","System default"],["visualStudioCode","Visual Studio Code"],["cursor","Cursor"],["zed","Zed"]]} />
-              <div className="data-boundary">
-                <h3>Remote AI boundary</h3>
-                <p>Both options are off by default. Every remote request still requires local context selection and a request preview.</p>
-                <ToggleRow label="Allow uncommitted code in remote AI requests" checked={app.codeAnalysis.allowUncommittedCodeForRemoteAi} onChange={(allowUncommittedCodeForRemoteAi) => void saveApp({ ...app, codeAnalysis: { ...app.codeAnalysis, allowUncommittedCodeForRemoteAi } })} />
-                <ToggleRow label="Allow source excerpts in remote AI requests" checked={app.codeAnalysis.allowSourceExcerptsForRemoteAi} onChange={(allowSourceExcerptsForRemoteAi) => void saveApp({ ...app, codeAnalysis: { ...app.codeAnalysis, allowSourceExcerptsForRemoteAi } })} />
-              </div>
-              <CategoryReset onReset={() => void saveApp({ ...app, codeAnalysis: defaultAppSettings().codeAnalysis })} />
-            </SettingsSection>
-          ) : null}
-
           {visibleCategory === "data-sources" ? (
             <SettingsSection title="Data Sources" description="Connection behavior and schema refresh policy.">
               <StatusCard status={activeSourceId ? "Configured" : "No active source"} label={`${dataSources.length} saved data source${dataSources.length === 1 ? "" : "s"}`} />
@@ -388,7 +367,6 @@ export function SettingsPage({
 
           {visibleCategory === "ai" ? (
             <SettingsSection title="AI" description="Explanations are optional and always require confirmation before becoming semantics.">
-              {runtime?.kind === "desktop" ? <ModelConnectionsSettings platform={platform} /> : null}
               <StatusCard status={app.privacy.offlineMode ? "Offline" : source?.ai.enabled ? "Configured" : "Off"} label="No database credentials or row data are sent." />
               {source && ai ? <>
                 <ToggleRow label="Enable AI explanations" checked={source.ai.enabled} managed={isManaged("ai.enabled")} onChange={(enabled) => void saveSource({ ...source, ai: { ...source.ai, enabled } })} />

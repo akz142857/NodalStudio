@@ -11,11 +11,8 @@ import type {
   SemanticBundle,
   SavedView,
   SnapshotSummary,
+  VerifyAndRefreshDataSourceResult,
   NodalStudioPlatform,
-  LocalProject,
-  ProjectScan,
-  ProjectGraphSnapshot,
-  ObjectKey,
   LogicalRelationship,
   IgnoredRelationshipInference,
   RelationshipValidation,
@@ -63,7 +60,6 @@ function readAppSettings(): AppSettings {
     general: { ...defaults.general, ...stored.general },
     appearance: { ...defaults.appearance, ...stored.appearance },
     canvas: { ...defaults.canvas, ...stored.canvas },
-    codeAnalysis: { ...defaults.codeAnalysis, ...stored.codeAnalysis },
     connectionDefaults: { ...defaults.connectionDefaults, ...stored.connectionDefaults },
     history: { ...defaults.history, ...stored.history },
     privacy: { ...defaults.privacy, ...stored.privacy },
@@ -133,6 +129,10 @@ export class WebPlatform implements NodalStudioPlatform {
   }
 
   testPostgresConnection(): Promise<ConnectionTestResult> {
+    return Promise.reject(new Error("Database connections require the desktop app."));
+  }
+
+  verifyAndRefreshDataSource(): Promise<VerifyAndRefreshDataSourceResult> {
     return Promise.reject(new Error("Database connections require the desktop app."));
   }
 
@@ -265,120 +265,6 @@ export class WebPlatform implements NodalStudioPlatform {
   saveCodeLineage(): Promise<never> {
     return Promise.reject(new Error("Code lineage import requires the desktop app."));
   }
-
-  addLocalProject(): Promise<never> {
-    return Promise.reject(new Error("Local project scanning requires the desktop app."));
-  }
-  cloneRemoteProject(): Promise<never> { return Promise.reject(new Error("Remote project cloning requires the desktop app.")); }
-  selectProjectDirectory(): Promise<null> { return Promise.resolve(null); }
-
-  listLocalProjects(): Promise<LocalProject[]> {
-    return Promise.resolve((this.bundle?.projectGraphs ?? []).map((project) => ({
-      id: project.projectId,
-      name: project.projectName,
-      rootPath: "",
-      repositoryKind: "directory",
-      remoteUrl: null,
-      managedCache: false,
-      databaseSourceIds: this.bundle ? [this.bundle.sourceId] : [],
-      createdAt: project.scan.startedAt,
-    })));
-  }
-  setProjectBindings(): Promise<never> { return Promise.reject(new Error("Project bindings require the desktop app.")); }
-
-  removeLocalProject(): Promise<never> {
-    return Promise.reject(new Error("Local project scanning requires the desktop app."));
-  }
-
-  startProjectScan(): Promise<never> {
-    return Promise.reject(new Error("Local project scanning requires the desktop app."));
-  }
-
-  cancelProjectScan(): Promise<false> {
-    return Promise.resolve(false);
-  }
-
-  getProjectScanStatus(scanId: string): Promise<ProjectScan | null> {
-    return Promise.resolve(this.bundle?.projectGraphs.find((project) => project.scan.id === scanId)?.scan ?? null);
-  }
-
-  listProjectScans(projectId: string): Promise<ProjectScan[]> {
-    const shared = this.bundle?.projectGraphs.find((project) => project.projectId === projectId);
-    return Promise.resolve(shared ? [shared.scan] : []);
-  }
-
-  getProjectGraph(scanId: string): Promise<ProjectGraphSnapshot> {
-    const shared = this.bundle?.projectGraphs.find((project) => project.scan.id === scanId);
-    return shared
-      ? Promise.resolve({ scanId, nodes: shared.nodes, edges: shared.edges })
-      : Promise.reject(new Error("Shared project graph is not available."));
-  }
-
-  getDatabaseCodeUsage(_sourceId: string, objectKey: ObjectKey): Promise<{ nodes: import("./types").ProjectNode[]; edges: import("./types").ProjectEdge[] }> {
-    const nodes = (this.bundle?.projectGraphs ?? []).flatMap((project) => project.nodes);
-    const edges = (this.bundle?.projectGraphs ?? []).flatMap((project) => project.edges);
-    const roots = new Set(nodes.filter((node) => node.databaseObject?.kind === objectKey.kind && node.databaseObject.schema === objectKey.schema && node.databaseObject.name === objectKey.name).map((node) => node.id));
-    const selectedEdges = edges.filter((edge) => roots.has(edge.sourceId) || roots.has(edge.targetId));
-    const ids = new Set([...roots, ...selectedEdges.flatMap((edge) => [edge.sourceId, edge.targetId])]);
-    return Promise.resolve({ nodes: nodes.filter((node) => ids.has(node.id)), edges: selectedEdges });
-  }
-  getChangeImpact(_sourceId: string, objectKeys: ObjectKey[], maxDepth = 4): Promise<import("./types").ImpactPath[]> {
-    void _sourceId;
-    const nodes = (this.bundle?.projectGraphs ?? []).flatMap((project) => project.nodes);
-    const edges = (this.bundle?.projectGraphs ?? []).flatMap((project) => project.edges);
-    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-    const incoming = new Map<string, typeof edges>();
-    for (const edge of edges) {
-      const values = incoming.get(edge.targetId) ?? [];
-      values.push(edge);
-      incoming.set(edge.targetId, values);
-    }
-    const paths: import("./types").ImpactPath[] = [];
-    for (const target of objectKeys) {
-      const roots = nodes.filter((node) =>
-        node.databaseObject?.kind === target.kind &&
-        node.databaseObject.schema === target.schema &&
-        node.databaseObject.name === target.name,
-      );
-      for (const root of roots) {
-        const queue = [{ id: root.id, nodeIds: [root.id], edgeIds: [] as string[], potential: false, depth: 0 }];
-        const visited = new Set<string>();
-        while (queue.length) {
-          const current = queue.shift();
-          if (!current || current.depth >= Math.min(maxDepth, 8) || visited.has(`${current.id}:${current.depth}`)) continue;
-          visited.add(`${current.id}:${current.depth}`);
-          for (const edge of incoming.get(current.id) ?? []) {
-            const source = nodeMap.get(edge.sourceId);
-            if (!source) continue;
-            const nodeIds = [...current.nodeIds, source.id];
-            const edgeIds = [...current.edgeIds, edge.id];
-            const potential = current.potential || edge.certainty === "convention" || edge.certainty === "aiInferred";
-            if (source.kind !== "table" && source.kind !== "column") {
-              paths.push({ target, nodeIds, edgeIds, potential });
-            }
-            queue.push({ id: source.id, nodeIds, edgeIds, potential, depth: current.depth + 1 });
-          }
-        }
-      }
-    }
-    return Promise.resolve(paths);
-  }
-  openCodeLocation(): Promise<never> { return Promise.reject(new Error("Opening local code requires the desktop app.")); }
-
-  listModelConnections(): Promise<[]> { return Promise.resolve([]); }
-  saveModelConnection(): Promise<never> { return Promise.reject(new Error("Model connections require the desktop app.")); }
-  deleteModelConnection(): Promise<never> { return Promise.reject(new Error("Model connections require the desktop app.")); }
-  saveModelCredential(): Promise<never> { return Promise.reject(new Error("Model credentials require the desktop app.")); }
-  getModelRoutes(): Promise<[]> { return Promise.resolve([]); }
-  saveModelRoute(): Promise<never> { return Promise.reject(new Error("Model routes require the desktop app.")); }
-  deleteModelRoute(): Promise<never> { return Promise.reject(new Error("Model routes require the desktop app.")); }
-  previewModelFallback(): Promise<[]> { return Promise.resolve([]); }
-  testModelConnection(): Promise<never> { return Promise.reject(new Error("Model connections require the desktop app.")); }
-  previewAiProjectContext(): Promise<never> { return Promise.reject(new Error("AI project analysis requires the desktop app.")); }
-  runAiProjectAnalysis(): Promise<never> { return Promise.reject(new Error("AI project analysis requires the desktop app.")); }
-  listAiCandidates(): Promise<[]> { return Promise.resolve([]); }
-  listAiUsageEvents(): Promise<[]> { return Promise.resolve([]); }
-  reviewAiCandidate(): Promise<never> { return Promise.reject(new Error("AI candidate review requires the desktop app.")); }
 
   exportGitWorkspace(): Promise<never> {
     return Promise.reject(new Error("Git workspace export requires the desktop app."));

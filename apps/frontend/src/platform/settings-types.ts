@@ -27,7 +27,7 @@ export interface AppSettings {
     confirmBeforeQuit: boolean;
     dateTimeFormat: DateTimeFormat;
     lastSourceId: string | null;
-    lastViewMode: "explore" | "query" | "system" | "changes" | "history";
+    lastViewMode: "explore" | "query" | "changes" | "history";
   };
   appearance: {
     density: Density;
@@ -67,16 +67,6 @@ export interface AppSettings {
     edgeSpacing: number;
     restorePersonalLayout: boolean;
     largeModelThreshold: number;
-  };
-  codeAnalysis: {
-    enabled: boolean;
-    autoScan: boolean;
-    includeGitignore: boolean;
-    includeNodalStudioIgnore: boolean;
-    maxFileBytes: number;
-    editor: "systemDefault" | "visualStudioCode" | "cursor" | "zed";
-    allowUncommittedCodeForRemoteAi: boolean;
-    allowSourceExcerptsForRemoteAi: boolean;
   };
   connectionDefaults: {
     databaseEngine: "postgreSql" | "mySql";

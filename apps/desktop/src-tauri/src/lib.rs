@@ -1,7 +1,7 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap},
     fs,
-    path::PathBuf,
+    path::Path,
     process::Command,
     sync::Arc,
     time::Duration,
@@ -11,15 +11,10 @@ use ai_context::{
     AiProvider, ContextPolicy, Explanation, OfflineSchemaProvider, SchemaContext, change_context,
     domain_context, table_context,
 };
-use ai_provider::{
-    AiProvider as ModelAiProvider, CompletionRequest, OfflineProvider, OpenAiCompatibleProvider,
-    select_connection, validate_relation_candidates,
-};
 use chrono::Utc;
-use code_analysis::{AnalysisBatch, AnalysisError, SourceDocument, analyze_documents};
 use extension_model::{
     ChangeProvenance, CodeLineageLink, DriftReport, EnvironmentSnapshot, EventTriggerPlan,
-    LineageConfidence, compare_environments,
+    compare_environments,
 };
 use git_workspace::{
     DomainDocument, ExportReceipt, ProvenanceDocument, SemanticDocument, SemanticValue,
@@ -33,40 +28,33 @@ use mysql_adapter::{
 use postgres_adapter::{
     PostgresConnectionOptions, PostgresSslMode, connect, inspect_schema, test_connection,
 };
-use project_model::{
-    AiCandidateStatus, AiRelationCandidate, AiUsageEvent, ConnectionPrivacy, EdgeCertainty,
-    EdgeEvidence, FileChangeKind, GitMetadata, LocalProject, ModelCapabilities, ModelConnection,
-    ModelRole, ModelRoute, ProjectEdge, ProjectEdgeKind, ProjectFile, ProjectNode, ProjectNodeKind,
-    ProjectScan, ProviderKind, ReviewStatus, ScanStatus,
-};
-use project_scanner::{
-    ScanCancellation, ScanOptions, ScanOutput, ScannerError, discover_project,
-    scan_project_cancellable,
-};
 use query_engine::{ExecuteQueryRequest, QueryError, QueryExecutionResult, execute_postgres_query};
 use schema_diff::{SchemaChangeSet, diff_snapshots};
 use schema_model::{
     DataSourceProfile, DatabaseInfo, DatabaseSnapshot, DatabaseType, IgnoredRelationshipInference,
-    LogicalRelationship, LogicalRelationshipOrigin, LogicalRelationshipStatus, ObjectKey,
-    ObjectKind, RelationshipCardinality, RelationshipEndpoint, SslMode,
+    LogicalRelationship, LogicalRelationshipOrigin, LogicalRelationshipStatus,
+    RelationshipCardinality, RelationshipEndpoint, SslMode,
 };
 use semantic_model::{
     CanvasLayout, CanvasPosition, DomainGroup, ObjectAnnotation, SavedView, reattach_semantics,
 };
 use serde::{Deserialize, Serialize};
 use settings_model::{
-    AiProviderKind, AppSettings, ConflictStrategy, DataSourceSettings, EditorIntegration,
-    EffectiveSettings, MergeDriverStatus, OrganizationPolicy, ProjectSettings, SecurityStatus,
-    SettingsExportBundle, StorageUsage, apply_policy, apply_settings_layers,
+    AiProviderKind, AppSettings, ConflictStrategy, DataSourceSettings, EffectiveSettings,
+    MergeDriverStatus, OrganizationPolicy, ProjectSettings, SecurityStatus, SettingsExportBundle,
+    StorageUsage, apply_policy, apply_settings_layers,
 };
 use sha2::{Digest, Sha256};
 use snapshot_store::{
     ExternalAccessRecord, LocalSnapshotStore, QueryHistoryEntry, SnapshotSummary, SourceDataImpact,
     SyncQueueItem,
 };
-use sqlx::{Row, mysql::MySqlSslMode};
-use tauri::{Emitter, Manager, State};
-use tauri_plugin_dialog::DialogExt;
+use sqlx::{
+    Row,
+    mysql::MySqlSslMode,
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+};
+use tauri::{Manager, State};
 use tokio::sync::{Mutex, Semaphore};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -75,13 +63,12 @@ const KEYRING_SERVICE: &str = "com.claycosmos.nodalstudio.datasource";
 const CLOUD_KEYRING_SERVICE: &str = "com.claycosmos.nodalstudio.cloud";
 const CLOUD_REFRESH_KEYRING_SERVICE: &str = "com.claycosmos.nodalstudio.cloud.refresh";
 const AI_KEYRING_SERVICE: &str = "com.claycosmos.nodalstudio.ai";
-const MODEL_KEYRING_SERVICE: &str = "com.claycosmos.nodalstudio.model";
+const RETIRED_MODEL_KEYRING_SERVICE: &str = "com.claycosmos.nodalstudio.model";
 
 #[derive(Clone)]
 struct AppState {
     store: LocalSnapshotStore,
     ai_limiter: Arc<Semaphore>,
-    project_scans: Arc<Mutex<HashMap<Uuid, (Uuid, ScanCancellation)>>>,
     snapshot_captures: Arc<Mutex<HashMap<Uuid, Arc<Semaphore>>>>,
     cloud_operations: Arc<Mutex<HashMap<Uuid, Arc<Semaphore>>>>,
     active_queries: Arc<Mutex<HashMap<Uuid, (Uuid, CancellationToken)>>>,
@@ -102,168 +89,6 @@ async fn acquire_cloud_operation(
     gate.acquire_owned()
         .await
         .map_err(|_| "The source metadata operation gate is unavailable.".to_owned())
-}
-
-#[derive(Debug)]
-enum ProjectScanTaskError {
-    Scanner(ScannerError),
-    Analysis,
-}
-
-impl From<ScannerError> for ProjectScanTaskError {
-    fn from(value: ScannerError) -> Self {
-        Self::Scanner(value)
-    }
-}
-
-impl From<AnalysisError> for ProjectScanTaskError {
-    fn from(_value: AnalysisError) -> Self {
-        Self::Analysis
-    }
-}
-
-struct ProjectScanTask {
-    project_id: Uuid,
-    root_path: PathBuf,
-    scan: ProjectScan,
-    previous_hashes: std::collections::BTreeMap<String, String>,
-    options: ScanOptions,
-    snapshot: Option<DatabaseSnapshot>,
-    previous_graph: Option<snapshot_store::ProjectGraphSnapshot>,
-    cancellation: ScanCancellation,
-    store: LocalSnapshotStore,
-    active_scans: Arc<Mutex<HashMap<Uuid, (Uuid, ScanCancellation)>>>,
-    app: tauri::AppHandle,
-}
-
-impl ProjectScanTask {
-    async fn run(self) {
-        let Self {
-            project_id,
-            root_path,
-            scan,
-            previous_hashes,
-            options,
-            snapshot,
-            previous_graph,
-            cancellation,
-            store,
-            active_scans,
-            app,
-        } = self;
-        let scan_id = scan.id;
-        let lineage_source_id = snapshot.as_ref().map(|value| value.source_id);
-        let mut completed = scan;
-        let scan_root = root_path.clone();
-        let scan_cancellation = cancellation.clone();
-        let scanned = tauri::async_runtime::spawn_blocking(move || {
-            scan_project_cancellable(&scan_root, &previous_hashes, &options, &scan_cancellation)
-                .map_err(ProjectScanTaskError::from)
-        })
-        .await;
-        let result = match scanned {
-            Ok(Ok(output)) => {
-                completed.status = ScanStatus::Parsing;
-                let _ = store.save_project_scan(&completed).await;
-                let _ = app.emit("project-scan-updated", &completed);
-                let analysis_output = output.clone();
-                let analyzed = tauri::async_runtime::spawn_blocking(move || {
-                    analyze_scan_output(
-                        &root_path,
-                        &analysis_output,
-                        snapshot.as_ref(),
-                        previous_graph,
-                        project_id,
-                        scan_id,
-                    )
-                })
-                .await;
-                match analyzed {
-                    Ok(Ok(analysis)) => {
-                        completed.status = ScanStatus::Matching;
-                        let _ = store.save_project_scan(&completed).await;
-                        let _ = app.emit("project-scan-updated", &completed);
-                        Ok((output, analysis))
-                    }
-                    Ok(Err(error)) => Err(error),
-                    Err(_) => Err(ProjectScanTaskError::Analysis),
-                }
-            }
-            Ok(Err(error)) => Err(error),
-            Err(_) => Err(ProjectScanTaskError::Analysis),
-        };
-        completed.completed_at = Some(Utc::now());
-        match result {
-            Ok((output, mut analysis)) => {
-                apply_scan_metadata(&mut completed, output.discovery.git.as_ref());
-                if let (Some(source_id), Some(batch)) = (lineage_source_id, analysis.as_mut())
-                    && let Ok(lineage) = store.list_lineage(source_id).await
-                {
-                    project_legacy_lineage(
-                        project_id,
-                        completed.id,
-                        &output.files,
-                        &lineage,
-                        batch,
-                    );
-                }
-                let files_saved = store
-                    .replace_project_files(project_id, completed.id, &output.files)
-                    .await
-                    .is_ok();
-                let graph_saved =
-                    persist_analysis(&store, project_id, completed.id, analysis.as_ref()).await;
-                completed.status = if files_saved && graph_saved {
-                    ScanStatus::Ready
-                } else {
-                    ScanStatus::Failed
-                };
-            }
-            Err(ProjectScanTaskError::Scanner(ScannerError::Cancelled)) => {
-                completed.status = ScanStatus::Cancelled;
-            }
-            Err(_) => completed.status = ScanStatus::Failed,
-        }
-        let _ = store.save_project_scan(&completed).await;
-        active_scans.lock().await.remove(&completed.id);
-        let _ = app.emit("project-scan-updated", &completed);
-    }
-}
-
-fn analyze_scan_output(
-    root_path: &std::path::Path,
-    output: &ScanOutput,
-    snapshot: Option<&DatabaseSnapshot>,
-    previous_graph: Option<snapshot_store::ProjectGraphSnapshot>,
-    project_id: Uuid,
-    scan_id: Uuid,
-) -> Result<Option<AnalysisBatch>, ProjectScanTaskError> {
-    let Some(snapshot) = snapshot else {
-        return Ok(None);
-    };
-    let changed_paths = output
-        .changes
-        .iter()
-        .filter(|change| change.kind != FileChangeKind::Unchanged)
-        .map(|change| change.relative_path.clone())
-        .collect::<BTreeSet<_>>();
-    let analysis_files = if previous_graph.is_some() {
-        output
-            .files
-            .iter()
-            .filter(|file| changed_paths.contains(&file.relative_path))
-            .cloned()
-            .collect::<Vec<_>>()
-    } else {
-        output.files.clone()
-    };
-    let documents = read_analysis_documents(root_path, &analysis_files)?;
-    let current = analyze_documents(project_id, scan_id, &documents, snapshot)?;
-    Ok(Some(if let Some(previous) = previous_graph {
-        merge_incremental_analysis(previous, current, &changed_paths, scan_id)
-    } else {
-        current
-    }))
 }
 
 #[derive(Serialize)]
@@ -296,6 +121,14 @@ struct ConnectionTestResult {
     database: DatabaseInfo,
     ssl_active: Option<bool>,
     server_read_only: Option<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VerifyAndRefreshResult {
+    profile: DataSourceProfile,
+    connection: ConnectionTestResult,
+    capture: CaptureSnapshotResult,
 }
 
 #[derive(Deserialize)]
@@ -398,102 +231,6 @@ struct SaveLineageInput {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AddLocalProjectInput {
-    root_path: String,
-    name: Option<String>,
-    database_source_ids: Vec<Uuid>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CloneRemoteProjectInput {
-    remote_url: String,
-    name: Option<String>,
-    database_source_ids: Vec<Uuid>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RemoveProjectInput {
-    project_id: Uuid,
-    #[serde(default)]
-    delete_managed_cache: bool,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProjectBindingsInput {
-    project_id: Uuid,
-    database_source_ids: Vec<Uuid>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProjectInput {
-    project_id: Uuid,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProjectScanInput {
-    project_id: Uuid,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ScanInput {
-    scan_id: Uuid,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ObjectUsageInput {
-    source_id: Uuid,
-    object_key: ObjectKey,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ChangeImpactInput {
-    source_id: Uuid,
-    object_keys: Vec<ObjectKey>,
-    max_depth: usize,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ModelFallbackPreviewInput {
-    role: ModelRole,
-    contains_source_excerpts: bool,
-    contains_uncommitted_code: bool,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ModelFallbackStep {
-    connection_id: Uuid,
-    name: String,
-    eligible: bool,
-    local: bool,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CodeLocationInput {
-    project_id: Uuid,
-    relative_path: String,
-    line: Option<u32>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CodeUsageResult {
-    nodes: Vec<ProjectNode>,
-    edges: Vec<ProjectEdge>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct ExportGitWorkspaceInput {
     source_id: Uuid,
     repository_path: String,
@@ -550,62 +287,6 @@ struct SettingsInput {
 struct SecretInput {
     source_id: Uuid,
     secret: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ModelConnectionInput {
-    connection: ModelConnection,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ModelConnectionIdInput {
-    connection_id: Uuid,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ModelCredentialInput {
-    connection_id: Uuid,
-    secret: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ModelRouteInput {
-    route: ModelRoute,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ModelRoleInput {
-    role: ModelRole,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ReviewAiCandidateInput {
-    scan_id: Uuid,
-    candidate_id: Uuid,
-    decision: AiCandidateStatus,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AiProjectContextPreview {
-    scan_id: Uuid,
-    connection_id: Option<Uuid>,
-    provider: Option<ProviderKind>,
-    model: Option<String>,
-    network_used: bool,
-    node_count: usize,
-    edge_count: usize,
-    evidence_count: usize,
-    request_count: usize,
-    max_request_nodes: usize,
-    source_excerpts: usize,
-    uncommitted_code_included: bool,
 }
 
 #[derive(Deserialize)]
@@ -985,8 +666,6 @@ struct CloudSyncBundle {
     logical_relationships: Vec<LogicalRelationship>,
     layout: Option<CanvasLayout>,
     project_settings: Option<ProjectSettings>,
-    #[serde(default)]
-    project_graphs: Vec<project_model::SharedProjectGraph>,
     base_version: i64,
 }
 
@@ -1104,32 +783,30 @@ async fn save_data_source(
     input: SaveDataSourceInput,
     state: State<'_, AppState>,
 ) -> Result<DataSourceProfile, String> {
-    validate_connection_input(&input)?;
+    validate_connection_profile_input(&input)?;
     let now = Utc::now();
     let id = input.id.unwrap_or_else(Uuid::new_v4);
-    let created_at = match state.store.get_data_source(id).await {
-        Ok(Some(existing)) => existing.created_at,
-        Ok(None) => now,
-        Err(error) => return Err(safe_store_error(error)),
+    let existing = state
+        .store
+        .get_data_source(id)
+        .await
+        .map_err(safe_store_error)?;
+    if existing.is_none() && input.password.is_empty() {
+        return Err("A database password is required for a new data source.".into());
+    }
+    let created_at = match existing {
+        Some(existing) => existing.created_at,
+        None => now,
     };
-    credential_entry(id)?
-        .set_password(&input.password)
-        .map_err(|_| {
-            "Unable to save the database password in the operating system keychain.".to_owned()
-        })?;
+    if !input.password.is_empty() {
+        credential_entry(id)?
+            .set_password(&input.password)
+            .map_err(|_| {
+                "Unable to save the database password in the operating system keychain.".to_owned()
+            })?;
+    }
 
-    let profile = DataSourceProfile {
-        id,
-        display_name: input.display_name.trim().to_owned(),
-        host: input.host.trim().to_owned(),
-        port: input.port,
-        database: input.database.trim().to_owned(),
-        username: input.username.trim().to_owned(),
-        database_type: input.database_type,
-        ssl_mode: input.ssl_mode,
-        created_at,
-        updated_at: now,
-    };
+    let profile = data_source_profile_from_input(&input, id, created_at, now);
     state
         .store
         .save_data_source(&profile)
@@ -1142,10 +819,17 @@ async fn save_data_source(
 async fn test_postgres_connection(
     input: SaveDataSourceInput,
 ) -> Result<ConnectionTestResult, String> {
+    let input = connection_input_with_resolved_password(input)?;
     validate_connection_input(&input)?;
+    test_database_connection(&input).await
+}
+
+async fn test_database_connection(
+    input: &SaveDataSourceInput,
+) -> Result<ConnectionTestResult, String> {
     match input.database_type {
         DatabaseType::PostgreSql => {
-            let options = connection_options_from_input(&input);
+            let options = connection_options_from_input(input);
             let pool = connect(&options).await.map_err(safe_connection_error)?;
             let database = test_connection(&pool)
                 .await
@@ -1170,7 +854,7 @@ async fn test_postgres_connection(
             })
         }
         DatabaseType::MySql => {
-            let options = mysql_connection_options_from_input(&input);
+            let options = mysql_connection_options_from_input(input);
             let pool = connect_mysql(&options).await.map_err(safe_mysql_error)?;
             let database = test_mysql_connection(&pool)
                 .await
@@ -1197,11 +881,130 @@ async fn test_postgres_connection(
     }
 }
 
+fn connection_input_with_resolved_password(
+    mut input: SaveDataSourceInput,
+) -> Result<SaveDataSourceInput, String> {
+    validate_connection_profile_input(&input)?;
+    if input.password.is_empty() {
+        let source_id = input.id.ok_or_else(|| {
+            "A database password is required to verify a new connection.".to_owned()
+        })?;
+        input.password = credential_entry(source_id)?
+            .get_password()
+            .map_err(|_| "Unable to read the database password from the keychain.".to_owned())?;
+    }
+    Ok(input)
+}
+
+fn data_source_profile_from_input(
+    input: &SaveDataSourceInput,
+    id: Uuid,
+    created_at: chrono::DateTime<Utc>,
+    updated_at: chrono::DateTime<Utc>,
+) -> DataSourceProfile {
+    DataSourceProfile {
+        id,
+        display_name: input.display_name.trim().to_owned(),
+        host: input.host.trim().to_owned(),
+        port: input.port,
+        database: input.database.trim().to_owned(),
+        username: input.username.trim().to_owned(),
+        database_type: input.database_type,
+        ssl_mode: input.ssl_mode,
+        created_at,
+        updated_at,
+    }
+}
+
 #[tauri::command]
-#[allow(clippy::too_many_lines)]
+async fn verify_and_refresh_data_source(
+    input: SaveDataSourceInput,
+    state: State<'_, AppState>,
+) -> Result<VerifyAndRefreshResult, String> {
+    let source_id = input
+        .id
+        .ok_or_else(|| "Verify and refresh requires an existing data source.".to_owned())?;
+    let previous_profile = state
+        .store
+        .get_data_source(source_id)
+        .await
+        .map_err(safe_store_error)?
+        .ok_or_else(|| "The selected data source no longer exists.".to_owned())?;
+    let entry = credential_entry(source_id)?;
+    let previous_password = entry.get_password().ok();
+    let resolved = connection_input_with_resolved_password(input)?;
+    validate_connection_input(&resolved)?;
+    let connection = test_database_connection(&resolved).await?;
+    let profile = data_source_profile_from_input(
+        &resolved,
+        source_id,
+        previous_profile.created_at,
+        Utc::now(),
+    );
+
+    entry.set_password(&resolved.password).map_err(|_| {
+        "Unable to save the database password in the operating system keychain.".to_owned()
+    })?;
+    if let Err(error) = state.store.save_data_source(&profile).await {
+        restore_database_secret(source_id, previous_password.as_deref())?;
+        return Err(safe_store_error(error));
+    }
+
+    let capture = match capture_snapshot(
+        CaptureSnapshotInput {
+            source_id,
+            trigger: None,
+        },
+        &state,
+    )
+    .await
+    {
+        Ok(capture) => capture,
+        Err(error) => {
+            let profile_restored = state
+                .store
+                .save_data_source(&previous_profile)
+                .await
+                .is_ok();
+            let secret_restored =
+                restore_database_secret(source_id, previous_password.as_deref()).is_ok();
+            if !profile_restored || !secret_restored {
+                return Err(format!(
+                    "{error} The previous connection profile could not be fully restored."
+                ));
+            }
+            return Err(error);
+        }
+    };
+
+    Ok(VerifyAndRefreshResult {
+        profile,
+        connection,
+        capture,
+    })
+}
+
+fn restore_database_secret(source_id: Uuid, previous_password: Option<&str>) -> Result<(), String> {
+    match previous_password {
+        Some(password) => credential_entry(source_id)?
+            .set_password(password)
+            .map_err(|_| "Unable to restore the previous database password.".to_owned()),
+        None => delete_secret(KEYRING_SERVICE, source_id),
+    }
+}
+
+#[tauri::command]
 async fn capture_postgres_snapshot(
     input: CaptureSnapshotInput,
     state: State<'_, AppState>,
+) -> Result<CaptureSnapshotResult, String> {
+    capture_snapshot(input, &state).await
+}
+
+#[allow(clippy::too_many_lines)]
+async fn capture_snapshot(
+    input: CaptureSnapshotInput,
+    state: &AppState,
 ) -> Result<CaptureSnapshotResult, String> {
     let capture_gate = {
         let mut captures = state.snapshot_captures.lock().await;
@@ -1617,1002 +1420,6 @@ async fn save_code_lineage(
 }
 
 #[tauri::command]
-async fn list_model_connections(
-    state: State<'_, AppState>,
-) -> Result<Vec<ModelConnection>, String> {
-    state
-        .store
-        .list_model_connections()
-        .await
-        .map_err(safe_store_error)
-}
-
-#[tauri::command]
-async fn save_model_connection(
-    input: ModelConnectionInput,
-    state: State<'_, AppState>,
-) -> Result<ModelConnection, String> {
-    let mut connection = input.connection;
-    connection.credential_ref = credential_exists(MODEL_KEYRING_SERVICE, connection.id)
-        .then(|| format!("keychain:model:{}", connection.id));
-    state
-        .store
-        .save_model_connection(&connection)
-        .await
-        .map_err(safe_store_error)?;
-    Ok(connection)
-}
-
-#[tauri::command]
-async fn delete_model_connection(
-    input: ModelConnectionIdInput,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    if state
-        .store
-        .list_model_routes()
-        .await
-        .map_err(safe_store_error)?
-        .iter()
-        .any(|route| {
-            route.primary_connection_id == input.connection_id
-                || route.fallback_connection_ids.contains(&input.connection_id)
-        })
-    {
-        return Err(
-            "Clear or replace every task route that uses this connection before deleting it."
-                .into(),
-        );
-    }
-    delete_secret(MODEL_KEYRING_SERVICE, input.connection_id)?;
-    state
-        .store
-        .delete_model_connection(input.connection_id)
-        .await
-        .map_err(safe_store_error)
-}
-
-#[tauri::command]
-async fn save_model_credential(
-    input: ModelCredentialInput,
-    state: State<'_, AppState>,
-) -> Result<ModelConnection, String> {
-    save_secret(MODEL_KEYRING_SERVICE, input.connection_id, &input.secret)?;
-    let mut connection = state
-        .store
-        .list_model_connections()
-        .await
-        .map_err(safe_store_error)?
-        .into_iter()
-        .find(|item| item.id == input.connection_id)
-        .ok_or_else(|| "Model connection no longer exists.".to_owned())?;
-    connection.credential_ref = Some(format!("keychain:model:{}", connection.id));
-    state
-        .store
-        .save_model_connection(&connection)
-        .await
-        .map_err(safe_store_error)?;
-    Ok(connection)
-}
-
-#[tauri::command]
-async fn get_model_routes(state: State<'_, AppState>) -> Result<Vec<ModelRoute>, String> {
-    state
-        .store
-        .list_model_routes()
-        .await
-        .map_err(safe_store_error)
-}
-
-#[tauri::command]
-async fn save_model_route(
-    input: ModelRouteInput,
-    state: State<'_, AppState>,
-) -> Result<ModelRoute, String> {
-    let connections = state
-        .store
-        .list_model_connections()
-        .await
-        .map_err(safe_store_error)?;
-    if !connections
-        .iter()
-        .any(|connection| connection.id == input.route.primary_connection_id && connection.enabled)
-    {
-        return Err("Choose an enabled primary model connection.".into());
-    }
-    state
-        .store
-        .save_model_route(&input.route)
-        .await
-        .map_err(safe_store_error)?;
-    Ok(input.route)
-}
-
-#[tauri::command]
-async fn delete_model_route(
-    input: ModelRoleInput,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    state
-        .store
-        .delete_model_route(input.role)
-        .await
-        .map_err(safe_store_error)
-}
-
-#[tauri::command]
-async fn preview_model_fallback(
-    input: ModelFallbackPreviewInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<ModelFallbackStep>, String> {
-    let connections = state
-        .store
-        .list_model_connections()
-        .await
-        .map_err(safe_store_error)?;
-    let route = state
-        .store
-        .list_model_routes()
-        .await
-        .map_err(safe_store_error)?
-        .into_iter()
-        .find(|route| route.role == input.role)
-        .ok_or_else(|| "No route is configured for this role.".to_owned())?;
-    let request = CompletionRequest {
-        system: String::new(),
-        input: String::new(),
-        structured_output: input.role == ModelRole::Analysis,
-        contains_source_excerpts: input.contains_source_excerpts,
-        contains_uncommitted_code: input.contains_uncommitted_code,
-    };
-    Ok(std::iter::once(route.primary_connection_id)
-        .chain(route.fallback_connection_ids)
-        .filter_map(|id| connections.iter().find(|connection| connection.id == id))
-        .map(|connection| ModelFallbackStep {
-            connection_id: connection.id,
-            name: connection.name.clone(),
-            eligible: select_connection(input.role, [connection], false, &request).is_ok(),
-            local: connection.capabilities.local,
-        })
-        .collect())
-}
-
-fn model_secret(connection_id: Uuid) -> Option<String> {
-    keyring::Entry::new(MODEL_KEYRING_SERVICE, &connection_id.to_string())
-        .ok()?
-        .get_password()
-        .ok()
-}
-
-#[tauri::command]
-async fn test_model_connection(
-    input: ModelConnectionIdInput,
-    state: State<'_, AppState>,
-) -> Result<ai_provider::ConnectionTest, String> {
-    let connection = state
-        .store
-        .list_model_connections()
-        .await
-        .map_err(safe_store_error)?
-        .into_iter()
-        .find(|item| item.id == input.connection_id)
-        .ok_or_else(|| "Model connection no longer exists.".to_owned())?;
-    let secret = model_secret(connection.id);
-    match connection.provider {
-        ProviderKind::Offline => OfflineProvider.test_connection(&connection, None).await,
-        ProviderKind::OpenAiCompatible => {
-            OpenAiCompatibleProvider::default()
-                .test_connection(&connection, secret.as_deref())
-                .await
-        }
-    }
-    .map_err(|_| {
-        "Model connection test failed. Check its endpoint, model, and credential.".to_owned()
-    })
-}
-
-async fn analysis_route(
-    store: &LocalSnapshotStore,
-    request: &CompletionRequest,
-) -> Result<(ModelConnection, Vec<ModelConnection>), String> {
-    let connections = store
-        .list_model_connections()
-        .await
-        .map_err(safe_store_error)?;
-    let route = store
-        .list_model_routes()
-        .await
-        .map_err(safe_store_error)?
-        .into_iter()
-        .find(|route| route.role == ModelRole::Analysis)
-        .ok_or_else(|| "Configure an Analysis Model route first.".to_owned())?;
-    let ids = std::iter::once(route.primary_connection_id)
-        .chain(route.fallback_connection_ids)
-        .collect::<Vec<_>>();
-    let ordered = ids
-        .iter()
-        .filter_map(|id| connections.iter().find(|connection| connection.id == *id))
-        .cloned()
-        .collect::<Vec<_>>();
-    let selected = select_connection(ModelRole::Analysis, ordered.iter(), false, request)
-        .map_err(|_| {
-            "No Analysis Model satisfies the configured capability and privacy policy.".to_owned()
-        })?
-        .clone();
-    Ok((selected, ordered))
-}
-
-#[tauri::command]
-async fn preview_ai_project_context(
-    input: ScanInput,
-    state: State<'_, AppState>,
-) -> Result<AiProjectContextPreview, String> {
-    let graph = state
-        .store
-        .get_project_graph(input.scan_id)
-        .await
-        .map_err(safe_store_error)?;
-    let request = CompletionRequest {
-        system: String::new(),
-        input: String::new(),
-        structured_output: true,
-        contains_source_excerpts: false,
-        contains_uncommitted_code: false,
-    };
-    let selected = analysis_route(&state.store, &request)
-        .await
-        .ok()
-        .map(|value| value.0);
-    let slices = project_graph::bounded_context_slices(&graph.nodes, &graph.edges, 24, 160);
-    Ok(AiProjectContextPreview {
-        scan_id: input.scan_id,
-        connection_id: selected.as_ref().map(|item| item.id),
-        provider: selected.as_ref().map(|item| item.provider),
-        model: selected.as_ref().map(|item| item.model.clone()),
-        network_used: selected.as_ref().is_some_and(|item| item.privacy.remote),
-        node_count: graph.nodes.len(),
-        edge_count: graph.edges.len(),
-        evidence_count: graph.edges.iter().map(|edge| edge.evidence.len()).sum(),
-        request_count: slices.len(),
-        max_request_nodes: slices
-            .iter()
-            .map(|slice| slice.node_ids.len())
-            .max()
-            .unwrap_or(0),
-        source_excerpts: 0,
-        uncommitted_code_included: false,
-    })
-}
-
-#[tauri::command]
-async fn run_ai_project_analysis(
-    input: ScanInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<AiRelationCandidate>, String> {
-    let graph = state
-        .store
-        .get_project_graph(input.scan_id)
-        .await
-        .map_err(safe_store_error)?;
-    let slices = project_graph::bounded_context_slices(&graph.nodes, &graph.edges, 24, 160);
-    let mut candidates = BTreeMap::new();
-    for slice in &slices {
-        for candidate in analyze_graph_slice(&state.store, &graph, slice).await? {
-            candidates.insert(candidate.proposed_edge.id.clone(), candidate);
-        }
-    }
-    for candidate in candidates.values() {
-        state
-            .store
-            .save_ai_candidate(candidate)
-            .await
-            .map_err(safe_store_error)?;
-    }
-    Ok(candidates.into_values().collect())
-}
-
-async fn analyze_graph_slice(
-    store: &LocalSnapshotStore,
-    graph: &snapshot_store::ProjectGraphSnapshot,
-    slice: &project_graph::GraphContextSlice,
-) -> Result<Vec<AiRelationCandidate>, String> {
-    let node_ids = slice.node_ids.iter().collect::<BTreeSet<_>>();
-    let edge_ids = slice.edge_ids.iter().collect::<BTreeSet<_>>();
-    let context_nodes = graph
-        .nodes
-        .iter()
-        .filter(|node| node_ids.contains(&node.id))
-        .cloned()
-        .collect::<Vec<_>>();
-    let context_edges = graph
-        .edges
-        .iter()
-        .filter(|edge| edge_ids.contains(&edge.id))
-        .cloned()
-        .collect::<Vec<_>>();
-    let graph_context = serde_json::json!({ "targets": slice.target_node_ids, "nodes": context_nodes.iter().map(|node| serde_json::json!({"id":node.id,"kind":node.kind,"name":node.qualified_name})).collect::<Vec<_>>(), "relations": context_edges.iter().map(|edge| serde_json::json!({"sourceId":edge.source_id,"targetId":edge.target_id,"kind":edge.kind,"evidenceIds":edge.evidence.iter().map(|item| &item.id).collect::<Vec<_>>()})).collect::<Vec<_>>() });
-    let request = CompletionRequest { system: "Analyze only the supplied targets and one-hop context. Return JSON only: {\"edges\":[{\"sourceId\":\"existing id\",\"targetId\":\"existing id\",\"kind\":\"calls|handles|reads|writes|joins|mapsTo|returns|changes|triggers\",\"evidenceIds\":[\"existing evidence id\"],\"explanation\":\"reason\"}]}. Never invent IDs and omit uncertain relations.".into(), input: graph_context.to_string(), structured_output: true, contains_source_excerpts: false, contains_uncommitted_code: false };
-    let (primary, ordered) = analysis_route(store, &request).await?;
-    let local_only = primary.capabilities.local;
-    let mut completed = None;
-    for connection in ordered
-        .into_iter()
-        .skip_while(|item| item.id != primary.id)
-        .filter(|item| !local_only || item.capabilities.local)
-    {
-        if select_connection(ModelRole::Analysis, [&connection], false, &request).is_err() {
-            continue;
-        }
-        let started_at = Utc::now();
-        let secret = model_secret(connection.id);
-        let response = match connection.provider {
-            ProviderKind::Offline => {
-                OfflineProvider
-                    .complete(&connection, None, request.clone())
-                    .await
-            }
-            ProviderKind::OpenAiCompatible => {
-                OpenAiCompatibleProvider::default()
-                    .complete(&connection, secret.as_deref(), request.clone())
-                    .await
-            }
-        };
-        store
-            .save_ai_usage_event(&AiUsageEvent {
-                id: Uuid::new_v4(),
-                role: ModelRole::Analysis,
-                connection_id: connection.id,
-                provider: connection.provider,
-                model: connection.model.clone(),
-                started_at,
-                completed_at: Utc::now(),
-                input_tokens: None,
-                output_tokens: None,
-                fallback_from: (connection.id != primary.id).then_some(primary.id),
-                status: if response.is_ok() {
-                    "success".into()
-                } else {
-                    "failed".into()
-                },
-                file_count: 0,
-                snippet_count: 0,
-                privacy_policy_version: 1,
-            })
-            .await
-            .map_err(safe_store_error)?;
-        if let Ok(response) = response {
-            completed = Some((connection, response));
-            break;
-        }
-    }
-    let (connection, response) = completed.ok_or_else(|| "All eligible Analysis Model connections failed; the deterministic System Map was not changed.".to_owned())?;
-    validate_relation_candidates(
-        &response.content,
-        graph.scan_id,
-        &connection,
-        &context_nodes,
-        &context_edges,
-    )
-    .map_err(|_| {
-        "The model response was rejected because it referenced unknown or unsupported evidence."
-            .to_owned()
-    })
-}
-
-#[tauri::command]
-async fn list_ai_candidates(
-    input: ScanInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<AiRelationCandidate>, String> {
-    state
-        .store
-        .list_ai_candidates(input.scan_id)
-        .await
-        .map_err(safe_store_error)
-}
-
-#[tauri::command]
-async fn list_ai_usage_events(state: State<'_, AppState>) -> Result<Vec<AiUsageEvent>, String> {
-    state
-        .store
-        .list_ai_usage_events(100)
-        .await
-        .map_err(safe_store_error)
-}
-
-#[tauri::command]
-async fn review_ai_candidate(
-    input: ReviewAiCandidateInput,
-    state: State<'_, AppState>,
-) -> Result<AiRelationCandidate, String> {
-    let mut candidate = state
-        .store
-        .list_ai_candidates(input.scan_id)
-        .await
-        .map_err(safe_store_error)?
-        .into_iter()
-        .find(|item| item.id == input.candidate_id)
-        .ok_or_else(|| "AI candidate no longer exists.".to_owned())?;
-    if candidate.status != AiCandidateStatus::Pending
-        || !matches!(
-            input.decision,
-            AiCandidateStatus::Confirmed | AiCandidateStatus::Rejected
-        )
-    {
-        return Err("Only pending candidates can be confirmed or rejected.".into());
-    }
-    candidate.status = input.decision;
-    candidate.reviewed_at = Some(Utc::now());
-    if input.decision == AiCandidateStatus::Confirmed {
-        candidate.proposed_edge.certainty = EdgeCertainty::HumanConfirmed;
-        candidate.proposed_edge.review_status = ReviewStatus::Confirmed;
-        let graph = state
-            .store
-            .get_project_graph(input.scan_id)
-            .await
-            .map_err(safe_store_error)?;
-        let project_id = graph
-            .nodes
-            .iter()
-            .find(|node| node.id == candidate.proposed_edge.source_id)
-            .map(|node| node.project_id)
-            .ok_or_else(|| "Candidate source node no longer exists.".to_owned())?;
-        state
-            .store
-            .save_project_edge(project_id, &candidate.proposed_edge)
-            .await
-            .map_err(safe_store_error)?;
-    }
-    state
-        .store
-        .save_ai_candidate(&candidate)
-        .await
-        .map_err(safe_store_error)?;
-    Ok(candidate)
-}
-
-#[tauri::command]
-async fn add_local_project(
-    input: AddLocalProjectInput,
-    state: State<'_, AppState>,
-) -> Result<LocalProject, String> {
-    let requested_root = PathBuf::from(input.root_path.trim());
-    let discovery = tauri::async_runtime::spawn_blocking(move || discover_project(&requested_root))
-        .await
-        .map_err(|_| "Local project discovery stopped unexpectedly.".to_owned())?
-        .map_err(|error| safe_scanner_error(&error))?;
-    let fallback_name = discovery
-        .canonical_root
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("Local project");
-    let name = input
-        .name
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(fallback_name)
-        .to_owned();
-    let project = LocalProject {
-        id: Uuid::new_v4(),
-        name,
-        root_path: discovery.canonical_root.to_string_lossy().into_owned(),
-        repository_kind: discovery.repository_kind,
-        remote_url: None,
-        managed_cache: false,
-        database_source_ids: input.database_source_ids,
-        created_at: Utc::now(),
-    };
-    state
-        .store
-        .save_local_project(&project)
-        .await
-        .map_err(safe_store_error)?;
-    Ok(project)
-}
-
-#[tauri::command]
-async fn clone_remote_project(
-    input: CloneRemoteProjectInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<LocalProject, String> {
-    let remote_url = validated_remote_git_url(&input.remote_url)?;
-    let project_id = Uuid::new_v4();
-    let cache_root = app
-        .path()
-        .app_cache_dir()
-        .map_err(|_| "Unable to resolve the application cache directory.".to_owned())?
-        .join("projects");
-    fs::create_dir_all(&cache_root)
-        .map_err(|_| "Unable to create the managed project cache.".to_owned())?;
-    let destination = cache_root.join(project_id.to_string());
-    let clone_url = remote_url.to_string();
-    let clone_destination = destination.clone();
-    let cloned = tauri::async_runtime::spawn_blocking(move || {
-        remote_clone_command(&clone_url, &clone_destination).status()
-    })
-    .await
-    .map_err(|_| "Remote clone stopped unexpectedly.".to_owned())?
-    .map_err(|_| "Git is unavailable on this system.".to_owned())?;
-    if !cloned.success() {
-        let _ = fs::remove_dir_all(&destination);
-        return Err("Remote repository clone failed without changing existing projects.".into());
-    }
-    let discovery = discover_project(&destination).map_err(|error| safe_scanner_error(&error))?;
-    let fallback_name = remote_url
-        .path_segments()
-        .and_then(Iterator::last)
-        .unwrap_or("Remote project")
-        .trim_end_matches(".git");
-    let project = LocalProject {
-        id: project_id,
-        name: input
-            .name
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(fallback_name)
-            .to_owned(),
-        root_path: discovery.canonical_root.to_string_lossy().into_owned(),
-        repository_kind: discovery.repository_kind,
-        remote_url: Some(remote_url.to_string()),
-        managed_cache: true,
-        database_source_ids: input.database_source_ids,
-        created_at: Utc::now(),
-    };
-    state
-        .store
-        .save_local_project(&project)
-        .await
-        .map_err(safe_store_error)?;
-    Ok(project)
-}
-
-fn validated_remote_git_url(value: &str) -> Result<reqwest::Url, String> {
-    let url =
-        reqwest::Url::parse(value.trim()).map_err(|_| "Enter a valid HTTPS Git URL.".to_owned())?;
-    if url.scheme() != "https"
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.host_str().is_none()
-        || url.query().is_some()
-        || url.fragment().is_some()
-    {
-        return Err("Remote Git URLs must use HTTPS and cannot contain credentials, query parameters, or fragments.".into());
-    }
-    Ok(url)
-}
-
-fn remote_clone_command(remote_url: &str, destination: &std::path::Path) -> Command {
-    let mut command = Command::new("git");
-    command
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .args([
-            "-c",
-            "core.hooksPath=/dev/null",
-            "-c",
-            "protocol.file.allow=never",
-            "clone",
-            "--depth",
-            "1",
-            "--single-branch",
-            "--no-tags",
-            "--recurse-submodules=no",
-            "--",
-            remote_url,
-        ])
-        .arg(destination);
-    command
-}
-
-#[tauri::command]
-#[allow(clippy::needless_pass_by_value)]
-fn select_project_directory(app: tauri::AppHandle) -> Option<String> {
-    app.dialog()
-        .file()
-        .blocking_pick_folder()
-        .map(|path| path.to_string())
-}
-
-#[tauri::command]
-async fn list_local_projects(state: State<'_, AppState>) -> Result<Vec<LocalProject>, String> {
-    state
-        .store
-        .list_local_projects()
-        .await
-        .map_err(safe_store_error)
-}
-
-#[tauri::command]
-async fn set_project_bindings(
-    input: ProjectBindingsInput,
-    state: State<'_, AppState>,
-) -> Result<LocalProject, String> {
-    let mut project = state
-        .store
-        .get_local_project(input.project_id)
-        .await
-        .map_err(safe_store_error)?
-        .ok_or_else(|| "Local project no longer exists.".to_owned())?;
-    project.database_source_ids = input
-        .database_source_ids
-        .into_iter()
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    state
-        .store
-        .save_local_project(&project)
-        .await
-        .map_err(safe_store_error)?;
-    Ok(project)
-}
-
-#[tauri::command]
-async fn remove_local_project(
-    input: RemoveProjectInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let project = state
-        .store
-        .get_local_project(input.project_id)
-        .await
-        .map_err(safe_store_error)?;
-    let managed_cache_path = if input.delete_managed_cache
-        && let Some(project) = project.as_ref()
-        && project.managed_cache
-    {
-        let cache_root = app
-            .path()
-            .app_cache_dir()
-            .map_err(|_| "Unable to resolve the application cache directory.".to_owned())?
-            .join("projects");
-        let project_path = PathBuf::from(&project.root_path)
-            .canonicalize()
-            .map_err(|_| "Managed project cache is unavailable.".to_owned())?;
-        let canonical_cache = cache_root
-            .canonicalize()
-            .map_err(|_| "Managed project cache is unavailable.".to_owned())?;
-        if !project_path.starts_with(&canonical_cache) {
-            return Err("Refusing to delete a project directory outside the managed cache.".into());
-        }
-        Some(project_path)
-    } else {
-        None
-    };
-    let tokens: Vec<_> = state
-        .project_scans
-        .lock()
-        .await
-        .values()
-        .filter(|(project_id, _)| *project_id == input.project_id)
-        .map(|(_, cancellation)| cancellation.clone())
-        .collect();
-    for cancellation in tokens {
-        cancellation.cancel();
-    }
-    state
-        .store
-        .delete_local_project(input.project_id)
-        .await
-        .map_err(safe_store_error)?;
-    if let Some(project_path) = managed_cache_path {
-        fs::remove_dir_all(project_path)
-            .map_err(|_| "Unable to delete the managed project cache.".to_owned())?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn start_project_scan(
-    input: ProjectScanInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ProjectScan, String> {
-    let project = state
-        .store
-        .get_local_project(input.project_id)
-        .await
-        .map_err(safe_store_error)?
-        .ok_or_else(|| "The selected local project no longer exists.".to_owned())?;
-    let previous_hashes = state
-        .store
-        .latest_project_file_hashes(project.id)
-        .await
-        .map_err(safe_store_error)?;
-    let previous_graph = latest_ready_project_graph(&state.store, project.id).await?;
-    let app_settings = state
-        .store
-        .get_app_settings()
-        .await
-        .map_err(safe_store_error)?;
-    if !app_settings.code_analysis.enabled {
-        return Err("Local code analysis is disabled in Settings.".into());
-    }
-    let scan_options = ScanOptions {
-        max_file_bytes: app_settings.code_analysis.max_file_bytes,
-        include_gitignore: app_settings.code_analysis.include_gitignore,
-        include_nodal_studio_ignore: app_settings.code_analysis.include_nodal_studio_ignore,
-    };
-    let scan = ProjectScan {
-        id: Uuid::new_v4(),
-        project_id: project.id,
-        branch: None,
-        commit_sha: None,
-        dirty: false,
-        status: ScanStatus::Discovering,
-        analyzer_versions: std::collections::BTreeMap::from([
-            ("project-scanner".into(), env!("CARGO_PKG_VERSION").into()),
-            ("generic-sql".into(), env!("CARGO_PKG_VERSION").into()),
-            (
-                "typescript-tree-sitter".into(),
-                env!("CARGO_PKG_VERSION").into(),
-            ),
-            ("prisma-schema".into(), env!("CARGO_PKG_VERSION").into()),
-        ]),
-        started_at: Utc::now(),
-        completed_at: None,
-    };
-    state
-        .store
-        .save_project_scan(&scan)
-        .await
-        .map_err(safe_store_error)?;
-
-    let cancellation = ScanCancellation::default();
-    state
-        .project_scans
-        .lock()
-        .await
-        .insert(scan.id, (project.id, cancellation.clone()));
-    let store = state.store.clone();
-    let mut analysis_snapshot = None;
-    for source_id in &project.database_source_ids {
-        if let Some(snapshot) = store
-            .latest_snapshot(*source_id)
-            .await
-            .map_err(safe_store_error)?
-        {
-            analysis_snapshot = Some(snapshot);
-            break;
-        }
-    }
-    let task = ProjectScanTask {
-        project_id: project.id,
-        root_path: PathBuf::from(&project.root_path),
-        scan: scan.clone(),
-        previous_hashes,
-        options: scan_options,
-        snapshot: analysis_snapshot,
-        previous_graph,
-        cancellation,
-        store,
-        active_scans: Arc::clone(&state.project_scans),
-        app,
-    };
-    tauri::async_runtime::spawn(task.run());
-    Ok(scan)
-}
-
-async fn latest_ready_project_graph(
-    store: &LocalSnapshotStore,
-    project_id: Uuid,
-) -> Result<Option<snapshot_store::ProjectGraphSnapshot>, String> {
-    let scan = store
-        .list_project_scans(project_id)
-        .await
-        .map_err(safe_store_error)?
-        .into_iter()
-        .find(|candidate| candidate.status == ScanStatus::Ready);
-    match scan {
-        Some(scan) => store
-            .get_project_graph(scan.id)
-            .await
-            .map(Some)
-            .map_err(safe_store_error),
-        None => Ok(None),
-    }
-}
-
-#[tauri::command]
-async fn cancel_project_scan(input: ScanInput, state: State<'_, AppState>) -> Result<bool, String> {
-    let scans = state.project_scans.lock().await;
-    let Some((_, cancellation)) = scans.get(&input.scan_id) else {
-        return Ok(false);
-    };
-    cancellation.cancel();
-    Ok(true)
-}
-
-#[tauri::command]
-async fn get_project_scan_status(
-    input: ScanInput,
-    state: State<'_, AppState>,
-) -> Result<Option<ProjectScan>, String> {
-    state
-        .store
-        .get_project_scan(input.scan_id)
-        .await
-        .map_err(safe_store_error)
-}
-
-#[tauri::command]
-async fn list_project_scans(
-    input: ProjectInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<ProjectScan>, String> {
-    state
-        .store
-        .list_project_scans(input.project_id)
-        .await
-        .map_err(safe_store_error)
-}
-
-#[tauri::command]
-async fn get_project_graph(
-    input: ScanInput,
-    state: State<'_, AppState>,
-) -> Result<snapshot_store::ProjectGraphSnapshot, String> {
-    state
-        .store
-        .get_project_graph(input.scan_id)
-        .await
-        .map_err(safe_store_error)
-}
-
-#[tauri::command]
-async fn get_database_code_usage(
-    input: ObjectUsageInput,
-    state: State<'_, AppState>,
-) -> Result<CodeUsageResult, String> {
-    let projects = state
-        .store
-        .list_local_projects()
-        .await
-        .map_err(safe_store_error)?;
-    let mut nodes = BTreeMap::new();
-    let mut edges = BTreeMap::new();
-    for project in projects
-        .into_iter()
-        .filter(|project| project.database_source_ids.contains(&input.source_id))
-    {
-        let scans = state
-            .store
-            .list_project_scans(project.id)
-            .await
-            .map_err(safe_store_error)?;
-        let Some(scan) = scans
-            .into_iter()
-            .find(|scan| scan.status == ScanStatus::Ready)
-        else {
-            continue;
-        };
-        let graph = state
-            .store
-            .get_project_graph(scan.id)
-            .await
-            .map_err(safe_store_error)?;
-        collect_object_neighbourhood(
-            &graph.nodes,
-            &graph.edges,
-            &input.object_key,
-            &mut nodes,
-            &mut edges,
-        );
-    }
-    Ok(CodeUsageResult {
-        nodes: nodes.into_values().collect(),
-        edges: edges.into_values().collect(),
-    })
-}
-
-#[tauri::command]
-async fn get_change_impact(
-    input: ChangeImpactInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<project_graph::ImpactPath>, String> {
-    let projects = state
-        .store
-        .list_local_projects()
-        .await
-        .map_err(safe_store_error)?;
-    let mut paths = Vec::new();
-    for project in projects
-        .into_iter()
-        .filter(|project| project.database_source_ids.contains(&input.source_id))
-    {
-        if let Some(graph) = latest_ready_project_graph(&state.store, project.id).await? {
-            paths.extend(project_graph::reverse_impact_paths(
-                &graph.nodes,
-                &graph.edges,
-                &input.object_keys,
-                input.max_depth.min(8),
-            ));
-        }
-    }
-    Ok(paths)
-}
-
-#[tauri::command]
-async fn open_code_location(
-    input: CodeLocationInput,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let project = state
-        .store
-        .get_local_project(input.project_id)
-        .await
-        .map_err(safe_store_error)?
-        .ok_or_else(|| "Local project no longer exists.".to_owned())?;
-    let root = PathBuf::from(project.root_path)
-        .canonicalize()
-        .map_err(|_| "Project directory is unavailable.".to_owned())?;
-    let path = root
-        .join(&input.relative_path)
-        .canonicalize()
-        .map_err(|_| "Code location is unavailable.".to_owned())?;
-    if !path.starts_with(&root) || !path.is_file() {
-        return Err("Code location falls outside the authorized project.".into());
-    }
-    let editor = state
-        .store
-        .get_app_settings()
-        .await
-        .map_err(safe_store_error)?
-        .code_analysis
-        .editor;
-    let mut command = code_editor_command(editor, &path, input.line);
-    command
-        .spawn()
-        .map_err(|_| "Unable to open the code location with the system editor.".to_owned())?;
-    Ok(())
-}
-
-fn code_editor_command(
-    editor: EditorIntegration,
-    path: &std::path::Path,
-    line: Option<u32>,
-) -> Command {
-    match editor {
-        EditorIntegration::VisualStudioCode => {
-            let mut command = Command::new("code");
-            command
-                .arg("--goto")
-                .arg(format!("{}:{}", path.display(), line.unwrap_or(1)));
-            command
-        }
-        EditorIntegration::Cursor => {
-            let mut command = Command::new("cursor");
-            command
-                .arg("--goto")
-                .arg(format!("{}:{}", path.display(), line.unwrap_or(1)));
-            command
-        }
-        EditorIntegration::Zed => {
-            let mut command = Command::new("zed");
-            command.arg(format!("{}:{}", path.display(), line.unwrap_or(1)));
-            command
-        }
-        EditorIntegration::SystemDefault => system_open_command(path),
-    }
-}
-
-fn system_open_command(path: &std::path::Path) -> Command {
-    #[cfg(target_os = "macos")]
-    let mut command = Command::new("open");
-    #[cfg(target_os = "windows")]
-    let mut command = Command::new("explorer");
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut command = Command::new("xdg-open");
-    command.arg(path);
-    command
-}
-
-#[tauri::command]
 async fn export_git_workspace(
     input: ExportGitWorkspaceInput,
     state: State<'_, AppState>,
@@ -2993,94 +1800,7 @@ async fn get_settings(
     input: SettingsInput,
     state: State<'_, AppState>,
 ) -> Result<EffectiveSettings, String> {
-    if let Some(source_id) = input.source_id {
-        migrate_legacy_model_connection(&state.store, source_id).await?;
-    }
     effective_settings(&state.store, input.source_id).await
-}
-
-async fn migrate_legacy_model_connection(
-    store: &LocalSnapshotStore,
-    source_id: Uuid,
-) -> Result<(), String> {
-    if !store
-        .list_model_connections()
-        .await
-        .map_err(safe_store_error)?
-        .is_empty()
-    {
-        return Ok(());
-    }
-    let settings = store
-        .get_data_source_settings(source_id)
-        .await
-        .map_err(safe_store_error)?;
-    if !settings.ai.enabled {
-        return Ok(());
-    }
-    let remote = settings.ai.provider == AiProviderKind::OpenAiCompatible;
-    let id = Uuid::new_v4();
-    let mut connection = ModelConnection {
-        id,
-        name: "Migrated AI connection".into(),
-        provider: if remote {
-            ProviderKind::OpenAiCompatible
-        } else {
-            ProviderKind::Offline
-        },
-        endpoint: remote.then(|| settings.ai.endpoint.clone()),
-        model: if settings.ai.model.is_empty() {
-            "offline-analyzer".into()
-        } else {
-            settings.ai.model.clone()
-        },
-        credential_ref: None,
-        capabilities: ModelCapabilities {
-            chat: true,
-            structured_output: true,
-            tool_calling: remote,
-            embeddings: false,
-            code_analysis: remote,
-            local: !remote,
-            max_context_tokens: None,
-        },
-        privacy: ConnectionPrivacy {
-            allow_uncommitted_code: false,
-            allow_source_excerpts: true,
-            remote,
-        },
-        enabled: true,
-    };
-    if settings.ai.credential_configured
-        && let Ok(secret) = keyring::Entry::new(AI_KEYRING_SERVICE, &source_id.to_string())
-            .and_then(|entry| entry.get_password())
-    {
-        save_secret(MODEL_KEYRING_SERVICE, id, &secret)?;
-        connection.credential_ref = Some(format!("keychain:model:{id}"));
-    }
-    store
-        .save_model_connection(&connection)
-        .await
-        .map_err(safe_store_error)?;
-    store
-        .save_model_route(&ModelRoute {
-            role: ModelRole::Explanation,
-            primary_connection_id: id,
-            fallback_connection_ids: Vec::new(),
-        })
-        .await
-        .map_err(safe_store_error)?;
-    if connection.capabilities.code_analysis {
-        store
-            .save_model_route(&ModelRoute {
-                role: ModelRole::Analysis,
-                primary_connection_id: id,
-                fallback_connection_ids: Vec::new(),
-            })
-            .await
-            .map_err(safe_store_error)?;
-    }
-    Ok(())
 }
 
 async fn effective_settings(
@@ -4141,6 +2861,66 @@ fn credential_exists(service: &str, source_id: Uuid) -> bool {
     keyring::Entry::new(service, &source_id.to_string())
         .and_then(|entry| entry.get_password())
         .is_ok()
+}
+
+async fn cleanup_retired_external_artifacts(
+    database_path: &Path,
+    app_cache_dir: &Path,
+) -> Result<(), String> {
+    for connection_id in retired_model_connection_ids(database_path).await? {
+        delete_secret(RETIRED_MODEL_KEYRING_SERVICE, connection_id)?;
+    }
+    let managed_projects = app_cache_dir.join("projects");
+    if managed_projects.exists() {
+        fs::remove_dir_all(&managed_projects)
+            .map_err(|_| "Unable to remove the retired managed project cache.".to_owned())?;
+    }
+    Ok(())
+}
+
+async fn retired_model_connection_ids(database_path: &Path) -> Result<Vec<Uuid>, String> {
+    if !database_path.is_file() {
+        return Ok(Vec::new());
+    }
+    let options = SqliteConnectOptions::new()
+        .filename(database_path)
+        .read_only(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .map_err(|_| "Unable to inspect retired local project data.".to_owned())?;
+    let version = sqlx::query_scalar::<_, i64>("PRAGMA user_version")
+        .fetch_one(&pool)
+        .await
+        .map_err(|_| "Unable to inspect the local schema version.".to_owned())?;
+    if version >= 3 {
+        pool.close().await;
+        return Ok(Vec::new());
+    }
+    let table_exists = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'model_connections')",
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(|_| "Unable to inspect retired model credentials.".to_owned())?
+        != 0;
+    if !table_exists {
+        pool.close().await;
+        return Ok(Vec::new());
+    }
+    let accounts = sqlx::query_scalar::<_, String>("SELECT id FROM model_connections")
+        .fetch_all(&pool)
+        .await
+        .map_err(|_| "Unable to inspect retired model credentials.".to_owned())?;
+    pool.close().await;
+    accounts
+        .into_iter()
+        .map(|account| {
+            Uuid::parse_str(&account)
+                .map_err(|_| "Retired model credential identity is invalid.".to_owned())
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -5692,7 +4472,6 @@ async fn build_cloud_bundle(
         .map_err(safe_store_error)?
         .into_iter()
         .next();
-    let project_graphs = shared_project_graphs(store, input.source_id).await?;
     let mut bundle = CloudSyncBundle {
         project_id: input.project_id,
         source_id: input.source_id,
@@ -5744,7 +4523,6 @@ async fn build_cloud_bundle(
             .get_project_settings(&input.project_id.to_string())
             .await
             .map_err(safe_store_error)?,
-        project_graphs,
         base_version: input.base_version,
     };
     bundle.fingerprint = cloud_bundle_fingerprint(&bundle)?;
@@ -5758,86 +4536,6 @@ fn cloud_bundle_fingerprint(bundle: &CloudSyncBundle) -> Result<String, String> 
     let bytes = serde_json::to_vec(&canonical)
         .map_err(|_| "Unable to fingerprint the Cloud metadata bundle.".to_owned())?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
-}
-
-async fn shared_project_graphs(
-    store: &LocalSnapshotStore,
-    source_id: Uuid,
-) -> Result<Vec<project_model::SharedProjectGraph>, String> {
-    let mut shared = Vec::new();
-    for project in store
-        .list_local_projects()
-        .await
-        .map_err(safe_store_error)?
-        .into_iter()
-        .filter(|project| project.database_source_ids.contains(&source_id))
-    {
-        let Some(scan) = store
-            .list_project_scans(project.id)
-            .await
-            .map_err(safe_store_error)?
-            .into_iter()
-            .find(|scan| scan.status == ScanStatus::Ready)
-        else {
-            continue;
-        };
-        let graph = store
-            .get_project_graph(scan.id)
-            .await
-            .map_err(safe_store_error)?;
-        let nodes = graph
-            .nodes
-            .into_iter()
-            .map(|mut node| {
-                node.relative_path = None;
-                node.line = None;
-                if !matches!(node.kind, ProjectNodeKind::Table | ProjectNodeKind::Column) {
-                    node.qualified_name.clone_from(&node.name);
-                }
-                node.attributes.retain(|key, _| {
-                    matches!(
-                        key.as_str(),
-                        "framework" | "language" | "method" | "operation"
-                    )
-                });
-                node
-            })
-            .collect();
-        let edges = graph
-            .edges
-            .into_iter()
-            .filter(|edge| {
-                matches!(
-                    edge.review_status,
-                    ReviewStatus::NotRequired | ReviewStatus::Confirmed
-                )
-            })
-            .map(|mut edge| {
-                edge.evidence = vec![EdgeEvidence {
-                    id: format!("shared-{}", edge.id),
-                    project_id: project.id,
-                    relative_path: String::new(),
-                    start_line: None,
-                    end_line: None,
-                    symbol: None,
-                    analyzer: "shared-metadata".into(),
-                    excerpt_hash: None,
-                    explanation: Some(
-                        "Source location and excerpt were redacted for team sharing.".into(),
-                    ),
-                }];
-                edge
-            })
-            .collect();
-        shared.push(project_model::SharedProjectGraph {
-            project_id: project.id,
-            project_name: project.name,
-            scan,
-            nodes,
-            edges,
-        });
-    }
-    Ok(shared)
 }
 
 async fn update_source_sync_events(
@@ -5862,13 +4560,20 @@ async fn update_source_sync_events(
 }
 
 fn validate_connection_input(input: &SaveDataSourceInput) -> Result<(), String> {
+    validate_connection_profile_input(input)?;
+    if input.password.is_empty() {
+        return Err("A database password is required to verify the connection.".into());
+    }
+    Ok(())
+}
+
+fn validate_connection_profile_input(input: &SaveDataSourceInput) -> Result<(), String> {
     if input.display_name.trim().is_empty()
         || input.host.trim().is_empty()
         || input.database.trim().is_empty()
         || input.username.trim().is_empty()
-        || input.password.is_empty()
     {
-        return Err("All connection fields are required.".into());
+        return Err("Name, host, database, and username are required.".into());
     }
     if input.port == 0 {
         return Err("Database port must be greater than zero.".into());
@@ -5976,286 +4681,6 @@ fn safe_store_error(_error: snapshot_store::SnapshotStoreError) -> String {
     "Unable to access Nodal Studio local storage.".into()
 }
 
-fn safe_scanner_error(error: &ScannerError) -> String {
-    match error {
-        ScannerError::InvalidRoot => "Choose an existing local project directory.".into(),
-        ScannerError::NonUtf8Path => {
-            "The selected project contains a path Nodal Studio cannot index safely.".into()
-        }
-        ScannerError::Cancelled => "The local project scan was cancelled.".into(),
-        ScannerError::Io(_) => "Nodal Studio cannot read the selected project directory.".into(),
-    }
-}
-
-fn collect_object_neighbourhood(
-    graph_nodes: &[ProjectNode],
-    graph_edges: &[ProjectEdge],
-    object_key: &ObjectKey,
-    nodes: &mut BTreeMap<String, ProjectNode>,
-    edges: &mut BTreeMap<String, ProjectEdge>,
-) {
-    let by_id: BTreeMap<_, _> = graph_nodes
-        .iter()
-        .map(|node| (node.id.as_str(), node))
-        .collect();
-    let mut included: BTreeSet<String> = graph_nodes
-        .iter()
-        .filter(|node| node.database_object.as_ref() == Some(object_key))
-        .map(|node| node.id.clone())
-        .collect();
-    let mut frontier = included.clone();
-    for _ in 0..4 {
-        let mut next = BTreeSet::new();
-        for edge in graph_edges
-            .iter()
-            .filter(|edge| frontier.contains(&edge.source_id) || frontier.contains(&edge.target_id))
-        {
-            edges.insert(edge.id.clone(), edge.clone());
-            next.insert(edge.source_id.clone());
-            next.insert(edge.target_id.clone());
-        }
-        next.retain(|node_id| !included.contains(node_id));
-        included.extend(next.iter().cloned());
-        frontier = next;
-    }
-    for node_id in included {
-        if let Some(node) = by_id.get(node_id.as_str()) {
-            nodes.insert(node_id, (*node).clone());
-        }
-    }
-}
-
-fn apply_scan_metadata(scan: &mut ProjectScan, git: Option<&GitMetadata>) {
-    if let Some(git) = git {
-        scan.branch.clone_from(&git.branch);
-        scan.commit_sha.clone_from(&git.commit_sha);
-        scan.dirty = git.dirty;
-    }
-}
-
-async fn persist_analysis(
-    store: &LocalSnapshotStore,
-    project_id: Uuid,
-    scan_id: Uuid,
-    analysis: Option<&AnalysisBatch>,
-) -> bool {
-    let Some(analysis) = analysis else {
-        return true;
-    };
-    store
-        .replace_project_graph(project_id, scan_id, &analysis.nodes, &analysis.edges)
-        .await
-        .is_ok()
-}
-
-fn merge_incremental_analysis(
-    previous: snapshot_store::ProjectGraphSnapshot,
-    current: AnalysisBatch,
-    changed_paths: &BTreeSet<String>,
-    scan_id: Uuid,
-) -> AnalysisBatch {
-    let protected_nodes = previous
-        .edges
-        .iter()
-        .filter(|edge| {
-            edge.certainty == EdgeCertainty::HumanConfirmed
-                || edge.review_status == ReviewStatus::Confirmed
-        })
-        .flat_map(|edge| [&edge.source_id, &edge.target_id])
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    let mut nodes = previous
-        .nodes
-        .into_iter()
-        .filter(|node| {
-            protected_nodes.contains(&node.id)
-                || node
-                    .relative_path
-                    .as_ref()
-                    .is_none_or(|path| !changed_paths.contains(path))
-        })
-        .map(|node| (node.id.clone(), node))
-        .collect::<BTreeMap<_, _>>();
-    for node in current.nodes {
-        nodes.insert(node.id.clone(), node);
-    }
-    let mut edges = previous
-        .edges
-        .into_iter()
-        .filter_map(|mut edge| {
-            let changed = edge
-                .evidence
-                .iter()
-                .any(|evidence| changed_paths.contains(&evidence.relative_path));
-            if changed
-                && edge.certainty != EdgeCertainty::HumanConfirmed
-                && edge.review_status != ReviewStatus::Confirmed
-            {
-                return None;
-            }
-            if changed {
-                edge.review_status = ReviewStatus::Stale;
-            }
-            Some(edge)
-        })
-        .filter(|edge| nodes.contains_key(&edge.source_id) && nodes.contains_key(&edge.target_id))
-        .map(|mut edge| {
-            edge.scan_id = scan_id;
-            (edge.id.clone(), edge)
-        })
-        .collect::<BTreeMap<_, _>>();
-    for mut edge in current.edges {
-        if edges
-            .get(&edge.id)
-            .is_some_and(|existing| existing.certainty == EdgeCertainty::HumanConfirmed)
-        {
-            edge.certainty = EdgeCertainty::HumanConfirmed;
-            edge.review_status = ReviewStatus::Confirmed;
-        }
-        edges.insert(edge.id.clone(), edge);
-    }
-    AnalysisBatch {
-        nodes: nodes.into_values().collect(),
-        edges: edges.into_values().collect(),
-        diagnostics: current.diagnostics,
-    }
-}
-
-fn project_legacy_lineage(
-    project_id: Uuid,
-    scan_id: Uuid,
-    files: &[ProjectFile],
-    lineage: &[CodeLineageLink],
-    batch: &mut AnalysisBatch,
-) {
-    let allowed_paths = files
-        .iter()
-        .map(|file| file.relative_path.as_str())
-        .collect::<BTreeSet<_>>();
-    let mut nodes = batch
-        .nodes
-        .drain(..)
-        .map(|node| (node.id.clone(), node))
-        .collect::<BTreeMap<_, _>>();
-    let mut edges = batch
-        .edges
-        .drain(..)
-        .map(|edge| (edge.id.clone(), edge))
-        .collect::<BTreeMap<_, _>>();
-    for link in lineage
-        .iter()
-        .filter(|link| allowed_paths.contains(link.file_path.as_str()))
-    {
-        let symbol_id = ProjectNode::stable_id(
-            project_id,
-            ProjectNodeKind::Symbol,
-            &format!("{}#{}", link.file_path, link.symbol),
-        );
-        let database_kind = if link.object_key.kind == ObjectKind::Column {
-            ProjectNodeKind::Column
-        } else {
-            ProjectNodeKind::Table
-        };
-        let database_id = ProjectNode::stable_id(
-            project_id,
-            database_kind,
-            &format!("{}.{}", link.object_key.schema, link.object_key.name),
-        );
-        nodes
-            .entry(symbol_id.clone())
-            .or_insert_with(|| ProjectNode {
-                id: symbol_id.clone(),
-                project_id,
-                kind: ProjectNodeKind::Symbol,
-                name: link.symbol.clone(),
-                qualified_name: link.symbol.clone(),
-                relative_path: Some(link.file_path.clone()),
-                line: link.line,
-                database_object: None,
-                attributes: BTreeMap::from([
-                    ("language".into(), link.language.clone()),
-                    ("framework".into(), link.framework.clone()),
-                ]),
-            });
-        nodes
-            .entry(database_id.clone())
-            .or_insert_with(|| ProjectNode {
-                id: database_id.clone(),
-                project_id,
-                kind: database_kind,
-                name: link.object_key.name.clone(),
-                qualified_name: format!("{}.{}", link.object_key.schema, link.object_key.name),
-                relative_path: None,
-                line: None,
-                database_object: Some(link.object_key.clone()),
-                attributes: BTreeMap::new(),
-            });
-        let (certainty, review_status) = match link.confidence {
-            LineageConfidence::Declared => (EdgeCertainty::Declared, ReviewStatus::NotRequired),
-            LineageConfidence::Convention => (EdgeCertainty::Convention, ReviewStatus::NotRequired),
-            LineageConfidence::Inferred => (EdgeCertainty::AiInferred, ReviewStatus::Pending),
-        };
-        let edge_id = ProjectEdge::stable_id(&symbol_id, &database_id, ProjectEdgeKind::Reads);
-        edges.entry(edge_id.clone()).or_insert_with(|| ProjectEdge {
-            id: edge_id,
-            source_id: symbol_id,
-            target_id: database_id,
-            kind: ProjectEdgeKind::Reads,
-            certainty,
-            review_status,
-            evidence: vec![EdgeEvidence {
-                id: ProjectNode::stable_id(
-                    project_id,
-                    ProjectNodeKind::File,
-                    &format!("legacy:{}:{:?}", link.file_path, link.line),
-                ),
-                project_id,
-                relative_path: link.file_path.clone(),
-                start_line: link.line,
-                end_line: link.line,
-                symbol: Some(link.symbol.clone()),
-                analyzer: "legacy-code-lineage".into(),
-                excerpt_hash: None,
-                explanation: Some("Imported from a confirmed legacy CodeLineageLink".into()),
-            }],
-            scan_id,
-        });
-    }
-    batch.nodes = nodes.into_values().collect();
-    batch.edges = edges.into_values().collect();
-}
-
-fn read_analysis_documents(
-    root: &std::path::Path,
-    files: &[ProjectFile],
-) -> Result<Vec<SourceDocument>, ScannerError> {
-    let canonical_root = root.canonicalize()?;
-    let mut documents = Vec::new();
-    for file in files.iter().filter(|file| {
-        matches!(
-            file.language.as_deref(),
-            Some(
-                "sql" | "typescript" | "javascript" | "prisma" | "rust" | "java" | "go" | "python"
-            )
-        )
-    }) {
-        let path = canonical_root.join(&file.relative_path);
-        if fs::symlink_metadata(&path)?.file_type().is_symlink() {
-            return Err(ScannerError::InvalidRoot);
-        }
-        let canonical_path = path.canonicalize()?;
-        if !canonical_path.starts_with(&canonical_root) {
-            return Err(ScannerError::InvalidRoot);
-        }
-        documents.push(SourceDocument {
-            relative_path: file.relative_path.clone(),
-            language: file.language.clone().unwrap_or_default(),
-            contents: fs::read_to_string(canonical_path)?,
-        });
-    }
-    Ok(documents)
-}
-
 fn safe_git_workspace_error(error: &git_workspace::GitWorkspaceError) -> String {
     match error {
         git_workspace::GitWorkspaceError::InvalidRoot => {
@@ -6294,19 +4719,23 @@ pub fn run() {
                     fs::copy(legacy_database, &database_path)?;
                 }
             }
+            let cache_dir = app.path().app_cache_dir()?;
+            tauri::async_runtime::block_on(cleanup_retired_external_artifacts(
+                &database_path,
+                &cache_dir,
+            ))
+            .map_err(std::io::Error::other)?;
             let store =
                 tauri::async_runtime::block_on(LocalSnapshotStore::open_path(database_path))?;
             app.manage(AppState {
                 store,
                 ai_limiter: Arc::new(Semaphore::new(840)),
-                project_scans: Arc::new(Mutex::new(HashMap::new())),
                 snapshot_captures: Arc::new(Mutex::new(HashMap::new())),
                 cloud_operations: Arc::new(Mutex::new(HashMap::new())),
                 active_queries: Arc::new(Mutex::new(HashMap::new())),
             });
             Ok(())
         })
-        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_runtime_info,
             get_diagnostic_info,
@@ -6314,6 +4743,7 @@ pub fn run() {
             list_data_sources,
             save_data_source,
             test_postgres_connection,
+            verify_and_refresh_data_source,
             capture_postgres_snapshot,
             execute_readonly_query,
             cancel_query,
@@ -6326,34 +4756,6 @@ pub fn run() {
             compare_environment_snapshots,
             save_change_provenance,
             save_code_lineage,
-            list_model_connections,
-            save_model_connection,
-            delete_model_connection,
-            save_model_credential,
-            get_model_routes,
-            save_model_route,
-            delete_model_route,
-            preview_model_fallback,
-            test_model_connection,
-            preview_ai_project_context,
-            run_ai_project_analysis,
-            list_ai_candidates,
-            list_ai_usage_events,
-            review_ai_candidate,
-            add_local_project,
-            clone_remote_project,
-            select_project_directory,
-            list_local_projects,
-            set_project_bindings,
-            remove_local_project,
-            start_project_scan,
-            cancel_project_scan,
-            get_project_scan_status,
-            list_project_scans,
-            get_project_graph,
-            get_database_code_usage,
-            get_change_impact,
-            open_code_location,
             export_git_workspace,
             preview_git_export,
             preview_git_import,
@@ -6446,6 +4848,81 @@ mod tests {
     }
 
     #[test]
+    fn allows_an_existing_profile_to_keep_its_keychain_password() {
+        let input = SaveDataSourceInput {
+            id: Some(Uuid::new_v4()),
+            display_name: "Local development".into(),
+            host: "127.0.0.1".into(),
+            port: 5432,
+            database: "app".into(),
+            username: "developer".into(),
+            password: String::new(),
+            database_type: DatabaseType::PostgreSql,
+            ssl_mode: SslMode::Prefer,
+        };
+        assert!(validate_connection_profile_input(&input).is_ok());
+        assert!(validate_connection_input(&input).is_err());
+    }
+
+    #[tokio::test]
+    async fn discovers_retired_model_credentials_before_the_schema_is_removed() {
+        let root =
+            std::env::temp_dir().join(format!("nodalstudio-retired-models-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let database = root.join("model.sqlite3");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&database)
+                    .create_if_missing(true),
+            )
+            .await
+            .unwrap();
+        let connection_id = Uuid::new_v4();
+        sqlx::query("PRAGMA user_version = 2")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE model_connections (id TEXT PRIMARY KEY NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO model_connections (id) VALUES (?)")
+            .bind(connection_id.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+
+        assert_eq!(
+            retired_model_connection_ids(&database).await.unwrap(),
+            [connection_id]
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn removes_the_retired_managed_project_cache() {
+        let root =
+            std::env::temp_dir().join(format!("nodalstudio-retired-projects-{}", Uuid::new_v4()));
+        let projects = root.join("cache").join("projects");
+        fs::create_dir_all(projects.join("repository")).unwrap();
+        fs::write(
+            projects.join("repository").join("README.md"),
+            "private source",
+        )
+        .unwrap();
+
+        cleanup_retired_external_artifacts(&root.join("missing.sqlite3"), &root.join("cache"))
+            .await
+            .unwrap();
+
+        assert!(!projects.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn normalizes_openai_compatible_chat_endpoints() {
         assert_eq!(
             remote_chat_endpoint("https://ai.example/v1")
@@ -6456,180 +4933,6 @@ mod tests {
         assert!(remote_chat_endpoint("file:///tmp/model").is_err());
         assert!(remote_chat_endpoint("http://ai.example/v1").is_err());
         assert!(remote_chat_endpoint("http://127.0.0.1:11434/v1").is_ok());
-    }
-
-    #[test]
-    fn accepts_only_credential_free_https_git_urls() {
-        assert!(validated_remote_git_url("https://example.com/team/app.git").is_ok());
-        assert!(validated_remote_git_url("http://example.com/team/app.git").is_err());
-        assert!(validated_remote_git_url("https://token@example.com/team/app.git").is_err());
-        assert!(validated_remote_git_url("file:///tmp/project").is_err());
-    }
-
-    #[test]
-    fn managed_clone_disables_prompts_hooks_submodules_and_file_protocol() {
-        let command = remote_clone_command(
-            "https://example.com/team/app.git",
-            std::path::Path::new("/cache/project"),
-        );
-        let args = command
-            .get_args()
-            .map(|value| value.to_string_lossy())
-            .collect::<Vec<_>>();
-        assert!(args.iter().any(|value| value == "core.hooksPath=/dev/null"));
-        assert!(
-            args.iter()
-                .any(|value| value == "protocol.file.allow=never")
-        );
-        assert!(args.iter().any(|value| value == "--recurse-submodules=no"));
-        assert!(
-            command
-                .get_envs()
-                .any(|(key, value)| key == "GIT_TERMINAL_PROMPT"
-                    && value.is_some_and(|value| value == "0"))
-        );
-    }
-
-    #[test]
-    fn configured_editor_receives_file_and_evidence_line_without_a_shell() {
-        let command = code_editor_command(
-            EditorIntegration::VisualStudioCode,
-            std::path::Path::new("/workspace/orders.ts"),
-            Some(42),
-        );
-        assert_eq!(command.get_program(), "code");
-        assert_eq!(
-            command
-                .get_args()
-                .map(|value| value.to_string_lossy())
-                .collect::<Vec<_>>(),
-            ["--goto", "/workspace/orders.ts:42"]
-        );
-    }
-
-    #[test]
-    fn incremental_analysis_replaces_only_changed_file_subgraphs() {
-        use project_model::ProjectNodeKind;
-        let project_id = Uuid::new_v4();
-        let old_scan = Uuid::new_v4();
-        let new_scan = Uuid::new_v4();
-        let node = |id: &str, path: &str| ProjectNode {
-            id: id.into(),
-            project_id,
-            kind: ProjectNodeKind::Service,
-            name: id.into(),
-            qualified_name: id.into(),
-            relative_path: Some(path.into()),
-            line: Some(1),
-            database_object: None,
-            attributes: BTreeMap::new(),
-        };
-        let previous = snapshot_store::ProjectGraphSnapshot {
-            scan_id: old_scan,
-            nodes: vec![node("unchanged", "src/a.ts"), node("old", "src/b.ts")],
-            edges: Vec::new(),
-        };
-        let current = AnalysisBatch {
-            nodes: vec![node("new", "src/b.ts")],
-            edges: Vec::new(),
-            diagnostics: Vec::new(),
-        };
-        let merged = merge_incremental_analysis(
-            previous,
-            current,
-            &BTreeSet::from(["src/b.ts".into()]),
-            new_scan,
-        );
-        assert!(
-            merged
-                .nodes
-                .iter()
-                .any(|candidate| candidate.id == "unchanged")
-        );
-        assert!(merged.nodes.iter().any(|candidate| candidate.id == "new"));
-        assert!(!merged.nodes.iter().any(|candidate| candidate.id == "old"));
-    }
-
-    #[test]
-    fn changed_evidence_marks_human_relations_stale_instead_of_dropping_them() {
-        let project_id = Uuid::new_v4();
-        let old_scan = Uuid::new_v4();
-        let new_scan = Uuid::new_v4();
-        let node = |id: &str| ProjectNode {
-            id: id.into(),
-            project_id,
-            kind: ProjectNodeKind::Service,
-            name: id.into(),
-            qualified_name: id.into(),
-            relative_path: Some("src/orders.ts".into()),
-            line: Some(1),
-            database_object: None,
-            attributes: BTreeMap::new(),
-        };
-        let edge = ProjectEdge {
-            id: "confirmed".into(),
-            source_id: "source".into(),
-            target_id: "target".into(),
-            kind: ProjectEdgeKind::Calls,
-            certainty: EdgeCertainty::HumanConfirmed,
-            review_status: ReviewStatus::Confirmed,
-            evidence: vec![EdgeEvidence {
-                id: "evidence".into(),
-                project_id,
-                relative_path: "src/orders.ts".into(),
-                start_line: Some(1),
-                end_line: Some(1),
-                symbol: None,
-                analyzer: "test".into(),
-                excerpt_hash: None,
-                explanation: None,
-            }],
-            scan_id: old_scan,
-        };
-        let previous = snapshot_store::ProjectGraphSnapshot {
-            scan_id: old_scan,
-            nodes: vec![node("source"), node("target")],
-            edges: vec![edge],
-        };
-        let merged = merge_incremental_analysis(
-            previous,
-            AnalysisBatch::default(),
-            &BTreeSet::from(["src/orders.ts".into()]),
-            new_scan,
-        );
-        assert_eq!(merged.edges[0].review_status, ReviewStatus::Stale);
-        assert_eq!(merged.nodes.len(), 2);
-    }
-
-    #[test]
-    fn legacy_lineage_is_projected_only_for_authorized_scanned_files() {
-        let project_id = Uuid::new_v4();
-        let scan_id = Uuid::new_v4();
-        let mut batch = AnalysisBatch::default();
-        let link = |file_path: &str| CodeLineageLink {
-            object_key: ObjectKey::table("public", "orders"),
-            language: "TypeScript".into(),
-            framework: "legacy".into(),
-            symbol: "findOrders".into(),
-            file_path: file_path.into(),
-            line: Some(4),
-            confidence: LineageConfidence::Declared,
-        };
-        project_legacy_lineage(
-            project_id,
-            scan_id,
-            &[ProjectFile {
-                relative_path: "src/orders.ts".into(),
-                byte_size: 1,
-                modified_unix_ms: None,
-                content_hash: "hash".into(),
-                language: Some("typescript".into()),
-            }],
-            &[link("src/orders.ts"), link("../outside.ts")],
-            &mut batch,
-        );
-        assert_eq!(batch.edges.len(), 1);
-        assert_eq!(batch.edges[0].evidence[0].relative_path, "src/orders.ts");
     }
 
     #[test]

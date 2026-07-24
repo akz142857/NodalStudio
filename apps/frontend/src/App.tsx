@@ -3,9 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { AiAssistant } from "./components/AiAssistant";
 import { CloudSyncPanel } from "./components/CloudSyncPanel";
-import { CodeUsagePanel } from "./components/CodeUsagePanel";
 import { ProvenancePanel } from "./components/ProvenancePanel";
-import { ProjectPanel } from "./components/ProjectPanel";
 import { GitWorkspacePanel } from "./components/GitWorkspacePanel";
 import { KnowledgePanel } from "./components/KnowledgePanel";
 import { SchemaCanvas } from "./components/SchemaCanvas";
@@ -13,8 +11,6 @@ import { SchemaTree } from "./components/SchemaTree";
 import { TableInspector } from "./components/TableInspector";
 import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import type { SettingsCategory } from "./components/SettingsPage";
-import type { SystemMapSelection } from "./components/SystemMap";
-import { SystemNodeInspector } from "./components/SystemNodeInspector";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
 import type { OpenQueryRequest } from "./components/query/QueryPage";
 import { tablePreviewSql } from "./components/query/query-format";
@@ -40,12 +36,10 @@ import { migrateLegacySettings } from "./settings-migration";
 
 const platform = getPlatform();
 const SettingsPage = lazy(() => import("./components/SettingsPage").then((module) => ({ default: module.SettingsPage })));
-const SystemMap = lazy(() => import("./components/SystemMap").then((module) => ({ default: module.SystemMap })));
 const HistoryPanel = lazy(() => import("./components/HistoryPanel").then((module) => ({ default: module.HistoryPanel })));
-const ChangeImpactPanel = lazy(() => import("./components/ChangeImpactPanel").then((module) => ({ default: module.ChangeImpactPanel })));
 const QueryPage = lazy(() => import("./components/query/QueryPage").then((module) => ({ default: module.QueryPage })));
 
-type ViewMode = "explore" | "query" | "system" | "changes" | "history";
+type ViewMode = "explore" | "query" | "changes" | "history";
 type AppNotice = { id: string; title: string; message: string; createdAt: string };
 
 type PanelPreference = {
@@ -76,7 +70,6 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSearchResult, setActiveSearchResult] = useState(0);
   const [selectedTable, setSelectedTable] = useState<TableDefinition>();
-  const [systemSelection, setSystemSelection] = useState<SystemMapSelection>();
   const [semantics, setSemantics] = useState<SemanticBundle>(emptySemantics);
   const [savedView, setSavedView] = useState<SavedView>();
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "error">("idle");
@@ -586,20 +579,16 @@ export function App() {
           <h1>Nodal Studio</h1>
         </div>
         <nav className="mode-switcher" aria-label="View mode">
-          {(["explore", "query", "system", "changes", "history"] as const).map((item) => (
+          {(["explore", "query", "changes", "history"] as const).map((item) => (
             <button
               type="button"
               key={item}
               className={mode === item ? "active" : ""}
               disabled={(item === "changes" && !changeSet) || (item === "query" && runtime.data?.kind === "web")}
               title={item === "query" && runtime.data?.kind === "web" ? "Query requires the desktop app" : undefined}
-              onClick={() => {
-                setMode(item);
-                if (item === "system") setSelectedTable(undefined);
-                else setSystemSelection(undefined);
-              }}
+              onClick={() => setMode(item)}
             >
-              {item === "explore" ? "Database" : item === "system" ? "System Map" : item[0].toUpperCase() + item.slice(1)}
+              {item === "explore" ? "Database" : item[0].toUpperCase() + item.slice(1)}
             </button>
           ))}
         </nav>
@@ -720,9 +709,6 @@ export function App() {
             defaultDatabaseType={settings.app.connectionDefaults.databaseEngine}
             defaultSslMode={settings.app.connectionDefaults.sslMode}
           />
-          {runtime.data?.kind === "desktop" ? (
-            <ProjectPanel platform={platform} sourceId={snapshot?.sourceId} autoScan={settings.app.codeAnalysis.autoScan} />
-          ) : null}
           {snapshot ? (
             <>
               <SchemaTree snapshot={snapshot} onSelectTable={setSelectedTable} />
@@ -789,13 +775,6 @@ export function App() {
               openRequest={openQueryRequest}
               onConsumeOpenRequest={() => setOpenQueryRequest(undefined)}
             />
-          ) : snapshot && mode === "system" ? (
-            <SystemMap
-              platform={platform}
-              sourceId={snapshot.sourceId}
-              query={query}
-              onSelect={setSystemSelection}
-            />
           ) : snapshot ? (
             <SchemaCanvas
               snapshot={snapshot}
@@ -847,10 +826,8 @@ export function App() {
         />
 
         <aside className="inspector" hidden={!rightPanel.expanded}>
-          <h2>{mode === "system" ? (systemSelection?.node.name ?? "System Map") : selectedTable ? selectedTable.key.name : "Inspector"}</h2>
-          {mode === "system" ? (
-            <SystemNodeInspector selection={systemSelection} />
-          ) : selectedTable ? (
+          <h2>{selectedTable ? selectedTable.key.name : "Inspector"}</h2>
+          {selectedTable ? (
             <>
               <TableInspector
                 key={`${selectedTable.key.schema}.${selectedTable.key.name}:${
@@ -872,13 +849,6 @@ export function App() {
                 onSaveAnnotation={saveAnnotation}
                 onOpenQuery={runtime.data?.kind === "desktop" ? openTableInQuery : undefined}
               />
-              {snapshot && runtime.data?.kind === "desktop" ? (
-                <CodeUsagePanel
-                  platform={platform}
-                  sourceId={snapshot.sourceId}
-                  objectKey={selectedTable.key}
-                />
-              ) : null}
               {snapshot ? (
                 <AiAssistant
                   platform={platform}
@@ -965,11 +935,7 @@ export function App() {
                       </li>
                     ))}
                   </ol>
-                </section><ChangeImpactPanel
-                  platform={platform}
-                  snapshot={snapshot}
-                  changeSet={changeSet}
-                /><AiAssistant
+                </section><AiAssistant
                   platform={platform}
                   input={{ snapshotId: snapshot.id, targetType: "changeSet", changeSet }}
                   enabled={Boolean(settings.source?.ai.enabled) && !settings.app.privacy.offlineMode}

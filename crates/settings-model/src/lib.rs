@@ -18,8 +18,6 @@ pub struct AppSettings {
     pub appearance: AppearanceSettings,
     pub canvas: CanvasSettings,
     #[serde(default)]
-    pub code_analysis: CodeAnalysisSettings,
-    #[serde(default)]
     pub connection_defaults: ConnectionDefaults,
     pub history: HistorySettings,
     pub privacy: PrivacySettings,
@@ -37,7 +35,6 @@ impl Default for AppSettings {
             general: GeneralSettings::default(),
             appearance: AppearanceSettings::default(),
             canvas: CanvasSettings::default(),
-            code_analysis: CodeAnalysisSettings::default(),
             connection_defaults: ConnectionDefaults::default(),
             history: HistorySettings::default(),
             privacy: PrivacySettings::default(),
@@ -47,45 +44,6 @@ impl Default for AppSettings {
             advanced: AdvancedSettings::default(),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodeAnalysisSettings {
-    pub enabled: bool,
-    pub auto_scan: bool,
-    pub include_gitignore: bool,
-    pub include_nodal_studio_ignore: bool,
-    pub max_file_bytes: u64,
-    #[serde(default)]
-    pub editor: EditorIntegration,
-    pub allow_uncommitted_code_for_remote_ai: bool,
-    pub allow_source_excerpts_for_remote_ai: bool,
-}
-
-impl Default for CodeAnalysisSettings {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            auto_scan: false,
-            include_gitignore: true,
-            include_nodal_studio_ignore: true,
-            max_file_bytes: 2 * 1024 * 1024,
-            editor: EditorIntegration::SystemDefault,
-            allow_uncommitted_code_for_remote_ai: false,
-            allow_source_excerpts_for_remote_ai: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub enum EditorIntegration {
-    #[default]
-    SystemDefault,
-    VisualStudioCode,
-    Cursor,
-    Zed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -839,8 +797,6 @@ pub enum SettingsValidationError {
     InvalidRetention,
     #[error("project settings require a project identifier")]
     InvalidProjectId,
-    #[error("code analysis file limit must be between 64 KiB and 10 MiB")]
-    InvalidCodeAnalysisFileLimit,
 }
 
 impl AppSettings {
@@ -863,9 +819,6 @@ impl AppSettings {
         }
         if self.history.retention != RetentionPolicy::Forever && self.history.retention_value == 0 {
             return Err(SettingsValidationError::InvalidRetention);
-        }
-        if !(64 * 1024..=10 * 1024 * 1024).contains(&self.code_analysis.max_file_bytes) {
-            return Err(SettingsValidationError::InvalidCodeAnalysisFileLimit);
         }
         Ok(())
     }

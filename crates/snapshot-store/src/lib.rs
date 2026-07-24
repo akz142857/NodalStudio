@@ -4,10 +4,6 @@ use std::{collections::BTreeSet, path::Path, str::FromStr};
 
 use chrono::Utc;
 use extension_model::{ChangeProvenance, CodeLineageLink};
-use project_model::{
-    AiRelationCandidate, AiUsageEvent, LocalProject, ModelConnection, ModelRole, ModelRoute,
-    ProjectEdge, ProjectFile, ProjectNode, ProjectScan,
-};
 use schema_diff::SchemaChangeSet;
 use schema_model::{
     DataSourceProfile, DatabaseSnapshot, IgnoredRelationshipInference, LogicalRelationship,
@@ -21,7 +17,7 @@ use sqlx::{Row, SqlitePool, sqlite::SqliteConnectOptions, sqlite::SqlitePoolOpti
 use thiserror::Error;
 use uuid::Uuid;
 
-const LOCAL_SCHEMA_VERSION: i64 = 2;
+const LOCAL_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Error)]
 pub enum SnapshotStoreError {
@@ -31,8 +27,6 @@ pub enum SnapshotStoreError {
     Serialization(#[from] serde_json::Error),
     #[error("stored identifier is invalid: {0}")]
     Identifier(#[from] uuid::Error),
-    #[error("project graph payload is invalid: {0}")]
-    ProjectModel(#[from] project_model::ProjectModelError),
     #[error("local database schema version {0} is newer than this application supports")]
     UnsupportedSchema(i64),
     #[error("local database backup failed: {0}")]
@@ -106,14 +100,6 @@ pub struct ExternalAccessRecord {
     pub capability: String,
     pub last_access_at: String,
     pub outcome: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectGraphSnapshot {
-    pub scan_id: Uuid,
-    pub nodes: Vec<ProjectNode>,
-    pub edges: Vec<ProjectEdge>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1655,449 +1641,6 @@ impl LocalSnapshotStore {
         deserialize_payloads(rows)
     }
 
-    /// Saves local-only project metadata. The root path is never exported by this store.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when serialization or `SQLite` persistence fails.
-    pub async fn save_local_project(
-        &self,
-        project: &LocalProject,
-    ) -> Result<(), SnapshotStoreError> {
-        let mut transaction = self.pool.begin().await?;
-        sqlx::query(
-            "INSERT INTO local_projects (id, name, root_path, created_at, payload_json) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, root_path = excluded.root_path, payload_json = excluded.payload_json",
-        )
-        .bind(project.id.to_string())
-        .bind(&project.name)
-        .bind(&project.root_path)
-        .bind(project.created_at.to_rfc3339())
-        .bind(serde_json::to_string(project)?)
-        .execute(&mut *transaction)
-        .await?;
-        sqlx::query("DELETE FROM project_bindings WHERE project_id = ?")
-            .bind(project.id.to_string())
-            .execute(&mut *transaction)
-            .await?;
-        for source_id in &project.database_source_ids {
-            sqlx::query("INSERT INTO project_bindings (project_id, source_id) VALUES (?, ?)")
-                .bind(project.id.to_string())
-                .bind(source_id.to_string())
-                .execute(&mut *transaction)
-                .await?;
-        }
-        transaction.commit().await?;
-        Ok(())
-    }
-
-    /// Lists local projects by display name.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` access or deserialization fails.
-    pub async fn list_local_projects(&self) -> Result<Vec<LocalProject>, SnapshotStoreError> {
-        let rows = sqlx::query("SELECT payload_json FROM local_projects ORDER BY name, id")
-            .fetch_all(&self.pool)
-            .await?;
-        deserialize_payloads(rows)
-    }
-
-    /// Saves an application-level model connection without storing its credential.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when serialization or `SQLite` persistence fails.
-    pub async fn save_model_connection(
-        &self,
-        connection: &ModelConnection,
-    ) -> Result<(), SnapshotStoreError> {
-        sqlx::query("INSERT INTO model_connections (id, name, enabled, payload_json) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, enabled = excluded.enabled, payload_json = excluded.payload_json")
-            .bind(connection.id.to_string()).bind(&connection.name).bind(connection.enabled).bind(serde_json::to_string(connection)?).execute(&self.pool).await?;
-        Ok(())
-    }
-
-    /// Lists reusable model connections.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` access or deserialization fails.
-    pub async fn list_model_connections(&self) -> Result<Vec<ModelConnection>, SnapshotStoreError> {
-        deserialize_payloads(
-            sqlx::query("SELECT payload_json FROM model_connections ORDER BY name, id")
-                .fetch_all(&self.pool)
-                .await?,
-        )
-    }
-
-    /// Deletes a model connection. Callers must first ensure no route references it.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` persistence fails.
-    pub async fn delete_model_connection(
-        &self,
-        connection_id: Uuid,
-    ) -> Result<(), SnapshotStoreError> {
-        sqlx::query("DELETE FROM model_connections WHERE id = ?")
-            .bind(connection_id.to_string())
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    /// Saves the route for one task role.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when serialization or `SQLite` persistence fails.
-    pub async fn save_model_route(&self, route: &ModelRoute) -> Result<(), SnapshotStoreError> {
-        sqlx::query("INSERT INTO model_routes (role, payload_json) VALUES (?, ?) ON CONFLICT(role) DO UPDATE SET payload_json = excluded.payload_json")
-            .bind(model_role_name(route.role)?).bind(serde_json::to_string(route)?).execute(&self.pool).await?;
-        Ok(())
-    }
-
-    /// Lists task routes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` access or deserialization fails.
-    pub async fn list_model_routes(&self) -> Result<Vec<ModelRoute>, SnapshotStoreError> {
-        deserialize_payloads(
-            sqlx::query("SELECT payload_json FROM model_routes ORDER BY role")
-                .fetch_all(&self.pool)
-                .await?,
-        )
-    }
-
-    /// Clears one task route.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` persistence fails.
-    pub async fn delete_model_route(&self, role: ModelRole) -> Result<(), SnapshotStoreError> {
-        sqlx::query("DELETE FROM model_routes WHERE role = ?")
-            .bind(model_role_name(role)?)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    /// Saves an AI relation candidate for human review.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when serialization or `SQLite` persistence fails.
-    pub async fn save_ai_candidate(
-        &self,
-        candidate: &AiRelationCandidate,
-    ) -> Result<(), SnapshotStoreError> {
-        sqlx::query("INSERT INTO ai_candidates (id, scan_id, status, created_at, payload_json) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET status = excluded.status, payload_json = excluded.payload_json")
-            .bind(candidate.id.to_string()).bind(candidate.scan_id.to_string()).bind(format!("{:?}", candidate.status).to_ascii_lowercase()).bind(candidate.created_at.to_rfc3339()).bind(serde_json::to_string(candidate)?).execute(&self.pool).await?;
-        Ok(())
-    }
-
-    /// Lists AI candidates for a scan.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` access or deserialization fails.
-    pub async fn list_ai_candidates(
-        &self,
-        scan_id: Uuid,
-    ) -> Result<Vec<AiRelationCandidate>, SnapshotStoreError> {
-        deserialize_payloads(
-            sqlx::query(
-                "SELECT payload_json FROM ai_candidates WHERE scan_id = ? ORDER BY created_at DESC",
-            )
-            .bind(scan_id.to_string())
-            .fetch_all(&self.pool)
-            .await?,
-        )
-    }
-
-    /// Appends a metadata-only AI usage event; prompts and source code are never stored here.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when serialization or `SQLite` persistence fails.
-    pub async fn save_ai_usage_event(
-        &self,
-        event: &AiUsageEvent,
-    ) -> Result<(), SnapshotStoreError> {
-        sqlx::query(
-            "INSERT INTO ai_usage_events (id, completed_at, payload_json) VALUES (?, ?, ?)",
-        )
-        .bind(event.id.to_string())
-        .bind(event.completed_at.to_rfc3339())
-        .bind(serde_json::to_string(event)?)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
-    /// Lists recent AI usage metadata, newest first.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` access or deserialization fails.
-    pub async fn list_ai_usage_events(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<AiUsageEvent>, SnapshotStoreError> {
-        deserialize_payloads(
-            sqlx::query(
-                "SELECT payload_json FROM ai_usage_events ORDER BY completed_at DESC LIMIT ?",
-            )
-            .bind(i64::from(limit.min(500)))
-            .fetch_all(&self.pool)
-            .await?,
-        )
-    }
-
-    /// Adds or replaces one reviewed graph edge.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when validation, serialization, or `SQLite` persistence fails.
-    pub async fn save_project_edge(
-        &self,
-        project_id: Uuid,
-        edge: &ProjectEdge,
-    ) -> Result<(), SnapshotStoreError> {
-        edge.validate()?;
-        sqlx::query("INSERT INTO project_edges (scan_id, project_id, edge_id, payload_json) VALUES (?, ?, ?, ?) ON CONFLICT(scan_id, edge_id) DO UPDATE SET payload_json = excluded.payload_json")
-            .bind(edge.scan_id.to_string()).bind(project_id.to_string()).bind(&edge.id).bind(serde_json::to_string(edge)?).execute(&self.pool).await?;
-        Ok(())
-    }
-
-    /// Loads one local project.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` access or deserialization fails.
-    pub async fn get_local_project(
-        &self,
-        project_id: Uuid,
-    ) -> Result<Option<LocalProject>, SnapshotStoreError> {
-        let row = sqlx::query("SELECT payload_json FROM local_projects WHERE id = ?")
-            .bind(project_id.to_string())
-            .fetch_optional(&self.pool)
-            .await?;
-        row.map(|row| serde_json::from_str(row.get("payload_json")))
-            .transpose()
-            .map_err(Into::into)
-    }
-
-    /// Removes local project metadata and all derived scans, files, nodes, and edges.
-    ///
-    /// This never deletes or modifies the user's source directory.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` persistence fails.
-    pub async fn delete_local_project(&self, project_id: Uuid) -> Result<(), SnapshotStoreError> {
-        sqlx::query("DELETE FROM local_projects WHERE id = ?")
-            .bind(project_id.to_string())
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    /// Saves one project scan state transition.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when serialization or `SQLite` persistence fails.
-    pub async fn save_project_scan(&self, scan: &ProjectScan) -> Result<(), SnapshotStoreError> {
-        sqlx::query(
-            "INSERT INTO project_scans (id, project_id, status, started_at, completed_at, payload_json) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET status = excluded.status, completed_at = excluded.completed_at, payload_json = excluded.payload_json",
-        )
-        .bind(scan.id.to_string())
-        .bind(scan.project_id.to_string())
-        .bind(scan_status_name(scan)?)
-        .bind(scan.started_at.to_rfc3339())
-        .bind(scan.completed_at.map(|value| value.to_rfc3339()))
-        .bind(serde_json::to_string(scan)?)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
-    /// Lists scans newest-first for one local project.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` access or deserialization fails.
-    pub async fn list_project_scans(
-        &self,
-        project_id: Uuid,
-    ) -> Result<Vec<ProjectScan>, SnapshotStoreError> {
-        let rows = sqlx::query(
-            "SELECT payload_json FROM project_scans WHERE project_id = ? ORDER BY started_at DESC",
-        )
-        .bind(project_id.to_string())
-        .fetch_all(&self.pool)
-        .await?;
-        deserialize_payloads(rows)
-    }
-
-    /// Loads one project scan.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` access or deserialization fails.
-    pub async fn get_project_scan(
-        &self,
-        scan_id: Uuid,
-    ) -> Result<Option<ProjectScan>, SnapshotStoreError> {
-        let row = sqlx::query("SELECT payload_json FROM project_scans WHERE id = ?")
-            .bind(scan_id.to_string())
-            .fetch_optional(&self.pool)
-            .await?;
-        row.map(|row| serde_json::from_str(row.get("payload_json")))
-            .transpose()
-            .map_err(Into::into)
-    }
-
-    /// Atomically replaces the file inventory for a scan.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when serialization or `SQLite` persistence fails.
-    pub async fn replace_project_files(
-        &self,
-        project_id: Uuid,
-        scan_id: Uuid,
-        files: &[ProjectFile],
-    ) -> Result<(), SnapshotStoreError> {
-        let mut transaction = self.pool.begin().await?;
-        sqlx::query("DELETE FROM project_files WHERE scan_id = ?")
-            .bind(scan_id.to_string())
-            .execute(&mut *transaction)
-            .await?;
-        for file in files {
-            sqlx::query(
-                "INSERT INTO project_files (scan_id, project_id, relative_path, content_hash, payload_json) VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(scan_id.to_string())
-            .bind(project_id.to_string())
-            .bind(&file.relative_path)
-            .bind(&file.content_hash)
-            .bind(serde_json::to_string(file)?)
-            .execute(&mut *transaction)
-            .await?;
-        }
-        transaction.commit().await?;
-        Ok(())
-    }
-
-    /// Loads hashes from the latest successful scan for incremental discovery.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` access fails.
-    pub async fn latest_project_file_hashes(
-        &self,
-        project_id: Uuid,
-    ) -> Result<std::collections::BTreeMap<String, String>, SnapshotStoreError> {
-        let rows = sqlx::query(
-            r"
-            SELECT relative_path, content_hash
-            FROM project_files
-            WHERE scan_id = (
-                SELECT id FROM project_scans
-                WHERE project_id = ? AND status = 'ready'
-                ORDER BY completed_at DESC, started_at DESC
-                LIMIT 1
-            )
-            ORDER BY relative_path
-            ",
-        )
-        .bind(project_id.to_string())
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(rows
-            .into_iter()
-            .map(|row| (row.get("relative_path"), row.get("content_hash")))
-            .collect())
-    }
-
-    /// Atomically publishes the normalized project graph for one scan.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when serialization or `SQLite` persistence fails.
-    pub async fn replace_project_graph(
-        &self,
-        project_id: Uuid,
-        scan_id: Uuid,
-        nodes: &[ProjectNode],
-        edges: &[ProjectEdge],
-    ) -> Result<(), SnapshotStoreError> {
-        let mut transaction = self.pool.begin().await?;
-        sqlx::query("DELETE FROM project_nodes WHERE scan_id = ?")
-            .bind(scan_id.to_string())
-            .execute(&mut *transaction)
-            .await?;
-        sqlx::query("DELETE FROM project_edges WHERE scan_id = ?")
-            .bind(scan_id.to_string())
-            .execute(&mut *transaction)
-            .await?;
-        for node in nodes {
-            sqlx::query(
-                "INSERT INTO project_nodes (scan_id, project_id, node_id, payload_json) VALUES (?, ?, ?, ?)",
-            )
-            .bind(scan_id.to_string())
-            .bind(project_id.to_string())
-            .bind(&node.id)
-            .bind(serde_json::to_string(node)?)
-            .execute(&mut *transaction)
-            .await?;
-        }
-        for edge in edges {
-            edge.validate()?;
-            sqlx::query(
-                "INSERT INTO project_edges (scan_id, project_id, edge_id, payload_json) VALUES (?, ?, ?, ?)",
-            )
-            .bind(scan_id.to_string())
-            .bind(project_id.to_string())
-            .bind(&edge.id)
-            .bind(serde_json::to_string(edge)?)
-            .execute(&mut *transaction)
-            .await?;
-        }
-        transaction.commit().await?;
-        Ok(())
-    }
-
-    /// Loads a graph previously published for one scan.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `SQLite` access or deserialization fails.
-    pub async fn get_project_graph(
-        &self,
-        scan_id: Uuid,
-    ) -> Result<ProjectGraphSnapshot, SnapshotStoreError> {
-        let nodes = sqlx::query(
-            "SELECT payload_json FROM project_nodes WHERE scan_id = ? ORDER BY node_id",
-        )
-        .bind(scan_id.to_string())
-        .fetch_all(&self.pool)
-        .await?;
-        let edges = sqlx::query(
-            "SELECT payload_json FROM project_edges WHERE scan_id = ? ORDER BY edge_id",
-        )
-        .bind(scan_id.to_string())
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(ProjectGraphSnapshot {
-            scan_id,
-            nodes: deserialize_payloads(nodes)?,
-            edges: deserialize_payloads(edges)?,
-        })
-    }
-
     /// Saves a local query-history entry and retains at most 100 entries per source.
     ///
     /// # Errors
@@ -2270,7 +1813,7 @@ impl LocalSnapshotStore {
         self.initialize_semantic_tables().await?;
         self.initialize_sync_tables().await?;
         self.initialize_extension_tables().await?;
-        self.initialize_project_tables().await?;
+        self.remove_retired_project_tables().await?;
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS local_schema_migrations (version INTEGER PRIMARY KEY NOT NULL, applied_at TEXT NOT NULL)",
         )
@@ -2283,18 +1826,13 @@ impl LocalSnapshotStore {
         .bind(Utc::now().to_rfc3339())
         .execute(&self.pool)
         .await?;
-        sqlx::query("PRAGMA user_version = 2")
+        sqlx::query("PRAGMA user_version = 3")
             .execute(&self.pool)
             .await?;
         Ok(())
     }
 
     async fn initialize_settings_tables(&self) -> Result<(), SnapshotStoreError> {
-        sqlx::query("CREATE TABLE IF NOT EXISTS model_connections (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, enabled INTEGER NOT NULL, payload_json TEXT NOT NULL)").execute(&self.pool).await?;
-        sqlx::query("CREATE TABLE IF NOT EXISTS model_routes (role TEXT PRIMARY KEY NOT NULL, payload_json TEXT NOT NULL)").execute(&self.pool).await?;
-        sqlx::query("CREATE TABLE IF NOT EXISTS ai_candidates (id TEXT PRIMARY KEY NOT NULL, scan_id TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, payload_json TEXT NOT NULL)").execute(&self.pool).await?;
-        sqlx::query("CREATE INDEX IF NOT EXISTS ai_candidates_scan_idx ON ai_candidates (scan_id, created_at DESC)").execute(&self.pool).await?;
-        sqlx::query("CREATE TABLE IF NOT EXISTS ai_usage_events (id TEXT PRIMARY KEY NOT NULL, completed_at TEXT NOT NULL, payload_json TEXT NOT NULL)").execute(&self.pool).await?;
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS app_settings (settings_key TEXT PRIMARY KEY NOT NULL, schema_version INTEGER NOT NULL, payload_json TEXT NOT NULL)",
         )
@@ -2466,63 +2004,25 @@ impl LocalSnapshotStore {
         Ok(())
     }
 
-    async fn initialize_project_tables(&self) -> Result<(), SnapshotStoreError> {
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS local_projects (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, root_path TEXT NOT NULL, created_at TEXT NOT NULL, payload_json TEXT NOT NULL)",
-        )
-        .execute(&self.pool)
-        .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS project_scans (id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT NOT NULL, completed_at TEXT, payload_json TEXT NOT NULL, FOREIGN KEY (project_id) REFERENCES local_projects (id) ON DELETE CASCADE)",
-        )
-        .execute(&self.pool)
-        .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS project_bindings (project_id TEXT NOT NULL, source_id TEXT NOT NULL, PRIMARY KEY (project_id, source_id), FOREIGN KEY (project_id) REFERENCES local_projects (id) ON DELETE CASCADE)",
-        )
-        .execute(&self.pool)
-        .await?;
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS project_scans_project_time_idx ON project_scans (project_id, started_at DESC)",
-        )
-        .execute(&self.pool)
-        .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS project_files (scan_id TEXT NOT NULL, project_id TEXT NOT NULL, relative_path TEXT NOT NULL, content_hash TEXT NOT NULL, payload_json TEXT NOT NULL, PRIMARY KEY (scan_id, relative_path), FOREIGN KEY (scan_id) REFERENCES project_scans (id) ON DELETE CASCADE, FOREIGN KEY (project_id) REFERENCES local_projects (id) ON DELETE CASCADE)",
-        )
-        .execute(&self.pool)
-        .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS project_nodes (scan_id TEXT NOT NULL, project_id TEXT NOT NULL, node_id TEXT NOT NULL, payload_json TEXT NOT NULL, PRIMARY KEY (scan_id, node_id), FOREIGN KEY (scan_id) REFERENCES project_scans (id) ON DELETE CASCADE, FOREIGN KEY (project_id) REFERENCES local_projects (id) ON DELETE CASCADE)",
-        )
-        .execute(&self.pool)
-        .await?;
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS project_edges (scan_id TEXT NOT NULL, project_id TEXT NOT NULL, edge_id TEXT NOT NULL, payload_json TEXT NOT NULL, PRIMARY KEY (scan_id, edge_id), FOREIGN KEY (scan_id) REFERENCES project_scans (id) ON DELETE CASCADE, FOREIGN KEY (project_id) REFERENCES local_projects (id) ON DELETE CASCADE)",
-        )
-        .execute(&self.pool)
-        .await?;
+    async fn remove_retired_project_tables(&self) -> Result<(), SnapshotStoreError> {
+        let mut transaction = self.pool.begin().await?;
+        for statement in [
+            "DROP TABLE IF EXISTS project_edges",
+            "DROP TABLE IF EXISTS project_nodes",
+            "DROP TABLE IF EXISTS project_files",
+            "DROP TABLE IF EXISTS project_bindings",
+            "DROP TABLE IF EXISTS project_scans",
+            "DROP TABLE IF EXISTS local_projects",
+            "DROP TABLE IF EXISTS ai_candidates",
+            "DROP TABLE IF EXISTS ai_usage_events",
+            "DROP TABLE IF EXISTS model_routes",
+            "DROP TABLE IF EXISTS model_connections",
+        ] {
+            sqlx::query(statement).execute(&mut *transaction).await?;
+        }
+        transaction.commit().await?;
         Ok(())
     }
-}
-
-fn model_role_name(role: ModelRole) -> Result<String, SnapshotStoreError> {
-    let value = serde_json::to_value(role)?;
-    value.as_str().map(str::to_owned).ok_or_else(|| {
-        SnapshotStoreError::Serialization(serde_json::Error::io(std::io::Error::other(
-            "model role must serialize to a string",
-        )))
-    })
-}
-
-fn scan_status_name(scan: &ProjectScan) -> Result<String, SnapshotStoreError> {
-    let value = serde_json::to_value(scan.status)?;
-    value.as_str().map(str::to_owned).ok_or_else(|| {
-        SnapshotStoreError::Serialization(serde_json::Error::io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "scan status must serialize as a string",
-        )))
-    })
 }
 
 fn deserialize_payloads<T: for<'de> Deserialize<'de>>(
@@ -2647,6 +2147,18 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
+        sqlx::query("CREATE TABLE local_projects (id TEXT PRIMARY KEY NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE project_nodes (id TEXT PRIMARY KEY NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE model_connections (id TEXT PRIMARY KEY NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
         pool.close().await;
 
         let store = LocalSnapshotStore::open_path(&database).await.unwrap();
@@ -2658,8 +2170,15 @@ mod tests {
             .fetch_one(&store.pool)
             .await
             .unwrap();
+        let retired_tables = sqlx::query_scalar::<_, String>(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('local_projects', 'project_nodes', 'model_connections')",
+        )
+        .fetch_all(&store.pool)
+        .await
+        .unwrap();
         assert_eq!(version, LOCAL_SCHEMA_VERSION);
         assert_eq!(marker, "preserved");
+        assert!(retired_tables.is_empty());
         assert!(database.with_extension("pre-v0.bak").exists());
         store.pool.close().await;
         std::fs::remove_dir_all(root).unwrap();
@@ -2926,197 +2445,6 @@ mod tests {
             Some(provenance)
         );
         assert_eq!(store.list_lineage(source_id).await.unwrap(), [lineage]);
-    }
-
-    #[tokio::test]
-    #[allow(clippy::too_many_lines)]
-    async fn persists_local_project_scans_files_and_validated_graphs() {
-        use project_model::{
-            EdgeCertainty, ProjectEdgeKind, ProjectNodeKind, RepositoryKind, ReviewStatus,
-            ScanStatus,
-        };
-
-        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
-        let project_id = Uuid::new_v4();
-        let scan_id = Uuid::new_v4();
-        let source_id = Uuid::new_v4();
-        let project = LocalProject {
-            id: project_id,
-            name: "Shop API".into(),
-            root_path: "/private/local/shop-api".into(),
-            repository_kind: RepositoryKind::Git,
-            remote_url: None,
-            managed_cache: false,
-            database_source_ids: vec![source_id],
-            created_at: Utc::now(),
-        };
-        let scan = ProjectScan {
-            id: scan_id,
-            project_id,
-            branch: Some("main".into()),
-            commit_sha: Some("abc123".into()),
-            dirty: true,
-            status: ScanStatus::Ready,
-            analyzer_versions: BTreeMap::from([("scanner".into(), "1".into())]),
-            started_at: Utc::now(),
-            completed_at: Some(Utc::now()),
-        };
-        let file = ProjectFile {
-            relative_path: "src/orders.ts".into(),
-            byte_size: 42,
-            modified_unix_ms: Some(100),
-            content_hash: "hash".into(),
-            language: Some("typescript".into()),
-        };
-        let service_id =
-            ProjectNode::stable_id(project_id, ProjectNodeKind::Service, "OrderService.create");
-        let table_id = ProjectNode::stable_id(project_id, ProjectNodeKind::Table, "public.orders");
-        let nodes = vec![
-            ProjectNode {
-                id: service_id.clone(),
-                project_id,
-                kind: ProjectNodeKind::Service,
-                name: "create".into(),
-                qualified_name: "OrderService.create".into(),
-                relative_path: Some("src/orders.ts".into()),
-                line: Some(12),
-                database_object: None,
-                attributes: BTreeMap::new(),
-            },
-            ProjectNode {
-                id: table_id.clone(),
-                project_id,
-                kind: ProjectNodeKind::Table,
-                name: "orders".into(),
-                qualified_name: "public.orders".into(),
-                relative_path: None,
-                line: None,
-                database_object: Some(ObjectKey::table("public", "orders")),
-                attributes: BTreeMap::new(),
-            },
-        ];
-        let edge = ProjectEdge {
-            id: ProjectEdge::stable_id(&service_id, &table_id, ProjectEdgeKind::Writes),
-            source_id: service_id,
-            target_id: table_id,
-            kind: ProjectEdgeKind::Writes,
-            certainty: EdgeCertainty::Declared,
-            review_status: ReviewStatus::NotRequired,
-            evidence: vec![],
-            scan_id,
-        };
-
-        store.save_local_project(&project).await.unwrap();
-        store.save_project_scan(&scan).await.unwrap();
-        store
-            .replace_project_files(project_id, scan_id, std::slice::from_ref(&file))
-            .await
-            .unwrap();
-        store
-            .replace_project_graph(project_id, scan_id, &nodes, std::slice::from_ref(&edge))
-            .await
-            .unwrap();
-
-        assert_eq!(store.list_local_projects().await.unwrap(), [project]);
-        assert_eq!(store.list_project_scans(project_id).await.unwrap(), [scan]);
-        assert_eq!(
-            store.latest_project_file_hashes(project_id).await.unwrap(),
-            BTreeMap::from([("src/orders.ts".into(), "hash".into())])
-        );
-        let mut expected_nodes = nodes;
-        expected_nodes.sort_by(|left, right| left.id.cmp(&right.id));
-        assert_eq!(
-            store.get_project_graph(scan_id).await.unwrap(),
-            ProjectGraphSnapshot {
-                scan_id,
-                nodes: expected_nodes,
-                edges: vec![edge]
-            }
-        );
-
-        store.delete_local_project(project_id).await.unwrap();
-        assert!(store.list_local_projects().await.unwrap().is_empty());
-        assert!(
-            store
-                .list_project_scans(project_id)
-                .await
-                .unwrap()
-                .is_empty()
-        );
-    }
-
-    #[tokio::test]
-    async fn persists_model_routes_and_ai_review_candidates() {
-        use project_model::{
-            AiCandidateStatus, AiRelationCandidate, ConnectionPrivacy, ModelCapabilities,
-            ProviderKind,
-        };
-        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
-        let connection = ModelConnection {
-            id: Uuid::new_v4(),
-            name: "Local gateway".into(),
-            provider: ProviderKind::OpenAiCompatible,
-            endpoint: Some("http://localhost:11434".into()),
-            model: "code".into(),
-            credential_ref: None,
-            capabilities: ModelCapabilities {
-                chat: true,
-                structured_output: true,
-                tool_calling: false,
-                embeddings: false,
-                code_analysis: true,
-                local: true,
-                max_context_tokens: Some(8192),
-            },
-            privacy: ConnectionPrivacy {
-                allow_uncommitted_code: false,
-                allow_source_excerpts: true,
-                remote: false,
-            },
-            enabled: true,
-        };
-        let route = ModelRoute {
-            role: ModelRole::Analysis,
-            primary_connection_id: connection.id,
-            fallback_connection_ids: Vec::new(),
-        };
-        store.save_model_connection(&connection).await.unwrap();
-        store.save_model_route(&route).await.unwrap();
-        assert_eq!(
-            store.list_model_connections().await.unwrap(),
-            std::slice::from_ref(&connection)
-        );
-        assert_eq!(store.list_model_routes().await.unwrap(), [route]);
-        let scan_id = Uuid::new_v4();
-        let candidate = AiRelationCandidate {
-            id: Uuid::new_v4(),
-            scan_id,
-            connection_id: connection.id,
-            model: connection.model.clone(),
-            proposed_edge: ProjectEdge {
-                id: "candidate-edge".into(),
-                source_id: "source".into(),
-                target_id: "target".into(),
-                kind: project_model::ProjectEdgeKind::Calls,
-                certainty: project_model::EdgeCertainty::AiInferred,
-                review_status: project_model::ReviewStatus::Pending,
-                evidence: Vec::new(),
-                scan_id,
-            },
-            explanation: "Candidate".into(),
-            status: AiCandidateStatus::Pending,
-            created_at: Utc::now(),
-            reviewed_at: None,
-        };
-        store.save_ai_candidate(&candidate).await.unwrap();
-        assert_eq!(
-            store.list_ai_candidates(scan_id).await.unwrap(),
-            [candidate]
-        );
-        store.delete_model_route(ModelRole::Analysis).await.unwrap();
-        store.delete_model_connection(connection.id).await.unwrap();
-        assert!(store.list_model_routes().await.unwrap().is_empty());
-        assert!(store.list_model_connections().await.unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -137,7 +137,6 @@ async fn cloud_conflicts_and_share_lifecycle_are_enforced() {
         logical_relationships: Vec::new(),
         layout: None,
         project_settings: None,
-        project_graphs: Vec::new(),
         base_version: 0,
     };
     bundle.fingerprint = compute_sync_bundle_fingerprint(&bundle).expect("fingerprint");

@@ -8,15 +8,10 @@ members = [
   "crates/schema-diff",
   "crates/semantic-model",
   "crates/ai-context",
-  "crates/ai-provider",
-  "crates/code-analysis",
   "crates/extension-model",
   "crates/git-workspace",
   "crates/mysql-adapter",
   "crates/postgres-adapter",
-  "crates/project-model",
-  "crates/project-graph",
-  "crates/project-scanner",
   "crates/query-engine",
   "crates/snapshot-store",
 ]
@@ -46,12 +41,6 @@ tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread", "sync", "
 tokio-util = "0.7.18"
 tower = { version = "0.5.3", features = ["limit"] }
 tower-http = { version = "0.6.8", features = ["timeout"] }
-tree-sitter = "0.26.10"
-tree-sitter-go = "0.25.0"
-tree-sitter-java = "0.23.5"
-tree-sitter-python = "0.25.0"
-tree-sitter-rust = "0.24.2"
-tree-sitter-typescript = "0.23.2"
 uuid = { version = "1.22.0", features = ["serde", "v4"] }
 
 [workspace.lints.rust]

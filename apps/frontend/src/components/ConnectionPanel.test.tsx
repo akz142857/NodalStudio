@@ -46,6 +46,11 @@ function platformMock(overrides: Partial<NodalStudioPlatform> = {}): NodalStudio
     testPostgresConnection: vi.fn().mockResolvedValue(connectionResult),
     saveDataSource: vi.fn().mockResolvedValue(profile),
     capturePostgresSnapshot: vi.fn().mockResolvedValue(captureResult),
+    verifyAndRefreshDataSource: vi.fn().mockResolvedValue({
+      profile,
+      connection: connectionResult,
+      capture: captureResult,
+    }),
     clearCredentials: vi.fn().mockResolvedValue(undefined),
     deleteSourceData: vi.fn().mockResolvedValue(4),
     ...overrides,
@@ -92,7 +97,7 @@ describe("ConnectionPanel", () => {
     const platform = platformMock({ listSnapshots, getSnapshot, capturePostgresSnapshot });
     const { onSnapshot } = renderPanel(platform);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Open Flow" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open local snapshot for Flow" }));
 
     await waitFor(() => expect(listSnapshots).toHaveBeenCalledWith(profile.id));
     expect(getSnapshot).toHaveBeenCalledWith("snapshot-1");
@@ -106,10 +111,82 @@ describe("ConnectionPanel", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit Flow" }));
 
-    expect(screen.getByRole("dialog", { name: "Edit database connection" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Edit Flow" })).toBeInTheDocument();
     expect(screen.getByLabelText("Database")).toHaveValue("flow");
-    expect(screen.getByLabelText("Password")).toHaveAttribute("placeholder", "Required to save changes");
+    expect(screen.getByLabelText("Password")).toHaveAttribute("placeholder", "Optional — keep current password");
+    expect(screen.getByText("Keychain storage")).toBeInTheDocument();
+    expect(screen.getByText("Use TLS when the database server supports it.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Verify & refresh" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Delete data source" })).toBeInTheDocument();
+  });
+
+  it("saves profile edits locally without reconnecting or replacing the saved password", async () => {
+    const updatedProfile = { ...profile, displayName: "Flow local" };
+    const saveDataSource = vi.fn().mockResolvedValue(updatedProfile);
+    const testPostgresConnection = vi.fn();
+    const capturePostgresSnapshot = vi.fn();
+    const platform = platformMock({ saveDataSource, testPostgresConnection, capturePostgresSnapshot });
+    renderPanel(platform);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Flow" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Flow local" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(saveDataSource).toHaveBeenCalledWith(expect.objectContaining({
+      id: profile.id,
+      displayName: "Flow local",
+      password: "",
+    })));
+    expect(testPostgresConnection).not.toHaveBeenCalled();
+    expect(capturePostgresSnapshot).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Flow local")).toBeInTheDocument();
+  });
+
+  it("requires verification for connection detail changes and reuses the Keychain password", async () => {
+    const verifyAndRefreshDataSource = vi.fn().mockResolvedValue({
+      profile,
+      connection: connectionResult,
+      capture: captureResult,
+    });
+    const platform = platformMock({ verifyAndRefreshDataSource });
+    const { onSnapshot } = renderPanel(platform);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Flow" }));
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "db.internal" } });
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByText(/Connection details changed/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Verify & refresh" }));
+
+    await waitFor(() => expect(verifyAndRefreshDataSource).toHaveBeenCalledWith(expect.objectContaining({
+      id: profile.id,
+      host: "db.internal",
+      password: "",
+    })));
+    expect(onSnapshot).toHaveBeenCalledWith(captureResult);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("keeps the original profile active when atomic verification fails", async () => {
+    const saveDataSource = vi.fn();
+    const capturePostgresSnapshot = vi.fn();
+    const verifyAndRefreshDataSource = vi.fn().mockRejectedValue(new Error("Metadata refresh failed"));
+    const platform = platformMock({
+      saveDataSource,
+      capturePostgresSnapshot,
+      verifyAndRefreshDataSource,
+    });
+    renderPanel(platform);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Flow" }));
+    fireEvent.change(screen.getByLabelText("Database"), { target: { value: "other" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify & refresh" }));
+
+    expect(await screen.findByText("Metadata refresh failed")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Edit Flow" })).toBeInTheDocument();
+    expect(saveDataSource).not.toHaveBeenCalled();
+    expect(capturePostgresSnapshot).not.toHaveBeenCalled();
+    expect(screen.getByText("Flow")).toBeInTheDocument();
   });
 
   it("deletes a source and its local data after confirmation", async () => {
