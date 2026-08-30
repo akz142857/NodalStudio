@@ -13,10 +13,14 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
-  min-width: 960px;
-  min-height: 100vh;
 }
 
 button,
@@ -28,13 +32,14 @@ select {
 .app-shell {
   display: grid;
   height: 100vh;
+  overflow: hidden;
   grid-template-rows: 76px 1fr;
 }
 
 .topbar {
   position: relative;
   display: grid;
-  grid-template-columns: auto auto minmax(180px, 360px) auto;
+  grid-template-columns: auto auto minmax(140px, 360px) auto;
   gap: 22px;
   align-items: center;
   padding: 0 48px;
@@ -385,10 +390,11 @@ select {
 
 .workspace {
   display: grid;
+  min-width: 0;
   min-height: 0;
   grid-template-columns:
-    var(--left-sidebar-width, 272px) 10px minmax(420px, 1fr) 10px
-    var(--right-sidebar-width, 300px);
+    minmax(0, var(--left-sidebar-width, 272px)) 10px minmax(240px, 1fr) 10px
+    minmax(0, var(--right-sidebar-width, 300px));
 }
 
 .sidebar,
