@@ -2624,9 +2624,12 @@ async fn get_security_status(
         .map_err(safe_store_error)?
     {
         let path = std::path::Path::new(settings.git.repository_path.trim()).join(".nodalstudio");
+        // A directory that cannot be read must not audit as zero conflicts: this
+        // is the security panel, and "could not check" reported as "nothing to
+        // see" is the one failure mode it must not have. list_conflict_reports
+        // already returns Ok(empty) when there is simply no workspace.
         unresolved_git_conflict_reports +=
-            u64::try_from(list_conflict_reports(&path).unwrap_or_default().len())
-                .unwrap_or(u64::MAX);
+            u64::try_from(list_conflict_reports(&path)?.len()).unwrap_or(u64::MAX);
     }
     Ok(SecurityStatus {
         offline_mode: app.privacy.offline_mode,
