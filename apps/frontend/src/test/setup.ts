@@ -1,4 +1,11 @@
 import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach } from "vitest";
+
+// Vitest runs without `globals`, so Testing Library never registers its own
+// auto-cleanup: without this every render leaks into the next test in the file,
+// and queries can match a stale instance instead of the one under test.
+afterEach(cleanup);
 
 class MemoryStorage implements Storage {
   readonly #values = new Map<string, string>();
