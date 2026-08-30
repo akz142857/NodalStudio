@@ -116,4 +116,13 @@ jobs:
       - name: Build unsigned macOS application bundle
         run: pnpm --filter @nodalstudio/desktop tauri build --bundles app
       - name: Verify application bundle
-        run: test -d target/release/bundle/macos/Nodal Studio.app
+        run: |
+          # The productName is "Nodal Studio", so the bundle path contains a
+          # space: unquoted, `test` saw three arguments and tried to read the
+          # path as an operator instead of checking anything.
+          bundle="target/release/bundle/macos/Nodal Studio.app"
+          if [ ! -d "$bundle" ]; then
+            echo "::error::Expected bundle at $bundle"
+            ls -la target/release/bundle/macos/ || true
+            exit 1
+          fi
