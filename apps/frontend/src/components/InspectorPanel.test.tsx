@@ -102,4 +102,21 @@ describe("InspectorPanel", () => {
       "true",
     );
   });
+
+  it("shows a change set on the History segment whatever the canvas is showing", () => {
+    // The change summary used to be gated on the top bar being in Changes mode.
+    // The canvas overlay is a rendering mode; this segment owns time.
+    const changeSet = {
+      id: "change-set",
+      operations: [
+        { operationType: "addTable", risk: "low", object: { schema: "public", name: "invoices" } },
+      ],
+      riskSummary: { high: 0, medium: 0, low: 1, informational: 0 },
+    } as unknown as Parameters<typeof InspectorPanel>[0]["changeSet"];
+
+    renderPanel({ changeSet });
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    expect(screen.getByRole("heading", { name: "1 structural changes" })).toBeVisible();
+    expect(screen.getByText("invoices")).toBeVisible();
+  });
 });

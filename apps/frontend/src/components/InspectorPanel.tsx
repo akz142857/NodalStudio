@@ -108,13 +108,14 @@ export function InspectorPanel({
   return (
     <>
       <h2>{selectedTable ? selectedTable.key.name : snapshot.database.name}</h2>
-      <Segmented
-        className="inspector-segments"
-        label="Inspector section"
-        value={segment}
-        options={SEGMENTS}
-        onChange={setSegment}
-      />
+      <div className="inspector-segments">
+        <Segmented
+          label="Inspector section"
+          value={segment}
+          options={SEGMENTS}
+          onChange={setSegment}
+        />
+      </div>
 
       {segment === "structure" ? (
         selectedTable ? (

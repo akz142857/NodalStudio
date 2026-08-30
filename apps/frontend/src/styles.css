@@ -416,11 +416,15 @@ select {
 /* The inspector's segments span the panel rather than hugging their labels the
    way the top bar's do, so a segment stays a predictable target as the panel is
    resized. */
+/* Pinned while the panel scrolls. The negative margins pull it over the panel's
+   own padding so content passes behind it rather than through the gap. */
 .inspector-segments {
   position: sticky;
   z-index: 5;
-  top: 0;
-  margin-bottom: 14px;
+  top: -20px;
+  margin: -20px -20px 14px;
+  padding: 20px 20px 10px;
+  background: #171a20;
 }
 
 .inspector-segments button {
@@ -1007,6 +1011,52 @@ fieldset.settings-card {
   background: #e7ebf0;
 }
 
+
+/* The sidebar tree and snapshot card were written against the dark panel only:
+   on the light one their text landed at roughly 1.1:1, which is invisible. */
+:root[data-theme="light"] .tree-row {
+  color: #3c4452;
+}
+
+:root[data-theme="light"] .tree-row-schema,
+:root[data-theme="light"] .tree-row-source .tree-row-main {
+  color: #20242c;
+}
+
+:root[data-theme="light"] .tree-row-object {
+  color: #525b6b;
+}
+
+:root[data-theme="light"] .tree-row small,
+:root[data-theme="light"] .tree-row-action,
+:root[data-theme="light"] .snapshot-card-meta {
+  color: #79828f;
+}
+
+:root[data-theme="light"] .tree-twisty {
+  border-color: #79828f;
+}
+
+:root[data-theme="light"] .tree-row:hover:not(:disabled):not(.is-static) {
+  background: #e7ebf0;
+}
+
+:root[data-theme="light"] .tree-row-object[aria-current="true"],
+:root[data-theme="light"] .tree-row-source[data-active] .tree-row-main {
+  color: #20242c;
+  background: #e2e7ef;
+}
+
+:root[data-theme="light"] .snapshot-card {
+  border-top-color: #dfe3e9;
+}
+
+:root[data-theme="light"] .snapshot-card-actions button {
+  border-color: #d8dde5;
+  color: #2b313b;
+  background: #fff;
+}
+
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"] {
     color: #20242c;
@@ -1022,6 +1072,51 @@ fieldset.settings-card {
   :root[data-theme="system"] .settings-card {
     color: #20242c;
     background: #f7f8fa;
+  }
+
+  /* The sidebar tree and snapshot card were written against the dark panel only:
+     on the light one their text landed at roughly 1.1:1, which is invisible. */
+  :root[data-theme="system"] .tree-row {
+    color: #3c4452;
+  }
+
+  :root[data-theme="system"] .tree-row-schema,
+  :root[data-theme="system"] .tree-row-source .tree-row-main {
+    color: #20242c;
+  }
+
+  :root[data-theme="system"] .tree-row-object {
+    color: #525b6b;
+  }
+
+  :root[data-theme="system"] .tree-row small,
+  :root[data-theme="system"] .tree-row-action,
+  :root[data-theme="system"] .snapshot-card-meta {
+    color: #79828f;
+  }
+
+  :root[data-theme="system"] .tree-twisty {
+    border-color: #79828f;
+  }
+
+  :root[data-theme="system"] .tree-row:hover:not(:disabled):not(.is-static) {
+    background: #e7ebf0;
+  }
+
+  :root[data-theme="system"] .tree-row-object[aria-current="true"],
+  :root[data-theme="system"] .tree-row-source[data-active] .tree-row-main {
+    color: #20242c;
+    background: #e2e7ef;
+  }
+
+  :root[data-theme="system"] .snapshot-card {
+    border-top-color: #dfe3e9;
+  }
+
+  :root[data-theme="system"] .snapshot-card-actions button {
+    border-color: #d8dde5;
+    color: #2b313b;
+    background: #fff;
   }
 }
 

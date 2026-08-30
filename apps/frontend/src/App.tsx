@@ -868,10 +868,13 @@ export function App() {
         />
 
         <aside className="inspector" hidden={!rightPanel.expanded}>
+          {/* changeSet is not gated on the view mode here: the canvas overlay is
+              a rendering mode, while the History segment owns time whatever the
+              main area happens to be showing. */}
           <InspectorPanel
             snapshot={snapshot}
             selectedTable={selectedTable}
-            changeSet={mode === "changes" ? changeSet : undefined}
+            changeSet={changeSet}
             semantics={semantics}
             settings={settings}
             runtime={runtime.data}
