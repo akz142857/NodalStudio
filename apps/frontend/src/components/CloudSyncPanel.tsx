@@ -13,6 +13,7 @@ export function CloudSyncPanel({ sourceId, platform, settings, offline, onOpenSe
   const [accessToken, setAccessToken] = useState("");
   const [version, setVersion] = useState(settings.baseVersion);
   const [status, setStatus] = useState<"idle" | "syncing" | "synced" | "error">("idle");
+  const [error, setError] = useState<string>();
 
   async function sync(event: FormEvent) {
     event.preventDefault();
@@ -28,7 +29,8 @@ export function CloudSyncPanel({ sourceId, platform, settings, offline, onOpenSe
       setVersion(result.version);
       setAccessToken("");
       setStatus("synced");
-    } catch {
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
       setStatus("error");
     }
   }
@@ -49,7 +51,7 @@ export function CloudSyncPanel({ sourceId, platform, settings, offline, onOpenSe
             {status === "syncing" ? "Syncing…" : "Publish metadata"}
           </button>
           <small data-status={status}>
-            {status === "synced" ? `Synced · version ${version}` : status === "error" ? "Sync failed or conflicted" : `Cloud version ${version}`}
+            {status === "synced" ? `Synced · version ${version}` : status === "error" ? (error ?? "Sync failed or conflicted") : `Cloud version ${version}`}
           </small>
         </form>
       ) : <button type="button" className="panel-settings-link" onClick={onOpenSettings}>Configure in Settings → Cloud Sync</button>}

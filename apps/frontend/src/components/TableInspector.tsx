@@ -23,6 +23,7 @@ export function TableInspector({
   const [owner, setOwner] = useState(annotation?.owner ?? "");
   const [isCore, setIsCore] = useState(annotation?.isCore ?? false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState<string>();
 
   async function saveAnnotation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,7 +41,8 @@ export function TableInspector({
         isCore,
       });
       setStatus("saved");
-    } catch {
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
       setStatus("error");
     }
   }
@@ -73,7 +75,7 @@ export function TableInspector({
               : status === "saved"
                 ? "Saved"
                 : status === "error"
-                  ? "Save failed"
+                  ? (error ?? "Save failed")
                   : "Editable"}
           </span>
         </div>

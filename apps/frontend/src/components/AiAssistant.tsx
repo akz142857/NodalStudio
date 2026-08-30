@@ -19,6 +19,7 @@ export function AiAssistant({ platform, input, onConfirmCandidate, enabled, prov
   const [depth, setDepth] = useState(1);
   const [result, setResult] = useState<AiExplanation>();
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "confirmed">("idle");
+  const [error, setError] = useState<string>();
 
   async function explain() {
     setStatus("loading");
@@ -32,7 +33,8 @@ export function AiAssistant({ platform, input, onConfirmCandidate, enabled, prov
         }),
       );
       setStatus("idle");
-    } catch {
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
       setStatus("error");
     }
   }
@@ -43,7 +45,8 @@ export function AiAssistant({ platform, input, onConfirmCandidate, enabled, prov
     try {
       await onConfirmCandidate(result.candidateAnnotation);
       setStatus("confirmed");
-    } catch {
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
       setStatus("error");
     }
   }
@@ -78,7 +81,7 @@ export function AiAssistant({ platform, input, onConfirmCandidate, enabled, prov
           </button>
         </>
       ) : <button type="button" className="panel-settings-link" onClick={onOpenSettings}>Configure in Settings → AI</button>}
-      {status === "error" ? <p className="error-message">Explanation failed.</p> : null}
+      {status === "error" ? <p className="error-message">{error ?? "Explanation failed."}</p> : null}
       {result ? (
         <div className="ai-result">
           <strong>{result.title}</strong>

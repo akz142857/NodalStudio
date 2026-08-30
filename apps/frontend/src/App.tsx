@@ -259,7 +259,20 @@ export function App() {
 
   useEffect(() => {
     if (runtime.data?.kind !== "desktop") return;
-    void platform.listDataSources().then(setDataSources).catch(() => setDataSources([]));
+    void platform
+      .listDataSources()
+      .then(setDataSources)
+      .catch((reason: unknown) => {
+        // An empty list and a failed one look the same in the sidebar, so a
+        // connection that exists would read as "you have none".
+        setDataSources([]);
+        publishNoticeRef.current({
+          id: "data-sources-load-failed",
+          title: "Data sources could not be listed",
+          message: `Existing connections are not shown — they have not been removed. ${noticeReason(reason)}`,
+          createdAt: new Date().toISOString(),
+        });
+      });
   }, [runtime.data?.kind]);
 
   useEffect(() => {

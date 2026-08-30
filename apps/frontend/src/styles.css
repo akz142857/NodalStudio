@@ -1606,6 +1606,15 @@ fieldset.settings-card {
   line-height: 1.45;
 }
 
+/* Panels that surface a failure reason had no base style for it; the scoped
+   rules below still win where they already applied. */
+.error-message {
+  margin: 0;
+  color: #ff8d8d;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .connection-panel .error-message,
 .connection-status.error-message {
   margin: 0;

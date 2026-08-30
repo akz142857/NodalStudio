@@ -17,6 +17,7 @@ export function GitWorkspacePanel({
   onOpenSettings,
 }: GitWorkspacePanelProps) {
   const [repositoryPath, setRepositoryPath] = useState(defaultRepositoryPath);
+  const [error, setError] = useState<string>();
   const [status, setStatus] = useState<
     "idle" | "exporting" | "exported" | "importing" | "imported" | "mismatch" | "error"
   >("idle");
@@ -26,13 +27,15 @@ export function GitWorkspacePanel({
     event.preventDefault();
     setStatus("exporting");
     try {
+      setError(undefined);
       const result = await platform.exportGitWorkspace(sourceId, repositoryPath.trim());
       setSummary(
         `${result.writtenFiles} files · ${result.schemaFingerprint.slice(0, 8)}`,
       );
       setStatus("exported");
-    } catch {
+    } catch (reason) {
       setSummary("");
+      setError(reason instanceof Error ? reason.message : String(reason));
       setStatus("error");
     }
   }
@@ -40,6 +43,7 @@ export function GitWorkspacePanel({
   async function importWorkspace() {
     setStatus("importing");
     try {
+      setError(undefined);
       const preview = await platform.previewGitImport(sourceId, repositoryPath.trim());
       const conflictSummary = preview.relationshipConflicts.length
         ? `\n\n${preview.relationshipConflicts.length} local relationship conflict(s) will be overwritten:\n${preview.relationshipConflicts.join("\n")}`
@@ -52,8 +56,9 @@ export function GitWorkspacePanel({
       await onImported();
       setSummary(`${result.importedAnnotations} annotations · ${result.importedLogicalRelationships} relationships`);
       setStatus(result.fingerprintMatches ? "imported" : "mismatch");
-    } catch {
+    } catch (reason) {
       setSummary("");
+      setError(reason instanceof Error ? reason.message : String(reason));
       setStatus("error");
     }
   }
@@ -102,7 +107,7 @@ export function GitWorkspacePanel({
               : status === "mismatch"
                 ? `Imported · ${summary} · schema fingerprint differs`
             : status === "error"
-              ? "Choose an existing absolute directory"
+              ? (error ?? "Export or import failed")
               : "Migration/DDL remains the schema source of truth"}
         </small>
       </form>

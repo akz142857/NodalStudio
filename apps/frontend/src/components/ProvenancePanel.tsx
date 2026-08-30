@@ -12,6 +12,7 @@ export function ProvenancePanel({ changeSetId, platform }: ProvenancePanelProps)
   const [pullRequestUrl, setPullRequestUrl] = useState("");
   const [migrations, setMigrations] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState<string>();
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -25,7 +26,8 @@ export function ProvenancePanel({ changeSetId, platform }: ProvenancePanelProps)
         migrationFiles: migrations.split(",").map((value) => value.trim()).filter(Boolean),
       });
       setStatus("saved");
-    } catch {
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
       setStatus("error");
     }
   }
@@ -38,7 +40,7 @@ export function ProvenancePanel({ changeSetId, platform }: ProvenancePanelProps)
       <input aria-label="Pull request URL" value={pullRequestUrl} onChange={(event) => setPullRequestUrl(event.target.value)} placeholder="Pull request URL" />
       <input aria-label="Migration files" value={migrations} onChange={(event) => setMigrations(event.target.value)} placeholder="001.sql, 002.sql" />
       <button type="submit" disabled={status === "saving"}>Save evidence</button>
-      <small>{status === "saved" ? "Evidence saved" : status === "error" ? "Save failed" : "Optional metadata"}</small>
+      <small>{status === "saved" ? "Evidence saved" : status === "error" ? (error ?? "Save failed") : "Optional metadata"}</small>
     </form>
   );
 }

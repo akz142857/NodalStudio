@@ -70,4 +70,29 @@ describe("GitWorkspacePanel", () => {
       await screen.findByText("Imported · 4 annotations · 2 relationships · schema fingerprint differs"),
     ).toBeVisible();
   });
+
+  it("reports why an export failed instead of blaming the path", async () => {
+    // The panel used to print "Choose an existing absolute directory" for every
+    // failure, which is actively wrong when the path was fine.
+    const exportGitWorkspace = vi
+      .fn()
+      .mockRejectedValue(new Error("Merge driver is not configured for this repository."));
+    const platform = { exportGitWorkspace } as unknown as NodalStudioPlatform;
+    render(
+      <GitWorkspacePanel
+        sourceId="source"
+        platform={platform}
+        onImported={vi.fn().mockResolvedValue(undefined)}
+        defaultRepositoryPath="/repo"
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Export .nodalstudio" }));
+
+    expect(
+      await screen.findByText("Merge driver is not configured for this repository."),
+    ).toBeVisible();
+    expect(screen.queryByText(/Choose an existing absolute directory/)).not.toBeInTheDocument();
+  });
 });

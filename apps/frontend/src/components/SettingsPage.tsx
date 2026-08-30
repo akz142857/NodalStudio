@@ -74,6 +74,7 @@ export function SettingsPage({
   const [category, setCategory] = useState<SettingsCategory>(initialCategory);
   const [query, setQuery] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string>();
   const [storageUsage, setStorageUsage] = useState<StorageUsage>();
   const [securityStatus, setSecurityStatus] = useState<SecurityStatus>();
   const [mergeStatus, setMergeStatus] = useState<MergeDriverStatus>();
@@ -125,7 +126,8 @@ export function SettingsPage({
     try {
       await onUpdateApp(next);
       setSaveState("saved");
-    } catch {
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : String(reason));
       setSaveState("error");
     }
   }
@@ -135,7 +137,8 @@ export function SettingsPage({
     try {
       await onUpdateSource(next);
       setSaveState("saved");
-    } catch {
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : String(reason));
       setSaveState("error");
     }
   }
@@ -237,7 +240,7 @@ export function SettingsPage({
           />
         </label>
         <div className="settings-save-state" data-state={saveState}>
-          {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved locally" : saveState === "error" ? "Save failed" : runtime?.label}
+          {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved locally" : saveState === "error" ? (saveError ?? "Save failed") : runtime?.label}
         </div>
       </header>
 
