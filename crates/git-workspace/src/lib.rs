@@ -736,10 +736,18 @@ fn record_conflict(
     theirs: &impl Serialize,
     conflicts: &mut Vec<MergeConflict>,
 ) {
+    // A conflict report is what a human reads to resolve the merge, so a value
+    // that failed to serialise must not land as null — indistinguishable from a
+    // field that genuinely is null. The semantic types cannot fail to serialise
+    // today; this keeps that from becoming silent if they ever do.
+    fn describe(value: &impl Serialize) -> serde_json::Value {
+        serde_json::to_value(value)
+            .unwrap_or_else(|error| serde_json::json!({ "serializationError": error.to_string() }))
+    }
     conflicts.push(MergeConflict {
         path: path.into(),
-        ours: serde_json::to_value(ours).unwrap_or(serde_json::Value::Null),
-        theirs: serde_json::to_value(theirs).unwrap_or(serde_json::Value::Null),
+        ours: describe(ours),
+        theirs: describe(theirs),
     });
 }
 
@@ -1001,6 +1009,13 @@ mod tests {
 
         assert_eq!(result.document.value.description, ours.value.description);
         assert_eq!(result.conflicts[0].path, "object.description");
+        // The report is what a human reads to resolve the merge, so it has to
+        // carry both sides rather than just naming the field.
+        assert_eq!(result.conflicts[0].ours, serde_json::json!("User accounts"));
+        assert_eq!(
+            result.conflicts[0].theirs,
+            serde_json::json!("Customer identities")
+        );
     }
 
     #[test]
