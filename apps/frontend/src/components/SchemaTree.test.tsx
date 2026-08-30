@@ -94,4 +94,33 @@ describe("SchemaTree", () => {
       "true",
     );
   });
+
+  it("re-applies its defaults for a different source but not for a refresh", () => {
+    // The open state used to be computed once on mount, so switching connection
+    // left the new tree collapsed and holding schema names that were not in it.
+    const other = {
+      ...snapshot,
+      sourceId: "other-source",
+      schemas: [{ name: "billing", tables: [table("invoices")], views: [], enums: [] }],
+    } as unknown as DatabaseSnapshot;
+
+    const { rerender } = render(<SchemaTree snapshot={snapshot} onSelectTable={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Tables/ }));
+    expect(screen.getByText("orders")).toBeVisible();
+
+    rerender(<SchemaTree snapshot={other} onSelectTable={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /billing/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.queryByText("invoices")).not.toBeInTheDocument();
+
+    // A new capture of the same source is the same database, so what you had
+    // open stays open.
+    rerender(<SchemaTree snapshot={snapshot} onSelectTable={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Tables/ }));
+    const refreshed = { ...snapshot, id: "later-capture" };
+    rerender(<SchemaTree snapshot={refreshed} onSelectTable={vi.fn()} />);
+    expect(screen.getByText("orders")).toBeVisible();
+  });
 });

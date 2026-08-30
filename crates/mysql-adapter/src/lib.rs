@@ -259,7 +259,7 @@ async fn load_indexes(
     pool: &MySqlPool,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let rows = sqlx::query("SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, INDEX_TYPE AS index_type, NON_UNIQUE AS non_unique, COLUMN_NAME AS column_name FROM information_schema.statistics WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX").fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, INDEX_TYPE AS index_type, CAST(NON_UNIQUE AS SIGNED) AS non_unique, COLUMN_NAME AS column_name FROM information_schema.statistics WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX").fetch_all(pool).await?;
     let mut grouped: BTreeMap<(String, String), IndexDefinition> = BTreeMap::new();
     for row in rows {
         let table: String = row.try_get("table_name")?;
@@ -270,10 +270,12 @@ async fn load_indexes(
                 name: name.clone(),
                 method: row.try_get("index_type")?,
                 columns: vec![],
-                // information_schema.statistics.NON_UNIQUE is INT, not TINYINT:
-                // reading it as u8 always failed, and the fallback it used to
-                // have reported every index as non-unique.
-                unique: row.try_get::<i32, _>("non_unique")? == 0,
+                // NON_UNIQUE was read as u8 and always failed to decode, so
+                // the fallback it used to have reported every index as
+                // non-unique. Its width also varies — INT on MySQL 8, BIGINT on
+                // MariaDB and 5.7 — so the query casts it and we read one type
+                // rather than guessing per server.
+                unique: row.try_get::<i64, _>("non_unique")? == 0,
                 primary: name == "PRIMARY",
                 predicate: None,
             });

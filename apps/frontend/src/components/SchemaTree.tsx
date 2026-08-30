@@ -18,9 +18,20 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable }: SchemaTre
   // until you pick one. Type nodes always start closed — flattening a few
   // hundred tables into the sidebar is what made it scroll for thousands of
   // pixels before you could reach anything below it.
-  const [open, setOpen] = useState<OpenState>(() =>
-    snapshot.schemas.length === 1 ? { [snapshot.schemas[0].name]: true } : {},
-  );
+  //
+  // Keyed by source, not by snapshot: switching connection starts from that
+  // decision again rather than inheriting a tree whose schema names may not
+  // exist here, while refreshing or stepping through history keeps whatever you
+  // had open — it is the same database either way.
+  const [open, setOpen] = useState<OpenState>({});
+  const [openFor, setOpenFor] = useState<string>();
+  const defaults: OpenState =
+    snapshot.schemas.length === 1 ? { [snapshot.schemas[0].name]: true } : {};
+  if (openFor !== snapshot.sourceId) {
+    setOpenFor(snapshot.sourceId);
+    setOpen(defaults);
+  }
+  const effectiveOpen = openFor === snapshot.sourceId ? open : defaults;
   const toggle = (key: string) =>
     setOpen((current) => ({ ...current, [key]: !current[key] }));
 
@@ -45,7 +56,7 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable }: SchemaTre
       </div>
 
       {snapshot.schemas.map((schema) => {
-        const schemaOpen = open[schema.name] ?? false;
+        const schemaOpen = effectiveOpen[schema.name] ?? false;
         const counts: Record<ObjectType, number> = {
           tables: schema.tables.length,
           views: schema.views.length,
@@ -67,7 +78,7 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable }: SchemaTre
             {schemaOpen
               ? (Object.keys(TYPE_LABEL) as ObjectType[]).map((type) => {
                   const key = `${schema.name}:${type}`;
-                  const typeOpen = open[key] ?? false;
+                  const typeOpen = effectiveOpen[key] ?? false;
                   const count = counts[type];
                   return (
                     <div className="tree-node tree-node-type" key={key}>

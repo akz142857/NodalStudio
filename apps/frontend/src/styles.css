@@ -1242,74 +1242,6 @@ fieldset.settings-card {
   background: #20262d;
 }
 
-.source-open-button {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-  padding: 9px 10px;
-  border: 0;
-  text-align: left;
-  color: inherit;
-  background: transparent;
-}
-
-.source-edit-button {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  margin-right: 6px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  color: #929cab;
-  background: transparent;
-  opacity: 0;
-  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
-}
-
-.saved-source:hover .source-edit-button,
-.source-edit-button:focus-visible {
-  opacity: 1;
-}
-
-.source-edit-button:hover,
-.source-edit-button:focus-visible {
-  border-color: #414b58;
-  color: #e5eaf1;
-  background: #303741;
-}
-
-.source-open-button strong {
-  font-size: 11px;
-}
-
-.source-open-meta {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-}
-
-.source-open-meta > span {
-  overflow: hidden;
-  color: #7f8998;
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.source-open-meta > small {
-  flex: 0 0 auto;
-  padding: 2px 5px;
-  border-radius: 999px;
-  color: #8490a0;
-  background: #282e37;
-  font-size: 7px;
-  font-weight: 650;
-  line-height: 1.2;
-}
-
 .empty-data-source {
   display: grid;
   gap: 4px;
@@ -1800,98 +1732,10 @@ fieldset.settings-card {
   font-size: 8px;
 }
 
-.cloud-sync-panel {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid #2c3038;
-}
-
-.git-workspace-panel {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid #2c3038;
-}
-
-.git-workspace-panel .section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.git-workspace-panel .section-heading span,
-.git-workspace-panel p,
-.git-workspace-panel small {
-  color: #788291;
-  font-size: 8px;
-}
-
-.git-workspace-panel form {
-  display: grid;
-  gap: 6px;
-}
-
-.git-workspace-panel input {
-  min-width: 0;
-  padding: 7px;
-  border: 1px solid #353c47;
-  border-radius: 5px;
-  color: #e0e4ea;
-  background: #111318;
-  font-size: 9px;
-}
-
-.git-workspace-panel button {
-  padding: 7px;
-  border: 0;
-  border-radius: 5px;
-  color: #fff;
-  background: #596579;
-  font-size: 9px;
-}
-
 .git-workspace-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-}
-
-.cloud-sync-panel .section-heading,
-.cloud-sync-panel .section-heading label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 5px;
-}
-
-.cloud-sync-panel .section-heading label,
-.cloud-sync-panel p,
-.cloud-sync-panel small {
-  color: #788291;
-  font-size: 8px;
-}
-
-.cloud-sync-panel form {
-  display: grid;
-  gap: 6px;
-}
-
-.cloud-sync-panel form input {
-  min-width: 0;
-  padding: 7px;
-  border: 1px solid #353c47;
-  border-radius: 5px;
-  color: #e0e4ea;
-  background: #111318;
-  font-size: 9px;
-}
-
-.cloud-sync-panel form button {
-  padding: 7px;
-  border: 0;
-  border-radius: 5px;
-  color: #fff;
-  background: #397ce5;
-  font-size: 9px;
 }
 
 /* Rows read as one quiet list — the twisty and the count carry the structure,
@@ -2072,7 +1916,6 @@ fieldset.settings-card {
 .tree-twisty[data-open] {
   rotate: 45deg;
 }
-
 
 .section-heading {
   display: flex;
