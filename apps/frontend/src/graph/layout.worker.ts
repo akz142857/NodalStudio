@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
-import ELK from "elkjs/lib/elk.bundled.js";
+import ELK from "elkjs/lib/elk-api.js";
+import ElkWorker from "elkjs/lib/elk-worker.min.js?worker";
 import { packLayoutComponents, splitLayoutComponents, type PositionedLayoutNode } from "./layout-components";
 
 interface LayoutRequest {
@@ -14,7 +15,15 @@ interface LayoutRequest {
   edges: Array<{ id: string; source: string; target: string }>;
 }
 
-const elk = new ELK();
+// elk-worker decides at load time whether it *is* a worker script or is being
+// imported as a module, by testing `typeof document === "undefined" && typeof
+// self !== "undefined"`. Inside a Web Worker both hold, so importing it here —
+// directly, or transitively via elk.bundled.js — took the worker branch: it
+// exported nothing (leaving elk.bundled's `require(...).Worker` undefined, so
+// layout rejected with "undefined is not a constructor" and the canvas fell
+// back to the deterministic grid) and it overwrote this worker's own
+// `self.onmessage`. Load it the way it expects instead, as a nested worker.
+const elk = new ELK({ workerFactory: () => new ElkWorker() });
 
 self.onmessage = (event: MessageEvent<LayoutRequest>) => {
   void layoutComponents(event.data)
