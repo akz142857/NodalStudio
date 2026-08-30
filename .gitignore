@@ -62,3 +62,6 @@ Desktop.ini
 
 # --- Local/Internal Project Notes ---
 .private-docs/
+
+# Claude Code personal settings (machine-specific paths)
+.claude/settings.local.json
