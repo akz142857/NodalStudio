@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { SaveAnnotationInput, TableDefinition } from "../platform";
-import { TableInspector } from "./TableInspector";
+import { TableKnowledgeForm } from "./TableInspector";
 
 const table: TableDefinition = {
   key: { kind: "table", schema: "public", name: "users" },
@@ -31,7 +31,7 @@ describe("TableInspector", () => {
   it("saves normalized team knowledge for a table", async () => {
     const save = vi.fn<(input: SaveAnnotationInput) => Promise<void>>().mockResolvedValue();
     render(
-      <TableInspector
+      <TableKnowledgeForm
         table={table}
         sourceId="source"
         onSaveAnnotation={save}

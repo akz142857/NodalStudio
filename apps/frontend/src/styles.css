@@ -413,6 +413,24 @@ select {
     minmax(0, var(--right-sidebar-width, 300px));
 }
 
+/* The inspector's segments span the panel rather than hugging their labels the
+   way the top bar's do, so a segment stays a predictable target as the panel is
+   resized. */
+.inspector-segments {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  margin-bottom: 14px;
+}
+
+.inspector-segments button {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar,
 .inspector {
   min-height: 0;
@@ -1876,89 +1894,87 @@ fieldset.settings-card {
   font-size: 9px;
 }
 
-.schema-tree details {
-  border-radius: 6px;
+/* Rows read as one quiet list — the twisty and the count carry the structure,
+   so nothing needs a border or a divider to be legible. */
+.tree-node-type {
+  margin-left: 12px;
 }
 
-.schema-tree summary {
+.tree-row {
   display: flex;
+  width: 100%;
   align-items: center;
-  gap: 7px;
-  padding: 6px 4px;
-  color: #cbd1db;
-  cursor: default;
-  font-size: 10px;
-  list-style: none;
-}
-
-.schema-tree summary::before {
-  content: "›";
-  color: #798392;
-  font-size: 14px;
-  transform-origin: center;
-}
-
-.schema-tree details[open] summary::before {
-  transform: rotate(90deg);
-}
-
-.schema-tree summary span {
-  margin-left: auto;
-  color: #717b89;
-  font-size: 8px;
-}
-
-.schema-objects {
-  display: grid;
-  margin-left: 8px;
-  padding-left: 9px;
-  border-left: 1px solid #303640;
-}
-
-.schema-objects button,
-.schema-object-static {
-  display: grid;
-  grid-template-columns: 17px minmax(0, 1fr) auto;
-  gap: 5px;
-  align-items: center;
-  padding: 5px 4px;
+  gap: 6px;
+  padding: 5px 6px;
   border: 0;
-  border-radius: 4px;
-  overflow: hidden;
-  text-align: left;
-  color: #aab2bf;
+  border-radius: 5px;
+  color: #cbd1db;
   background: transparent;
-  font-size: 9px;
+  cursor: pointer;
+  font-size: 11px;
+  text-align: left;
 }
 
-.schema-objects button:hover {
-  color: #eff2f6;
-  background: #242a33;
+.tree-row:hover:not(:disabled):not(.is-static) {
+  background: #1b1f27;
 }
 
-.schema-objects button > span:nth-child(2),
-.schema-object-static > span:nth-child(2) {
+.tree-row:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.tree-row.is-static {
+  cursor: default;
+}
+
+.tree-row-schema {
+  color: #e8ebf0;
+  font-weight: 600;
+}
+
+.tree-row-object {
+  margin-left: 12px;
+  color: #aab2c0;
+}
+
+/* Low-contrast fill rather than a saturated bar: this is a model browser, not a
+   console where the selection says "commands land here". */
+.tree-row-object[aria-current="true"] {
+  color: #e8ebf0;
+  background: #262c36;
+}
+
+.tree-label {
   overflow: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.object-icon {
-  display: grid;
-  width: 15px;
-  height: 15px;
-  place-items: center;
-  border-radius: 3px;
-  color: #76dd89;
-  background: #203529;
-  font-size: 7px;
-  font-weight: 800;
+.tree-row small {
+  flex: 0 0 auto;
+  color: #6f7887;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
 }
 
-.schema-objects small {
-  color: #687281;
-  font-size: 8px;
+.tree-twisty {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-right: 1.5px solid #6f7887;
+  border-bottom: 1.5px solid #6f7887;
+  margin-right: 1px;
+  rotate: -45deg;
+  transition: rotate 120ms ease;
 }
+
+.tree-twisty[data-open] {
+  rotate: 45deg;
+}
+
 
 .section-heading {
   display: flex;

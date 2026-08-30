@@ -1,51 +1,27 @@
 import { type FormEvent, useState } from "react";
 import type { ObjectAnnotation, SaveAnnotationInput, TableDefinition } from "../platform";
 
-interface TableInspectorProps {
+interface TableStructureProps {
+  table: TableDefinition;
+  onOpenQuery?: (table: TableDefinition) => void;
+}
+
+interface TableKnowledgeFormProps {
   table: TableDefinition;
   sourceId: string;
   annotation?: ObjectAnnotation;
   onSaveAnnotation: (input: SaveAnnotationInput) => Promise<void>;
-  onOpenQuery?: (table: TableDefinition) => void;
 }
 
-export function TableInspector({
-  table,
-  sourceId,
-  annotation,
-  onSaveAnnotation,
-  onOpenQuery,
-}: TableInspectorProps) {
+/**
+ * What the database says about a table: shape, keys, indexes, constraints.
+ *
+ * Split from the knowledge form because the inspector shows one or the other —
+ * structure is read-only and comes from the snapshot, the form is authored.
+ */
+export function TableStructure({ table, onOpenQuery }: TableStructureProps) {
   const primaryColumns = new Set(table.primaryKey?.columns ?? []);
   const foreignColumns = new Set(table.foreignKeys.flatMap((key) => key.columns));
-  const [description, setDescription] = useState(annotation?.description ?? "");
-  const [tags, setTags] = useState(annotation?.tags.join(", ") ?? "");
-  const [owner, setOwner] = useState(annotation?.owner ?? "");
-  const [isCore, setIsCore] = useState(annotation?.isCore ?? false);
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [error, setError] = useState<string>();
-
-  async function saveAnnotation(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus("saving");
-    try {
-      await onSaveAnnotation({
-        sourceId,
-        objectKey: table.key,
-        description: description || null,
-        tags: tags
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-        owner: owner || null,
-        isCore,
-      });
-      setStatus("saved");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-      setStatus("error");
-    }
-  }
 
   return (
     <>
@@ -65,57 +41,6 @@ export function TableInspector({
           <dd>{table.foreignKeys.length}</dd>
         </div>
       </dl>
-
-      <form className="annotation-form" onSubmit={(event) => void saveAnnotation(event)}>
-        <div className="annotation-heading">
-          <h3>Team knowledge</h3>
-          <span data-status={status}>
-            {status === "saving"
-              ? "Saving…"
-              : status === "saved"
-                ? "Saved"
-                : status === "error"
-                  ? (error ?? "Save failed")
-                  : "Editable"}
-          </span>
-        </div>
-        <label>
-          Description
-          <textarea
-            rows={3}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="What business role does this table play?"
-          />
-        </label>
-        <label>
-          Tags
-          <input
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-            placeholder="identity, billing, core"
-          />
-        </label>
-        <label>
-          Owner
-          <input
-            value={owner}
-            onChange={(event) => setOwner(event.target.value)}
-            placeholder="Team or person"
-          />
-        </label>
-        <label className="core-toggle">
-          <input
-            type="checkbox"
-            checked={isCore}
-            onChange={(event) => setIsCore(event.target.checked)}
-          />
-          Mark as a core table
-        </label>
-        <button type="submit" disabled={status === "saving"}>
-          Save knowledge
-        </button>
-      </form>
 
       <section className="inspector-section">
         <h3>Columns</h3>
@@ -185,5 +110,95 @@ export function TableInspector({
         </section>
       ) : null}
     </>
+  );
+}
+
+/** What the team says about a table. The physical model stays read-only. */
+export function TableKnowledgeForm({
+  table,
+  sourceId,
+  annotation,
+  onSaveAnnotation,
+}: TableKnowledgeFormProps) {
+  const [description, setDescription] = useState(annotation?.description ?? "");
+  const [tags, setTags] = useState(annotation?.tags.join(", ") ?? "");
+  const [owner, setOwner] = useState(annotation?.owner ?? "");
+  const [isCore, setIsCore] = useState(annotation?.isCore ?? false);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState<string>();
+
+  async function saveAnnotation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("saving");
+    try {
+      await onSaveAnnotation({
+        sourceId,
+        objectKey: table.key,
+        description: description || null,
+        tags: tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        owner: owner || null,
+        isCore,
+      });
+      setStatus("saved");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+      setStatus("error");
+    }
+  }
+
+  return (
+    <form className="annotation-form" onSubmit={(event) => void saveAnnotation(event)}>
+      <div className="annotation-heading">
+        <h3>Team knowledge</h3>
+        <span data-status={status}>
+          {status === "saving"
+            ? "Saving…"
+            : status === "saved"
+              ? "Saved"
+              : status === "error"
+                ? (error ?? "Save failed")
+                : "Editable"}
+        </span>
+      </div>
+      <label>
+        Description
+        <textarea
+          rows={3}
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="What business role does this table play?"
+        />
+      </label>
+      <label>
+        Tags
+        <input
+          value={tags}
+          onChange={(event) => setTags(event.target.value)}
+          placeholder="identity, billing, core"
+        />
+      </label>
+      <label>
+        Owner
+        <input
+          value={owner}
+          onChange={(event) => setOwner(event.target.value)}
+          placeholder="Team or person"
+        />
+      </label>
+      <label className="core-toggle">
+        <input
+          type="checkbox"
+          checked={isCore}
+          onChange={(event) => setIsCore(event.target.checked)}
+        />
+        Mark as a core table
+      </label>
+      <button type="submit" disabled={status === "saving"}>
+        Save knowledge
+      </button>
+    </form>
   );
 }

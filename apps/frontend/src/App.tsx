@@ -1,15 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ConnectionPanel } from "./components/ConnectionPanel";
+import { InspectorPanel } from "./components/InspectorPanel";
 import { Segmented } from "./components/Segmented";
-import { AiAssistant } from "./components/AiAssistant";
-import { CloudSyncPanel } from "./components/CloudSyncPanel";
-import { ProvenancePanel } from "./components/ProvenancePanel";
-import { GitWorkspacePanel } from "./components/GitWorkspacePanel";
-import { KnowledgePanel } from "./components/KnowledgePanel";
 import { SchemaCanvas } from "./components/SchemaCanvas";
 import { SchemaTree } from "./components/SchemaTree";
-import { TableInspector } from "./components/TableInspector";
 import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
@@ -37,10 +32,9 @@ import { migrateLegacySettings } from "./settings-migration";
 
 const platform = getPlatform();
 const SettingsPage = lazy(() => import("./components/SettingsPage").then((module) => ({ default: module.SettingsPage })));
-const HistoryPanel = lazy(() => import("./components/HistoryPanel").then((module) => ({ default: module.HistoryPanel })));
 const QueryPage = lazy(() => import("./components/query/QueryPage").then((module) => ({ default: module.QueryPage })));
 
-type ViewMode = "explore" | "query" | "changes" | "history";
+type ViewMode = "explore" | "query" | "changes";
 type AppNotice = { id: string; title: string; message: string; createdAt: string };
 
 function noticeReason(reason: unknown): string {
@@ -615,7 +609,9 @@ export function App() {
   function handleHistorySnapshot(historySnapshot: DatabaseSnapshot) {
     setSnapshot(historySnapshot);
     setChangeSet(undefined);
-    setMode("history");
+    // Viewing an older snapshot is the ordinary canvas with different data, not
+    // a mode of its own — "history" never had a branch in the main area.
+    setMode("explore");
     setSelectedTable(undefined);
     setSavedView(undefined);
   }
@@ -661,7 +657,6 @@ export function App() {
               title: runtime.data?.kind === "web" ? "Query requires the desktop app" : undefined,
             },
             { value: "changes", label: "Changes", disabled: !changeSet },
-            { value: "history", label: "History" },
           ]}
         />
         <label className="global-search">
@@ -783,45 +778,7 @@ export function App() {
           />
           {snapshot ? (
             <>
-              <SchemaTree snapshot={snapshot} onSelectTable={setSelectedTable} />
-              <KnowledgePanel
-                sourceId={snapshot.sourceId}
-                selectedTable={selectedTable}
-                semantics={semantics}
-                platform={platform}
-                onChange={setSemantics}
-                onApplyView={setSavedView}
-              />
-              {runtime.data?.kind === "desktop" ? (
-                <>
-                  <GitWorkspacePanel
-                    sourceId={snapshot.sourceId}
-                    platform={platform}
-                    onImported={async () => {
-                      setSemantics(await platform.getSemantics(snapshot.sourceId));
-                    }}
-                    defaultRepositoryPath={settings.source?.git.repositoryPath ?? ""}
-                    onOpenSettings={() => openSettings("git")}
-                  />
-                  <CloudSyncPanel
-                    sourceId={snapshot.sourceId}
-                    platform={platform}
-                    settings={
-                      settings.source?.cloud ??
-                      defaultEffectiveSettings(snapshot.sourceId).source!.cloud
-                    }
-                    offline={settings.app.privacy.offlineMode}
-                    onOpenSettings={() => openSettings("cloud")}
-                  />
-                </>
-              ) : null}
-              <HistoryPanel
-                sourceId={snapshot.sourceId}
-                revision={snapshot.id}
-                platform={platform}
-                onSelect={handleHistorySnapshot}
-                onCompare={handleComparison}
-              />
+              <SchemaTree snapshot={snapshot} selectedTable={selectedTable} onSelectTable={setSelectedTable} />
             </>
           ) : null}
         </aside>
@@ -898,129 +855,23 @@ export function App() {
         />
 
         <aside className="inspector" hidden={!rightPanel.expanded}>
-          <h2>{selectedTable ? selectedTable.key.name : "Inspector"}</h2>
-          {selectedTable ? (
-            <>
-              <TableInspector
-                key={`${selectedTable.key.schema}.${selectedTable.key.name}:${
-                  semantics.annotations.find(
-                    (item) =>
-                      item.objectKey.kind === "table" &&
-                      item.objectKey.schema === selectedTable.key.schema &&
-                      item.objectKey.name === selectedTable.key.name,
-                  )?.updatedAt ?? "new"
-                }`}
-                table={selectedTable}
-                sourceId={snapshot?.sourceId ?? ""}
-                annotation={semantics.annotations.find(
-                  (item) =>
-                    item.objectKey.kind === "table" &&
-                    item.objectKey.schema === selectedTable.key.schema &&
-                    item.objectKey.name === selectedTable.key.name,
-                )}
-                onSaveAnnotation={saveAnnotation}
-                onOpenQuery={runtime.data?.kind === "desktop" ? openTableInQuery : undefined}
-              />
-              {snapshot ? (
-                <AiAssistant
-                  platform={platform}
-                  enabled={Boolean(settings.source?.ai.enabled) && !settings.app.privacy.offlineMode}
-                  providerLabel={settings.source?.ai.provider === "openAiCompatible" ? "Remote" : "Offline"}
-                  onOpenSettings={() => openSettings("ai")}
-                  input={{
-                    snapshotId: snapshot.id,
-                    targetType: "table",
-                    objectKey: selectedTable.key,
-                  }}
-                  onConfirmCandidate={(candidate) =>
-                    saveAnnotation({
-                      sourceId: snapshot.sourceId,
-                      objectKey: selectedTable.key,
-                      description: candidate,
-                      tags:
-                        semantics.annotations.find(
-                          (item) =>
-                            item.objectKey.kind === "table" &&
-                            item.objectKey.schema === selectedTable.key.schema &&
-                            item.objectKey.name === selectedTable.key.name,
-                        )?.tags ?? [],
-                      owner:
-                        semantics.annotations.find(
-                          (item) =>
-                            item.objectKey.kind === "table" &&
-                            item.objectKey.schema === selectedTable.key.schema &&
-                            item.objectKey.name === selectedTable.key.name,
-                        )?.owner ?? null,
-                      isCore:
-                        semantics.annotations.find(
-                          (item) =>
-                            item.objectKey.kind === "table" &&
-                            item.objectKey.schema === selectedTable.key.schema &&
-                            item.objectKey.name === selectedTable.key.name,
-                        )?.isCore ?? false,
-                    })
-                  }
-                />
-              ) : null}
-            </>
-          ) : snapshot ? (
-            <>
-              <dl className="snapshot-summary">
-                <div>
-                  <dt>Database</dt>
-                  <dd>{snapshot.database.name}</dd>
-                </div>
-                <div>
-                  <dt>Schemas</dt>
-                  <dd>{snapshot.schemas.length}</dd>
-                </div>
-                <div>
-                  <dt>Tables</dt>
-                  <dd>
-                    {snapshot.schemas.reduce(
-                      (total, schema) => total + schema.tables.length,
-                      0,
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Fingerprint</dt>
-                  <dd title={snapshot.fingerprint}>{snapshot.fingerprint.slice(0, 12)}</dd>
-                </div>
-              </dl>
-              {mode === "changes" && changeSet ? (
-                <><section className="change-summary">
-                  <h3>{changeSet.operations.length} structural changes</h3>
-                  <div className="risk-grid">
-                    {(["high", "medium", "low", "informational"] as const).map((risk) => (
-                      <div key={risk} data-risk={risk}>
-                        <strong>{changeSet.riskSummary[risk]}</strong>
-                        <span>{risk}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <ol className="operation-list">
-                    {changeSet.operations.slice(0, 30).map((operation, index) => (
-                      <li key={`${operation.object.schema}.${operation.object.name}.${index}`}>
-                        <span data-risk={operation.risk}>{operation.operationType}</span>
-                        <strong>{operation.object.name}</strong>
-                      </li>
-                    ))}
-                  </ol>
-                </section><AiAssistant
-                  platform={platform}
-                  input={{ snapshotId: snapshot.id, targetType: "changeSet", changeSet }}
-                  enabled={Boolean(settings.source?.ai.enabled) && !settings.app.privacy.offlineMode}
-                  providerLabel={settings.source?.ai.provider === "openAiCompatible" ? "Remote" : "Offline"}
-                  onOpenSettings={() => openSettings("ai")}
-                />{runtime.data?.kind === "desktop" ? (
-                  settings.app.advanced.extensions.migrationProvenance ? <ProvenancePanel changeSetId={changeSet.id} platform={platform} /> : null
-                ) : null}</>
-              ) : null}
-            </>
-          ) : (
-            <p>Select a table, field, relationship, or change to inspect it.</p>
-          )}
+          <InspectorPanel
+            snapshot={snapshot}
+            selectedTable={selectedTable}
+            changeSet={mode === "changes" ? changeSet : undefined}
+            semantics={semantics}
+            settings={settings}
+            runtime={runtime.data}
+            platform={platform}
+            historyRevision={snapshot?.id ?? ""}
+            onSaveAnnotation={saveAnnotation}
+            onSemanticsChange={setSemantics}
+            onApplyView={setSavedView}
+            onOpenQuery={runtime.data?.kind === "desktop" ? openTableInQuery : undefined}
+            onOpenSettings={openSettings}
+            onSelectSnapshot={handleHistorySnapshot}
+            onCompareSnapshots={handleComparison}
+          />
         </aside>
       </section>
       {settingsOpen ? (
