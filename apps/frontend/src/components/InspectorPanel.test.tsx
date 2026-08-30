@@ -89,4 +89,17 @@ describe("InspectorPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "AI" }));
     expect(screen.getByText(/Select a table to explain/)).toBeVisible();
   });
+
+  it("opens the History segment when the sidebar asks for a comparison", () => {
+    renderPanel();
+    expect(screen.queryByRole("heading", { name: /Snapshots|History/ })).not.toBeInTheDocument();
+
+    fireEvent(window, new Event("nodalstudio:inspect-history"));
+    // The History segment becomes the pressed one; the sidebar's "Compare…" has
+    // no panel of its own to fall back on.
+    expect(screen.getByRole("button", { name: "History" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
 });

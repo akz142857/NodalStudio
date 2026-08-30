@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   DatabaseSnapshot,
   EffectiveSettings,
@@ -83,6 +83,14 @@ export function InspectorPanel({
   onCompareSnapshots,
 }: InspectorPanelProps) {
   const [segment, setSegment] = useState<InspectorSegment>("structure");
+
+  // The sidebar's "Compare…" reaches the History segment the same way the
+  // command palette reaches the canvas, so a collapsed panel is not a dead end.
+  useEffect(() => {
+    const openHistory = () => setSegment("history");
+    window.addEventListener("nodalstudio:inspect-history", openHistory);
+    return () => window.removeEventListener("nodalstudio:inspect-history", openHistory);
+  }, []);
   const annotation = findAnnotation(semantics, selectedTable);
   const aiEnabled = Boolean(settings.source?.ai.enabled) && !settings.app.privacy.offlineMode;
   const aiProviderLabel =

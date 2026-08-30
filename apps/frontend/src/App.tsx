@@ -5,6 +5,7 @@ import { InspectorPanel } from "./components/InspectorPanel";
 import { Segmented } from "./components/Segmented";
 import { SchemaCanvas } from "./components/SchemaCanvas";
 import { SchemaTree } from "./components/SchemaTree";
+import { SnapshotSummary } from "./components/SnapshotSummary";
 import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
@@ -775,11 +776,23 @@ export function App() {
             }}
             defaultDatabaseType={settings.app.connectionDefaults.databaseEngine}
             defaultSslMode={settings.app.connectionDefaults.sslMode}
-          />
+            activeSourceId={snapshot?.sourceId}
+          >
+            {snapshot ? (
+              <SchemaTree
+                snapshot={snapshot}
+                selectedTable={selectedTable}
+                onSelectTable={setSelectedTable}
+              />
+            ) : null}
+          </ConnectionPanel>
           {snapshot ? (
-            <>
-              <SchemaTree snapshot={snapshot} selectedTable={selectedTable} onSelectTable={setSelectedTable} />
-            </>
+            <SnapshotSummary
+              snapshot={snapshot}
+              refreshState={refreshState}
+              canRefresh={runtime.data?.kind === "desktop"}
+              onRefresh={() => void refreshActive()}
+            />
           ) : null}
         </aside>
 

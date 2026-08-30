@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import type {
   DataSourceProfile,
   CaptureSnapshotResult,
@@ -10,6 +10,10 @@ import type {
 
 interface ConnectionPanelProps {
   enabled: boolean;
+  /** The source whose snapshot is on the canvas; its objects nest beneath it. */
+  activeSourceId?: string;
+  /** The schema tree for the active source, rendered as that row's children. */
+  children?: ReactNode;
   platform: NodalStudioPlatform;
   onSnapshot: (result: CaptureSnapshotResult) => void;
   onSourceDeleted?: (sourceId: string) => void;
@@ -62,7 +66,7 @@ function connectionDetailsDiffer(
   );
 }
 
-export function ConnectionPanel({ enabled, platform, onSnapshot, onSourceDeleted, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
+export function ConnectionPanel({ enabled, activeSourceId, children, platform, onSnapshot, onSourceDeleted, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
   const [form, setForm] = useState<SaveDataSourceInput>(() => newConnectionForm(defaultDatabaseType, defaultSslMode));
   const [profiles, setProfiles] = useState<DataSourceProfile[]>([]);
   const [connectionResult, setConnectionResult] = useState<ConnectionTestResult>();
@@ -249,34 +253,42 @@ export function ConnectionPanel({ enabled, platform, onSnapshot, onSourceDeleted
       </header>
       {profiles.length > 0 ? (
         <div className="saved-sources">
-          {profiles.map((profile) => (
-            <article className="saved-source" key={profile.id}>
-              <button
-                type="button"
-                className="source-open-button"
-                aria-label={`Open local snapshot for ${profile.displayName}`}
-                title="Open the latest saved schema snapshot"
-                disabled={pending}
-                onClick={() => void handleExistingOpen(profile)}
-              >
-                <strong>{profile.displayName}</strong>
-                <span className="source-open-meta">
-                  <span>{profile.host}:{profile.port}/{profile.database}</span>
-                  <small>Local snapshot</small>
-                </span>
-              </button>
-              <button
-                type="button"
-                className="source-edit-button"
-                aria-label={`Edit ${profile.displayName}`}
-                title="Edit connection"
-                disabled={pending}
-                onClick={() => openEditDialog(profile)}
-              >
-                <span aria-hidden="true">✎</span>
-              </button>
-            </article>
-          ))}
+          {profiles.map((profile) => {
+            const active = profile.id === activeSourceId;
+            return (
+              <div className="tree-node" key={profile.id}>
+                <div className="tree-row tree-row-source" data-active={active || undefined}>
+                  <button
+                    type="button"
+                    className="tree-row-main"
+                    aria-label={`Open local snapshot for ${profile.displayName}`}
+                    aria-expanded={active}
+                    title={`${profile.host}:${profile.port}/${profile.database}`}
+                    disabled={pending}
+                    onClick={() => void handleExistingOpen(profile)}
+                  >
+                    <span
+                      className="tree-twisty"
+                      data-open={active || undefined}
+                      aria-hidden="true"
+                    />
+                    <span className="tree-label">{profile.displayName}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="tree-row-action"
+                    aria-label={`Edit ${profile.displayName}`}
+                    title="Edit connection"
+                    disabled={pending}
+                    onClick={() => openEditDialog(profile)}
+                  >
+                    <span aria-hidden="true">✎</span>
+                  </button>
+                </div>
+                {active ? children : null}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <button type="button" className="empty-data-source" onClick={openCreateDialog} disabled={!enabled}>

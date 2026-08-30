@@ -244,7 +244,28 @@ Numbers 的做法是分段仍在、内容变成该分段的全局/文档级设�
 
 初稿把 `KnowledgePanel` 整体当作一个功能页塞进分段。看到 Numbers 参考图后改为拆开——分段描述的是「同一对象的不同侧面」，所以对象级注解进 Semantics 分段，全局分组/视图管理退到无选中时的同一分段。
 
-### 尚未做的
+### 左栏最终形态
 
-- 左栏顶部仍是既有的 `ConnectionPanel`，没有改造成母题 B 那种「连接 → 数据库 → 类型」的三级树。当前是「数据源列表 + 单快照结构树」，因为 `ConnectionPanel`（440 行，含增删改查与连接测试）重写风险高于收益。
-- 2.3 节设想的只读 Snapshot 区块（时间 · 表数 · 指纹 + Refresh/Compare）未实现——这些信息现在在右侧 Table 分段的无选中态里。
+连接列表与结构树合并成一棵树，`ConnectionPanel` 通过 `children` 把 `SchemaTree` 渲染在激活连接之下：
+
+```
+Data sources                 + Create
+▾ Local development            ← 激活连接（低对比度填充）
+   ▾ public              502
+      ▸ Tables           499   ← 默认折叠
+      ▸ Views              3
+      ▸ Enums              0   ← 无内容则禁用
+  MySQL fixture                ← 其它连接，折叠
+─────────────────────────────
+Snapshot        Aug 31 12:46
+73 tables            1bab60fc
+[ Refresh ]      [ Compare… ]
+```
+
+`ConnectionPanel` 的对话框、CRUD 与连接测试完全没动——只改了列表那一段的渲染。
+
+`Compare…` 不自带面板，而是派发 `nodalstudio:inspect-history`，由右栏切到 History 分段。沿用了命令面板驱动画布的同一套 `nodalstudio:*` 事件惯例。
+
+### 仍未做的
+
+- 母题 B 里 `Tables / Views / Functions / Events / Queries / Backups` 那种完整对象类型集合。Nodal Studio 的快照模型只有 tables / views / enums 三类（`schema-model` 的 `SchemaDefinition`），其余类型没有数据支撑，凭空加节点是假 UI。
