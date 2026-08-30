@@ -235,21 +235,11 @@ async fn load_foreign_keys(
             .or_insert(ForeignKeyDefinition {
                 name,
                 columns: vec![],
-                referenced_schema: row
-                    .try_get("referenced_table_schema")
-                    .unwrap_or_else(|_| schema.name.clone()),
-                referenced_table: row.try_get("referenced_table_name").unwrap_or_default(),
+                referenced_schema: row.try_get("referenced_table_schema")?,
+                referenced_table: row.try_get("referenced_table_name")?,
                 referenced_columns: vec![],
-                on_update: parse_action(
-                    &row.try_get::<String, _>("update_rule")
-                        .unwrap_or_else(|_| "NO ACTION".into()),
-                )
-                .unwrap_or(ReferentialAction::NoAction),
-                on_delete: parse_action(
-                    &row.try_get::<String, _>("delete_rule")
-                        .unwrap_or_else(|_| "NO ACTION".into()),
-                )
-                .unwrap_or(ReferentialAction::NoAction),
+                on_update: parse_action(&row.try_get::<String, _>("update_rule")?)?,
+                on_delete: parse_action(&row.try_get::<String, _>("delete_rule")?)?,
                 match_type: MatchType::Simple,
                 deferrable: false,
                 initially_deferred: false,
@@ -278,9 +268,12 @@ async fn load_indexes(
             .entry((table, name.clone()))
             .or_insert(IndexDefinition {
                 name: name.clone(),
-                method: row.try_get("index_type").unwrap_or_else(|_| "BTREE".into()),
+                method: row.try_get("index_type")?,
                 columns: vec![],
-                unique: row.try_get::<u8, _>("non_unique").unwrap_or(1) == 0,
+                // information_schema.statistics.NON_UNIQUE is INT, not TINYINT:
+                // reading it as u8 always failed, and the fallback it used to
+                // have reported every index as non-unique.
+                unique: row.try_get::<i32, _>("non_unique")? == 0,
                 primary: name == "PRIMARY",
                 predicate: None,
             });
