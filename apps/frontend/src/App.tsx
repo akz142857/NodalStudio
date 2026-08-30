@@ -42,6 +42,10 @@ const QueryPage = lazy(() => import("./components/query/QueryPage").then((module
 type ViewMode = "explore" | "query" | "changes" | "history";
 type AppNotice = { id: string; title: string; message: string; createdAt: string };
 
+function noticeReason(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
 type PanelPreference = {
   expanded: boolean;
   width: number;
@@ -125,6 +129,16 @@ export function App() {
     }
   }, [settings.app.notifications]);
 
+  // Effects that only need to *emit* a notice read publishNotice through a ref:
+  // its identity changes with every notification setting, and depending on it
+  // would make the settings loader re-fetch (and the semantics loader re-run)
+  // each time those settings change.
+  const publishNoticeRef = useRef(publishNotice);
+  useEffect(() => {
+    publishNoticeRef.current = publishNotice;
+  }, [publishNotice]);
+  const healthCheckFailing = useRef(false);
+
   const handleCapture = useCallback((result: CaptureSnapshotResult) => {
     setSnapshot(result.snapshot);
     setChangeSet(result.changeSet ?? undefined);
@@ -193,7 +207,19 @@ export function App() {
         }
         setSettingsLoaded(true);
       })
-      .catch(() => setSettingsLoaded(true));
+      .catch((reason: unknown) => {
+        // Carry on with defaults so the app still renders, but say so: silently
+        // substituting them makes a load failure indistinguishable from a fresh
+        // install, and the defaults include the privacy and cloud posture.
+        if (!active) return;
+        setSettingsLoaded(true);
+        publishNoticeRef.current({
+          id: "settings-load-failed",
+          title: "Stored settings could not be loaded",
+          message: `Running with default settings, including default privacy and cloud options. ${noticeReason(reason)}`,
+          createdAt: new Date().toISOString(),
+        });
+      });
     return () => {
       active = false;
     };
@@ -320,8 +346,28 @@ export function App() {
         }
       }
     }
-    void inspectLocalHealth().catch(() => undefined);
-    const timer = window.setInterval(() => void inspectLocalHealth().catch(() => undefined), 60_000);
+    // This check is what raises drift, cloud and Git-conflict warnings, so its
+    // own failure has to be visible: otherwise the warnings simply stop and the
+    // silence reads as "nothing wrong". Notify on the edge into failure only —
+    // it runs every minute.
+    function runHealthCheck() {
+      void inspectLocalHealth()
+        .then(() => {
+          healthCheckFailing.current = false;
+        })
+        .catch((reason: unknown) => {
+          if (!active || healthCheckFailing.current) return;
+          healthCheckFailing.current = true;
+          publishNotice({
+            id: "health-check-failed",
+            title: "Background checks are not running",
+            message: `Storage, cloud sync and Git conflict warnings are paused until this recovers. ${noticeReason(reason)}`,
+            createdAt: new Date().toISOString(),
+          });
+        });
+    }
+    runHealthCheck();
+    const timer = window.setInterval(runHealthCheck, 60_000);
     if (
       !automaticUpdateChecked.current &&
       settings.app.updates.automaticChecks &&
@@ -440,8 +486,18 @@ export function App() {
       .then((bundle) => {
         if (active) setSemantics(bundle);
       })
-      .catch(() => {
-        if (active) setSemantics(emptySemantics);
+      .catch((reason: unknown) => {
+        // An empty semantic model and one that failed to load look identical in
+        // the Knowledge panel, so the annotations, domain groups and saved views
+        // would appear to have been lost rather than to be unavailable.
+        if (!active) return;
+        setSemantics(emptySemantics);
+        publishNoticeRef.current({
+          id: `semantics-load-failed-${snapshot.sourceId}`,
+          title: "Semantic model could not be loaded",
+          message: `Annotations, domain groups and saved views are unavailable for this snapshot — they have not been deleted. ${noticeReason(reason)}`,
+          createdAt: new Date().toISOString(),
+        });
       });
     return () => {
       active = false;
