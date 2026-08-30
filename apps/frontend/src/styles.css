@@ -65,7 +65,22 @@ select {
   border-radius: 5px;
   color: #808a99;
   background: transparent;
+  cursor: pointer;
   font-size: 11px;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+/* Green means "you can switch to this", so it belongs on the segments you can
+   act on: not the active one, which is already where you are, and not a
+   disabled one. The tint stays a different hue from the neutral active fill so
+   hover cannot read as a weaker kind of selection. Focus gets the same
+   treatment — keyboard users otherwise have nothing. */
+.segmented button:not(.active):not(:disabled):hover,
+.segmented button:not(.active):not(:disabled):focus-visible {
+  color: #77e08a;
+  background: rgb(119 224 138 / 10%);
 }
 
 .segmented button.active {
@@ -74,6 +89,7 @@ select {
 }
 
 .segmented button:disabled {
+  cursor: default;
   opacity: 0.35;
 }
 
