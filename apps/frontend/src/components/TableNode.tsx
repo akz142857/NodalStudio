@@ -5,12 +5,12 @@ import {
   useUpdateNodeInternals,
   type NodeProps,
 } from "@xyflow/react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { TableNode as TableNodeType } from "../graph/schema-graph";
 import { useCanvasInteraction } from "./CanvasInteractionContext";
 import { useCanvasSettings } from "./CanvasSettingsContext";
 
-export function TableNode({ id, data, selected, width, height }: NodeProps<TableNodeType>) {
+function TableNodeComponent({ id, data, selected, width, height }: NodeProps<TableNodeType>) {
   const settings = useCanvasSettings();
   const { spacePanMode } = useCanvasInteraction();
   const updateNodeInternals = useUpdateNodeInternals();
@@ -32,6 +32,10 @@ export function TableNode({ id, data, selected, width, height }: NodeProps<Table
   const referencedColumns = new Set(data.referencedForeignKeyColumns ?? []);
   const uniqueColumns = new Set(data.table.indexes.filter((index) => index.unique).flatMap((index) => index.columns));
   const indexedColumns = new Set(data.table.indexes.flatMap((index) => index.columns));
+
+  // Set on every node while a relationship connection is in flight, so a drop can
+  // land on a column that has no relationship yet.
+  const revealAllHandles = data.relationshipConnectTargets !== undefined;
 
   useEffect(() => {
     updateNodeInternals(id);
@@ -68,7 +72,7 @@ export function TableNode({ id, data, selected, width, height }: NodeProps<Table
 
   useEffect(() => {
     updateNodeInternals(id);
-  }, [columnCenters, id, updateNodeInternals]);
+  }, [columnCenters, hoveredColumn, id, revealAllHandles, updateNodeInternals]);
 
   useEffect(() => () => {
     if (hoverClearTimer.current !== undefined) window.clearTimeout(hoverClearTimer.current);
@@ -99,6 +103,10 @@ export function TableNode({ id, data, selected, width, height }: NodeProps<Table
         handleClassName="table-resize-handle"
         lineClassName="table-resize-line"
       />
+      {/* The domain colour travels as a custom property rather than a concrete
+          style: border and box-shadow already carry selection / change /
+          relationship state, so it gets its own channels (header tint and left
+          stripe) in CSS instead of fighting them. */}
       <article
         ref={tableNodeRef}
         className="table-node"
@@ -106,7 +114,8 @@ export function TableNode({ id, data, selected, width, height }: NodeProps<Table
         data-change={data.changeStatus}
         data-core={data.isCore || undefined}
         data-relationship-highlighted={data.relationshipHighlighted || undefined}
-        style={data.domainColor ? { borderTopColor: data.domainColor } : undefined}
+        data-domain={data.domainColor ? "true" : undefined}
+        style={data.domainColor ? ({ "--domain-color": data.domainColor } as CSSProperties) : undefined}
       >
       {!settings.fieldLevelEdges ? <><Handle id="table-target-left" type="target" position={Position.Left} isConnectable={false} /><Handle id="table-target-right" type="target" position={Position.Right} isConnectable={false} /><Handle id="table-source-left" type="source" position={Position.Left} isConnectable={false} /><Handle id="table-source-right" type="source" position={Position.Right} isConnectable={false} /></> : null}
       <header>
@@ -189,6 +198,16 @@ export function TableNode({ id, data, selected, width, height }: NodeProps<Table
       {visibleColumns.map((column) => {
         const top = columnCenters[column.name];
         if (!Number.isFinite(top)) return null;
+        // Columns that carry an actual relationship need a mounted handle at all
+        // times, otherwise their edge has nothing to attach to. Every other column
+        // only needs one while it is hovered (to start a drag from it) or while a
+        // relationship is being connected (to be droppable) — mounting all of them
+        // costs four handles per column on every table.
+        const participates = referencedColumns.has(column.name)
+          || foreignColumns.has(column.name)
+          || inferredColumns.has(column.name)
+          || logicalColumns.has(column.name);
+        if (!participates && !revealAllHandles && hoveredColumn !== column.name) return null;
         const targetEnabled = (settings.fieldLevelEdges || data.relationshipsEditable)
           && (referencedColumns.has(column.name) || data.relationshipsEditable);
         const sourceEnabled = (settings.fieldLevelEdges || data.relationshipsEditable)
@@ -207,3 +226,5 @@ export function TableNode({ id, data, selected, width, height }: NodeProps<Table
     </>
   );
 }
+
+export const TableNode = memo(TableNodeComponent);

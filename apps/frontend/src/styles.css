@@ -2099,6 +2099,7 @@ fieldset.settings-card {
 }
 
 .table-node {
+  position: relative;
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -2217,6 +2218,35 @@ fieldset.settings-card {
   padding: 8px 10px;
   border-bottom: 1px solid #9bd9a7;
   background: #d9f4de;
+}
+
+/* Domain groups own the header tint and a full-height stripe. Both are derived
+   from --domain-color so any user-picked colour stays readable, and neither
+   touches border-color or box-shadow, which already signal selection, change
+   status and relationship highlighting. */
+.table-node[data-domain]::before {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  background: var(--domain-color);
+  content: "";
+}
+
+.table-node[data-domain] header {
+  padding-left: 14px;
+  border-bottom-color: color-mix(in srgb, var(--domain-color) 55%, #fff);
+  background: color-mix(in srgb, var(--domain-color) 22%, #fff);
+}
+
+.table-node[data-domain] header span {
+  color: color-mix(in srgb, var(--domain-color) 45%, #333a44);
+}
+
+.large-model-mode .table-node[data-domain]::before {
+  width: 4px;
 }
 
 .table-node header span {

@@ -177,6 +177,8 @@ function SchemaCanvasInner({
   const [nodes, setNodes] = useNodesState<TableNodeType>(graph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
   const persistResizedNodes = useRef(false);
+  const draggingRef = useRef(false);
+  const canvasInteraction = useMemo(() => ({ spacePanMode }), [spacePanMode]);
   const lastAutoFitFingerprint = useRef<string | undefined>(undefined);
   const selectedTableNodeId = selectedTable
     ? `${selectedTable.key.schema}.${selectedTable.key.name}`
@@ -184,7 +186,7 @@ function SchemaCanvasInner({
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
   useLayoutEffect(() => {
     void viewportRevision;
-    if (!selectedEdge) return;
+    if (!selectedEdge || draggingRef.current) return;
     const frame = window.requestAnimationFrame(() => {
       const edgeElement = Array.from(document.querySelectorAll<SVGGElement>(".schema-canvas-flow .react-flow__edge"))
         .find((element) => element.dataset.id === selectedEdge.id);
@@ -221,39 +223,55 @@ function SchemaCanvasInner({
     };
   }), [edges, selectedEdge]);
   const activeRelationshipSource = relationshipPickSource ?? connectionDragSource;
-  const displayedNodes = useMemo(() => nodes.map((node) => {
-    const isSource = node.id === selectedEdge?.source;
-    const isTarget = node.id === selectedEdge?.target;
+  const displayedNodes = useMemo(() => {
+    // Hoisted out of the map: this lookup does not vary per node.
     const sourceNode = activeRelationshipSource
       ? graph.nodes.find((candidate) => candidate.id === `${activeRelationshipSource.schema}.${activeRelationshipSource.table}`)
       : undefined;
     const sourceColumn = sourceNode?.data.table.columns.find((column) => column.name === activeRelationshipSource?.columns[0]);
-    const relationshipConnectTargets = sourceColumn && activeRelationshipSource
-      ? Object.fromEntries(node.data.table.columns.map((column) => {
-          const sameField = node.data.schema === activeRelationshipSource.schema
-            && node.data.table.key.name === activeRelationshipSource.table
-            && column.name === activeRelationshipSource.columns[0];
-          const compatible = column.typeName === sourceColumn.typeName && column.typeSchema === sourceColumn.typeSchema;
-          return [column.name, sameField ? "invalid" : compatible ? "valid" : "warning"];
-        })) as Record<string, "valid" | "warning" | "invalid">
-      : undefined;
-    return {
-      ...node,
-      selected: node.id === selectedTableNodeId,
-      data: {
-        ...node.data,
-        relationshipHighlighted: selectedEdge ? isSource || isTarget : undefined,
-        relationshipColumn: selectedEdge
-          ? isSource
-            ? selectedEdge.data?.sourceColumn
-            : isTarget
-              ? selectedEdge.data?.targetColumn
-              : undefined
-          : undefined,
-        relationshipConnectTargets,
-      },
-    };
-  }), [activeRelationshipSource, graph.nodes, nodes, selectedEdge, selectedTableNodeId]);
+    return nodes.map((node) => {
+      const isSource = node.id === selectedEdge?.source;
+      const isTarget = node.id === selectedEdge?.target;
+      const relationshipConnectTargets = sourceColumn && activeRelationshipSource
+        ? Object.fromEntries(node.data.table.columns.map((column) => {
+            const sameField = node.data.schema === activeRelationshipSource.schema
+              && node.data.table.key.name === activeRelationshipSource.table
+              && column.name === activeRelationshipSource.columns[0];
+            const compatible = column.typeName === sourceColumn.typeName && column.typeSchema === sourceColumn.typeSchema;
+            return [column.name, sameField ? "invalid" : compatible ? "valid" : "warning"];
+          })) as Record<string, "valid" | "warning" | "invalid">
+        : undefined;
+      const selected = node.id === selectedTableNodeId;
+      const relationshipHighlighted = selectedEdge ? isSource || isTarget : undefined;
+      const relationshipColumn = selectedEdge
+        ? isSource
+          ? selectedEdge.data?.sourceColumn
+          : isTarget
+            ? selectedEdge.data?.targetColumn
+            : undefined
+        : undefined;
+      // Reuse the existing object when nothing this memo derives has changed, so
+      // dragging one table does not hand every other node a fresh `data` identity.
+      if (
+        node.selected === selected
+        && node.data.relationshipHighlighted === relationshipHighlighted
+        && node.data.relationshipColumn === relationshipColumn
+        && node.data.relationshipConnectTargets === relationshipConnectTargets
+      ) {
+        return node;
+      }
+      return {
+        ...node,
+        selected,
+        data: {
+          ...node.data,
+          relationshipHighlighted,
+          relationshipColumn,
+          relationshipConnectTargets,
+        },
+      };
+    });
+  }, [activeRelationshipSource, graph.nodes, nodes, selectedEdge, selectedTableNodeId]);
 
   const endpointFromHandle = useCallback((nodeId: string | null | undefined, handleId: string | null | undefined): RelationshipEndpoint | undefined => {
     return relationshipEndpointFromHandle(graph.nodes, nodeId, handleId);
@@ -474,7 +492,7 @@ function SchemaCanvasInner({
 
   return (
     <>
-      <CanvasInteractionProvider value={{ spacePanMode }}>
+      <CanvasInteractionProvider value={canvasInteraction}>
       <ReactFlow<TableNodeType, FieldEdge>
         className={[
           "schema-canvas-flow",
@@ -598,7 +616,11 @@ function SchemaCanvasInner({
           setColumnContextMenu(undefined);
           onSelectTable(undefined);
         }}
+        onNodeDragStart={() => {
+          draggingRef.current = true;
+        }}
         onNodeDragStop={(_event, movedNode) => {
+          draggingRef.current = false;
           const movedNodes = nodes.map((node) =>
             node.id === movedNode.id ? movedNode : node,
           );
