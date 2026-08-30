@@ -2216,8 +2216,8 @@ fieldset.settings-card {
   align-items: baseline;
   gap: 6px;
   padding: 8px 10px;
-  border-bottom: 1px solid #9bd9a7;
-  background: #d9f4de;
+  border-bottom: 1px solid #d8dde5;
+  background: #f1f4f8;
 }
 
 /* Domain groups own the header tint and a full-height stripe. Both are derived
@@ -2250,7 +2250,7 @@ fieldset.settings-card {
 }
 
 .table-node header span {
-  color: #577360;
+  color: #667085;
   font-size: 9px;
   text-transform: uppercase;
 }
@@ -2269,7 +2269,7 @@ fieldset.settings-card {
 .table-node-actions > button {
   padding: 0 3px;
   border: 0;
-  color: #577360;
+  color: #7a8492;
   background: transparent;
   cursor: pointer;
 }
