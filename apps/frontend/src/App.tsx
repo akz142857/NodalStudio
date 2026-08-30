@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ConnectionPanel } from "./components/ConnectionPanel";
+import { Segmented } from "./components/Segmented";
 import { AiAssistant } from "./components/AiAssistant";
 import { CloudSyncPanel } from "./components/CloudSyncPanel";
 import { ProvenancePanel } from "./components/ProvenancePanel";
@@ -647,20 +648,22 @@ export function App() {
           <p className="eyebrow">LIVING SYSTEM BLUEPRINT</p>
           <h1>Nodal Studio</h1>
         </div>
-        <nav className="mode-switcher" aria-label="View mode">
-          {(["explore", "query", "changes", "history"] as const).map((item) => (
-            <button
-              type="button"
-              key={item}
-              className={mode === item ? "active" : ""}
-              disabled={(item === "changes" && !changeSet) || (item === "query" && runtime.data?.kind === "web")}
-              title={item === "query" && runtime.data?.kind === "web" ? "Query requires the desktop app" : undefined}
-              onClick={() => setMode(item)}
-            >
-              {item === "explore" ? "Database" : item[0].toUpperCase() + item.slice(1)}
-            </button>
-          ))}
-        </nav>
+        <Segmented
+          label="View mode"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "explore", label: "Database" },
+            {
+              value: "query",
+              label: "Query",
+              disabled: runtime.data?.kind === "web",
+              title: runtime.data?.kind === "web" ? "Query requires the desktop app" : undefined,
+            },
+            { value: "changes", label: "Changes", disabled: !changeSet },
+            { value: "history", label: "History" },
+          ]}
+        />
         <label className="global-search">
           <span>Search schema</span>
           <input

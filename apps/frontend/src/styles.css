@@ -51,7 +51,7 @@ select {
   min-width: 170px;
 }
 
-.mode-switcher {
+.segmented {
   display: flex;
   padding: 3px;
   border: 1px solid #333945;
@@ -59,7 +59,7 @@ select {
   background: #111318;
 }
 
-.mode-switcher button {
+.segmented button {
   padding: 6px 10px;
   border: 0;
   border-radius: 5px;
@@ -68,12 +68,12 @@ select {
   font-size: 11px;
 }
 
-.mode-switcher button.active {
+.segmented button.active {
   color: #e8ebf0;
   background: #2b313b;
 }
 
-.mode-switcher button:disabled {
+.segmented button:disabled {
   opacity: 0.35;
 }
 
@@ -954,7 +954,7 @@ fieldset.settings-card {
 }
 
 :root[data-theme="light"] .sidebar-rail,
-:root[data-theme="light"] .mode-switcher,
+:root[data-theme="light"] .segmented,
 :root[data-theme="light"] .global-search input,
 :root[data-theme="light"] .settings-search input,
 :root[data-theme="light"] .setting-row input,
