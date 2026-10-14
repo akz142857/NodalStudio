@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { CapabilitiesMatrix } from "./CapabilitiesMatrix";
 import {
   defaultAppSettings,
   defaultProjectSettings,
   type AppSettings,
   type DataSourceProfile,
   type DataSourceSettings,
+  type DatabaseInfo,
   type EffectiveSettings,
   type RuntimeInfo,
   type NodalStudioPlatform,
@@ -33,6 +35,7 @@ const categories = [
   ["notifications", "Notifications", "schema change conflict warning quiet"],
   ["shortcuts", "Keyboard Shortcuts", "keyboard command focus refresh sidebar"],
   ["updates", "Updates & About", "version update channel license logs"],
+  ["capabilities", "Capabilities", "support scope matrix PostgreSQL MySQL Desktop Web query diagram export preflight limitations"],
   ["advanced", "Advanced", "performance worker beta reset factory"],
 ] as const;
 
@@ -43,6 +46,7 @@ type SettingsPageProps = {
   runtime?: RuntimeInfo;
   dataSources: DataSourceProfile[];
   activeSourceId?: string;
+  activeDatabase?: DatabaseInfo;
   initialCategory?: SettingsCategory;
   onClose: () => void;
   onUpdateApp: (settings: AppSettings) => Promise<void>;
@@ -60,6 +64,7 @@ export function SettingsPage({
   runtime,
   dataSources,
   activeSourceId,
+  activeDatabase,
   initialCategory = "general",
   onClose,
   onUpdateApp,
@@ -457,6 +462,8 @@ export function SettingsPage({
               <button type="button" className="secondary-setting-action" onClick={() => void saveApp({ ...app, shortcuts: defaultAppSettings().shortcuts })}>Reset shortcuts</button>
             </SettingsSection>
           ) : null}
+
+          {visibleCategory === "capabilities" ? <SettingsSection title="Capabilities" description="Supported features and limits for PostgreSQL, MySQL, Desktop and Web."><CapabilitiesMatrix runtime={runtime} database={activeDatabase} /></SettingsSection> : null}
 
           {visibleCategory === "updates" ? (
             <SettingsSection title="Updates & About" description="Application version, update channel, licenses, and diagnostic paths.">

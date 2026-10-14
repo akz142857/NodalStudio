@@ -1,4 +1,6 @@
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
+import { comparisonTables, type ChangeStatus } from "./schema-comparison";
+export type { ChangeStatus } from "./schema-comparison";
 import type {
   DatabaseSnapshot,
   DomainGroup,
@@ -9,12 +11,15 @@ import type {
   TableDefinition,
 } from "../platform";
 
-export type ChangeStatus = "added" | "modified";
-
 export interface TableNodeData extends Record<string, unknown> {
   schema: string;
+  layoutPinned?: boolean;
   table: TableDefinition;
   changeStatus?: ChangeStatus;
+  inspectionTable?: TableDefinition;
+  columnChanges?: Record<string, ChangeStatus | undefined>;
+  columnNotes?: Record<string, string>;
+  visibleColumnNames?: string[];
   isCore?: boolean;
   domainColor?: string;
   annotation?: ObjectAnnotation;
@@ -24,6 +29,7 @@ export interface TableNodeData extends Record<string, unknown> {
   onOpenQuery?: (table: TableDefinition) => void;
   relationshipsEditable?: boolean;
   relationshipHighlighted?: boolean;
+  inspectorFocused?: boolean;
   relationshipColumn?: string;
   relationshipConnectTargets?: Record<string, "valid" | "warning" | "invalid">;
 }
@@ -31,6 +37,10 @@ export interface TableNodeData extends Record<string, unknown> {
 export type TableNode = Node<TableNodeData, "table">;
 
 export interface FieldEdgeData extends Record<string, unknown> {
+  changeStatus?: ChangeStatus;
+  snapshotSide?: "before" | "after";
+  comparisonOffset?: number;
+  edgeStyle?: "orthogonal" | "curved";
   relationshipKind: "physical" | "logical" | "inferred";
   relationshipId?: string;
   relationshipStatus?: LogicalRelationshipStatus;
@@ -63,6 +73,7 @@ export interface SchemaGraphOptions {
   rootNodeIds?: string[];
   relationshipDepth?: number;
   changeSet?: SchemaChangeSet;
+  beforeSnapshot?: DatabaseSnapshot;
   annotations?: ObjectAnnotation[];
   domainGroups?: DomainGroup[];
   includeInferredRelationships?: boolean;
@@ -116,9 +127,15 @@ export function buildSchemaGraph(
   snapshot: DatabaseSnapshot,
   options: SchemaGraphOptions = {},
 ): SchemaGraph {
-  const allTables = snapshot.schemas.flatMap((schema) =>
-    schema.tables.map((table) => ({ schema: schema.name, table })),
-  );
+  const allTables = comparisonTables(snapshot, options.beforeSnapshot, options.changeSet);
+  const afterTables = snapshot.schemas.flatMap((schema) => schema.tables.map((table) => ({ schema: schema.name, table })));
+  const comparing = options.changeSet?.afterSnapshotId === snapshot.id;
+  const currentTableMap = new Map(afterTables.map(({ schema, table }) => [tableNodeId(schema, table.key.name), table]));
+  const logicalRelationships = (options.logicalRelationships ?? []).filter((relationship) => !comparing ||
+    [relationship.source, relationship.target].every((endpoint) => {
+      const table = currentTableMap.get(tableNodeId(endpoint.schema, endpoint.table));
+      return endpoint.columns.every((name) => table?.columns.some((column) => column.name === name));
+    }));
 
   const normalizedQuery = options.query?.trim().toLocaleLowerCase() ?? "";
   let includedIds = new Set(
@@ -132,7 +149,7 @@ export function buildSchemaGraph(
   );
 
   if (options.focusNodeId && allTableIds.has(options.focusNodeId)) {
-    const focusedIds = relatedTableIds(allTables, [options.focusNodeId], 1, options.logicalRelationships);
+    const focusedIds = relatedTableIds(allTables, [options.focusNodeId], 1, logicalRelationships);
     includedIds = new Set([...includedIds].filter((id) => focusedIds.has(id)));
   }
 
@@ -141,7 +158,7 @@ export function buildSchemaGraph(
       allTables,
       options.rootNodeIds,
       options.relationshipDepth ?? 1,
-      options.logicalRelationships,
+      logicalRelationships,
     );
     includedIds = new Set([...includedIds].filter((id) => viewIds.has(id)));
   }
@@ -150,7 +167,7 @@ export function buildSchemaGraph(
     includedIds.has(tableNodeId(schema, table.key.name)),
   );
   const ignoredRelationshipKeys = new Set(options.ignoredRelationshipKeys ?? []);
-  const inferredRelationships = inferRelationships(allTables).filter(
+  const inferredRelationships = inferRelationships(afterTables).filter(
     (relationship) =>
       includedIds.has(relationship.sourceId)
       && includedIds.has(relationship.targetId)
@@ -160,7 +177,7 @@ export function buildSchemaGraph(
   const inferredColumns = new Map<string, string[]>();
   const logicalColumns = new Map<string, string[]>();
   const highlightedRelationshipIds = options.selectedNodeId
-    ? relatedTableIds(allTables, [options.selectedNodeId], options.relationshipHighlightDepth ?? 1, options.logicalRelationships)
+    ? relatedTableIds(allTables, [options.selectedNodeId], options.relationshipHighlightDepth ?? 1, logicalRelationships)
     : null;
   const referencedColumns = new Map<string, Set<string>>();
   let physicalRelationshipCount = 0;
@@ -188,7 +205,7 @@ export function buildSchemaGraph(
     }
   }
   if (options.includeLogicalRelationships !== false) {
-    for (const relationship of options.logicalRelationships ?? []) {
+    for (const relationship of logicalRelationships) {
       if (relationship.status === "disabled" || relationship.status === "orphaned") continue;
       const sourceId = tableNodeId(relationship.source.schema, relationship.source.table);
       const targetId = tableNodeId(relationship.target.schema, relationship.target.table);
@@ -202,7 +219,17 @@ export function buildSchemaGraph(
     }
   }
 
-  const nodes: TableNode[] = tables.map(({ schema, table }, index) => ({
+  const visibleColumns = new Map(tables.map(({ schema, table, columnChanges }) => {
+    const first = table.columns.slice(0, options.maxInitialColumns ?? table.columns.length).map((column) => column.name);
+    const required = new Set([...first, ...table.foreignKeys.flatMap((foreignKey) => foreignKey.columns),
+      ...(referencedColumns.get(tableNodeId(schema, table.key.name)) ?? []),
+      ...(logicalColumns.get(tableNodeId(schema, table.key.name)) ?? []),
+      ...(inferredColumns.get(tableNodeId(schema, table.key.name)) ?? [])]);
+    return [tableNodeId(schema, table.key.name), table.columns
+      .filter((column) => (comparing && columnChanges?.[column.name]) || required.has(column.name))
+      .map((column) => column.name)] as const;
+  }));
+  const nodes: TableNode[] = tables.map(({ schema, table, inspectionTable, changeStatus, columnChanges, columnNotes }, index) => ({
     id: tableNodeId(schema, table.key.name),
     type: "table",
     selected: options.selectedNodeId === tableNodeId(schema, table.key.name),
@@ -216,43 +243,50 @@ export function buildSchemaGraph(
         maxInitialColumns: options.maxInitialColumns,
         indexes: options.indexes,
         showTableComments: options.showTableComments,
+        visibleColumnCount: visibleColumns.get(tableNodeId(schema, table.key.name))?.length,
       }),
       cursor: "default",
     },
     data: {
       schema,
       table,
-      changeStatus: tableChangeStatus(schema, table.key.name, options.changeSet),
+      changeStatus,
+      inspectionTable,
+      columnChanges,
+      columnNotes,
+      visibleColumnNames: visibleColumns.get(tableNodeId(schema, table.key.name)),
       ...tableSemantics(schema, table.key.name, options.annotations, options.domainGroups),
       inferredForeignKeyColumns: inferredColumns.get(tableNodeId(schema, table.key.name)),
       logicalForeignKeyColumns: logicalColumns.get(tableNodeId(schema, table.key.name)),
       referencedForeignKeyColumns: [
         ...(referencedColumns.get(tableNodeId(schema, table.key.name)) ?? []),
       ],
-      relationshipsEditable: options.relationshipsEditable,
+      relationshipsEditable: !comparing && options.relationshipsEditable,
     },
   }));
 
-  const physicalEdges: FieldEdge[] = options.includePhysicalRelationships === false ? [] : tables.flatMap(({ schema, table }) =>
-    table.foreignKeys
-      .filter((foreignKey) =>
+  const physicalEdges: FieldEdge[] = options.includePhysicalRelationships === false ? [] : tables.flatMap(({ schema, table, relations }) =>
+    relations
+      .filter(({ foreignKey }) =>
         includedIds.has(tableNodeId(foreignKey.referencedSchema, foreignKey.referencedTable)),
       )
-      .flatMap((foreignKey) =>
+      .flatMap(({ foreignKey, changeStatus, snapshotSide, replaced }) =>
         foreignKey.columns.flatMap((sourceColumn, columnIndex) => {
           const targetColumn = foreignKey.referencedColumns[columnIndex];
           if (!targetColumn) return [];
           return [{
-            id: `${schema}.${table.key.name}.${foreignKey.name}.${columnIndex}`,
+            id: `${schema}.${table.key.name}.${foreignKey.name}.${columnIndex}${snapshotSide ? `.${snapshotSide}` : ""}`,
             source: tableNodeId(schema, table.key.name),
             target: tableNodeId(foreignKey.referencedSchema, foreignKey.referencedTable),
             sourceHandle: options.fieldLevelEdges === false ? "table-source-right" : fieldHandleId("source", sourceColumn, "right"),
             targetHandle: options.fieldLevelEdges === false ? "table-target-left" : fieldHandleId("target", targetColumn, "left"),
-            type: options.edgeStyle === "curved" ? "default" : "smoothstep",
-            label: relationshipLabel(options, foreignKey.name, sourceColumn, foreignKey.referencedTable, targetColumn, foreignKey.onDelete, foreignKey.onUpdate),
-            markerEnd: { type: MarkerType.ArrowClosed, color: options.colorBlindPalette ? "#0072b2" : "#2563eb" },
-            style: { stroke: options.colorBlindPalette ? "#0072b2" : "#2563eb", strokeWidth: options.highContrastRelations ? 3 : 1.8, opacity: relationshipOpacity(highlightedRelationshipIds, tableNodeId(schema, table.key.name), tableNodeId(foreignKey.referencedSchema, foreignKey.referencedTable)) },
-            labelStyle: { fill: "#1e40af", fontSize: 9, fontWeight: 600 },
+            type: changeStatus ? "comparison" : options.edgeStyle === "curved" ? "default" : "smoothstep",
+            label: changeStatus ? `${changeMarker(changeStatus)} ${changeStatus} · ${snapshotSide === "before" ? "Before" : "After"} · ${relationshipLabel({ ...options, showRelationshipLabels: true }, foreignKey.name, sourceColumn, foreignKey.referencedTable, targetColumn, foreignKey.onDelete, foreignKey.onUpdate)}`
+              : relationshipLabel(options, foreignKey.name, sourceColumn, foreignKey.referencedTable, targetColumn, foreignKey.onDelete, foreignKey.onUpdate),
+            className: changeStatus ? `comparison-edge comparison-edge-${changeStatus}` : undefined,
+            markerEnd: { type: MarkerType.ArrowClosed, color: relationColor(changeStatus, options.colorBlindPalette) },
+            style: { stroke: relationColor(changeStatus, options.colorBlindPalette), strokeDasharray: changeStatus === "deleted" ? "8 5" : changeStatus === "modified" ? "3 3" : undefined, strokeWidth: options.highContrastRelations ? 3 : 1.8, opacity: relationshipOpacity(highlightedRelationshipIds, tableNodeId(schema, table.key.name), tableNodeId(foreignKey.referencedSchema, foreignKey.referencedTable)) },
+            labelStyle: { fill: relationColor(changeStatus, options.colorBlindPalette), fontSize: 9, fontWeight: 600 },
             labelBgStyle: { fill: "#eff6ff", fillOpacity: 0.94 },
             labelBgPadding: [4, 2] as [number, number],
             labelBgBorderRadius: 3,
@@ -260,6 +294,10 @@ export function buildSchemaGraph(
             interactionWidth: 20,
             data: {
               relationshipKind: "physical" as const,
+              changeStatus,
+              snapshotSide,
+              comparisonOffset: replaced ? -12 : changeStatus === "modified" ? 12 : 0,
+              edgeStyle: options.edgeStyle,
               constraintName: foreignKey.name,
               sourceColumn,
               targetColumn,
@@ -271,7 +309,7 @@ export function buildSchemaGraph(
         }),
       ),
   );
-  const physicalKeys = new Set(physicalEdges.map((edge) => logicalRelationshipKey(
+  const physicalKeys = new Set(physicalEdges.filter((edge) => edge.data?.changeStatus !== "deleted").map((edge) => logicalRelationshipKey(
     edge.source,
     edge.data?.sourceColumn ?? "",
     edge.target,
@@ -279,7 +317,7 @@ export function buildSchemaGraph(
   )));
   const logicalEdges: FieldEdge[] = options.includeLogicalRelationships === false
     ? []
-    : (options.logicalRelationships ?? []).flatMap((relationship) => {
+    : logicalRelationships.flatMap((relationship) => {
         if (relationship.status === "disabled" && !options.includeInvalidLogicalRelationships) return [];
         if (
           relationship.status === "orphaned"
@@ -334,7 +372,7 @@ export function buildSchemaGraph(
           }];
         });
       });
-  const logicalKeys = new Set((options.logicalRelationships ?? []).flatMap((relationship) => {
+  const logicalKeys = new Set(logicalRelationships.flatMap((relationship) => {
     if (relationship.status === "disabled" || relationship.status === "orphaned") return [];
     const sourceId = tableNodeId(relationship.source.schema, relationship.source.table);
     const targetId = tableNodeId(relationship.target.schema, relationship.target.table);
@@ -378,7 +416,7 @@ export function buildSchemaGraph(
     nodes,
     edges: [...physicalEdges, ...logicalEdges, ...inferredEdges],
     physicalRelationshipCount,
-    logicalRelationshipCount: (options.logicalRelationships ?? []).filter((relationship) => relationship.status !== "disabled").length,
+    logicalRelationshipCount: logicalRelationships.filter((relationship) => relationship.status !== "disabled").length,
     inferredRelationshipCount: availableInferredRelationships.length,
   };
 }
@@ -389,9 +427,10 @@ export function estimatedTableNodeHeight(
     maxInitialColumns?: number;
     indexes?: "expanded" | "collapsed" | "hidden";
     showTableComments?: boolean;
+    visibleColumnCount?: number;
   } = {},
 ): number {
-  const visibleColumns = Math.min(
+  const visibleColumns = options.visibleColumnCount ?? Math.min(
     table.columns.length,
     options.maxInitialColumns ?? table.columns.length,
   );
@@ -632,21 +671,13 @@ function tableMatches(schema: string, table: TableDefinition, query: string): bo
   );
 }
 
-function tableChangeStatus(
-  schema: string,
-  table: string,
-  changeSet: SchemaChangeSet | undefined,
-): ChangeStatus | undefined {
-  const tableId = tableNodeId(schema, table);
-  const operations = changeSet?.operations.filter((operation) => {
-    const operationTableId =
-      operation.object.kind === "table"
-        ? tableNodeId(operation.object.schema, operation.object.name)
-        : operation.object.schema;
-    return operationTableId === tableId;
-  });
-  if (!operations?.length) return undefined;
-  return operations.some((operation) => operation.operationType === "addTable")
-    ? "added"
-    : "modified";
+export function changeMarker(status: ChangeStatus): string {
+  return status === "added" ? "+" : status === "modified" ? "~" : "−";
+}
+
+function relationColor(status: ChangeStatus | undefined, colorBlind = false): string {
+  if (status === "deleted") return colorBlind ? "#d55e00" : "#c43e48";
+  if (status === "modified") return "#946200";
+  if (status === "added") return colorBlind ? "#0072b2" : "#16803c";
+  return colorBlind ? "#0072b2" : "#2563eb";
 }

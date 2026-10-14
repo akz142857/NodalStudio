@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type {
   DatabaseSnapshot,
@@ -49,6 +49,8 @@ const changeSet: SchemaChangeSet = {
 
 function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"]): NodalStudioPlatform {
   return {
+    saveDiagramExport: vi.fn().mockResolvedValue({ path: null }),
+    saveSchemaReport: vi.fn().mockResolvedValue({ path: null }),
     getRuntimeInfo: vi.fn(),
     getDiagnosticInfo: vi.fn(),
     revealAppDirectory: vi.fn(),
@@ -154,5 +156,42 @@ describe("HistoryPanel", () => {
 
     await waitFor(() => expect(onCompare).toHaveBeenCalledWith(snapshot, changeSet));
     expect(compareSnapshots).toHaveBeenCalledWith("before", "after");
+  });
+
+  it("compares in the chosen direction even when the target is older", async () => {
+    const compareSnapshots = vi.fn().mockResolvedValue(changeSet);
+    const platform = platformMock(compareSnapshots);
+    const getSnapshot = vi.fn().mockResolvedValue(snapshot);
+    platform.getSnapshot = getSnapshot;
+    render(<HistoryPanel sourceId="source" revision="after" platform={platform} onSelect={vi.fn()} onCompare={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Swap direction" }));
+    expect(screen.getByLabelText("Before (baseline)")).toHaveValue("after");
+    expect(screen.getByLabelText("After (target)")).toHaveValue("before");
+    fireEvent.click(screen.getByRole("button", { name: "Compare versions" }));
+    await waitFor(() => expect(compareSnapshots).toHaveBeenCalledWith("after", "before"));
+    expect(getSnapshot).toHaveBeenCalledWith("before");
+  });
+
+  it("prevents comparison of a snapshot with itself", async () => {
+    const compareSnapshots = vi.fn().mockResolvedValue(changeSet);
+    render(<HistoryPanel sourceId="source" revision="after" platform={platformMock(compareSnapshots)} onSelect={vi.fn()} onCompare={vi.fn()} />);
+    await screen.findByRole("button", { name: "Swap direction" });
+    fireEvent.change(screen.getByLabelText("Before (baseline)"), { target: { value: "after" } });
+    expect(screen.getByRole("button", { name: "Compare versions" })).toBeDisabled();
+    expect(compareSnapshots).not.toHaveBeenCalled();
+  });
+
+  it("ignores a comparison that finishes after the history has changed", async () => {
+    let complete!: (changeSet: SchemaChangeSet) => void;
+    const compareSnapshots = vi.fn<NodalStudioPlatform["compareSnapshots"]>().mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
+    const platform = platformMock(compareSnapshots);
+    const onCompare = vi.fn();
+    const { rerender } = render(<HistoryPanel sourceId="source" revision="after" platform={platform} onSelect={vi.fn()} onCompare={onCompare} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Compare versions" }));
+    rerender(<HistoryPanel sourceId="source" revision="new-capture" platform={platform} onSelect={vi.fn()} onCompare={onCompare} />);
+    await act(async () => { complete(changeSet); await Promise.resolve(); });
+    expect(onCompare).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Compare versions" })).toBeEnabled();
   });
 });

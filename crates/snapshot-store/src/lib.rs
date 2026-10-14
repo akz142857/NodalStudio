@@ -2326,6 +2326,7 @@ mod tests {
                     y: 24.0,
                     width: None,
                     height: None,
+                    pinned: true,
                 },
             )]),
             updated_at: now,
@@ -2343,6 +2344,25 @@ mod tests {
         assert_eq!(
             store.get_layout(source_id, None).await.unwrap(),
             Some(layout)
+        );
+    }
+
+    #[test]
+    fn canvas_position_pin_is_backward_compatible() {
+        let legacy: CanvasPosition =
+            serde_json::from_str(r#"{"x":12,"y":24,"width":320,"height":200}"#).unwrap();
+        assert!(!legacy.pinned);
+        let json = serde_json::to_value(legacy).unwrap();
+        assert!(json.get("pinned").is_none());
+        let fixed = CanvasPosition {
+            pinned: true,
+            ..legacy
+        };
+        let json = serde_json::to_value(fixed).unwrap();
+        assert_eq!(json["pinned"], true);
+        assert_eq!(
+            serde_json::from_value::<CanvasPosition>(json).unwrap(),
+            fixed
         );
     }
 

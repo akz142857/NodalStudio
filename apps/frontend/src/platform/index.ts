@@ -11,6 +11,10 @@ export function getPlatform(): NodalStudioPlatform {
 }
 
 export type {
+  FileExportReceipt,
+  SchemaReportExportInput,
+  DiagramExportInput,
+  DiagramExportReceipt,
   AiExplanation,
   CloudViewBundle,
   ChangeProvenance,

@@ -30,6 +30,7 @@ const SEGMENTS = [
 interface InspectorPanelProps {
   snapshot?: DatabaseSnapshot;
   selectedTable?: TableDefinition;
+  historicalSelection?: boolean;
   changeSet?: SchemaChangeSet;
   semantics: SemanticBundle;
   settings: EffectiveSettings;
@@ -43,6 +44,7 @@ interface InspectorPanelProps {
   onOpenSettings: (category: "ai" | "cloud" | "git") => void;
   onSelectSnapshot: (snapshot: DatabaseSnapshot) => void;
   onCompareSnapshots: (snapshot: DatabaseSnapshot, changeSet: SchemaChangeSet) => void;
+  onReviewChanges?: () => void;
 }
 
 function findAnnotation(
@@ -68,6 +70,7 @@ function findAnnotation(
 export function InspectorPanel({
   snapshot,
   selectedTable,
+  historicalSelection = false,
   changeSet,
   semantics,
   settings,
@@ -81,6 +84,7 @@ export function InspectorPanel({
   onOpenSettings,
   onSelectSnapshot,
   onCompareSnapshots,
+  onReviewChanges,
 }: InspectorPanelProps) {
   const [segment, setSegment] = useState<InspectorSegment>("structure");
 
@@ -108,6 +112,7 @@ export function InspectorPanel({
   return (
     <>
       <h2>{selectedTable ? selectedTable.key.name : snapshot.database.name}</h2>
+      {historicalSelection ? <p className="historical-selection-note">Deleted table · Before snapshot</p> : null}
       <div className="inspector-segments">
         <Segmented
           label="Inspector section"
@@ -119,7 +124,7 @@ export function InspectorPanel({
 
       {segment === "structure" ? (
         selectedTable ? (
-          <TableStructure table={selectedTable} onOpenQuery={onOpenQuery} />
+          <TableStructure table={selectedTable} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
         ) : (
           <dl className="snapshot-summary">
             <div>
@@ -145,7 +150,7 @@ export function InspectorPanel({
       ) : null}
 
       {segment === "semantics" ? (
-        <>
+        historicalSelection ? <p>This deleted table belongs to Before. Its historical structure is read only.</p> : <>
           {selectedTable ? (
             <TableKnowledgeForm
               key={`${selectedTable.key.schema}.${selectedTable.key.name}:${annotation?.updatedAt ?? "new"}`}
@@ -179,14 +184,8 @@ export function InspectorPanel({
                   </div>
                 ))}
               </div>
-              <ol className="operation-list">
-                {changeSet.operations.slice(0, 30).map((operation, index) => (
-                  <li key={`${operation.object.schema}.${operation.object.name}.${index}`}>
-                    <span data-risk={operation.risk}>{operation.operationType}</span>
-                    <strong>{operation.object.name}</strong>
-                  </li>
-                ))}
-              </ol>
+              <p className="muted-copy">Before → After · Review each change and its snapshot properties in the change list.</p>
+              {onReviewChanges ? <button className="review-changes-button" type="button" onClick={onReviewChanges}>Review all changes</button> : null}
             </section>
           ) : null}
           {changeSet && runtime?.kind === "desktop"
@@ -194,6 +193,7 @@ export function InspectorPanel({
               <ProvenancePanel changeSetId={changeSet.id} platform={platform} />
             ) : null}
           <HistoryPanel
+            key={snapshot.sourceId}
             sourceId={snapshot.sourceId}
             revision={historyRevision}
             platform={platform}
@@ -204,7 +204,7 @@ export function InspectorPanel({
       ) : null}
 
       {segment === "ai" ? (
-        selectedTable ? (
+        historicalSelection ? <p>Review this deleted table’s Before properties in the change list.</p> : selectedTable ? (
           <AiAssistant
             platform={platform}
             enabled={aiEnabled}

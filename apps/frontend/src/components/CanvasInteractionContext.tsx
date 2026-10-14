@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 
 interface CanvasInteractionState {
   spacePanMode: boolean;
+  layoutEditingDisabled?: boolean;
 }
 
 const CanvasInteractionContext = createContext<CanvasInteractionState>({

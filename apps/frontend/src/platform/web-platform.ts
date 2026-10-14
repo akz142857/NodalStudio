@@ -1,4 +1,8 @@
 import type {
+  FileExportReceipt,
+  SchemaReportExportInput,
+  DiagramExportInput,
+  DiagramExportReceipt,
   CloudViewBundle,
   CaptureSnapshotResult,
   DataSourceProfile,
@@ -93,7 +97,28 @@ function readSourceSettings(sourceId: string): DataSourceSettings {
   };
 }
 
+function downloadFile(blob: Blob, fileName: string): Promise<FileExportReceipt> {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+  return Promise.resolve({ path: null });
+}
+
 export class WebPlatform implements NodalStudioPlatform {
+  saveSchemaReport(input: SchemaReportExportInput): Promise<FileExportReceipt> {
+    return downloadFile(new Blob([input.html], { type: "text/html;charset=utf-8" }), input.fileName);
+  }
+  saveDiagramExport(input: DiagramExportInput): Promise<DiagramExportReceipt> {
+    return downloadFile(new Blob([new Uint8Array(input.data)], { type: input.format === "svg" ? "image/svg+xml" : "image/png" }), input.fileName);
+  }
   private bundle: CloudViewBundle | null = null;
 
   getRuntimeInfo(): Promise<RuntimeInfo> {

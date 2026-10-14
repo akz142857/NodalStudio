@@ -4,8 +4,37 @@ import { describe, expect, it, vi } from "vitest";
 import type { TableNode as TableNodeType } from "../graph/schema-graph";
 import { CanvasInteractionProvider } from "./CanvasInteractionContext";
 import { TableNode } from "./TableNode";
+import { buildSchemaGraph } from "../graph/schema-graph";
+import { diagramAfter, diagramBefore, diagramChangeSet } from "../test/diagram-comparison-fixture";
+import { CanvasSettingsProvider } from "./CanvasSettingsContext";
+import { defaultAppSettings } from "../platform";
 
 describe("TableNode", () => {
+  it("shows changed and historical fields beyond the ordinary column cap with explicit labels", () => {
+    const graph = buildSchemaGraph(diagramAfter, { beforeSnapshot: diagramBefore, changeSet: diagramChangeSet, maxInitialColumns: 1 });
+    const node = graph.nodes.find((item) => item.id === "public.orders")!;
+    const props = { ...node, dragging: false, zIndex: 0, isConnectable: false, positionAbsoluteX: 0, positionAbsoluteY: 0 } as NodeProps<TableNodeType>;
+    const { container } = render(<ReactFlowProvider><CanvasSettingsProvider value={{ ...defaultAppSettings().canvas, maxInitialColumns: 1 }}><TableNode {...props} /></CanvasSettingsProvider></ReactFlowProvider>);
+    expect(container.querySelector('[data-column-name="legacy_note"]')).toHaveAttribute("data-change", "deleted");
+    expect(container.querySelector('[data-column-name="priority"]')).toHaveAttribute("data-change", "added");
+    expect(container.querySelector('[data-column-name="user_id"]')).toHaveAttribute("data-change", "modified");
+    expect(screen.getByTitle("Inferred rename from old_name")).toBeVisible();
+    expect(screen.getAllByText(/− deleted/)).toHaveLength(2);
+    expect(screen.getByText(/\+ added/)).toBeVisible();
+    expect(container.querySelector('[data-handleid="source:user_id:right"]')).toBeInTheDocument();
+    expect(screen.queryByText(/more unchanged fields/)).not.toBeInTheDocument();
+  });
+
+  it("labels a deleted table and all its fields as Before definitions", () => {
+    const graph = buildSchemaGraph(diagramAfter, { beforeSnapshot: diagramBefore, changeSet: diagramChangeSet, maxInitialColumns: 1 });
+    const node = graph.nodes.find((item) => item.id === "public.audit")!;
+    const props = { ...node, dragging: false, zIndex: 0, isConnectable: false, positionAbsoluteX: 0, positionAbsoluteY: 0 } as NodeProps<TableNodeType>;
+    const { container } = render(<ReactFlowProvider><TableNode {...props} /></ReactFlowProvider>);
+    expect(screen.getByTitle("Deleted table · Before snapshot")).toBeVisible();
+    expect(container.querySelectorAll('.table-column[data-change="deleted"]')).toHaveLength(2);
+    expect(container.querySelector('[data-handleid="source:order_id:right"]')).toBeInTheDocument();
+  });
+
   it("shows physical FK fields and collected indexes", () => {
     const offsetTop = vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
       return this.dataset.columnName ? 140 : this.classList.contains("table-node") ? 20 : 0;

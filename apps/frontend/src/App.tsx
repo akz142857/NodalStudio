@@ -1,17 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { InspectorPanel } from "./components/InspectorPanel";
 import { Segmented } from "./components/Segmented";
+import { SchemaPreflightPanel } from "./components/SchemaPreflightPanel";
+import { OperationFeedback } from "./components/OperationFeedback";
+import { useOperation } from "./components/use-operation";
+import { resolveCapability } from "./platform/capabilities";
 import { SchemaCanvas } from "./components/SchemaCanvas";
+import { SchemaChangesPanel } from "./components/SchemaChangesPanel";
+import { SchemaChangesDiagram } from "./components/SchemaChangesDiagram";
 import { SchemaTree } from "./components/SchemaTree";
 import { SnapshotSummary } from "./components/SnapshotSummary";
+import { SchemaReportExportAction } from "./components/SchemaReportExportAction";
 import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
 import type { OpenQueryRequest } from "./components/query/QueryPage";
 import { tablePreviewSql } from "./components/query/query-format";
 import { searchSchema, type SchemaSearchResult } from "./graph/schema-search";
+import { domainMembershipAddition } from "./graph/table-selection";
 import { getPlatform } from "./platform";
 import type {
   AppSettings,
@@ -27,6 +35,7 @@ import type {
   SaveLogicalRelationshipInput,
   LogicalRelationship,
   TableDefinition,
+  ObjectKey,
 } from "./platform";
 import { defaultEffectiveSettings } from "./platform";
 import { migrateLegacySettings } from "./settings-migration";
@@ -34,6 +43,7 @@ import { migrateLegacySettings } from "./settings-migration";
 const platform = getPlatform();
 const SettingsPage = lazy(() => import("./components/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const QueryPage = lazy(() => import("./components/query/QueryPage").then((module) => ({ default: module.QueryPage })));
+const DdlImportPanel = lazy(() => import("./components/DdlImportPanel").then((module) => ({ default: module.DdlImportPanel })));
 
 type ViewMode = "explore" | "query" | "changes";
 type AppNotice = { id: string; title: string; message: string; createdAt: string };
@@ -66,13 +76,19 @@ export function App() {
   const [snapshot, setSnapshot] = useState<DatabaseSnapshot>();
   const [changeSet, setChangeSet] = useState<SchemaChangeSet>();
   const [mode, setMode] = useState<ViewMode>("explore");
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [ddlPreviewOpen, setDdlPreviewOpen] = useState(false);
+  const [changesView, setChangesView] = useState<"list" | "diagram">("list");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSearchResult, setActiveSearchResult] = useState(0);
   const [selectedTable, setSelectedTable] = useState<TableDefinition>();
   const [semantics, setSemantics] = useState<SemanticBundle>(emptySemantics);
+  const [semanticsSnapshot, setSemanticsSnapshot] = useState<DatabaseSnapshot>();
   const [savedView, setSavedView] = useState<SavedView>();
-  const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "error">("idle");
+  const refreshOperation = useOperation(snapshot?.sourceId ?? "no-source");
+  const runRefresh = refreshOperation.run;
+  const refreshState = refreshOperation.busy ? "refreshing" : refreshOperation.state?.phase === "error" ? "error" : "idle";
   const [leftPanel, setLeftPanel] = useState(LEFT_PANEL_DEFAULT);
   const [rightPanel, setRightPanel] = useState(RIGHT_PANEL_DEFAULT);
   const [settings, setSettings] = useState<EffectiveSettings>(() => defaultEffectiveSettings());
@@ -87,16 +103,51 @@ export function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const autoConnectAttempted = useRef(false);
   const automaticUpdateChecked = useRef(false);
-  const refreshInFlight = useRef(false);
   const runtime = useQuery({
     queryKey: ["runtime-info"],
     queryFn: () => platform.getRuntimeInfo(),
   });
+  const queryCapability = resolveCapability("read-only-query", runtime.data?.kind, snapshot?.database.databaseType);
+  const querySupported = Boolean(snapshot) && queryCapability.status === "supported";
+  const domainWorkspace = useRef({ snapshot, semantics, semanticsSnapshot, runtimeKind: runtime.data?.kind, mode });
+  const pendingDomainUpdates = useRef(new Set<string>());
+  useLayoutEffect(() => {
+    domainWorkspace.current = { snapshot, semantics, semanticsSnapshot, runtimeKind: runtime.data?.kind, mode };
+  }, [snapshot, semantics, semanticsSnapshot, runtime.data?.kind, mode]);
+
+  const addTablesToDomain = useCallback(async (domainId: string, tableKeys: ObjectKey[]) => {
+    const workspace = domainWorkspace.current;
+    const currentSnapshot = workspace.snapshot;
+    if (!currentSnapshot || workspace.runtimeKind !== "desktop" || workspace.mode !== "explore" || workspace.semanticsSnapshot !== currentSnapshot) {
+      throw new Error("Open a loaded Database diagram in the desktop app to edit business domains.");
+    }
+    const group = workspace.semantics.domainGroups.find((item) => item.id === domainId && item.sourceId === currentSnapshot.sourceId);
+    if (!group) throw new Error("This business domain is no longer available. Choose an existing domain and try again.");
+    const addition = domainMembershipAddition(currentSnapshot, group, tableKeys);
+    if (!addition.addedCount) return group;
+    const updateKey = `${currentSnapshot.sourceId}:${domainId}`;
+    if (pendingDomainUpdates.current.has(updateKey)) throw new Error("This business domain is still being saved. Try again when it finishes.");
+    pendingDomainUpdates.current.add(updateKey);
+    try {
+      const saved = await platform.saveDomainGroup(addition.input);
+      if (domainWorkspace.current.snapshot?.sourceId === currentSnapshot.sourceId) {
+        setSemantics((current) => ({ ...current, domainGroups: current.domainGroups.map((item) => item.id === saved.id ? saved : item) }));
+        setSavedView((current) => current?.id === `domain:${saved.id}` ? { ...current, rootTableKeys: saved.tableKeys, name: saved.name, updatedAt: saved.updatedAt } : current);
+      }
+      return saved;
+    } finally {
+      pendingDomainUpdates.current.delete(updateKey);
+    }
+  }, []);
 
   const schemaSearchResults = useMemo(() => searchSchema(snapshot, query), [query, snapshot]);
+  const WorkspaceCanvas = mode === "changes" && changeSet ? SchemaChangesDiagram : SchemaCanvas;
+  const historicalSelection = Boolean(snapshot && selectedTable && !snapshot.schemas.some((schema) =>
+    schema.tables.some((table) => table.key.schema === selectedTable.key.schema && table.key.name === selectedTable.key.name)));
 
   const openSchemaSearch = useCallback(() => {
     setSettingsOpen(false);
+    setPreflightOpen(false);
     setMode("explore");
     setSearchOpen(true);
     window.requestAnimationFrame(() => {
@@ -107,6 +158,7 @@ export function App() {
 
   const locateSearchResult = useCallback((result: SchemaSearchResult) => {
     setMode("explore");
+    setPreflightOpen(false);
     setQuery("");
     setSearchOpen(false);
     setSavedView(undefined);
@@ -138,6 +190,7 @@ export function App() {
   const handleCapture = useCallback((result: CaptureSnapshotResult) => {
     setSnapshot(result.snapshot);
     setChangeSet(result.changeSet ?? undefined);
+    setChangesView("list");
     setMode(result.changeSet ? "changes" : "explore");
     setSelectedTable(undefined);
     setSavedView(undefined);
@@ -159,19 +212,13 @@ export function App() {
   }, [publishNotice, settings.app.notifications, settings.source?.refresh.changeNotifications]);
 
   const refreshActive = useCallback(async (trigger: "manual" | "background" = "manual") => {
-    if (!snapshot || refreshInFlight.current) return;
-    refreshInFlight.current = true;
-    setRefreshState("refreshing");
-    try {
+    if (!snapshot) return;
+    await runRefresh(async (isCurrent) => {
       const result = await platform.capturePostgresSnapshot(snapshot.sourceId, trigger);
-      if (result.stored) handleCapture(result);
-      setRefreshState("idle");
-    } catch {
-      setRefreshState("error");
-    } finally {
-      refreshInFlight.current = false;
-    }
-  }, [handleCapture, snapshot]);
+      if (isCurrent() && result.stored) handleCapture(result);
+      return result;
+    }, { running: `Refreshing ${snapshot.database.name}…`, success: (result) => `Snapshot refreshed · ${result.snapshot.schemas.reduce((count, schema) => count + schema.tables.length, 0)} tables · ${result.changeSet?.operations.length ?? 0} structural changes.${result.stored ? "" : " No new snapshot stored."}`, failure: `Unable to refresh ${snapshot.database.name}. The loaded snapshot remains available.` });
+  }, [handleCapture, runRefresh, snapshot]);
 
   useEffect(() => {
     const intervalSeconds = settings.source?.refresh.intervalSeconds ?? 30;
@@ -298,7 +345,7 @@ export function App() {
         const result = await platform.capturePostgresSnapshot(candidate.profile.id, "background");
         handleCapture(result);
       })
-      .catch(() => setRefreshState("error"));
+      .catch((reason: unknown) => publishNoticeRef.current({ id: "auto-connect-failed", title: "Automatic connection failed", message: `Choose the data source to reconnect. ${noticeReason(reason)}`, createdAt: new Date().toISOString() }));
   }, [dataSources, handleCapture, runtime.data?.kind, settings.app.general.lastSourceId, settings.app.general.reopenLastWorkspace, settings.app.general.startPage, settingsLoaded, snapshot]);
 
   useEffect(() => {
@@ -413,6 +460,7 @@ export function App() {
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
+      if (ddlPreviewOpen) return;
       const target = event.target as HTMLElement | null;
       if (
         !event.metaKey &&
@@ -453,7 +501,7 @@ export function App() {
     }
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [openSchemaSearch, refreshActive, settings.app.shortcuts.bindings]);
+  }, [ddlPreviewOpen, openSchemaSearch, refreshActive, settings.app.shortcuts.bindings]);
 
   async function updateAppSettings(next: AppSettings) {
     await platform.updateAppSettings(next);
@@ -478,12 +526,15 @@ export function App() {
     { id: "settings", label: "Open Settings", keywords: "preferences general", shortcut: "Mod+,", run: () => openSettings() },
     { id: "settings-git", label: "Open Git Settings", keywords: "repository merge conflict", run: () => openSettings("git") },
     { id: "settings-ai", label: "Open AI Settings", keywords: "provider model explanation", run: () => openSettings("ai") },
+    { id: "capabilities", label: "Open capability matrix", keywords: "support PostgreSQL MySQL Desktop Web limitations", run: () => openSettings("capabilities") },
+    { id: "ddl-preview", label: "Open read-only DDL preview", keywords: "SQL file clipboard PostgreSQL MySQL import", run: () => { setSettingsOpen(false); setDdlPreviewOpen(true); } },
     { id: "refresh", label: "Refresh schema", keywords: "database capture", shortcut: settings.app.shortcuts.bindings.refreshSchema, run: () => void refreshActive() },
     { id: "toggle-left", label: "Toggle left sidebar", keywords: "collapse structure", shortcut: settings.app.shortcuts.bindings.toggleLeftSidebar, run: () => setLeftPanel((value) => ({ ...value, expanded: !value.expanded })) },
     { id: "toggle-right", label: "Toggle right inspector", keywords: "collapse details", shortcut: settings.app.shortcuts.bindings.toggleRightInspector, run: () => setRightPanel((value) => ({ ...value, expanded: !value.expanded })) },
     { id: "fit", label: "Fit ER canvas", keywords: "zoom model", shortcut: settings.app.shortcuts.bindings.fitCanvas, run: () => window.dispatchEvent(new Event("nodalstudio:fit-canvas")) },
     { id: "view-all", label: "View all database tables", keywords: "global overview exit focus", run: () => window.dispatchEvent(new Event("nodalstudio:view-all-tables")) },
     { id: "focus-selected", label: "Focus selected table", keywords: "isolate relationship table", shortcut: settings.app.shortcuts.bindings.focusSelectedTable, run: () => window.dispatchEvent(new Event("nodalstudio:focus-selected-table")) },
+    { id: "preflight", label: "Open structure preflight", keywords: "schema check validation PostgreSQL MySQL", run: () => { if (snapshot) setPreflightOpen(true); } },
     { id: "relayout", label: "Re-layout ER canvas", keywords: "automatic layout", shortcut: settings.app.shortcuts.bindings.relayoutCanvas, run: () => window.dispatchEvent(new Event("nodalstudio:relayout-canvas")) },
   ];
 
@@ -493,7 +544,10 @@ export function App() {
     void platform
       .getSemantics(snapshot.sourceId)
       .then((bundle) => {
-        if (active) setSemantics(bundle);
+        if (active) {
+          setSemantics(bundle);
+          setSemanticsSnapshot(snapshot);
+        }
       })
       .catch((reason: unknown) => {
         // An empty semantic model and one that failed to load look identical in
@@ -501,6 +555,7 @@ export function App() {
         // would appear to have been lost rather than to be unavailable.
         if (!active) return;
         setSemantics(emptySemantics);
+        setSemanticsSnapshot(undefined);
         publishNoticeRef.current({
           id: `semantics-load-failed-${snapshot.sourceId}`,
           title: "Semantic model could not be loaded",
@@ -601,10 +656,7 @@ export function App() {
 
   const saveCanvasLayout = useCallback((positions: Record<string, import("./platform/types").CanvasNodeLayout>) => {
     if (!snapshot) return;
-    void platform.saveLayout(snapshot.sourceId, null, positions)
-      .catch(() => {
-        // The in-memory auto layout remains usable when persistence is unavailable.
-      });
+    return platform.saveLayout(snapshot.sourceId, null, positions);
   }, [snapshot]);
 
   function handleHistorySnapshot(historySnapshot: DatabaseSnapshot) {
@@ -620,19 +672,22 @@ export function App() {
   function handleComparison(afterSnapshot: DatabaseSnapshot, comparison: SchemaChangeSet) {
     setSnapshot(afterSnapshot);
     setChangeSet(comparison);
+    setChangesView("list");
     setMode("changes");
     setSelectedTable(undefined);
     setSavedView(undefined);
   }
 
   const openTableInQuery = useCallback((table: TableDefinition) => {
+    if (!querySupported) return;
+    setPreflightOpen(false);
     setOpenQueryRequest({ id: Date.now(), sql: tablePreviewSql(table) });
     setMode("query");
-  }, []);
+  }, [querySupported]);
 
   return (
     <Suspense fallback={<main className="app-shell"><p>Loading workspace…</p></main>}>
-    <main className="app-shell">
+    {ddlPreviewOpen ? <DdlImportPanel canvasSettings={settings.app.canvas} runtimeKind={runtime.data?.kind} onClose={() => setDdlPreviewOpen(false)} /> : <main className="app-shell">
       <header className="topbar">
         <HeaderSidebarToggle
           side="left"
@@ -648,14 +703,14 @@ export function App() {
         <Segmented
           label="View mode"
           value={mode}
-          onChange={setMode}
+          onChange={(next) => { setPreflightOpen(false); setMode(next); }}
           options={[
             { value: "explore", label: "Database" },
             {
               value: "query",
               label: "Query",
-              disabled: runtime.data?.kind === "web",
-              title: runtime.data?.kind === "web" ? "Query requires the desktop app" : undefined,
+              disabled: runtime.data?.kind === "web" || Boolean(snapshot && !querySupported),
+              title: queryCapability.status === "supported" ? undefined : queryCapability.scope,
             },
             { value: "changes", label: "Changes", disabled: !changeSet },
           ]}
@@ -670,6 +725,7 @@ export function App() {
             onFocus={() => setSearchOpen(true)}
             onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
             onChange={(event) => {
+              setPreflightOpen(false);
               setQuery(event.target.value);
               setActiveSearchResult(0);
               setSearchOpen(true);
@@ -708,6 +764,10 @@ export function App() {
           </div> : null}
         </label>
         <div className="runtime-actions">
+          <button type="button" className="preflight-open-button" onClick={() => setDdlPreviewOpen(true)} title="Open a temporary PostgreSQL/MySQL file or clipboard model; never execute SQL">Import DDL</button>
+          {refreshOperation.state ? <div className="refresh-operation-result"><OperationFeedback label="Snapshot refresh" state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel="Retry snapshot refresh" onDismiss={refreshOperation.dismiss} /></div> : null}
+          {snapshot ? <button type="button" className="preflight-open-button" aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} title="Check the entire loaded snapshot with dialect-aware metadata rules">Structure preflight</button> : null}
+          {snapshot ? <SchemaReportExportAction key={snapshot.id} snapshot={snapshot} semantics={semanticsSnapshot === snapshot ? semantics : undefined} platform={platform} /> : null}
           {snapshot && runtime.data?.kind === "desktop" ? (
             <button
               type="button"
@@ -808,8 +868,25 @@ export function App() {
           }
         />
 
-        <section className="canvas-placeholder">
-          {mode === "query" ? (
+        <section className={`canvas-placeholder${mode === "changes" && changeSet ? " changes-workspace" : ""}`}>
+          {!preflightOpen && mode === "changes" && changeSet ? (
+            <div className="changes-view-toolbar">
+              <Segmented
+                label="Changes view"
+                value={changesView}
+                options={[{ value: "list", label: "Change list" }, { value: "diagram", label: "Diagram" }]}
+                onChange={setChangesView}
+              />
+              <span title={`Before: ${changeSet.beforeSnapshotId}\nAfter: ${changeSet.afterSnapshotId}`}>
+                Before {changeSet.beforeSnapshotId.slice(0, 8)} → After {changeSet.afterSnapshotId.slice(0, 8)}
+              </span>
+            </div>
+          ) : null}
+          {preflightOpen && snapshot ? <SchemaPreflightPanel key={JSON.stringify([snapshot.sourceId, snapshot.id, snapshot.fingerprint])} snapshot={snapshot}
+            onClose={() => setPreflightOpen(false)} onLocate={(key) => {
+              const table = snapshot.schemas.flatMap((schema) => schema.tables).find((item) => item.key.schema === key.schema && item.key.name === key.name);
+              if (table) locateSearchResult({ schema: key.schema, table, matchingColumns: [] });
+            }} /> : mode === "query" ? (
             <QueryPage
               platform={platform}
               snapshot={snapshot}
@@ -817,22 +894,34 @@ export function App() {
               openRequest={openQueryRequest}
               onConsumeOpenRequest={() => setOpenQueryRequest(undefined)}
             />
+          ) : mode === "changes" && changeSet && snapshot && changesView === "list" ? (
+            <SchemaChangesPanel
+              key={changeSet.id}
+              changeSet={changeSet}
+              currentSnapshot={snapshot}
+              platform={platform}
+              runtimeKind={runtime.data?.kind}
+            />
           ) : snapshot ? (
-            <SchemaCanvas
+            <WorkspaceCanvas
+              platform={platform}
+              runtimeKind={runtime.data?.kind}
               snapshot={snapshot}
               query={query}
               changeSet={mode === "changes" ? changeSet : undefined}
               onSelectTable={setSelectedTable}
               selectedTable={selectedTable}
               semantics={semantics}
+              onAddTablesToDomain={runtime.data?.kind === "desktop" && mode === "explore" && semanticsSnapshot === snapshot ? addTablesToDomain : undefined}
               savedView={savedView}
               onSaveLayout={saveCanvasLayout}
+              layoutLoaded={semanticsSnapshot === snapshot}
               canvasSettings={settings.app.canvas}
               layoutWorkerTimeoutMs={settings.app.advanced.layoutWorkerTimeoutMs}
               highContrastRelations={settings.app.appearance.highContrastRelations}
               colorBlindPalette={settings.app.appearance.colorBlindPalette}
               renderDegradeThreshold={settings.app.advanced.renderDegradeThreshold}
-              onOpenQuery={runtime.data?.kind === "desktop" ? openTableInQuery : undefined}
+              onOpenQuery={querySupported ? openTableInQuery : undefined}
               onValidateLogicalRelationship={runtime.data?.kind === "desktop" ? (input) => platform.validateLogicalRelationship(input) : undefined}
               onCreateLogicalRelationship={runtime.data?.kind === "desktop" ? createLogicalRelationship : undefined}
               onUpdateLogicalRelationship={runtime.data?.kind === "desktop" ? updateLogicalRelationship : undefined}
@@ -874,6 +963,7 @@ export function App() {
           <InspectorPanel
             snapshot={snapshot}
             selectedTable={selectedTable}
+            historicalSelection={historicalSelection}
             changeSet={changeSet}
             semantics={semantics}
             settings={settings}
@@ -883,10 +973,11 @@ export function App() {
             onSaveAnnotation={saveAnnotation}
             onSemanticsChange={setSemantics}
             onApplyView={setSavedView}
-            onOpenQuery={runtime.data?.kind === "desktop" ? openTableInQuery : undefined}
+            onOpenQuery={querySupported && !historicalSelection ? openTableInQuery : undefined}
             onOpenSettings={openSettings}
             onSelectSnapshot={handleHistorySnapshot}
             onCompareSnapshots={handleComparison}
+            onReviewChanges={() => { setMode("changes"); setChangesView("list"); }}
           />
         </aside>
       </section>
@@ -898,6 +989,7 @@ export function App() {
           runtime={runtime.data}
           dataSources={dataSources}
           activeSourceId={snapshot?.sourceId}
+          activeDatabase={snapshot?.database}
           initialCategory={settingsCategory}
           onClose={() => {
             setSettingsOpen(false);
@@ -928,7 +1020,7 @@ export function App() {
         />
       ) : null}
       {commandPaletteOpen ? <CommandPalette commands={commands} onClose={() => setCommandPaletteOpen(false)} /> : null}
-    </main>
+    </main>}
     </Suspense>
   );
 }

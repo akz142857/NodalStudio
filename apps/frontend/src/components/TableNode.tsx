@@ -7,12 +7,13 @@ import {
 } from "@xyflow/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { TableNode as TableNodeType } from "../graph/schema-graph";
+import { changeMarker } from "../graph/schema-graph";
 import { useCanvasInteraction } from "./CanvasInteractionContext";
 import { useCanvasSettings } from "./CanvasSettingsContext";
 
 function TableNodeComponent({ id, data, selected, width, height }: NodeProps<TableNodeType>) {
   const settings = useCanvasSettings();
-  const { spacePanMode } = useCanvasInteraction();
+  const { spacePanMode, layoutEditingDisabled } = useCanvasInteraction();
   const updateNodeInternals = useUpdateNodeInternals();
   const [indexesExpanded, setIndexesExpanded] = useState(settings.indexes === "expanded");
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -22,8 +23,10 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
   const columnRefs = useRef(new Map<string, HTMLDivElement>());
   const hoverClearTimer = useRef<number | undefined>(undefined);
   const visibleColumns = useMemo(
-    () => data.table.columns.slice(0, settings.maxInitialColumns),
-    [data.table.columns, settings.maxInitialColumns],
+    () => data.visibleColumnNames
+      ? data.table.columns.filter((column) => data.visibleColumnNames?.includes(column.name))
+      : data.table.columns.slice(0, settings.maxInitialColumns),
+    [data.table.columns, data.visibleColumnNames, settings.maxInitialColumns],
   );
   const primaryColumns = new Set(data.table.primaryKey?.columns ?? []);
   const foreignColumns = new Set(data.table.foreignKeys.flatMap((key) => key.columns));
@@ -95,7 +98,7 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
   return (
     <>
       <NodeResizer
-        isVisible={selected && !spacePanMode}
+        isVisible={selected && !data.layoutPinned && !spacePanMode && !layoutEditingDisabled}
         minWidth={240}
         minHeight={120}
         maxWidth={920}
@@ -111,8 +114,10 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
         ref={tableNodeRef}
         className="table-node"
         data-selected={selected || undefined}
+        data-inspector-focused={data.inspectorFocused || undefined}
         data-change={data.changeStatus}
         data-core={data.isCore || undefined}
+        data-pinned={data.layoutPinned || undefined}
         data-relationship-highlighted={data.relationshipHighlighted || undefined}
         data-domain={data.domainColor ? "true" : undefined}
         style={data.domainColor ? ({ "--domain-color": data.domainColor } as CSSProperties) : undefined}
@@ -121,6 +126,8 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
       <header>
         {settings.showSchema ? <span>{data.schema}</span> : null}
         <strong>{data.isCore ? "★ " : ""}{data.table.key.name}</strong>
+        {data.layoutPinned ? <span className="table-pin-badge" title="Position fixed · Unlock to move or resize" aria-label="Table position fixed">⌖ Fixed</span> : null}
+        {data.changeStatus ? <em className="comparison-badge" data-change={data.changeStatus} title={data.changeStatus === "deleted" ? "Deleted table · Before snapshot" : "Compared Before → After"}>{changeMarker(data.changeStatus)} {data.changeStatus}</em> : null}
         {data.onOpenQuery ? <div className="table-node-actions nodrag nopan">
           <button type="button" aria-label={`Query ${data.table.key.name}`} aria-expanded={actionsOpen} onClick={(event) => { event.stopPropagation(); setActionsOpen((value) => !value); }}>•••</button>
           {actionsOpen ? <div role="menu"><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>Preview rows</button><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>Open in Query</button></div> : null}
@@ -130,7 +137,9 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
         <p className="table-node-comment">{data.table.comment}</p>
       ) : null}
       <div className="table-columns">
-        {visibleColumns.map((column) => (
+        {visibleColumns.map((column) => {
+          const changeStatus = data.columnChanges?.[column.name];
+          return (
           <div
             className="table-column"
             key={column.name}
@@ -139,6 +148,8 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
               else columnRefs.current.delete(column.name);
             }}
             data-column-name={column.name}
+            data-change={changeStatus}
+            title={data.columnNotes?.[column.name]}
             data-relationship-column={data.relationshipColumn === column.name || undefined}
             data-connect-target={data.relationshipConnectTargets?.[column.name]}
             onMouseEnter={() => showColumnHandles(column.name)}
@@ -158,6 +169,7 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
               {settings.showKeyBadges && column.generated ? <b title="Generated column">GEN</b> : null}
               {settings.showKeyBadges && /(?:@deprecated|\bdeprecated\b)/i.test(column.comment ?? "") ? <b title="Deprecated column marker">DEP</b> : null}
               {column.name}
+              {changeStatus ? <em className="comparison-badge" data-change={changeStatus}>{changeMarker(changeStatus)} {changeStatus}</em> : null}
             </span>
             <span className="column-type">
               {settings.showColumnTypes ? column.formattedType : ""}
@@ -170,9 +182,10 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
               <small className="column-comment">{column.comment}</small>
             ) : null}
           </div>
-        ))}
-        {data.table.columns.length > settings.maxInitialColumns ? (
-          <p className="table-columns-more">+{data.table.columns.length - settings.maxInitialColumns} more fields</p>
+          );
+        })}
+        {data.table.columns.length > visibleColumns.length ? (
+          <p className="table-columns-more">+{data.table.columns.length - visibleColumns.length} more {data.columnChanges ? "unchanged " : ""}fields</p>
         ) : null}
       </div>
       {data.table.indexes.length > 0 && settings.indexes !== "hidden" ? (

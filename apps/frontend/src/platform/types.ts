@@ -1,3 +1,20 @@
+export interface DiagramExportInput {
+  fileName: string;
+  format: "svg" | "png";
+  data: number[];
+}
+
+export interface FileExportReceipt {
+  path: string | null;
+}
+
+export type DiagramExportReceipt = FileExportReceipt;
+
+export interface SchemaReportExportInput {
+  fileName: string;
+  html: string;
+}
+
 export interface RuntimeInfo {
   kind: "desktop" | "web";
   label: string;
@@ -182,6 +199,7 @@ export interface CanvasLayout {
 }
 
 export interface CanvasNodeLayout {
+  pinned?: boolean;
   x: number;
   y: number;
   width?: number;
@@ -501,6 +519,8 @@ export interface QueryHistoryEntry {
 }
 
 export interface NodalStudioPlatform {
+  saveDiagramExport(input: DiagramExportInput): Promise<DiagramExportReceipt>;
+  saveSchemaReport(input: SchemaReportExportInput): Promise<FileExportReceipt>;
   getRuntimeInfo(): Promise<RuntimeInfo>;
   getDiagnosticInfo(): Promise<import("./settings-types").DiagnosticInfo>;
   revealAppDirectory(kind: "data" | "logs"): Promise<void>;

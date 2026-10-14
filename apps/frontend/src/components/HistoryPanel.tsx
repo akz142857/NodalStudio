@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   DatabaseSnapshot,
   SchemaChangeSet,
@@ -16,6 +16,7 @@ interface HistoryPanelProps {
 
 function formatCapturedAt(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -36,8 +37,10 @@ export function HistoryPanel({
   const [afterId, setAfterId] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
+  const requestRevision = useRef(0);
 
   useEffect(() => {
+    requestRevision.current += 1;
     let active = true;
     void platform
       .listSnapshots(sourceId)
@@ -46,29 +49,38 @@ export function HistoryPanel({
         setSnapshots(items);
         setAfterId(items[0]?.id ?? "");
         setBeforeId(items[1]?.id ?? "");
+        setPending(false);
+        setError(undefined);
       })
       .catch((reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : String(reason));
+        if (active) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          setPending(false);
+        }
       });
     return () => {
       active = false;
+      requestRevision.current += 1;
     };
   }, [platform, revision, sourceId]);
 
   async function selectSnapshot(id: string) {
+    const revision = requestRevision.current;
     setPending(true);
     setError(undefined);
     try {
-      onSelect(await platform.getSnapshot(id));
+      const snapshot = await platform.getSnapshot(id);
+      if (revision === requestRevision.current) onSelect(snapshot);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (revision === requestRevision.current) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setPending(false);
+      if (revision === requestRevision.current) setPending(false);
     }
   }
 
   async function compare() {
     if (!beforeId || !afterId || beforeId === afterId) return;
+    const revision = requestRevision.current;
     setPending(true);
     setError(undefined);
     try {
@@ -76,11 +88,11 @@ export function HistoryPanel({
         platform.getSnapshot(afterId),
         platform.compareSnapshots(beforeId, afterId),
       ]);
-      onCompare(snapshot, changeSet);
+      if (revision === requestRevision.current) onCompare(snapshot, changeSet);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (revision === requestRevision.current) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setPending(false);
+      if (revision === requestRevision.current) setPending(false);
     }
   }
 
@@ -115,25 +127,33 @@ export function HistoryPanel({
           {snapshots.length > 1 ? (
             <div className="compare-controls">
               <label>
-                Before
-                <select value={beforeId} onChange={(event) => setBeforeId(event.target.value)}>
+                Before (baseline)
+                <select disabled={pending} value={beforeId} onChange={(event) => setBeforeId(event.target.value)}>
                   {snapshots.map((snapshot) => (
                     <option value={snapshot.id} key={snapshot.id}>
-                      {formatCapturedAt(snapshot.capturedAt)}
+                      {formatCapturedAt(snapshot.capturedAt)} · {snapshot.fingerprint.slice(0, 8)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                After
-                <select value={afterId} onChange={(event) => setAfterId(event.target.value)}>
+                After (target)
+                <select disabled={pending} value={afterId} onChange={(event) => setAfterId(event.target.value)}>
                   {snapshots.map((snapshot) => (
                     <option value={snapshot.id} key={snapshot.id}>
-                      {formatCapturedAt(snapshot.capturedAt)}
+                      {formatCapturedAt(snapshot.capturedAt)} · {snapshot.fingerprint.slice(0, 8)}
                     </option>
                   ))}
                 </select>
               </label>
+              <p className="muted-copy">Before → After: additions and removals are relative to the baseline.</p>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => { setBeforeId(afterId); setAfterId(beforeId); }}
+              >
+                Swap direction
+              </button>
               <button
                 type="button"
                 disabled={pending || !beforeId || !afterId || beforeId === afterId}

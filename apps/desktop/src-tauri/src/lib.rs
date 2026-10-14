@@ -55,6 +55,38 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 use tauri::{Manager, State};
+
+mod diagram_export;
+mod export_file;
+mod schema_report;
+
+#[tauri::command]
+async fn save_schema_report(
+    app: tauri::AppHandle,
+    input: schema_report::SchemaReportExportInput,
+) -> Result<schema_report::SchemaReportExportReceipt, String> {
+    let directory = app
+        .path()
+        .download_dir()
+        .map_err(|_| "The Downloads directory is unavailable.".to_owned())?;
+    tokio::task::spawn_blocking(move || schema_report::save(&input, &directory))
+        .await
+        .map_err(|_| "Unable to finish the schema report export.".to_owned())?
+}
+
+#[tauri::command]
+async fn save_diagram_export(
+    app: tauri::AppHandle,
+    input: diagram_export::DiagramExportInput,
+) -> Result<diagram_export::DiagramExportReceipt, String> {
+    let directory = app
+        .path()
+        .download_dir()
+        .map_err(|_| "The Downloads directory is unavailable.".to_owned())?;
+    tokio::task::spawn_blocking(move || diagram_export::save(&input, &directory))
+        .await
+        .map_err(|_| "Unable to finish the diagram export.".to_owned())?
+}
 use tokio::sync::{Mutex, Semaphore};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -4740,6 +4772,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            save_diagram_export,
+            save_schema_report,
             get_runtime_info,
             get_diagnostic_info,
             reveal_app_directory,

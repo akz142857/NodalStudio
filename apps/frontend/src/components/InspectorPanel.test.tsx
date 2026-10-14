@@ -90,6 +90,23 @@ describe("InspectorPanel", () => {
     expect(screen.getByText(/Select a table to explain/)).toBeVisible();
   });
 
+  it("keeps deleted-table inspection separate from current queries and semantic editing", () => {
+    const onOpenQuery = vi.fn();
+    const onSaveAnnotation = vi.fn();
+    renderPanel({ selectedTable: table, historicalSelection: true, onOpenQuery, onSaveAnnotation });
+    expect(screen.getByText("Deleted table · Before snapshot")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Columns" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Query|Preview rows/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Semantics" }));
+    expect(screen.getByText(/historical structure is read only/)).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Team knowledge" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "AI" }));
+    expect(screen.getByText(/Before properties in the change list/)).toBeVisible();
+    expect(onOpenQuery).not.toHaveBeenCalled();
+    expect(onSaveAnnotation).not.toHaveBeenCalled();
+  });
+
   it("opens the History segment when the sidebar asks for a comparison", () => {
     renderPanel();
     expect(screen.queryByRole("heading", { name: /Snapshots|History/ })).not.toBeInTheDocument();
@@ -114,9 +131,11 @@ describe("InspectorPanel", () => {
       riskSummary: { high: 0, medium: 0, low: 1, informational: 0 },
     } as unknown as Parameters<typeof InspectorPanel>[0]["changeSet"];
 
-    renderPanel({ changeSet });
+    const onReviewChanges = vi.fn();
+    renderPanel({ changeSet, onReviewChanges });
     fireEvent.click(screen.getByRole("button", { name: "History" }));
     expect(screen.getByRole("heading", { name: "1 structural changes" })).toBeVisible();
-    expect(screen.getByText("invoices")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Review all changes" }));
+    expect(onReviewChanges).toHaveBeenCalledOnce();
   });
 });

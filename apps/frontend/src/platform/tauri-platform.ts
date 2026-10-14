@@ -1,5 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  FileExportReceipt,
+  SchemaReportExportInput,
+  DiagramExportInput,
+  DiagramExportReceipt,
   AiExplanation,
   CloudViewBundle,
   ChangeProvenance,
@@ -53,6 +57,12 @@ import type {
 } from "./settings-types";
 
 export class TauriPlatform implements NodalStudioPlatform {
+  saveSchemaReport(input: SchemaReportExportInput): Promise<FileExportReceipt> {
+    return invoke("save_schema_report", { input });
+  }
+  saveDiagramExport(input: DiagramExportInput): Promise<DiagramExportReceipt> {
+    return invoke("save_diagram_export", { input });
+  }
   getRuntimeInfo(): Promise<RuntimeInfo> {
     return invoke<RuntimeInfo>("get_runtime_info");
   }

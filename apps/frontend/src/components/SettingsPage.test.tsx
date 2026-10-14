@@ -21,6 +21,18 @@ const baseProps = {
 };
 
 describe("SettingsPage", () => {
+  it("finds the capability matrix in Settings search and renders scope without platform requests", () => {
+    render(<SettingsPage {...baseProps} settings={defaultEffectiveSettings()} />);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), { target: { value: "capabilities" } });
+    fireEvent.click(screen.getByRole("button", { name: "Capabilities" }));
+    expect(screen.getByRole("region", { name: "Product capabilities" })).toBeVisible();
+    expect(screen.getByRole("table")).toBeVisible(); expect(screen.getByText(/No loaded database/)).toBeVisible();
+  });
+  it("supports the capabilities category deep link with a loaded MySQL context", () => {
+    render(<SettingsPage {...baseProps} settings={defaultEffectiveSettings()} initialCategory="capabilities" activeDatabase={{ name: "fixture", databaseType: "mySql", version: "8.4" }} />);
+    expect(screen.getByRole("columnheader", { name: "Desktop · MySQL Current" })).toHaveAttribute("data-current", "true");
+    expect(screen.getByText(/MySQL metadata capture is supported/)).toBeVisible();
+  });
   it("searches settings and saves a Canvas preference", async () => {
     const onUpdateApp = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());
     render(
