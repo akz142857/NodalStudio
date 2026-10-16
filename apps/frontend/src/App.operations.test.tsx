@@ -22,6 +22,20 @@ async function mount() {
 const refresh = () => screen.getAllByRole("button", { name: "Refresh" })[0];
 describe("App snapshot operation feedback", () => {
   beforeEach(() => localStorage.clear()); afterEach(() => vi.restoreAllMocks());
+  it("presents header functions as named icons with contextual help and working actions", async () => {
+    await mount();
+    const tools = within(screen.getByRole("group", { name: "Application tools" }));
+    for (const name of ["Import DDL", "Structure preflight", "Export HTML report", "Export offline Viewer", "Refresh", "Open Settings", "Open command palette", "Open notifications"]) {
+      const button = tools.getByRole("button", { name });
+      expect(button.textContent).toBe("");
+    }
+    const preflight = tools.getByRole("button", { name: "Structure preflight" });
+    fireEvent.focus(preflight);
+    expect(tools.getByRole("tooltip")).toHaveTextContent("Check the entire loaded snapshot");
+    fireEvent.click(preflight);
+    expect(preflight).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: "Structure preflight" })).toBeVisible();
+  });
   it("reports refresh running/error/success, blocks duplicates and retries with the current source", async () => {
     const platform = await mount(); let reject!: (reason: Error) => void;
     const capture = vi.spyOn(platform, "capturePostgresSnapshot").mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; })).mockResolvedValue({ snapshot: reportSnapshot, stored: false, changeSet: null });

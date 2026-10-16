@@ -3,6 +3,7 @@ import type { DatabaseSnapshot, DomainGroup, ObjectKey } from "../platform";
 import { domainMembershipAddition, tableKeyIdentity } from "../graph/table-selection";
 import { OperationFeedback } from "./OperationFeedback";
 import { useOperation } from "./use-operation";
+import { DiagramToolbarMenu } from "./DiagramToolbarMenu";
 
 export interface DiagramSelectionActionsProps {
   snapshot: DatabaseSnapshot;
@@ -28,6 +29,7 @@ export function DiagramSelectionActions({ snapshot, selectedCount, selectedTable
   const existing = new Set(group?.tableKeys.map(tableKeyIdentity));
   const newCount = selectedTableKeys.filter((key) => !existing.has(tableKeyIdentity(key))).length;
   const canSave = !disabled && !readOnlyReason && Boolean(onAddTablesToDomain && group && newCount > 0);
+  const domainReason = readOnlyReason ?? (!groups.length ? "Create a business domain in Semantics first." : !onAddTablesToDomain ? "Business semantics must finish loading before editing domains." : "Add selected tables to an existing business domain.");
 
   async function addToDomain() {
     if (!canSave || !group || !onAddTablesToDomain) return;
@@ -38,27 +40,20 @@ export function DiagramSelectionActions({ snapshot, selectedCount, selectedTable
     }, { running: `Adding ${newCount} table${newCount === 1 ? "" : "s"} to ${group.name}…`, success: (message) => message, failure: `Unable to add tables to ${group.name}.` });
   }
 
-  return <section className="diagram-selection-actions" aria-label="Diagram table selection">
-    {onToggleBoxSelection ? <button type="button" className="diagram-box-select" aria-pressed={boxSelectionActive} disabled={busy} onClick={onToggleBoxSelection}>Box select</button> : null}
-    <p className="diagram-selection-hint">Shift / ⌘ / Ctrl-click to select tables · Shift-drag to box select</p>
-    {boxSelectionActive ? <p>Drag on empty canvas to select tables. Hold Space to pan.</p> : null}
+  return <div className="diagram-toolbar" role="toolbar" aria-label="Diagram tools">
+    {onToggleBoxSelection ? <button type="button" className="diagram-box-select" title={boxSelectionActive ? "Drag empty canvas to select tables. Hold Space to pan." : "Box select · Shift-drag, or Shift / ⌘ / Ctrl-click to add tables to selection"} aria-pressed={boxSelectionActive} disabled={busy} onClick={onToggleBoxSelection}>Box select</button> : null}
     {selectedCount > 0 ? <>
-      <div className="diagram-selection-controls">
-        <strong>{selectedCount} table{selectedCount === 1 ? "" : "s"} selected</strong>
-        <button type="button" disabled={busy} onClick={onClear}>Clear selection</button>
-      </div>
-      {readOnlyReason ? <p>{readOnlyReason}</p> : <>
-        <div className="diagram-selection-controls">
+      <strong className="diagram-selected-count">{selectedCount} table{selectedCount === 1 ? "" : "s"} selected</strong>
+      <button type="button" aria-label="Clear selection" title="Clear selection" disabled={busy} onClick={onClear}>Clear</button>
+      <DiagramToolbarMenu label="Business domain" title={domainReason} disabled={disabled || Boolean(readOnlyReason) || !groups.length || !onAddTablesToDomain}>
           <select aria-label="Existing business domain" value={group ? domainId : ""} disabled={disabled || busy || !groups.length || !onAddTablesToDomain} onChange={(event) => setDomainId(event.target.value)}>
             <option value="">Choose business domain…</option>
             {groups.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
           </select>
-          <button type="button" disabled={!canSave || busy} onClick={() => void addToDomain()}>{busy ? "Adding…" : "Add to domain"}</button>
-        </div>
-        {!groups.length ? <p>Create a business domain in Semantics first.</p> : !onAddTablesToDomain ? <p>Business semantics must finish loading before editing domains.</p> : group && !newCount ? <p>All selected tables already belong to {group.name}.</p> : null}
-      </>}
-      <OperationFeedback label="Business domain update" state={operation.state} onRetry={() => void addToDomain()} retryLabel="Retry domain update" retryDisabled={!canSave} onDismiss={operation.dismiss} />
+          <button type="button" disabled={!canSave || busy} title={group && !newCount ? `All selected tables already belong to ${group.name}.` : "Add the selected tables; existing members are preserved."} onClick={() => void addToDomain()}>{busy ? "Adding…" : "Add to domain"}</button>
+      </DiagramToolbarMenu>
     </> : null}
     {layoutActions}
-  </section>;
+    {selectedCount > 0 ? <OperationFeedback label="Business domain update" state={operation.state} onRetry={() => void addToDomain()} retryLabel="Retry domain update" retryDisabled={!canSave} onDismiss={operation.dismiss} /> : null}
+  </div>;
 }

@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
+import { layoutLargeComponent, layoutQualityOptions } from "./large-component-layout";
 
-import ELK from "elkjs/lib/elk-api.js";
+import ELK, { type ELK as ElkApi } from "elkjs/lib/elk-api.js";
 import ElkWorker from "elkjs/lib/elk-worker.min.js?worker";
 import { packLayoutComponents, splitLayoutComponents, type PositionedLayoutNode } from "./layout-components";
 
@@ -23,7 +24,7 @@ interface LayoutRequest {
 // layout rejected with "undefined is not a constructor" and the canvas fell
 // back to the deterministic grid) and it overwrote this worker's own
 // `self.onmessage`. Load it the way it expects instead, as a nested worker.
-const elk = new ELK({ workerFactory: () => new ElkWorker() });
+let elk: ElkApi | undefined;
 
 self.onmessage = (event: MessageEvent<LayoutRequest>) => {
   void layoutComponents(event.data)
@@ -41,6 +42,11 @@ async function layoutComponents(request: LayoutRequest): Promise<Record<string, 
       positionedComponents.push([{ ...component.nodes[0], x: 0, y: 0 }]);
       continue;
     }
+    if (component.nodes.length >= 200) {
+      positionedComponents.push(layoutLargeComponent(component, request.options.direction, Math.max(request.options.nodeSpacing, request.options.layerSpacing)));
+      continue;
+    }
+    elk ??= new ELK({ workerFactory: () => new ElkWorker() });
     const graph = await elk.layout({
       id: `schema-component-${index}`,
       layoutOptions: {
@@ -50,9 +56,8 @@ async function layoutComponents(request: LayoutRequest): Promise<Record<string, 
         "elk.spacing.edgeEdge": String(request.options.edgeSpacing),
         "elk.layered.spacing.edgeEdgeBetweenLayers": String(request.options.edgeSpacing),
         "elk.layered.spacing.nodeNodeBetweenLayers": String(request.options.layerSpacing),
-        "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+        ...layoutQualityOptions(request.nodes.length),
         "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
-        "elk.layered.compaction.postCompaction.strategy": "EDGE_LENGTH",
       },
       children: component.nodes.map((node) => ({
         id: node.id,
@@ -65,8 +70,9 @@ async function layoutComponents(request: LayoutRequest): Promise<Record<string, 
         targets: [edge.target],
       })),
     });
+    const positions = new Map(graph.children?.map((child) => [child.id, child]));
     positionedComponents.push(component.nodes.map((node) => {
-      const positioned = graph.children?.find((child) => child.id === node.id);
+      const positioned = positions.get(node.id);
       return { ...node, x: positioned?.x ?? 0, y: positioned?.y ?? 0 };
     }));
   }

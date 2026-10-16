@@ -49,6 +49,9 @@ importers:
       '@xyflow/react':
         specifier: ^12.10.1
         version: 12.11.2(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@xyflow/system':
+        specifier: 0.0.79
+        version: 0.0.79
       elkjs:
         specifier: ^0.11.0
         version: 0.11.1

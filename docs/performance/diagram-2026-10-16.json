@@ -1,0 +1,589 @@
+{
+  "date": "2026-10-16",
+  "method": "Production SchemaCanvas/React Flow and real Worker in an isolated native Tauri WKWebView bundle; deterministic metadata only; no database access or user source/layout writes. Six 15-step DOM mouse-event drags, actual transform changes checked. No CPU limiting. All paint-hiding diagnostics false.",
+  "viewport": [
+    1280,
+    868
+  ],
+  "devicePixelRatio": 2,
+  "scenario": {
+    "tables": 2000,
+    "columns": 40000,
+    "physicalRelationships": 3997,
+    "topology": "one connected component, chain plus common root"
+  },
+  "finalProductionConsecutiveRuns": [
+    [
+      {
+        "phase": "first-load",
+        "wallMs": 1179,
+        "frameP95Ms": 77,
+        "frameMaxMs": 126,
+        "framesOver50Ms": 8,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12123,
+        "workerMs": [
+          90
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "auto-layout",
+        "wallMs": 238,
+        "frameP95Ms": 42,
+        "frameMaxMs": 42,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12130,
+        "workerMs": [
+          134
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "scripted-pointer-drag",
+        "wallMs": 2378,
+        "frameP95Ms": 52,
+        "frameMaxMs": 102,
+        "framesOver50Ms": 7,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10234,
+        "workerMs": [],
+        "hidden": false,
+        "movedGestures": 6,
+        "temporarilyMutedEdges": 1536,
+        "mutedEdgesAfter": 0
+      }
+    ],
+    [
+      {
+        "phase": "first-load",
+        "wallMs": 1443,
+        "frameP95Ms": 89,
+        "frameMaxMs": 253,
+        "framesOver50Ms": 9,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12126,
+        "workerMs": [
+          86
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "auto-layout",
+        "wallMs": 233,
+        "frameP95Ms": 45,
+        "frameMaxMs": 45,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12132,
+        "workerMs": [
+          134
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "scripted-pointer-drag",
+        "wallMs": 2248,
+        "frameP95Ms": 38,
+        "frameMaxMs": 79,
+        "framesOver50Ms": 4,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10235,
+        "workerMs": [],
+        "hidden": false,
+        "movedGestures": 6,
+        "temporarilyMutedEdges": 1536,
+        "mutedEdgesAfter": 0
+      }
+    ],
+    [
+      {
+        "phase": "first-load",
+        "wallMs": 1314,
+        "frameP95Ms": 113,
+        "frameMaxMs": 143,
+        "framesOver50Ms": 7,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12126,
+        "workerMs": [
+          82
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "auto-layout",
+        "wallMs": 212,
+        "frameP95Ms": 37,
+        "frameMaxMs": 37,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12132,
+        "workerMs": [
+          117
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "scripted-pointer-drag",
+        "wallMs": 2188,
+        "frameP95Ms": 37,
+        "frameMaxMs": 73,
+        "framesOver50Ms": 4,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10235,
+        "workerMs": [],
+        "hidden": false,
+        "movedGestures": 6,
+        "temporarilyMutedEdges": 1536,
+        "mutedEdgesAfter": 0
+      }
+    ]
+  ],
+  "initialBatchExport": {
+    "measurements": [
+      {
+        "phase": "first-load",
+        "wallMs": 1130,
+        "frameP95Ms": 79,
+        "frameMaxMs": 110,
+        "framesOver50Ms": 7,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12123,
+        "workerMs": [
+          87
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "auto-layout",
+        "wallMs": 227,
+        "frameP95Ms": 41,
+        "frameMaxMs": 41,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12130,
+        "workerMs": [
+          128
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "scripted-pointer-drag",
+        "wallMs": 2239,
+        "frameP95Ms": 47,
+        "frameMaxMs": 71,
+        "framesOver50Ms": 5,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10234,
+        "workerMs": [],
+        "hidden": false,
+        "movedGestures": 6,
+        "temporarilyMutedEdges": 1536,
+        "mutedEdgesAfter": 0
+      }
+    ],
+    "export": {
+      "bytes": 22803013,
+      "tables": 2000,
+      "columns": 40000,
+      "edges": 3997,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "theme": "dark",
+      "parserError": false,
+      "peakDetailedTables": 32,
+      "viewportRestored": true,
+      "selectionRestored": true
+    },
+    "exportMeasurement": {
+      "phase": "svg-export",
+      "wallMs": 21584,
+      "frameP95Ms": 326,
+      "frameMaxMs": 1378,
+      "framesOver50Ms": 73,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 5,
+      "mountedEdges": 1539,
+      "paintedSvgRoots": 1,
+      "domElements": 10240,
+      "workerMs": [],
+      "hidden": false
+    }
+  },
+  "postExportDrag": {
+    "phase": "scripted-pointer-drag",
+    "wallMs": 2394,
+    "frameP95Ms": 52,
+    "frameMaxMs": 85,
+    "framesOver50Ms": 7,
+    "longTasks": null,
+    "longestTaskMs": null,
+    "mountedTables": 5,
+    "mountedEdges": 1539,
+    "paintedSvgRoots": 1,
+    "domElements": 10241,
+    "workerMs": [],
+    "hidden": false,
+    "movedGestures": 6,
+    "temporarilyMutedEdges": 1536,
+    "mutedEdgesAfter": 0
+  },
+  "postExportAutoLayout": {
+    "phase": "auto-layout",
+    "wallMs": 617,
+    "frameP95Ms": 70,
+    "frameMaxMs": 70,
+    "framesOver50Ms": 1,
+    "longTasks": null,
+    "longestTaskMs": null,
+    "mountedTables": 264,
+    "mountedEdges": 1214,
+    "paintedSvgRoots": 1,
+    "domElements": 12148,
+    "workerMs": [
+      79
+    ],
+    "hidden": false
+  },
+  "repeatExportOverview": {
+    "measurement": {
+      "phase": "svg-export",
+      "wallMs": 18793,
+      "frameP95Ms": 248,
+      "frameMaxMs": 1272,
+      "framesOver50Ms": 71,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 264,
+      "mountedEdges": 1214,
+      "paintedSvgRoots": 1,
+      "domElements": 12147,
+      "workerMs": [],
+      "hidden": false
+    },
+    "validation": {
+      "bytes": 22679267,
+      "tables": 2000,
+      "columns": 40000,
+      "edges": 3997,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "theme": "dark",
+      "parserError": false,
+      "peakDetailedTables": 32,
+      "viewportRestored": true,
+      "selectionRestored": true
+    }
+  },
+  "finalProductionHighRssSampleWithXmlParser": {
+    "measurement": {
+      "phase": "svg-export",
+      "wallMs": 84639,
+      "frameP95Ms": 2667,
+      "frameMaxMs": 2840,
+      "framesOver50Ms": 97,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 5,
+      "mountedEdges": 1539,
+      "paintedSvgRoots": 1,
+      "domElements": 10240,
+      "workerMs": [],
+      "hidden": false
+    },
+    "validation": {
+      "bytes": 22803013,
+      "tables": 2000,
+      "columns": 40000,
+      "edges": 3997,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "theme": "dark",
+      "parserError": false,
+      "restoreMs": 1525,
+      "peakDetailedTables": 32,
+      "viewportRestored": true,
+      "selectionRestored": true
+    },
+    "note": "Same final production source; benchmark included native DOMParser validation after capture. High RSS observed."
+  },
+  "finalCaptureWithIndependentXmlValidation": {
+    "measurement": {
+      "phase": "svg-export",
+      "wallMs": 21624,
+      "frameP95Ms": 317,
+      "frameMaxMs": 2228,
+      "framesOver50Ms": 73,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 5,
+      "mountedEdges": 1539,
+      "paintedSvgRoots": 1,
+      "domElements": 10240,
+      "workerMs": [],
+      "hidden": false
+    },
+    "validation": {
+      "bytes": 22803013,
+      "tables": 2000,
+      "columns": 40000,
+      "edges": 3997,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "theme": "dark",
+      "validation": "String inventory only; validate the saved file with an independent XML parser.",
+      "restoreMs": 2933,
+      "peakDetailedTables": 32,
+      "viewportRestored": true,
+      "selectionRestored": true
+    },
+    "preExport": [
+      {
+        "phase": "first-load",
+        "wallMs": 1183,
+        "frameP95Ms": 68,
+        "frameMaxMs": 132,
+        "framesOver50Ms": 7,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12123,
+        "workerMs": [
+          84
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "auto-layout",
+        "wallMs": 283,
+        "frameP95Ms": 222,
+        "frameMaxMs": 222,
+        "framesOver50Ms": 1,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12130,
+        "workerMs": [
+          191
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "scripted-pointer-drag",
+        "wallMs": 2260,
+        "frameP95Ms": 40,
+        "frameMaxMs": 76,
+        "framesOver50Ms": 5,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10234,
+        "workerMs": [],
+        "hidden": false,
+        "movedGestures": 6,
+        "temporarilyMutedEdges": 1536,
+        "mutedEdgesAfter": 0
+      }
+    ],
+    "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-2.svg · 29984 × 19615",
+    "timing": "Capture/restore/byte preparation only; native SVG DOM parsing removed from harness, file XML validated independently."
+  },
+  "fileVerification": {
+    "path": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru.svg",
+    "bytes": 22803013,
+    "sha256": "3790e495cd1a0f6a21e50a200db95c1d1492b5f510f6e1a4e94c63d77ae7c22b",
+    "tables": 2000,
+    "uniqueTables": 2000,
+    "columns": 40000,
+    "edges": 3997,
+    "uniqueEdges": 3997,
+    "arrowheads": 3997,
+    "theme": "dark",
+    "externalResources": [],
+    "scriptCount": 0,
+    "uniqueTableColumnPairs": 40000,
+    "missingColumnNames": [],
+    "finalInstrumentedFile": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-1.svg",
+    "finalFile": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-2.svg",
+    "finalBytes": 22803013,
+    "finalIndependentXmlParse": "passed; byte-identical to previously verified all 40000 column names"
+  },
+  "memoryObservations": {
+    "unit": "KiB RSS from ps; isolated benchmark processes; snapshots, NOT peaks or retained-live-object estimates",
+    "beforeFinalExport": {
+      "webContent": 906336,
+      "desktop": 126048
+    },
+    "afterExportWithoutNativeXmlParser": {
+      "webContent": 4144976,
+      "desktop": 1092624
+    },
+    "highRssSampleWithNativeXmlParser": {
+      "webContent": 5612976,
+      "desktop": 282112
+    },
+    "limit": "Native parsing was removed from benchmark to avoid adding another SVG DOM; these samples do not prove parsing was the sole cause of variability. Export and native byte-array transport still use considerable memory."
+  },
+  "timingNotes": [
+    "Earlier batch-export samples included benchmark XML parsing.",
+    "Final independent-validation export stops the clock at entry to saveDiagramExport, before test inventory and native file I/O. It includes font/RAF preparation, full graph capture, restore and artifact-byte preparation.",
+    "restoreMs is finally entry through overview collapse, viewport culling, RAF commits and subscription reset, not pure CPU time.",
+    "An 84.639-second sample completed and saved successfully; preserved rather than discarded. Its native XML parsing and high RSS differ from the final lightweight harness.",
+    "WebKit Long Tasks values null mean unsupported observation, not zero tasks."
+  ],
+  "validation": {
+    "tests": 434,
+    "files": 81,
+    "typecheck": "passed",
+    "lint": "passed",
+    "standardDesktopBuild": "passed",
+    "productionAppBundle": "target/debug/bundle/macos/Nodal Studio.app",
+    "screenshot": "docs/performance/diagram-native-export-2026-10-16.png"
+  },
+  "knownLimits": [
+    "Full export remains expensive, has long frames, and uses substantial memory. It is not instantaneous or frame-rate guaranteed.",
+    "32 MiB SVG/PNG file cap and existing PNG pixel cap retained.",
+    "Native actual export in this report is SVG; no claim of a full 2000-table PNG runtime test."
+  ],
+  "crashAudit": {
+    "directories": [
+      "DiagnosticReports",
+      "DiagnosticReports/Retired"
+    ],
+    "newWebKitReports": 0,
+    "lastHistoricalReport": "2026-10-15 19:28:28"
+  },
+  "os": {
+    "productVersion": "27.0.1",
+    "build": "26A434"
+  },
+  "finalPostExportDrag": {
+    "phase": "scripted-pointer-drag",
+    "wallMs": 2273,
+    "frameP95Ms": 46,
+    "frameMaxMs": 89,
+    "framesOver50Ms": 4,
+    "longTasks": null,
+    "longestTaskMs": null,
+    "mountedTables": 5,
+    "mountedEdges": 1539,
+    "paintedSvgRoots": 1,
+    "domElements": 10241,
+    "workerMs": [],
+    "hidden": false,
+    "movedGestures": 6,
+    "temporarilyMutedEdges": 1536,
+    "mutedEdgesAfter": 0
+  },
+  "finalModuleRegression": [
+    {
+      "phase": "first-load",
+      "wallMs": 2253,
+      "frameP95Ms": 22,
+      "frameMaxMs": 77,
+      "framesOver50Ms": 3,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 45,
+      "mountedEdges": 121,
+      "paintedSvgRoots": 1,
+      "domElements": 3376,
+      "workerMs": [
+        1467
+      ],
+      "hidden": false
+    },
+    {
+      "phase": "auto-layout",
+      "wallMs": 1448,
+      "frameP95Ms": 18,
+      "frameMaxMs": 60,
+      "framesOver50Ms": 2,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 41,
+      "mountedEdges": 117,
+      "paintedSvgRoots": 1,
+      "domElements": 3302,
+      "workerMs": [
+        1368
+      ],
+      "hidden": false
+    },
+    {
+      "phase": "scripted-pointer-drag",
+      "wallMs": 1983,
+      "frameP95Ms": 18,
+      "frameMaxMs": 21,
+      "framesOver50Ms": 0,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 5,
+      "mountedEdges": 28,
+      "paintedSvgRoots": 1,
+      "domElements": 2680,
+      "workerMs": [],
+      "hidden": false,
+      "movedGestures": 6,
+      "temporarilyMutedEdges": 25,
+      "mutedEdgesAfter": 0
+    }
+  ],
+  "cleanup": "Isolated native benchmark quit after successful tests; original user app/source/layout left untouched."
+}

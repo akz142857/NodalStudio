@@ -61,6 +61,9 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke("save_schema_report", { input });
   }
   saveDiagramExport(input: DiagramExportInput): Promise<DiagramExportReceipt> {
+    if (input.data instanceof Uint8Array) return invoke("save_diagram_export_binary", input.data, { headers: {
+      "x-nodal-file-name": input.fileName, "x-nodal-format": input.format,
+    } });
     return invoke("save_diagram_export", { input });
   }
   getRuntimeInfo(): Promise<RuntimeInfo> {

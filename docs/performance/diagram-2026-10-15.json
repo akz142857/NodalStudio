@@ -1,0 +1,1223 @@
+{
+  "date": "2026-10-15",
+  "method": "Production React Flow/SchemaCanvas and real layout workers; deterministic synthetic metadata only; stage samples, not statistical medians.",
+  "chromiumStages": {
+    "after_geometry_seeding_before_layout_policy": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        642,
+        954
+      ],
+      "devicePixelRatio": 2,
+      "tables": 1000,
+      "topology": "40-table components",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 14946.399999976158,
+          "frameP95Ms": 17.5,
+          "frameMaxMs": 233.40000000000146,
+          "framesOver50Ms": 2,
+          "longTasks": 4,
+          "longestTaskMs": 234,
+          "mountedTables": 54,
+          "mountedEdges": 195,
+          "domElements": 2635,
+          "workerMs": [
+            14386.199999928474
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "native-pointer-drag",
+          "wallMs": 9332.899999976158,
+          "frameP95Ms": 17.5,
+          "frameMaxMs": 17.70000000001164,
+          "framesOver50Ms": 0,
+          "longTasks": 0,
+          "longestTaskMs": 0,
+          "mountedTables": 3,
+          "mountedEdges": 25,
+          "domElements": 1451,
+          "workerMs": [],
+          "hidden": false
+        }
+      ]
+    },
+    "after_layout_policy_1000_modular": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        642,
+        954
+      ],
+      "devicePixelRatio": 2,
+      "tables": 1000,
+      "topology": "40-table components",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1434.0999999046326,
+          "frameP95Ms": 17.599999999999454,
+          "frameMaxMs": 166.69999999999982,
+          "framesOver50Ms": 1,
+          "longTasks": 2,
+          "longestTaskMs": 120,
+          "mountedTables": 26,
+          "mountedEdges": 89,
+          "domElements": 1809,
+          "workerMs": [
+            953.7000000476837
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 810.6999999284744,
+          "frameP95Ms": 17.5,
+          "frameMaxMs": 17.600000000002183,
+          "framesOver50Ms": 0,
+          "longTasks": 0,
+          "longestTaskMs": 0,
+          "mountedTables": 23,
+          "mountedEdges": 82,
+          "domElements": 1742,
+          "workerMs": [
+            760.9000000953674
+          ],
+          "hidden": false
+        }
+      ]
+    },
+    "after_layout_policy_2000_modular": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        642,
+        954
+      ],
+      "devicePixelRatio": 2,
+      "tables": 2000,
+      "topology": "40-table components",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 2589.5999999046326,
+          "frameP95Ms": 17.5,
+          "frameMaxMs": 549.2,
+          "framesOver50Ms": 3,
+          "longTasks": 4,
+          "longestTaskMs": 425,
+          "mountedTables": 34,
+          "mountedEdges": 94,
+          "domElements": 2967,
+          "workerMs": [
+            1938.3999999761581
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 1513,
+          "frameP95Ms": 17.60000000000582,
+          "frameMaxMs": 50,
+          "framesOver50Ms": 0,
+          "longTasks": 1,
+          "longestTaskMs": 57,
+          "mountedTables": 31,
+          "mountedEdges": 91,
+          "domElements": 2916,
+          "workerMs": [
+            1431.8999999761581
+          ],
+          "hidden": false
+        }
+      ]
+    },
+    "after_progressive_mount_2000_connected": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "viewport": [
+        642,
+        954
+      ],
+      "devicePixelRatio": 2,
+      "tables": 2000,
+      "topology": "connected",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1751.1000000238419,
+          "frameP95Ms": 66.80000000000291,
+          "frameMaxMs": 399.90000000000146,
+          "framesOver50Ms": 5,
+          "longTasks": 7,
+          "longestTaskMs": 396,
+          "mountedTables": 170,
+          "mountedEdges": 1035,
+          "domElements": 8774,
+          "workerMs": [
+            335.8000000715256
+          ],
+          "hidden": false
+        }
+      ]
+    }
+  },
+  "denseDragComparison": {
+    "engine": "Chromium 155",
+    "viewportCSS": [
+      642,
+      954
+    ],
+    "devicePixelRatio": 2,
+    "tables": 2000,
+    "columns": 40000,
+    "relationships": 3997,
+    "input": "6 alternating DOM mouse gestures, 15 moves per gesture, one requested animation frame per move; transform changes verified. Includes restoration after release.",
+    "before": {
+      "phase": "scripted-pointer-drag",
+      "wallMs": 4855.600000023842,
+      "frameP95Ms": 133.29999999998836,
+      "frameMaxMs": 183.39999999996508,
+      "framesOver50Ms": 36,
+      "longTasks": 37,
+      "longestTaskMs": 134,
+      "mountedTables": 3,
+      "mountedEdges": 1511,
+      "domElements": 8398,
+      "workerMs": [],
+      "hidden": false,
+      "movedGestures": 6
+    },
+    "css_visibility_only_rejected": {
+      "phase": "scripted-pointer-drag",
+      "wallMs": 5357.5,
+      "frameP95Ms": 149.60000000000218,
+      "frameMaxMs": 200.89999999999782,
+      "framesOver50Ms": 39,
+      "longTasks": 43,
+      "longestTaskMs": 179,
+      "mountedTables": 3,
+      "mountedEdges": 1511,
+      "domElements": 8398,
+      "workerMs": [],
+      "hidden": false,
+      "movedGestures": 6,
+      "temporarilyMutedEdges": 1508,
+      "mutedEdgesAfter": 0
+    },
+    "after_relationship_subscription_culling": {
+      "phase": "scripted-pointer-drag",
+      "wallMs": 2597.5,
+      "frameP95Ms": 50,
+      "frameMaxMs": 83.30000000000291,
+      "framesOver50Ms": 5,
+      "longTasks": 6,
+      "longestTaskMs": 89,
+      "mountedTables": 3,
+      "mountedEdges": 1511,
+      "domElements": 8398,
+      "workerMs": [],
+      "hidden": false,
+      "movedGestures": 6,
+      "temporarilyMutedEdges": 1508,
+      "mutedEdgesAfter": 0
+    },
+    "same_artifact_first_load": {
+      "phase": "first-load",
+      "wallMs": 2017.1999999284744,
+      "frameP95Ms": 100,
+      "frameMaxMs": 500,
+      "framesOver50Ms": 7,
+      "longTasks": 9,
+      "longestTaskMs": 487,
+      "mountedTables": 170,
+      "mountedEdges": 1035,
+      "domElements": 8774,
+      "workerMs": [
+        420.1999999284744
+      ],
+      "hidden": false
+    }
+  },
+  "nativeWebKitCrossChecks": {
+    "engine": "AppleWebKit/605.1.15",
+    "viewportCSS": [
+      1280,
+      868
+    ],
+    "devicePixelRatio": 2,
+    "source": "Native accessibility Latest measurement; visible isolated Tauri benchmark window. Each sample has its stage; do not mix with browser engine.",
+    "samples": [
+      {
+        "stage": "progressive rendering before final drag policy",
+        "tables": 1000,
+        "topology": "40-table components",
+        "phase": "first-load",
+        "wallMs": 1567,
+        "frameP95Ms": 29,
+        "frameMaxMs": 80,
+        "framesOver50Ms": 3,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 38,
+        "mountedEdges": 103,
+        "domElements": 2047,
+        "workerMs": [
+          966
+        ],
+        "hidden": false
+      },
+      {
+        "stage": "layout policy earlier native cross-check",
+        "tables": 1000,
+        "topology": "40-table components",
+        "phase": "auto-layout",
+        "wallMs": 1133,
+        "frameP95Ms": 50,
+        "frameMaxMs": 166,
+        "framesOver50Ms": 2,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 35,
+        "mountedEdges": 95,
+        "domElements": 1978,
+        "workerMs": [
+          912
+        ],
+        "hidden": false
+      }
+    ]
+  },
+  "osPointerCrossCheck": {
+    "source": "first Chromium geometry/layout stage record, native-pointer-drag sample",
+    "note": "Real browser pointer drags verified Move tables undo state. Recording includes tool idle time; not used as the quantitative before/after comparison."
+  },
+  "finalRuntime": {
+    "stage": "Final shared getState batching key and dense-drag subscription policy; before rejected native stability experiments",
+    "artifact": "diagram-benchmark-mhgmNMvR.js",
+    "chromium": [
+      {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 2,
+        "tables": 2000,
+        "topology": "40-table components",
+        "measurements": [
+          {
+            "phase": "first-load",
+            "wallMs": 2262.2000000476837,
+            "frameP95Ms": 17.600000000000364,
+            "frameMaxMs": 83.39999999999964,
+            "framesOver50Ms": 1,
+            "longTasks": 1,
+            "longestTaskMs": 75,
+            "mountedTables": 31,
+            "mountedEdges": 86,
+            "domElements": 2893,
+            "workerMs": [
+              1475.7999999523163
+            ],
+            "hidden": false
+          },
+          {
+            "phase": "auto-layout",
+            "wallMs": 1460.2000000476837,
+            "frameP95Ms": 17.399999999999636,
+            "frameMaxMs": 33.30000000000109,
+            "framesOver50Ms": 0,
+            "longTasks": 0,
+            "longestTaskMs": 0,
+            "mountedTables": 27,
+            "mountedEdges": 60,
+            "domElements": 2735,
+            "workerMs": [
+              1369.2999999523163
+            ],
+            "hidden": false
+          },
+          {
+            "phase": "scripted-pointer-drag",
+            "wallMs": 2062,
+            "frameP95Ms": 17.5,
+            "frameMaxMs": 33.399999999999636,
+            "framesOver50Ms": 0,
+            "longTasks": 0,
+            "longestTaskMs": 0,
+            "mountedTables": 7,
+            "mountedEdges": 31,
+            "domElements": 2820,
+            "workerMs": [],
+            "hidden": false,
+            "movedGestures": 6,
+            "temporarilyMutedEdges": 28,
+            "mutedEdgesAfter": 0
+          }
+        ]
+      },
+      {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 2,
+        "tables": 2000,
+        "topology": "connected",
+        "measurements": [
+          {
+            "phase": "first-load",
+            "wallMs": 1229.1000000238419,
+            "frameP95Ms": 66.70000000000073,
+            "frameMaxMs": 99.89999999999782,
+            "framesOver50Ms": 5,
+            "longTasks": 7,
+            "longestTaskMs": 77,
+            "mountedTables": 198,
+            "mountedEdges": 1089,
+            "domElements": 9410,
+            "workerMs": [
+              106.60000002384186
+            ],
+            "hidden": false
+          },
+          {
+            "phase": "auto-layout",
+            "wallMs": 204.5,
+            "frameP95Ms": 83.40000000000146,
+            "frameMaxMs": 83.40000000000146,
+            "framesOver50Ms": 1,
+            "longTasks": 1,
+            "longestTaskMs": 91,
+            "mountedTables": 198,
+            "mountedEdges": 1089,
+            "domElements": 9416,
+            "workerMs": [
+              66.60000002384186
+            ],
+            "hidden": false
+          },
+          {
+            "phase": "scripted-pointer-drag",
+            "wallMs": 2307.7999999523163,
+            "frameP95Ms": 33.5,
+            "frameMaxMs": 83.40000000000146,
+            "framesOver50Ms": 4,
+            "longTasks": 4,
+            "longestTaskMs": 81,
+            "mountedTables": 7,
+            "mountedEdges": 1567,
+            "domElements": 8964,
+            "workerMs": [],
+            "hidden": false,
+            "movedGestures": 6,
+            "temporarilyMutedEdges": 1564,
+            "mutedEdgesAfter": 0
+          }
+        ]
+      },
+      {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+        "viewport": [
+          1280,
+          720
+        ],
+        "devicePixelRatio": 2,
+        "tables": 1000,
+        "topology": "40-table components",
+        "measurements": [
+          {
+            "phase": "first-load",
+            "wallMs": 1434.6000000238419,
+            "frameP95Ms": 17.69999999999709,
+            "frameMaxMs": 33.5,
+            "framesOver50Ms": 0,
+            "longTasks": 0,
+            "longestTaskMs": 0,
+            "mountedTables": 33,
+            "mountedEdges": 88,
+            "domElements": 1919,
+            "workerMs": [
+              845.9000000953674
+            ],
+            "hidden": false
+          },
+          {
+            "phase": "auto-layout",
+            "wallMs": 836.5,
+            "frameP95Ms": 17.19999999999709,
+            "frameMaxMs": 17.70000000001164,
+            "framesOver50Ms": 0,
+            "longTasks": 0,
+            "longestTaskMs": 0,
+            "mountedTables": 33,
+            "mountedEdges": 88,
+            "domElements": 1925,
+            "workerMs": [
+              773.5
+            ],
+            "hidden": false
+          },
+          {
+            "phase": "scripted-pointer-drag",
+            "wallMs": 1829,
+            "frameP95Ms": 17.30000000000291,
+            "frameMaxMs": 17.69999999999709,
+            "framesOver50Ms": 0,
+            "longTasks": 0,
+            "longestTaskMs": 0,
+            "mountedTables": 7,
+            "mountedEdges": 31,
+            "domElements": 1820,
+            "workerMs": [],
+            "hidden": false,
+            "movedGestures": 6,
+            "temporarilyMutedEdges": 28,
+            "mutedEdgesAfter": 0
+          }
+        ]
+      }
+    ],
+    "nativeWebKit": {
+      "engine": "AppleWebKit/605.1.15",
+      "viewportCSS": [
+        1280,
+        868
+      ],
+      "devicePixelRatio": 2,
+      "samples": [
+        {
+          "tables": 2000,
+          "topology": "40-table components",
+          "measurement": {
+            "phase": "first-load",
+            "wallMs": 2334,
+            "frameP95Ms": 18,
+            "frameMaxMs": 81,
+            "framesOver50Ms": 3,
+            "longTasks": null,
+            "longestTaskMs": null,
+            "mountedTables": 45,
+            "mountedEdges": 121,
+            "domElements": 3242,
+            "workerMs": [
+              1543
+            ],
+            "hidden": false
+          }
+        },
+        {
+          "tables": 2000,
+          "topology": "40-table components",
+          "measurement": {
+            "phase": "auto-layout",
+            "wallMs": 1696,
+            "frameP95Ms": 49,
+            "frameMaxMs": 65,
+            "framesOver50Ms": 4,
+            "longTasks": null,
+            "longestTaskMs": null,
+            "mountedTables": 40,
+            "mountedEdges": 116,
+            "domElements": 3153,
+            "workerMs": [
+              1592
+            ],
+            "hidden": false
+          }
+        },
+        {
+          "tables": 2000,
+          "topology": "40-table components",
+          "measurement": {
+            "phase": "scripted-pointer-drag",
+            "wallMs": 2084,
+            "frameP95Ms": 22,
+            "frameMaxMs": 87,
+            "framesOver50Ms": 2,
+            "longTasks": null,
+            "longestTaskMs": null,
+            "mountedTables": 5,
+            "mountedEdges": 28,
+            "domElements": 2639,
+            "workerMs": [],
+            "hidden": false,
+            "movedGestures": 6,
+            "temporarilyMutedEdges": 25,
+            "mutedEdgesAfter": 0
+          }
+        },
+        {
+          "tables": 2000,
+          "topology": "connected",
+          "measurement": {
+            "phase": "first-load",
+            "wallMs": 1117,
+            "frameP95Ms": 73,
+            "frameMaxMs": 96,
+            "framesOver50Ms": 4,
+            "longTasks": null,
+            "longestTaskMs": null,
+            "mountedTables": 264,
+            "mountedEdges": 1214,
+            "domElements": 10899,
+            "workerMs": [
+              86
+            ],
+            "hidden": false
+          }
+        }
+      ],
+      "note": "Module scenario completed all three phases. Connected first-load timing is diagnostic only: WebContent subsequently crashed; not a stable passed run."
+    }
+  },
+  "historicalInterruptions": [
+    {
+      "scenario": "Final native 2,000-table module graph",
+      "state": "interrupted",
+      "reason": "Mac locked and computer-use automatic unlock failed before a complete sample could be read.",
+      "resolution": "Mac unlocked; final runtime resampled on 2026-10-15. See finalRuntime."
+    },
+    {
+      "scenario": "Runtime pass after correcting batching key to shared getState identity",
+      "state": "awaiting unlock",
+      "reason": "Final batching fix is regression-tested with distinct React Flow store wrappers; no replacement runtime numbers are inferred.",
+      "resolution": "Mac unlocked; final runtime resampled on 2026-10-15. See finalRuntime."
+    }
+  ],
+  "nativeStabilityFailure": {
+    "scenario": "2,000 tables / 3,997 physical relationships, single connected graph",
+    "status": "resolved for tested load/layout/drag fixture by shared SVG painting; historical evidence retained",
+    "observed": "WebContent exited and Tauri returned to the initial benchmark screen after dense SVG rendering. First-load timing alone does not constitute a stable pass.",
+    "rejectedExperiments": [
+      "Conservative curve-based offscreen paint culling did not prevent the crash; reverted.",
+      "Hiding overview arrowheads did not prevent the crash; reverted.",
+      "Reducing progressive edge batches from 250 to 64 did not prevent the crash; reverted."
+    ],
+    "evidence": [
+      {
+        "report": "com.apple.WebKit.WebContent-2026-10-15-191620.ips",
+        "time": "2026-10-15 19:16:18.9666 +0800",
+        "os": {
+          "train": "macOS 27.0.1",
+          "build": "26A434",
+          "releaseType": "User"
+        },
+        "exception": {
+          "codes": "0x0000000000000001, 0x00000001b0833a90",
+          "rawCodes": [
+            1,
+            7256357520
+          ],
+          "type": "EXC_BREAKPOINT",
+          "signal": "SIGKILL"
+        },
+        "termination": {
+          "namespace": "FOUNDATION",
+          "flags": 2,
+          "code": 1
+        },
+        "faultingQueue": "com.apple.IPC.ReceiveQueue",
+        "faultFrames": [
+          "WTFCrashWithInfoImpl(int, char const*, char const*, unsigned long long, unsigned long long)",
+          "IPC::Connection::sendMessage(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>&, IPC::Connection::IsRetryDueToLargeSize)",
+          "IPC::Connection::retrySendMessageWithSharedMemory(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>, WTF::UniqueRef<IPC::Encoder>&)",
+          "IPC::Connection::sendOutgoingMessage(WTF::UniqueRef<IPC::Encoder>&&)",
+          "IPC::Connection::sendOutgoingMessages()"
+        ],
+        "mainFrames": [
+          "semaphore_timedwait_trap",
+          "IPC::Semaphore::waitFor(IPC::Timeout)",
+          "IPC::StreamClientConnectionBuffer::tryAcquire(IPC::Timeout)",
+          "WebKit::RemoteGraphicsContextProxy::setLineDash(WTF::FixedVector<double, WTF::FastMalloc> const&, float)",
+          "WebCore::LegacyRenderSVGPath::drawMarkers(WebCore::PaintInfo&)",
+          "WebCore::LegacyRenderSVGShape::paint(WebCore::PaintInfo&, WebCore::LayoutPoint const&)"
+        ]
+      },
+      {
+        "report": "com.apple.WebKit.WebContent-2026-10-15-191813.ips",
+        "time": "2026-10-15 19:18:13.4759 +0800",
+        "os": {
+          "train": "macOS 27.0.1",
+          "build": "26A434",
+          "releaseType": "User"
+        },
+        "exception": {
+          "codes": "0x0000000000000001, 0x00000001b0833a90",
+          "rawCodes": [
+            1,
+            7256357520
+          ],
+          "type": "EXC_BREAKPOINT",
+          "signal": "SIGKILL"
+        },
+        "termination": {
+          "namespace": "FOUNDATION",
+          "flags": 2,
+          "code": 1
+        },
+        "faultingQueue": "com.apple.IPC.ReceiveQueue",
+        "faultFrames": [
+          "WTFCrashWithInfoImpl(int, char const*, char const*, unsigned long long, unsigned long long)",
+          "IPC::Connection::sendMessage(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>&, IPC::Connection::IsRetryDueToLargeSize)",
+          "IPC::Connection::retrySendMessageWithSharedMemory(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>, WTF::UniqueRef<IPC::Encoder>&)",
+          "IPC::Connection::sendOutgoingMessage(WTF::UniqueRef<IPC::Encoder>&&)",
+          "IPC::Connection::sendOutgoingMessages()"
+        ],
+        "mainFrames": [
+          "WebKit::RemoteLayerBackingStoreCollection::collectAllRemoteRenderingBufferIdentifiersToMarkVolatile(WTF::OptionSet<WebKit::RemoteLayerBackingStoreCollection::VolatilityMarkingBehavior, (WTF::ConcurrencyTag)0>, WTF::OptionSet<WebKit::RemoteLayerBackingStoreCollection::VolatilityMarkingBehavior, (WTF::ConcurrencyTag)0>, WTF::Vector<std::__1::pair<WTF::Ref<WebKit::RemoteImageBufferSetProxy, WTF::RawPtrTraits<WebKit::RemoteImageBufferSetProxy>, WTF::DefaultRefDerefTraits<WebKit::RemoteImageBufferSetProxy>>, WTF::OptionSet<WebKit::BufferInSetType, (WTF::ConcurrencyTag)0>>, 0ul, WTF::CrashOnOverflow, 16ul, WTF::FastMalloc>&)",
+          "WebKit::RemoteLayerBackingStoreCollection::markAllBackingStoreVolatileFromTimer()",
+          "WTF::Detail::CallableWrapper<WebCore::Timer::Timer<WebKit::RemoteLayerBackingStoreCollection, WebKit::RemoteLayerBackingStoreCollection>(WebKit::RemoteLayerBackingStoreCollection&, void (WebKit::RemoteLayerBackingStoreCollection::*)())::'lambda'(), void>::call()",
+          "WTF::Detail::CallableWrapper<WebCore::ThreadTimers::setSharedTimer(WebCore::SharedTimer*)::$_0, void>::call()",
+          "WebCore::timerFired(__CFRunLoopTimer*, void*)",
+          "__CFRUNLOOP_IS_CALLING_OUT_TO_A_TIMER_CALLBACK_FUNCTION__"
+        ]
+      },
+      {
+        "report": "com.apple.WebKit.WebContent-2026-10-15-192318.ips",
+        "time": "2026-10-15 19:23:17.7585 +0800",
+        "os": {
+          "train": "macOS 27.0.1",
+          "build": "26A434",
+          "releaseType": "User"
+        },
+        "exception": {
+          "codes": "0x0000000000000001, 0x00000001b0833a90",
+          "rawCodes": [
+            1,
+            7256357520
+          ],
+          "type": "EXC_BREAKPOINT",
+          "signal": "SIGKILL"
+        },
+        "termination": {
+          "namespace": "FOUNDATION",
+          "flags": 2,
+          "code": 1
+        },
+        "faultingQueue": "com.apple.IPC.ReceiveQueue",
+        "faultFrames": [
+          "WTFCrashWithInfoImpl(int, char const*, char const*, unsigned long long, unsigned long long)",
+          "IPC::Connection::sendMessage(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>&, IPC::Connection::IsRetryDueToLargeSize)",
+          "IPC::Connection::retrySendMessageWithSharedMemory(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>, WTF::UniqueRef<IPC::Encoder>&)",
+          "IPC::Connection::sendOutgoingMessage(WTF::UniqueRef<IPC::Encoder>&&)",
+          "IPC::Connection::sendOutgoingMessages()"
+        ],
+        "mainFrames": [
+          "mach_msg2_trap",
+          "mach_msg2_internal",
+          "mach_msg_overwrite",
+          "mach_msg",
+          "__CFRunLoopServiceMachPort",
+          "__CFRunLoopRun"
+        ]
+      },
+      {
+        "report": "com.apple.WebKit.WebContent-2026-10-15-192424.ips",
+        "time": "2026-10-15 19:24:24.1209 +0800",
+        "os": {
+          "train": "macOS 27.0.1",
+          "build": "26A434",
+          "releaseType": "User"
+        },
+        "exception": {
+          "codes": "0x0000000000000001, 0x00000001b0833a90",
+          "rawCodes": [
+            1,
+            7256357520
+          ],
+          "type": "EXC_BREAKPOINT",
+          "signal": "SIGKILL"
+        },
+        "termination": {
+          "namespace": "FOUNDATION",
+          "flags": 2,
+          "code": 1
+        },
+        "faultingQueue": "com.apple.IPC.ReceiveQueue",
+        "faultFrames": [
+          "WTFCrashWithInfoImpl(int, char const*, char const*, unsigned long long, unsigned long long)",
+          "IPC::Connection::sendMessage(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>&, IPC::Connection::IsRetryDueToLargeSize)",
+          "IPC::Connection::retrySendMessageWithSharedMemory(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>, WTF::UniqueRef<IPC::Encoder>&)",
+          "IPC::Connection::sendOutgoingMessage(WTF::UniqueRef<IPC::Encoder>&&)",
+          "IPC::Connection::sendOutgoingMessages()"
+        ],
+        "mainFrames": [
+          "mach_msg2_trap",
+          "mach_msg2_internal",
+          "mach_msg_overwrite",
+          "mach_msg",
+          "__CFRunLoopServiceMachPort",
+          "__CFRunLoopRun"
+        ]
+      },
+      {
+        "report": "com.apple.WebKit.WebContent-2026-10-15-192706.ips",
+        "time": "2026-10-15 19:27:06.4474 +0800",
+        "os": {
+          "train": "macOS 27.0.1",
+          "build": "26A434",
+          "releaseType": "User"
+        },
+        "exception": {
+          "codes": "0x0000000000000001, 0x00000001b0833a90",
+          "rawCodes": [
+            1,
+            7256357520
+          ],
+          "type": "EXC_BREAKPOINT",
+          "signal": "SIGKILL"
+        },
+        "termination": {
+          "namespace": "FOUNDATION",
+          "flags": 2,
+          "code": 1
+        },
+        "faultingQueue": "com.apple.IPC.ReceiveQueue",
+        "faultFrames": [
+          "WTFCrashWithInfoImpl(int, char const*, char const*, unsigned long long, unsigned long long)",
+          "IPC::Connection::sendMessage(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>&, IPC::Connection::IsRetryDueToLargeSize)",
+          "IPC::Connection::retrySendMessageWithSharedMemory(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>, WTF::UniqueRef<IPC::Encoder>&)",
+          "IPC::Connection::sendOutgoingMessage(WTF::UniqueRef<IPC::Encoder>&&)",
+          "IPC::Connection::sendOutgoingMessages()"
+        ],
+        "mainFrames": [
+          "mach_msg2_trap",
+          "mach_msg2_internal",
+          "mach_msg_overwrite",
+          "mach_msg",
+          "__CFRunLoopServiceMachPort",
+          "__CFRunLoopRun"
+        ]
+      },
+      {
+        "report": "com.apple.WebKit.WebContent-2026-10-15-192828.ips",
+        "time": "2026-10-15 19:28:27.0552 +0800",
+        "os": {
+          "train": "macOS 27.0.1",
+          "build": "26A434",
+          "releaseType": "User"
+        },
+        "exception": {
+          "codes": "0x0000000000000001, 0x00000001b0833a90",
+          "rawCodes": [
+            1,
+            7256357520
+          ],
+          "type": "EXC_BREAKPOINT",
+          "signal": "SIGKILL"
+        },
+        "termination": {
+          "namespace": "FOUNDATION",
+          "flags": 2,
+          "code": 1
+        },
+        "faultingQueue": "com.apple.IPC.ReceiveQueue",
+        "faultFrames": [
+          "WTFCrashWithInfoImpl(int, char const*, char const*, unsigned long long, unsigned long long)",
+          "IPC::Connection::sendMessage(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>&, IPC::Connection::IsRetryDueToLargeSize)",
+          "IPC::Connection::retrySendMessageWithSharedMemory(std::__1::unique_ptr<IPC::MachMessage, std::__1::default_delete<IPC::MachMessage>>, WTF::UniqueRef<IPC::Encoder>&)",
+          "IPC::Connection::sendOutgoingMessage(WTF::UniqueRef<IPC::Encoder>&&)",
+          "IPC::Connection::sendOutgoingMessages()"
+        ],
+        "mainFrames": [
+          "mach_msg2_trap",
+          "mach_msg2_internal",
+          "mach_msg_overwrite",
+          "mach_msg",
+          "__CFRunLoopServiceMachPort",
+          "__CFRunLoopRun"
+        ]
+      }
+    ],
+    "diagnosisLimit": "Fault stack and Mach error point to WebKit IPC send failure. SVG painting was present on the main thread in one report; exact message and root cause are not established. No OS settings changed.",
+    "relatedUpstream": "https://results.webkit.org/commit?id=319119%40main&repository_id=webkit",
+    "noIntermediateAccessibilityReadCrossCheck": {
+      "control": "Run full scenario: first load, real auto layout, locate, six 15-step DOM drags; no AX tree inspection between phases.",
+      "result": "WebContent crashed and the initial empty screen returned; crash report at 19:28:28.",
+      "note": "This reproduced the failure without intermediate inspection; the exact triggering phase was not recoverable after process reset."
+    }
+  },
+  "incomplete": [],
+  "validation": {
+    "tests": 429,
+    "testFiles": 79,
+    "typecheck": "passed",
+    "lint": "passed",
+    "productionAppBundle": "target/debug/bundle/macos/Nodal Studio.app",
+    "screenshot": "docs/performance/diagram-runtime-final.png",
+    "desktopBuild": "passed"
+  },
+  "fullScenarioControl": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+    "viewport": [
+      1280,
+      720
+    ],
+    "devicePixelRatio": 1,
+    "tables": 2000,
+    "topology": "40-table components",
+    "measurements": [
+      {
+        "phase": "first-load",
+        "wallMs": 2233.5,
+        "frameP95Ms": 17.600000000000023,
+        "frameMaxMs": 83.30000000000001,
+        "framesOver50Ms": 1,
+        "longTasks": 1,
+        "longestTaskMs": 72,
+        "mountedTables": 31,
+        "mountedEdges": 86,
+        "domElements": 2895,
+        "workerMs": [
+          1427.1999999284744
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "auto-layout",
+        "wallMs": 1423,
+        "frameP95Ms": 16.800000000000182,
+        "frameMaxMs": 17.600000000000364,
+        "framesOver50Ms": 0,
+        "longTasks": 0,
+        "longestTaskMs": 0,
+        "mountedTables": 28,
+        "mountedEdges": 81,
+        "domElements": 2837,
+        "workerMs": [
+          1361.3999999761581
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "scripted-pointer-drag",
+        "wallMs": 2016.8999999761581,
+        "frameP95Ms": 16.800000000000182,
+        "frameMaxMs": 17.699999999999818,
+        "framesOver50Ms": 0,
+        "longTasks": 0,
+        "longestTaskMs": 0,
+        "mountedTables": 7,
+        "mountedEdges": 31,
+        "domElements": 2824,
+        "workerMs": [],
+        "hidden": false,
+        "movedGestures": 6,
+        "temporarilyMutedEdges": 28,
+        "mutedEdgesAfter": 0
+      }
+    ],
+    "note": "Additional continuous-scenario harness validation at an explicit 1280x720 viewport override (DPR=1); screenshot matches this run. Kept separate from primary DPR=2 samples."
+  },
+  "nativeStabilityResolution": {
+    "fix": "Preserve React Flow model/ports/visibility/subscriptions; portal actual BaseEdge paths to one SVG with inferred, ordinary and selected groups. Empty original wrappers are aria-hidden and omitted from export. No relationship or marker removal.",
+    "engine": "Native Tauri WKWebView / macOS 27.0.1 / WebKit 22625.1.29.11.28",
+    "viewport": [
+      1280,
+      868
+    ],
+    "devicePixelRatio": 2,
+    "tables": 2000,
+    "columns": 40000,
+    "physicalRelationships": 3997,
+    "topology": "one connected component, chain and root links",
+    "measurement": "Same production canvas and real layout workers. Six 15-step DOM mouse-event drags with transform verification and complete relationship restoration. All diagnostic paint-hiding switches false.",
+    "earlySharedLayerConsecutiveRuns": [
+      [
+        {
+          "phase": "first-load",
+          "wallMs": 1095,
+          "frameP95Ms": 64,
+          "frameMaxMs": 78,
+          "framesOver50Ms": 6,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12120,
+          "workerMs": [
+            84
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 336,
+          "frameP95Ms": 38,
+          "frameMaxMs": 38,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12127,
+          "workerMs": [
+            235
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2315,
+          "frameP95Ms": 46,
+          "frameMaxMs": 72,
+          "framesOver50Ms": 6,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 10231,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      [
+        {
+          "phase": "first-load",
+          "wallMs": 1296,
+          "frameP95Ms": 81,
+          "frameMaxMs": 266,
+          "framesOver50Ms": 6,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12123,
+          "workerMs": [
+            88
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 175,
+          "frameP95Ms": 73,
+          "frameMaxMs": 73,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12129,
+          "workerMs": [
+            54
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2180,
+          "frameP95Ms": 32,
+          "frameMaxMs": 71,
+          "framesOver50Ms": 4,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 10232,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      [
+        {
+          "phase": "first-load",
+          "wallMs": 1219,
+          "frameP95Ms": 83,
+          "frameMaxMs": 198,
+          "framesOver50Ms": 7,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12123,
+          "workerMs": [
+            86
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 299,
+          "frameP95Ms": 239,
+          "frameMaxMs": 239,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12129,
+          "workerMs": [
+            204
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2160,
+          "frameP95Ms": 39,
+          "frameMaxMs": 76,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 10232,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ]
+    ],
+    "earlyRunsNote": "Before adding inferred-edge lower paint group; this physical-only fixture is unchanged. Final-source confirmations are separate.",
+    "postInferredGroupConfirmation": [
+      {
+        "phase": "first-load",
+        "wallMs": 1101,
+        "frameP95Ms": 73,
+        "frameMaxMs": 88,
+        "framesOver50Ms": 6,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12121,
+        "workerMs": [
+          91
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "auto-layout",
+        "wallMs": 300,
+        "frameP95Ms": 41,
+        "frameMaxMs": 41,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12128,
+        "workerMs": [
+          242
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "scripted-pointer-drag",
+        "wallMs": 2189,
+        "frameP95Ms": 38,
+        "frameMaxMs": 77,
+        "framesOver50Ms": 4,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10232,
+        "workerMs": [],
+        "hidden": false,
+        "movedGestures": 6,
+        "temporarilyMutedEdges": 1536,
+        "mutedEdgesAfter": 0
+      }
+    ],
+    "finalSourceModuleRegression": [
+      {
+        "phase": "first-load",
+        "wallMs": 2267,
+        "frameP95Ms": 18,
+        "frameMaxMs": 81,
+        "framesOver50Ms": 3,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 45,
+        "mountedEdges": 121,
+        "paintedSvgRoots": 1,
+        "domElements": 3371,
+        "workerMs": [
+          1470
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "auto-layout",
+        "wallMs": 1469,
+        "frameP95Ms": 18,
+        "frameMaxMs": 67,
+        "framesOver50Ms": 2,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 41,
+        "mountedEdges": 117,
+        "paintedSvgRoots": 1,
+        "domElements": 3298,
+        "workerMs": [
+          1387
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "scripted-pointer-drag",
+        "wallMs": 1982,
+        "frameP95Ms": 18,
+        "frameMaxMs": 20,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 28,
+        "paintedSvgRoots": 1,
+        "domElements": 2677,
+        "workerMs": [],
+        "hidden": false,
+        "movedGestures": 6,
+        "temporarilyMutedEdges": 25,
+        "mutedEdgesAfter": 0
+      }
+    ],
+    "mechanismLimit": "One painted SVG avoids the observed IPC failure on this machine; exact WebKit attachment/message mechanism is unproven. This is not a universal topology or frame-rate guarantee.",
+    "finalSourceExtraDenseRun": {
+      "state": "retested on final production source 2026-10-16; three complete runs and SVG exports passed",
+      "evidence": "diagram-2026-10-16.json"
+    },
+    "crashReportAudit": {
+      "directories": [
+        "DiagnosticReports",
+        "DiagnosticReports/Retired"
+      ],
+      "reportsAfterFix": 0,
+      "lastHistoricalCrash": "2026-10-15 19:28:28",
+      "historicalWebKitReports": 6
+    }
+  },
+  "historicalIncompleteBefore20261016": [
+    {
+      "scenario": "Native full SVG export: 2000 tables / 40000 fields / 3997 edges",
+      "state": "blocked in canvas restoration; no save receipt",
+      "reason": "Capture returned, then React restore commit remained CPU bound (removeChild in sample), around 4 GB WebContent RSS. No additional IPC crash report. Separate from fixed interaction crash. Isolated XML, vector serialization, accessibility hiding and whole-surface display:none restore experiments unsuccessful and reverted."
+    }
+  ],
+  "followUp": "diagram-2026-10-16.json; bounded detail export resolves indefinite restoration, with explicit runtime/memory limits"
+}

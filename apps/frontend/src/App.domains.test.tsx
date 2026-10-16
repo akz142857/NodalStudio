@@ -38,6 +38,7 @@ async function selectTablesAndDomain() {
   fireEvent.click(screen.getByRole("button", { name: "Capture first source" }));
   await screen.findByText("Domain members: 1");
   fireEvent.click(screen.getByRole("button", { name: "Select both orders tables" }));
+  fireEvent.click(screen.getByRole("button", { name: "Business domain" }));
   fireEvent.change(screen.getByRole("combobox", { name: "Existing business domain" }), { target: { value: reportSemantics.domainGroups[0].id } });
 }
 

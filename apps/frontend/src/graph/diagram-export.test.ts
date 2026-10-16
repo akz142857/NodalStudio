@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { diagramAfter, diagramBefore, diagramChangeSet } from "../test/diagram-comparison-fixture";
-import { captureDiagramSvg, diagramFileName, pngDimensions } from "./diagram-export";
+import { captureDiagramSvg, createDiagramSvgCapture, diagramFileName, pngDimensions } from "./diagram-export";
 
 function diagramFixture(zoom = 1) {
   const root = document.createElement("div");
@@ -61,12 +61,107 @@ describe("diagram export", () => {
     expect(result.svg).toContain("translate(82 166)");
   });
 
+  it("collects table detail in separate batches without duplicating relationships or accepting incomplete output", () => {
+    const fixture = diagramFixture();
+    const first = fixture.root.querySelector<HTMLElement>(".table-node")!;
+    const second = first.cloneNode(true) as HTMLElement; second.querySelector("strong")!.textContent = "second_table";
+    fixture.root.append(second);
+    const capture = createDiagramSvgCapture({ ...fixture, snapshot: diagramAfter, changeSet: diagramChangeSet, beforeSnapshot: diagramBefore });
+    expect(() => capture.finish()).toThrow("Some tables were not captured");
+    first.dataset.overview = "true";
+    expect(() => capture.appendTables([first])).toThrow("Table details are not ready");
+    delete first.dataset.overview;
+    capture.appendTables([first]);
+    expect(() => capture.appendTables([first])).toThrow("diagram changed");
+    expect(() => capture.appendTables([document.createElement("article")])).toThrow("diagram changed");
+    expect(() => capture.finish()).toThrow("Some tables were not captured");
+    capture.appendTables([second]);
+    const result = capture.finish(); const svg = new DOMParser().parseFromString(result.svg, "image/svg+xml");
+    expect(svg.querySelectorAll(".react-flow__edge")).toHaveLength(1);
+    expect(svg.querySelectorAll("[data-table-id]")).toHaveLength(2);
+    expect(svg.documentElement.textContent).toContain("second_table");
+    expect(svg.documentElement.textContent).toContain("− Deleted · Before");
+    expect(svg.documentElement.textContent).not.toContain("Zoom in for details");
+  });
+
+  it("reuses one live text Range across batches and removed table DOM", () => {
+    const fixture = diagramFixture();
+    const first = fixture.root.querySelector<HTMLElement>(".table-node")!;
+    const second = first.cloneNode(true) as HTMLElement;
+    second.querySelector("strong")!.textContent = "短表"; fixture.root.append(second);
+    const ranges = vi.spyOn(document, "createRange");
+    const elements = vi.spyOn(document, "createElement");
+    // Exercise the character-level path too: a previous text's range endpoint
+    // must never leak into the next, shorter text node.
+    Object.defineProperty(Range.prototype, "getClientRects", { configurable: true, value: function (this: Range) { return [this.getBoundingClientRect(), this.getBoundingClientRect()]; } });
+    const capture = createDiagramSvgCapture({ ...fixture, snapshot: diagramAfter });
+    capture.appendTables([first]); first.remove(); capture.appendTables([second]);
+    const result = capture.finish();
+    expect(ranges).toHaveBeenCalledOnce();
+    expect(elements.mock.calls.filter(([tag]) => tag === "span").length).toBeLessThan(6);
+    const svg = new DOMParser().parseFromString(result.svg, "image/svg+xml");
+    expect(svg.querySelector("parsererror")).toBeNull();
+    expect(svg.documentElement.textContent).toContain("短表");
+    expect(svg.documentElement.textContent).toContain("orders & <script>alert('x')</script>");
+    expect(svg.querySelectorAll("[data-table-id]")).toHaveLength(2);
+  });
+
+  it("streams detached table/edge batches, enforces complete unique identities and retains marker definitions", () => {
+    const fixture = diagramFixture();
+    const first = fixture.root.querySelector<HTMLElement>(".table-node")!;
+    const second = first.cloneNode(true) as HTMLElement;
+    const wrap = (table: HTMLElement, id: string) => { const node = document.createElement("div"); node.className = "react-flow__node"; node.dataset.id = id; node.append(table); return node; };
+    const a = wrap(first, "a"), b = wrap(second, "b");
+    second.querySelector("strong")!.textContent = "second";
+    const edge = fixture.root.querySelector(".react-flow__edge")!; edge.setAttribute("data-id", "relation");
+    edge.remove(); a.remove();
+    const capture = createDiagramSvgCapture({ ...fixture, snapshot: diagramAfter, tableIds: new Set(["a", "b"]), edgeIds: new Set(["relation"]) });
+    fixture.root.append(a); capture.appendTables([first]); a.remove();
+    fixture.root.append(b); capture.appendTables([second]); b.remove();
+    expect(() => capture.finish()).toThrow("Some relationships");
+    fixture.root.querySelector("svg")!.append(edge); capture.appendEdges();
+    expect(() => capture.appendEdges()).toThrow("relationships changed"); edge.remove();
+    const result = capture.finish(), svg = new DOMParser().parseFromString(result.svg, "image/svg+xml");
+    expect(svg.querySelector("parsererror")).toBeNull();
+    expect(svg.querySelectorAll("[data-table-id]")).toHaveLength(2);
+    expect(svg.querySelectorAll(".react-flow__edge")).toHaveLength(1);
+    expect(svg.querySelector("marker#arrow")).not.toBeNull();
+    expect(svg.documentElement.textContent).toContain("second");
+    expect(result.svg).toContain("translate(82 120)");
+  });
+
   it("keeps output dimensions and layout independent of pan and zoom", () => {
     const original = captureDiagramSvg({ ...diagramFixture(), snapshot: diagramAfter });
     vi.restoreAllMocks(); document.body.innerHTML = "";
     const zoomed = captureDiagramSvg({ ...diagramFixture(0.25), snapshot: diagramAfter });
     expect([zoomed.width, zoomed.height]).toEqual([original.width, original.height]);
     expect(zoomed.svg).toContain("M10,50 L350,50");
+  });
+
+  it("omits unnecessary overflow clips while retaining clips for actual overflow", () => {
+    const fixture = diagramFixture();
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(280);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(150);
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(280);
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(150);
+    expect(captureDiagramSvg({ ...fixture, snapshot: diagramAfter }).svg).not.toContain("clipPath");
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(400);
+    const result = captureDiagramSvg({ ...fixture, snapshot: diagramAfter });
+    expect(result.svg).toContain("clipPath"); expect(result.svg).toContain("legacy_note");
+    expect(result.svg).toContain("diagram-text-0");
+    expect(new DOMParser().parseFromString(result.svg, "image/svg+xml").querySelector("parsererror")).toBeNull();
+  });
+
+  it("exports shared relationship paint exactly once while ignoring empty React Flow wrappers", () => {
+    const fixture = diagramFixture();
+    const empty = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    empty.innerHTML = '<g class="react-flow__edge" data-id="edge" aria-hidden="true" />';
+    fixture.root.prepend(empty);
+    fixture.root.querySelector(".react-flow__edge:not([aria-hidden])")!.setAttribute("data-shared-edge", "true");
+    const result = captureDiagramSvg({ ...fixture, snapshot: diagramAfter });
+    const exported = new DOMParser().parseFromString(result.svg, "image/svg+xml");
+    expect(exported.querySelectorAll(".react-flow__edge")).toHaveLength(1);
+    expect(exported.querySelector('[data-shared-edge="true"] path')?.getAttribute("marker-end")).toBe("url(#arrow)");
   });
 
   it("preserves light theme, color-blind legend and partial comparison coverage", () => {

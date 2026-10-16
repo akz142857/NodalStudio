@@ -1,0 +1,3170 @@
+{
+  "date": "2026-10-16",
+  "environment": {
+    "runtime": "native Tauri WKWebView",
+    "frontend": "production Vite assets",
+    "rustBundle": "debug app",
+    "isolatedIdentifier": "com.claycosmos.nodalstudio.benchmark",
+    "viewportCssPixels": [
+      1280,
+      868
+    ],
+    "devicePixelRatio": 2,
+    "tables": 2000,
+    "columns": 40000,
+    "relationships": 3997,
+    "topology": "single connected dense graph",
+    "diagnosticPaintFlags": false,
+    "concurrentBuildsOrTests": false,
+    "screenshot": "diagram-svg-capture-2026-10-16.png"
+  },
+  "measurementContract": {
+    "wallMs": "Unchanged: export click through capture, restore, byte preparation, lightweight inventory and actual native disk save. XML validation runs independently after the saved artifact is complete.",
+    "observer": "Formal final and paired baseline runs have no AX tree/screenshot queries while export is running. Polling for a complete saved synthetic artifact precedes independent XML verification and the final UI receipt read.",
+    "frames": "requestAnimationFrame intervals, not Long Tasks (WebKit API unavailable). Nested/overlapping stage windows are not additive.",
+    "batchDuration": "Old batch measures include a mandatory animation-frame wait; new batch measures contain commit, label readiness if needed, geometry/style reading and fragment serialization, and omit cooperative waits between batches. Do not interpret sums as equivalent phase wall durations.",
+    "capture": "The outer capture function measure includes its finally restoration.",
+    "scope": "This machine, fixture and observation window; no universal FPS, long-run leak or release/notarized-app claim."
+  },
+  "observerAudit": {
+    "previousReport": "diagram-svg-bytes-2026-10-16.json",
+    "previousFinalConfirmationMs": 119,
+    "splitTimingReproduction": {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-22.svg · 29984 × 19614",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 4154,
+        "frameP95Ms": 26,
+        "frameMaxMs": 118,
+        "framesOver50Ms": 5,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12136,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21313428,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 4101,
+        "validationMs": 27,
+        "nativeSaveMs": 25,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 16,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 38,
+          "max": 38
+        },
+        "capture": {
+          "count": 1,
+          "sum": 3968,
+          "max": 3968
+        },
+        "edge-commit": {
+          "count": 63,
+          "sum": 53,
+          "max": 2
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 1323,
+          "max": 113
+        },
+        "edge-read": {
+          "count": 63,
+          "sum": 98,
+          "max": 3
+        },
+        "table-commit": {
+          "count": 125,
+          "sum": 282,
+          "max": 3
+        },
+        "batch": {
+          "count": 125,
+          "sum": 2569,
+          "max": 118
+        },
+        "read": {
+          "count": 125,
+          "sum": 1176,
+          "max": 12
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 17,
+          "max": 17
+        },
+        "restore-surface": {
+          "count": 1,
+          "sum": 1,
+          "max": 1
+        },
+        "restore": {
+          "count": 1,
+          "sum": 16,
+          "max": 16
+        },
+        "restore-interaction": {
+          "count": 1,
+          "sum": 15,
+          "max": 15
+        },
+        "byte-allocation": {
+          "count": 1,
+          "sum": 0,
+          "max": 0
+        },
+        "utf8-chunk": {
+          "count": 163,
+          "sum": 53,
+          "max": 1
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 103,
+          "max": 103
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 3,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        },
+        {
+          "stage": "edge-batch",
+          "count": 64,
+          "p95": 100,
+          "max": 113,
+          "over50": 4
+        },
+        {
+          "stage": "edge-commit",
+          "count": 63,
+          "p95": 100,
+          "max": 113,
+          "over50": 4
+        },
+        {
+          "stage": "edge-read",
+          "count": 63,
+          "p95": 100,
+          "max": 113,
+          "over50": 4
+        },
+        {
+          "stage": "batch",
+          "count": 126,
+          "p95": 26,
+          "max": 118,
+          "over50": 1
+        },
+        {
+          "stage": "table-commit",
+          "count": 125,
+          "p95": 25,
+          "max": 118,
+          "over50": 1
+        },
+        {
+          "stage": "read",
+          "count": 125,
+          "p95": 26,
+          "max": 118,
+          "over50": 1
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 28,
+          "max": 28,
+          "over50": 0
+        },
+        {
+          "stage": "restore",
+          "count": 2,
+          "p95": 28,
+          "max": 28,
+          "over50": 0
+        },
+        {
+          "stage": "restore-surface",
+          "count": 1,
+          "p95": 28,
+          "max": 28,
+          "over50": 0
+        },
+        {
+          "stage": "restore-interaction",
+          "count": 2,
+          "p95": 28,
+          "max": 28,
+          "over50": 0
+        },
+        {
+          "stage": "bytes",
+          "count": 7,
+          "p95": 31,
+          "max": 31,
+          "over50": 0
+        },
+        {
+          "stage": "byte-allocation",
+          "count": 0,
+          "p95": 0,
+          "max": 0,
+          "over50": 0
+        },
+        {
+          "stage": "utf8-chunk",
+          "count": 7,
+          "p95": 31,
+          "max": 31,
+          "over50": 0
+        }
+      ],
+      "batchSchedule": []
+    },
+    "quietBaselines": [
+      {
+        "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-25.svg · 29984 × 19614",
+        "measurement": {
+          "phase": "svg-export",
+          "wallMs": 3708,
+          "frameP95Ms": 24,
+          "frameMaxMs": 42,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12136,
+          "workerMs": [],
+          "hidden": false
+        },
+        "validation": {
+          "bytes": 21313428,
+          "tables": 2000,
+          "columns": 40000,
+          "edges": 3997,
+          "uniqueEdges": 3997,
+          "arrowheads": 3997,
+          "theme": "dark",
+          "validation": "String inventory only; validate the saved file with an independent XML parser.",
+          "preparedWallMs": 3652,
+          "validationMs": 32,
+          "nativeSaveMs": 24,
+          "savedToDisk": true,
+          "transport": "binary",
+          "restoreMs": 33,
+          "peakDetailedTables": 16,
+          "viewportRestored": true,
+          "selectionRestored": true
+        },
+        "stages": {
+          "mount": {
+            "count": 1,
+            "sum": 35,
+            "max": 35
+          },
+          "capture": {
+            "count": 1,
+            "sum": 3531,
+            "max": 3531
+          },
+          "edge-commit": {
+            "count": 63,
+            "sum": 59,
+            "max": 2
+          },
+          "edge-batch": {
+            "count": 63,
+            "sum": 1041,
+            "max": 20
+          },
+          "edge-read": {
+            "count": 63,
+            "sum": 103,
+            "max": 3
+          },
+          "table-commit": {
+            "count": 125,
+            "sum": 275,
+            "max": 3
+          },
+          "batch": {
+            "count": 125,
+            "sum": 2398,
+            "max": 31
+          },
+          "read": {
+            "count": 125,
+            "sum": 1153,
+            "max": 15
+          },
+          "serialize": {
+            "count": 1,
+            "sum": 18,
+            "max": 18
+          },
+          "restore-surface": {
+            "count": 1,
+            "sum": 1,
+            "max": 1
+          },
+          "restore": {
+            "count": 1,
+            "sum": 33,
+            "max": 33
+          },
+          "restore-interaction": {
+            "count": 1,
+            "sum": 32,
+            "max": 32
+          },
+          "byte-allocation": {
+            "count": 1,
+            "sum": 0,
+            "max": 0
+          },
+          "utf8-chunk": {
+            "count": 163,
+            "sum": 53,
+            "max": 1
+          },
+          "bytes": {
+            "count": 1,
+            "sum": 89,
+            "max": 89
+          }
+        },
+        "overlappingStageFrameWindows": [
+          {
+            "stage": "mount",
+            "count": 2,
+            "p95": 19,
+            "max": 19,
+            "over50": 0
+          },
+          {
+            "stage": "edge-batch",
+            "count": 64,
+            "p95": 17,
+            "max": 17,
+            "over50": 0
+          },
+          {
+            "stage": "edge-commit",
+            "count": 63,
+            "p95": 17,
+            "max": 17,
+            "over50": 0
+          },
+          {
+            "stage": "edge-read",
+            "count": 63,
+            "p95": 17,
+            "max": 17,
+            "over50": 0
+          },
+          {
+            "stage": "batch",
+            "count": 126,
+            "p95": 24,
+            "max": 42,
+            "over50": 0
+          },
+          {
+            "stage": "table-commit",
+            "count": 125,
+            "p95": 24,
+            "max": 29,
+            "over50": 0
+          },
+          {
+            "stage": "read",
+            "count": 125,
+            "p95": 24,
+            "max": 42,
+            "over50": 0
+          },
+          {
+            "stage": "serialize",
+            "count": 1,
+            "p95": 42,
+            "max": 42,
+            "over50": 0
+          },
+          {
+            "stage": "restore",
+            "count": 2,
+            "p95": 42,
+            "max": 42,
+            "over50": 0
+          },
+          {
+            "stage": "restore-surface",
+            "count": 1,
+            "p95": 42,
+            "max": 42,
+            "over50": 0
+          },
+          {
+            "stage": "restore-interaction",
+            "count": 2,
+            "p95": 42,
+            "max": 42,
+            "over50": 0
+          },
+          {
+            "stage": "bytes",
+            "count": 7,
+            "p95": 32,
+            "max": 32,
+            "over50": 0
+          },
+          {
+            "stage": "byte-allocation",
+            "count": 0,
+            "p95": 0,
+            "max": 0,
+            "over50": 0
+          },
+          {
+            "stage": "utf8-chunk",
+            "count": 7,
+            "p95": 32,
+            "max": 32,
+            "over50": 0
+          }
+        ],
+        "batchSchedule": []
+      },
+      {
+        "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-26.svg · 29984 × 19614",
+        "measurement": {
+          "phase": "svg-export",
+          "wallMs": 3690,
+          "frameP95Ms": 24,
+          "frameMaxMs": 45,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12151,
+          "workerMs": [],
+          "hidden": false
+        },
+        "validation": {
+          "bytes": 21313428,
+          "tables": 2000,
+          "columns": 40000,
+          "edges": 3997,
+          "uniqueEdges": 3997,
+          "arrowheads": 3997,
+          "theme": "dark",
+          "validation": "String inventory only; validate the saved file with an independent XML parser.",
+          "preparedWallMs": 3639,
+          "validationMs": 29,
+          "nativeSaveMs": 22,
+          "savedToDisk": true,
+          "transport": "binary",
+          "restoreMs": 32,
+          "peakDetailedTables": 16,
+          "viewportRestored": true,
+          "selectionRestored": true
+        },
+        "stages": {
+          "mount": {
+            "count": 1,
+            "sum": 27,
+            "max": 27
+          },
+          "capture": {
+            "count": 1,
+            "sum": 3502,
+            "max": 3502
+          },
+          "edge-commit": {
+            "count": 63,
+            "sum": 52,
+            "max": 2
+          },
+          "edge-batch": {
+            "count": 63,
+            "sum": 1044,
+            "max": 20
+          },
+          "edge-read": {
+            "count": 63,
+            "sum": 94,
+            "max": 3
+          },
+          "table-commit": {
+            "count": 125,
+            "sum": 275,
+            "max": 3
+          },
+          "batch": {
+            "count": 125,
+            "sum": 2378,
+            "max": 27
+          },
+          "read": {
+            "count": 125,
+            "sum": 1166,
+            "max": 11
+          },
+          "serialize": {
+            "count": 1,
+            "sum": 20,
+            "max": 20
+          },
+          "restore-surface": {
+            "count": 1,
+            "sum": 1,
+            "max": 1
+          },
+          "restore": {
+            "count": 1,
+            "sum": 32,
+            "max": 32
+          },
+          "restore-interaction": {
+            "count": 1,
+            "sum": 31,
+            "max": 31
+          },
+          "bytes": {
+            "count": 1,
+            "sum": 91,
+            "max": 91
+          },
+          "byte-allocation": {
+            "count": 1,
+            "sum": 0,
+            "max": 0
+          },
+          "utf8-chunk": {
+            "count": 163,
+            "sum": 53,
+            "max": 1
+          }
+        },
+        "overlappingStageFrameWindows": [
+          {
+            "stage": "mount",
+            "count": 3,
+            "p95": 14,
+            "max": 14,
+            "over50": 0
+          },
+          {
+            "stage": "edge-batch",
+            "count": 64,
+            "p95": 17,
+            "max": 19,
+            "over50": 0
+          },
+          {
+            "stage": "edge-commit",
+            "count": 63,
+            "p95": 17,
+            "max": 19,
+            "over50": 0
+          },
+          {
+            "stage": "edge-read",
+            "count": 63,
+            "p95": 17,
+            "max": 19,
+            "over50": 0
+          },
+          {
+            "stage": "batch",
+            "count": 126,
+            "p95": 24,
+            "max": 45,
+            "over50": 0
+          },
+          {
+            "stage": "table-commit",
+            "count": 125,
+            "p95": 24,
+            "max": 26,
+            "over50": 0
+          },
+          {
+            "stage": "read",
+            "count": 125,
+            "p95": 24,
+            "max": 45,
+            "over50": 0
+          },
+          {
+            "stage": "serialize",
+            "count": 1,
+            "p95": 45,
+            "max": 45,
+            "over50": 0
+          },
+          {
+            "stage": "restore",
+            "count": 2,
+            "p95": 45,
+            "max": 45,
+            "over50": 0
+          },
+          {
+            "stage": "restore-surface",
+            "count": 1,
+            "p95": 45,
+            "max": 45,
+            "over50": 0
+          },
+          {
+            "stage": "restore-interaction",
+            "count": 2,
+            "p95": 45,
+            "max": 45,
+            "over50": 0
+          },
+          {
+            "stage": "bytes",
+            "count": 7,
+            "p95": 21,
+            "max": 21,
+            "over50": 0
+          },
+          {
+            "stage": "byte-allocation",
+            "count": 1,
+            "p95": 14,
+            "max": 14,
+            "over50": 0
+          },
+          {
+            "stage": "utf8-chunk",
+            "count": 7,
+            "p95": 21,
+            "max": 21,
+            "over50": 0
+          }
+        ],
+        "batchSchedule": []
+      }
+    ],
+    "interpretation": "Synchronous edge commit/read maxima were 2/3 ms and table commit/read maxima 3/12 ms in the 118 ms reproduction. A native sample showed accessibility query work. Paired old-method exports without concurrent AX queries have 42/45 ms maximum intervals. A substantial component of the earlier long frames was observer interference; do not attribute the full 119 ms to application capture work or claim that code alone removed it.",
+    "sampleEvidence": {
+      "fileDuringInvestigation": "/private/tmp/nodal-capture-webkit-sample.txt",
+      "role": "Diagnostic only, 15 seconds at 2 ms; not used as a formal timing sample. Includes UI observation outside the export as well.",
+      "symbols": [
+        "WebCore::AccessibilityObject::isARIAHidden() const",
+        "WebCore::AXObjectCache::performDeferredCacheUpdate(WebCore::ForceLayout)",
+        "-[WebAccessibilityObjectWrapper accessibilityAttributeValue:]",
+        "NSAccessibilityPerformEntryPointObject"
+      ]
+    }
+  },
+  "rejectedHypotheses": [
+    {
+      "hypothesis": "Duplicate replica SVG path IDs caused the long frames",
+      "sample": {
+        "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-23.svg · 29984 × 19614",
+        "measurement": {
+          "phase": "svg-export",
+          "wallMs": 4089,
+          "frameP95Ms": 25,
+          "frameMaxMs": 119,
+          "framesOver50Ms": 5,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12136,
+          "workerMs": [],
+          "hidden": false
+        },
+        "validation": {
+          "bytes": 21313428,
+          "tables": 2000,
+          "columns": 40000,
+          "edges": 3997,
+          "uniqueEdges": 3997,
+          "arrowheads": 3997,
+          "theme": "dark",
+          "validation": "String inventory only; validate the saved file with an independent XML parser.",
+          "preparedWallMs": 4033,
+          "validationMs": 27,
+          "nativeSaveMs": 29,
+          "savedToDisk": true,
+          "transport": "binary",
+          "restoreMs": 17,
+          "peakDetailedTables": 16,
+          "viewportRestored": true,
+          "selectionRestored": true
+        },
+        "stages": {
+          "capture": {
+            "count": 1,
+            "sum": 3908,
+            "max": 3908
+          },
+          "mount": {
+            "count": 1,
+            "sum": 39,
+            "max": 39
+          },
+          "edge-commit": {
+            "count": 63,
+            "sum": 38,
+            "max": 1
+          },
+          "edge-batch": {
+            "count": 63,
+            "sum": 1305,
+            "max": 106
+          },
+          "edge-read": {
+            "count": 63,
+            "sum": 94,
+            "max": 2
+          },
+          "table-commit": {
+            "count": 125,
+            "sum": 281,
+            "max": 3
+          },
+          "batch": {
+            "count": 125,
+            "sum": 2523,
+            "max": 116
+          },
+          "read": {
+            "count": 125,
+            "sum": 1168,
+            "max": 12
+          },
+          "serialize": {
+            "count": 1,
+            "sum": 17,
+            "max": 17
+          },
+          "restore-surface": {
+            "count": 1,
+            "sum": 1,
+            "max": 1
+          },
+          "restore": {
+            "count": 1,
+            "sum": 17,
+            "max": 17
+          },
+          "restore-interaction": {
+            "count": 1,
+            "sum": 16,
+            "max": 16
+          },
+          "byte-allocation": {
+            "count": 1,
+            "sum": 0,
+            "max": 0
+          },
+          "utf8-chunk": {
+            "count": 163,
+            "sum": 52,
+            "max": 1
+          },
+          "bytes": {
+            "count": 1,
+            "sum": 99,
+            "max": 99
+          }
+        },
+        "overlappingStageFrameWindows": [
+          {
+            "stage": "mount",
+            "count": 2,
+            "p95": 23,
+            "max": 23,
+            "over50": 0
+          },
+          {
+            "stage": "edge-batch",
+            "count": 64,
+            "p95": 100,
+            "max": 107,
+            "over50": 4
+          },
+          {
+            "stage": "edge-commit",
+            "count": 63,
+            "p95": 100,
+            "max": 107,
+            "over50": 4
+          },
+          {
+            "stage": "edge-read",
+            "count": 63,
+            "p95": 100,
+            "max": 107,
+            "over50": 4
+          },
+          {
+            "stage": "batch",
+            "count": 126,
+            "p95": 25,
+            "max": 119,
+            "over50": 1
+          },
+          {
+            "stage": "table-commit",
+            "count": 125,
+            "p95": 25,
+            "max": 119,
+            "over50": 1
+          },
+          {
+            "stage": "read",
+            "count": 125,
+            "p95": 25,
+            "max": 119,
+            "over50": 1
+          },
+          {
+            "stage": "serialize",
+            "count": 1,
+            "p95": 30,
+            "max": 30,
+            "over50": 0
+          },
+          {
+            "stage": "restore",
+            "count": 2,
+            "p95": 30,
+            "max": 30,
+            "over50": 0
+          },
+          {
+            "stage": "restore-surface",
+            "count": 1,
+            "p95": 30,
+            "max": 30,
+            "over50": 0
+          },
+          {
+            "stage": "restore-interaction",
+            "count": 2,
+            "p95": 30,
+            "max": 30,
+            "over50": 0
+          },
+          {
+            "stage": "bytes",
+            "count": 7,
+            "p95": 25,
+            "max": 25,
+            "over50": 0
+          },
+          {
+            "stage": "byte-allocation",
+            "count": 0,
+            "p95": 0,
+            "max": 0,
+            "over50": 0
+          },
+          {
+            "stage": "utf8-chunk",
+            "count": 7,
+            "p95": 25,
+            "max": 25,
+            "over50": 0
+          }
+        ],
+        "batchSchedule": []
+      },
+      "retained": false,
+      "note": "119 ms persisted; production path IDs were restored. This diagnostic file is not a final result."
+    },
+    {
+      "hypothesis": "Removing DOM turnover alone removes the long frames",
+      "sample": {
+        "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-24.svg · 29984 × 19614",
+        "measurement": {
+          "phase": "svg-export",
+          "wallMs": 4202,
+          "frameP95Ms": 44,
+          "frameMaxMs": 117,
+          "framesOver50Ms": 10,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12136,
+          "workerMs": [],
+          "hidden": false
+        },
+        "validation": {
+          "bytes": 21313428,
+          "tables": 2000,
+          "columns": 40000,
+          "edges": 3997,
+          "uniqueEdges": 3997,
+          "arrowheads": 3997,
+          "theme": "dark",
+          "validation": "String inventory only; validate the saved file with an independent XML parser.",
+          "preparedWallMs": 4152,
+          "validationMs": 28,
+          "nativeSaveMs": 22,
+          "savedToDisk": true,
+          "transport": "binary",
+          "restoreMs": 34,
+          "peakDetailedTables": 16,
+          "viewportRestored": true,
+          "selectionRestored": true
+        },
+        "stages": {
+          "mount": {
+            "count": 1,
+            "sum": 37,
+            "max": 37
+          },
+          "capture": {
+            "count": 1,
+            "sum": 4028,
+            "max": 4028
+          },
+          "edge-commit": {
+            "count": 63,
+            "sum": 26,
+            "max": 1
+          },
+          "edge-batch": {
+            "count": 63,
+            "sum": 1327,
+            "max": 117
+          },
+          "edge-read": {
+            "count": 63,
+            "sum": 89,
+            "max": 2
+          },
+          "table-commit": {
+            "count": 125,
+            "sum": 138,
+            "max": 3
+          },
+          "batch": {
+            "count": 125,
+            "sum": 2608,
+            "max": 117
+          },
+          "read": {
+            "count": 125,
+            "sum": 1142,
+            "max": 19
+          },
+          "serialize": {
+            "count": 1,
+            "sum": 19,
+            "max": 19
+          },
+          "restore-surface": {
+            "count": 1,
+            "sum": 2,
+            "max": 2
+          },
+          "restore": {
+            "count": 1,
+            "sum": 34,
+            "max": 34
+          },
+          "restore-interaction": {
+            "count": 1,
+            "sum": 32,
+            "max": 32
+          },
+          "bytes": {
+            "count": 1,
+            "sum": 93,
+            "max": 93
+          },
+          "byte-allocation": {
+            "count": 1,
+            "sum": 0,
+            "max": 0
+          },
+          "utf8-chunk": {
+            "count": 163,
+            "sum": 52,
+            "max": 1
+          }
+        },
+        "overlappingStageFrameWindows": [
+          {
+            "stage": "mount",
+            "count": 2,
+            "p95": 37,
+            "max": 37,
+            "over50": 0
+          },
+          {
+            "stage": "edge-batch",
+            "count": 64,
+            "p95": 101,
+            "max": 117,
+            "over50": 4
+          },
+          {
+            "stage": "edge-commit",
+            "count": 63,
+            "p95": 101,
+            "max": 117,
+            "over50": 4
+          },
+          {
+            "stage": "edge-read",
+            "count": 63,
+            "p95": 101,
+            "max": 117,
+            "over50": 4
+          },
+          {
+            "stage": "batch",
+            "count": 126,
+            "p95": 44,
+            "max": 115,
+            "over50": 6
+          },
+          {
+            "stage": "table-commit",
+            "count": 125,
+            "p95": 26,
+            "max": 115,
+            "over50": 6
+          },
+          {
+            "stage": "read",
+            "count": 125,
+            "p95": 44,
+            "max": 115,
+            "over50": 6
+          },
+          {
+            "stage": "serialize",
+            "count": 1,
+            "p95": 44,
+            "max": 44,
+            "over50": 0
+          },
+          {
+            "stage": "restore",
+            "count": 2,
+            "p95": 44,
+            "max": 44,
+            "over50": 0
+          },
+          {
+            "stage": "restore-surface",
+            "count": 1,
+            "p95": 44,
+            "max": 44,
+            "over50": 0
+          },
+          {
+            "stage": "restore-interaction",
+            "count": 2,
+            "p95": 44,
+            "max": 44,
+            "over50": 0
+          },
+          {
+            "stage": "bytes",
+            "count": 7,
+            "p95": 24,
+            "max": 24,
+            "over50": 0
+          },
+          {
+            "stage": "byte-allocation",
+            "count": 1,
+            "p95": 13,
+            "max": 13,
+            "over50": 0
+          },
+          {
+            "stage": "utf8-chunk",
+            "count": 7,
+            "p95": 24,
+            "max": 24,
+            "over50": 0
+          }
+        ],
+        "batchSchedule": []
+      },
+      "note": "117 ms persisted under concurrent AX observation. Slots are retained to reduce commits, together with controlled expansion and label measurement safeguards."
+    },
+    {
+      "hypothesis": "Sharing live marker resources caused the long frames",
+      "sample": {
+        "receipt": "Completed · Saved to benchmark memory (no file written) · 29984 × 19614",
+        "measurement": {
+          "phase": "svg-export",
+          "wallMs": 5000,
+          "frameP95Ms": 36,
+          "frameMaxMs": 177,
+          "framesOver50Ms": 8,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12151,
+          "workerMs": [],
+          "hidden": false
+        },
+        "validation": {
+          "bytes": 20833788,
+          "tables": 2000,
+          "columns": 40000,
+          "edges": 3997,
+          "uniqueEdges": 3997,
+          "arrowheads": 0,
+          "theme": "dark",
+          "validation": "String inventory only; validate the saved file with an independent XML parser.",
+          "preparedWallMs": 4938,
+          "validationMs": 62,
+          "nativeSaveMs": 0,
+          "savedToDisk": false,
+          "transport": "binary",
+          "restoreMs": 80,
+          "peakDetailedTables": 16,
+          "viewportRestored": true,
+          "selectionRestored": true
+        },
+        "stages": {
+          "mount": {
+            "count": 1,
+            "sum": 43,
+            "max": 43
+          },
+          "capture": {
+            "count": 1,
+            "sum": 4716,
+            "max": 4716
+          },
+          "edge-commit": {
+            "count": 63,
+            "sum": 50,
+            "max": 4
+          },
+          "edge-batch": {
+            "count": 63,
+            "sum": 1572,
+            "max": 176
+          },
+          "edge-read": {
+            "count": 63,
+            "sum": 168,
+            "max": 7
+          },
+          "table-commit": {
+            "count": 125,
+            "sum": 185,
+            "max": 6
+          },
+          "batch": {
+            "count": 125,
+            "sum": 2988,
+            "max": 52
+          },
+          "read": {
+            "count": 125,
+            "sum": 1769,
+            "max": 18
+          },
+          "serialize": {
+            "count": 1,
+            "sum": 29,
+            "max": 29
+          },
+          "restore-surface": {
+            "count": 1,
+            "sum": 3,
+            "max": 3
+          },
+          "restore": {
+            "count": 1,
+            "sum": 80,
+            "max": 80
+          },
+          "restore-interaction": {
+            "count": 1,
+            "sum": 77,
+            "max": 77
+          },
+          "byte-allocation": {
+            "count": 1,
+            "sum": 0,
+            "max": 0
+          },
+          "utf8-chunk": {
+            "count": 159,
+            "sum": 81,
+            "max": 3
+          },
+          "bytes": {
+            "count": 1,
+            "sum": 142,
+            "max": 142
+          }
+        },
+        "overlappingStageFrameWindows": [
+          {
+            "stage": "mount",
+            "count": 2,
+            "p95": 27,
+            "max": 27,
+            "over50": 0
+          },
+          {
+            "stage": "edge-batch",
+            "count": 64,
+            "p95": 164,
+            "max": 177,
+            "over50": 4
+          },
+          {
+            "stage": "edge-commit",
+            "count": 63,
+            "p95": 164,
+            "max": 177,
+            "over50": 4
+          },
+          {
+            "stage": "edge-read",
+            "count": 63,
+            "p95": 164,
+            "max": 177,
+            "over50": 4
+          },
+          {
+            "stage": "batch",
+            "count": 126,
+            "p95": 33,
+            "max": 83,
+            "over50": 2
+          },
+          {
+            "stage": "table-commit",
+            "count": 125,
+            "p95": 33,
+            "max": 51,
+            "over50": 1
+          },
+          {
+            "stage": "read",
+            "count": 125,
+            "p95": 33,
+            "max": 83,
+            "over50": 2
+          },
+          {
+            "stage": "serialize",
+            "count": 1,
+            "p95": 83,
+            "max": 83,
+            "over50": 1
+          },
+          {
+            "stage": "restore",
+            "count": 3,
+            "p95": 83,
+            "max": 83,
+            "over50": 1
+          },
+          {
+            "stage": "restore-surface",
+            "count": 1,
+            "p95": 83,
+            "max": 83,
+            "over50": 1
+          },
+          {
+            "stage": "restore-interaction",
+            "count": 3,
+            "p95": 83,
+            "max": 83,
+            "over50": 1
+          },
+          {
+            "stage": "bytes",
+            "count": 10,
+            "p95": 55,
+            "max": 55,
+            "over50": 1
+          },
+          {
+            "stage": "byte-allocation",
+            "count": 1,
+            "p95": 11,
+            "max": 11,
+            "over50": 0
+          },
+          {
+            "stage": "utf8-chunk",
+            "count": 10,
+            "p95": 55,
+            "max": 55,
+            "over50": 1
+          }
+        ],
+        "batchSchedule": []
+      },
+      "retained": false,
+      "excludedFromFormalResults": true,
+      "note": "Diagnostic removed all arrowheads and did not save a file; it did not fix the long frames. Production markers and all arrowheads were restored."
+    }
+  ],
+  "intermediateVersions": {
+    "cooperativeSchedulerWithEncodingAllocations": {
+      "prototype": {
+        "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-27.svg · 29984 × 19614",
+        "measurement": {
+          "phase": "svg-export",
+          "wallMs": 2839,
+          "frameP95Ms": 21,
+          "frameMaxMs": 34,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 12136,
+          "workerMs": [],
+          "hidden": false
+        },
+        "validation": {
+          "bytes": 21313428,
+          "tables": 2000,
+          "columns": 40000,
+          "edges": 3997,
+          "uniqueEdges": 3997,
+          "arrowheads": 3997,
+          "theme": "dark",
+          "validation": "String inventory only; validate the saved file with an independent XML parser.",
+          "preparedWallMs": 2787,
+          "validationMs": 28,
+          "nativeSaveMs": 24,
+          "savedToDisk": true,
+          "transport": "binary",
+          "restoreMs": 30,
+          "peakDetailedTables": 16,
+          "viewportRestored": true,
+          "selectionRestored": true
+        },
+        "stages": {
+          "capture": {
+            "count": 1,
+            "sum": 2664,
+            "max": 2664
+          },
+          "mount": {
+            "count": 1,
+            "sum": 35,
+            "max": 35
+          },
+          "edge-commit": {
+            "count": 63,
+            "sum": 22,
+            "max": 3
+          },
+          "edge-batch": {
+            "count": 63,
+            "sum": 129,
+            "max": 7
+          },
+          "edge-read": {
+            "count": 63,
+            "sum": 104,
+            "max": 4
+          },
+          "table-commit": {
+            "count": 197,
+            "sum": 161,
+            "max": 2
+          },
+          "batch": {
+            "count": 197,
+            "sum": 1549,
+            "max": 19
+          },
+          "read": {
+            "count": 197,
+            "sum": 1386,
+            "max": 17
+          },
+          "serialize": {
+            "count": 1,
+            "sum": 18,
+            "max": 18
+          },
+          "restore-surface": {
+            "count": 1,
+            "sum": 0,
+            "max": 0
+          },
+          "restore-interaction": {
+            "count": 1,
+            "sum": 30,
+            "max": 30
+          },
+          "restore": {
+            "count": 1,
+            "sum": 30,
+            "max": 30
+          },
+          "bytes": {
+            "count": 1,
+            "sum": 90,
+            "max": 90
+          },
+          "byte-allocation": {
+            "count": 1,
+            "sum": 0,
+            "max": 0
+          },
+          "utf8-chunk": {
+            "count": 163,
+            "sum": 53,
+            "max": 1
+          }
+        },
+        "overlappingStageFrameWindows": [
+          {
+            "stage": "mount",
+            "count": 2,
+            "p95": 34,
+            "max": 34,
+            "over50": 0
+          },
+          {
+            "stage": "edge-batch",
+            "count": 16,
+            "p95": 17,
+            "max": 17,
+            "over50": 0
+          },
+          {
+            "stage": "edge-commit",
+            "count": 16,
+            "p95": 17,
+            "max": 17,
+            "over50": 0
+          },
+          {
+            "stage": "edge-read",
+            "count": 16,
+            "p95": 17,
+            "max": 17,
+            "over50": 0
+          },
+          {
+            "stage": "batch",
+            "count": 139,
+            "p95": 20,
+            "max": 30,
+            "over50": 0
+          },
+          {
+            "stage": "table-commit",
+            "count": 139,
+            "p95": 20,
+            "max": 30,
+            "over50": 0
+          },
+          {
+            "stage": "read",
+            "count": 139,
+            "p95": 20,
+            "max": 30,
+            "over50": 0
+          },
+          {
+            "stage": "serialize",
+            "count": 1,
+            "p95": 31,
+            "max": 31,
+            "over50": 0
+          },
+          {
+            "stage": "restore",
+            "count": 2,
+            "p95": 31,
+            "max": 31,
+            "over50": 0
+          },
+          {
+            "stage": "restore-surface",
+            "count": 1,
+            "p95": 31,
+            "max": 31,
+            "over50": 0
+          },
+          {
+            "stage": "restore-interaction",
+            "count": 2,
+            "p95": 31,
+            "max": 31,
+            "over50": 0
+          },
+          {
+            "stage": "bytes",
+            "count": 7,
+            "p95": 23,
+            "max": 23,
+            "over50": 0
+          },
+          {
+            "stage": "byte-allocation",
+            "count": 1,
+            "p95": 9,
+            "max": 9,
+            "over50": 0
+          },
+          {
+            "stage": "utf8-chunk",
+            "count": 7,
+            "p95": 23,
+            "max": 23,
+            "over50": 0
+          }
+        ],
+        "batchSchedule": []
+      },
+      "additionalFinalCandidateRuns": [
+        {
+          "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-28.svg · 29984 × 19614",
+          "measurement": {
+            "phase": "svg-export",
+            "wallMs": 2668,
+            "frameP95Ms": 21,
+            "frameMaxMs": 35,
+            "framesOver50Ms": 0,
+            "longTasks": null,
+            "longestTaskMs": null,
+            "mountedTables": 264,
+            "mountedEdges": 1214,
+            "paintedSvgRoots": 1,
+            "domElements": 12137,
+            "workerMs": [],
+            "hidden": false
+          },
+          "validation": {
+            "bytes": 21313428,
+            "tables": 2000,
+            "columns": 40000,
+            "edges": 3997,
+            "uniqueEdges": 3997,
+            "arrowheads": 3997,
+            "theme": "dark",
+            "validation": "String inventory only; validate the saved file with an independent XML parser.",
+            "preparedWallMs": 2615,
+            "validationMs": 27,
+            "nativeSaveMs": 26,
+            "savedToDisk": true,
+            "transport": "binary",
+            "restoreMs": 36,
+            "peakDetailedTables": 16,
+            "viewportRestored": true,
+            "selectionRestored": true
+          },
+          "stages": {
+            "mount": {
+              "count": 1,
+              "sum": 33,
+              "max": 33
+            },
+            "capture": {
+              "count": 1,
+              "sum": 2505,
+              "max": 2505
+            },
+            "edge-commit": {
+              "count": 63,
+              "sum": 23,
+              "max": 1
+            },
+            "edge-batch": {
+              "count": 63,
+              "sum": 120,
+              "max": 4
+            },
+            "edge-read": {
+              "count": 63,
+              "sum": 97,
+              "max": 3
+            },
+            "table-commit": {
+              "count": 191,
+              "sum": 158,
+              "max": 2
+            },
+            "batch": {
+              "count": 191,
+              "sum": 1498,
+              "max": 19
+            },
+            "read": {
+              "count": 191,
+              "sum": 1339,
+              "max": 17
+            },
+            "serialize": {
+              "count": 1,
+              "sum": 20,
+              "max": 20
+            },
+            "restore-surface": {
+              "count": 1,
+              "sum": 0,
+              "max": 0
+            },
+            "restore-interaction": {
+              "count": 1,
+              "sum": 36,
+              "max": 36
+            },
+            "restore": {
+              "count": 1,
+              "sum": 36,
+              "max": 36
+            },
+            "byte-allocation": {
+              "count": 1,
+              "sum": 0,
+              "max": 0
+            },
+            "utf8-chunk": {
+              "count": 163,
+              "sum": 53,
+              "max": 1
+            },
+            "bytes": {
+              "count": 1,
+              "sum": 83,
+              "max": 83
+            }
+          },
+          "overlappingStageFrameWindows": [
+            {
+              "stage": "mount",
+              "count": 3,
+              "p95": 28,
+              "max": 28,
+              "over50": 0
+            },
+            {
+              "stage": "edge-batch",
+              "count": 15,
+              "p95": 17,
+              "max": 17,
+              "over50": 0
+            },
+            {
+              "stage": "edge-commit",
+              "count": 15,
+              "p95": 17,
+              "max": 17,
+              "over50": 0
+            },
+            {
+              "stage": "edge-read",
+              "count": 15,
+              "p95": 17,
+              "max": 17,
+              "over50": 0
+            },
+            {
+              "stage": "batch",
+              "count": 130,
+              "p95": 19,
+              "max": 30,
+              "over50": 0
+            },
+            {
+              "stage": "table-commit",
+              "count": 130,
+              "p95": 19,
+              "max": 30,
+              "over50": 0
+            },
+            {
+              "stage": "read",
+              "count": 130,
+              "p95": 19,
+              "max": 30,
+              "over50": 0
+            },
+            {
+              "stage": "serialize",
+              "count": 1,
+              "p95": 35,
+              "max": 35,
+              "over50": 0
+            },
+            {
+              "stage": "restore",
+              "count": 2,
+              "p95": 35,
+              "max": 35,
+              "over50": 0
+            },
+            {
+              "stage": "restore-surface",
+              "count": 1,
+              "p95": 35,
+              "max": 35,
+              "over50": 0
+            },
+            {
+              "stage": "restore-interaction",
+              "count": 2,
+              "p95": 35,
+              "max": 35,
+              "over50": 0
+            },
+            {
+              "stage": "bytes",
+              "count": 7,
+              "p95": 26,
+              "max": 26,
+              "over50": 0
+            },
+            {
+              "stage": "byte-allocation",
+              "count": 0,
+              "p95": 0,
+              "max": 0,
+              "over50": 0
+            },
+            {
+              "stage": "utf8-chunk",
+              "count": 7,
+              "p95": 26,
+              "max": 26,
+              "over50": 0
+            }
+          ],
+          "batchSchedule": [
+            {
+              "batchKind": "edge-batch",
+              "count": 63,
+              "total": 3997,
+              "min": 29,
+              "max": 64
+            },
+            {
+              "batchKind": "batch",
+              "count": 191,
+              "total": 2000,
+              "min": 3,
+              "max": 16
+            }
+          ]
+        },
+        {
+          "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-29.svg · 29984 × 19614",
+          "measurement": {
+            "phase": "svg-export",
+            "wallMs": 3247,
+            "frameP95Ms": 20,
+            "frameMaxMs": 264,
+            "framesOver50Ms": 3,
+            "longTasks": null,
+            "longestTaskMs": null,
+            "mountedTables": 264,
+            "mountedEdges": 1214,
+            "paintedSvgRoots": 1,
+            "domElements": 12154,
+            "workerMs": [],
+            "hidden": false
+          },
+          "validation": {
+            "bytes": 21313428,
+            "tables": 2000,
+            "columns": 40000,
+            "edges": 3997,
+            "uniqueEdges": 3997,
+            "arrowheads": 3997,
+            "theme": "dark",
+            "validation": "String inventory only; validate the saved file with an independent XML parser.",
+            "preparedWallMs": 3191,
+            "validationMs": 30,
+            "nativeSaveMs": 26,
+            "savedToDisk": true,
+            "transport": "binary",
+            "restoreMs": 33,
+            "peakDetailedTables": 16,
+            "viewportRestored": true,
+            "selectionRestored": true
+          },
+          "stages": {
+            "mount": {
+              "count": 1,
+              "sum": 29,
+              "max": 29
+            },
+            "capture": {
+              "count": 1,
+              "sum": 3054,
+              "max": 3054
+            },
+            "edge-commit": {
+              "count": 63,
+              "sum": 35,
+              "max": 1
+            },
+            "edge-batch": {
+              "count": 63,
+              "sum": 147,
+              "max": 3
+            },
+            "edge-read": {
+              "count": 63,
+              "sum": 110,
+              "max": 3
+            },
+            "table-commit": {
+              "count": 201,
+              "sum": 167,
+              "max": 2
+            },
+            "batch": {
+              "count": 201,
+              "sum": 1576,
+              "max": 19
+            },
+            "read": {
+              "count": 201,
+              "sum": 1408,
+              "max": 18
+            },
+            "serialize": {
+              "count": 1,
+              "sum": 18,
+              "max": 18
+            },
+            "restore-surface": {
+              "count": 1,
+              "sum": 1,
+              "max": 1
+            },
+            "restore": {
+              "count": 1,
+              "sum": 33,
+              "max": 33
+            },
+            "restore-interaction": {
+              "count": 1,
+              "sum": 32,
+              "max": 32
+            },
+            "byte-allocation": {
+              "count": 1,
+              "sum": 0,
+              "max": 0
+            },
+            "utf8-chunk": {
+              "count": 163,
+              "sum": 51,
+              "max": 1
+            },
+            "bytes": {
+              "count": 1,
+              "sum": 85,
+              "max": 85
+            }
+          },
+          "overlappingStageFrameWindows": [
+            {
+              "stage": "mount",
+              "count": 3,
+              "p95": 16,
+              "max": 16,
+              "over50": 0
+            },
+            {
+              "stage": "edge-batch",
+              "count": 17,
+              "p95": 17,
+              "max": 17,
+              "over50": 0
+            },
+            {
+              "stage": "edge-commit",
+              "count": 17,
+              "p95": 17,
+              "max": 17,
+              "over50": 0
+            },
+            {
+              "stage": "edge-read",
+              "count": 17,
+              "p95": 17,
+              "max": 17,
+              "over50": 0
+            },
+            {
+              "stage": "batch",
+              "count": 141,
+              "p95": 20,
+              "max": 264,
+              "over50": 3
+            },
+            {
+              "stage": "table-commit",
+              "count": 141,
+              "p95": 20,
+              "max": 264,
+              "over50": 3
+            },
+            {
+              "stage": "read",
+              "count": 141,
+              "p95": 20,
+              "max": 264,
+              "over50": 3
+            },
+            {
+              "stage": "serialize",
+              "count": 1,
+              "p95": 33,
+              "max": 33,
+              "over50": 0
+            },
+            {
+              "stage": "restore",
+              "count": 3,
+              "p95": 33,
+              "max": 33,
+              "over50": 0
+            },
+            {
+              "stage": "restore-surface",
+              "count": 1,
+              "p95": 33,
+              "max": 33,
+              "over50": 0
+            },
+            {
+              "stage": "restore-interaction",
+              "count": 3,
+              "p95": 33,
+              "max": 33,
+              "over50": 0
+            },
+            {
+              "stage": "bytes",
+              "count": 7,
+              "p95": 18,
+              "max": 18,
+              "over50": 0
+            },
+            {
+              "stage": "byte-allocation",
+              "count": 1,
+              "p95": 9,
+              "max": 9,
+              "over50": 0
+            },
+            {
+              "stage": "utf8-chunk",
+              "count": 7,
+              "p95": 18,
+              "max": 18,
+              "over50": 0
+            }
+          ],
+          "batchSchedule": [
+            {
+              "batchKind": "edge-batch",
+              "count": 63,
+              "total": 3997,
+              "min": 29,
+              "max": 64
+            },
+            {
+              "batchKind": "batch",
+              "count": 201,
+              "total": 2000,
+              "min": 6,
+              "max": 16
+            }
+          ]
+        }
+      ],
+      "note": "The repeat candidate still had a 264 ms interval despite batch synchronous work <=19 ms. This sample is retained, not silently discarded. After reducing serializer encoding allocations, the four formal final runs below did not reproduce it; an exact GC attribution for the candidate gap was not established."
+    }
+  },
+  "implementation": {
+    "maxTablesPerBatch": 16,
+    "maxEdgesPerBatch": 64,
+    "cooperativeWorkBudgetMs": 8,
+    "adaptiveBatchSize": true,
+    "fixedDomSlots": true,
+    "replicaIndexExpansionControlledPerBatch": true,
+    "labeledEdgesRemountForFreshMeasurement": true,
+    "unlabeledEdgesReusePathDom": true,
+    "perTokenEncodingArrays": false,
+    "serializedFragmentByteCountsReused": true,
+    "originalUtf8SizeLimitBytes": 33554432,
+    "smallGraphAndPngBehaviorPreserved": true,
+    "fullModelAndViewportCullingRetained": true
+  },
+  "finalExportViews": [
+    "new process overview",
+    "same overview second export",
+    "same overview third export",
+    "closeup after full load/layout/90-step drag scenario"
+  ],
+  "finalExports": [
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-30.svg · 29984 × 19614",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 2715,
+        "frameP95Ms": 19,
+        "frameMaxMs": 24,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12137,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21313428,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 2657,
+        "validationMs": 29,
+        "nativeSaveMs": 29,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 35,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 39,
+          "max": 39
+        },
+        "capture": {
+          "count": 1,
+          "sum": 2539,
+          "max": 2539
+        },
+        "edge-commit": {
+          "count": 63,
+          "sum": 38,
+          "max": 1
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 137,
+          "max": 5
+        },
+        "edge-read": {
+          "count": 63,
+          "sum": 96,
+          "max": 4
+        },
+        "table-commit": {
+          "count": 192,
+          "sum": 185,
+          "max": 2
+        },
+        "batch": {
+          "count": 192,
+          "sum": 1513,
+          "max": 21
+        },
+        "read": {
+          "count": 192,
+          "sum": 1327,
+          "max": 19
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 5,
+          "max": 5
+        },
+        "restore-surface": {
+          "count": 1,
+          "sum": 1,
+          "max": 1
+        },
+        "restore": {
+          "count": 1,
+          "sum": 35,
+          "max": 35
+        },
+        "restore-interaction": {
+          "count": 1,
+          "sum": 34,
+          "max": 34
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 98,
+          "max": 98
+        },
+        "byte-allocation": {
+          "count": 1,
+          "sum": 0,
+          "max": 0
+        },
+        "utf8-chunk": {
+          "count": 163,
+          "sum": 53,
+          "max": 1
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 3,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        },
+        {
+          "stage": "edge-batch",
+          "count": 17,
+          "p95": 19,
+          "max": 19,
+          "over50": 0
+        },
+        {
+          "stage": "edge-commit",
+          "count": 17,
+          "p95": 19,
+          "max": 19,
+          "over50": 0
+        },
+        {
+          "stage": "edge-read",
+          "count": 17,
+          "p95": 19,
+          "max": 19,
+          "over50": 0
+        },
+        {
+          "stage": "batch",
+          "count": 131,
+          "p95": 19,
+          "max": 24,
+          "over50": 0
+        },
+        {
+          "stage": "table-commit",
+          "count": 131,
+          "p95": 19,
+          "max": 24,
+          "over50": 0
+        },
+        {
+          "stage": "read",
+          "count": 131,
+          "p95": 19,
+          "max": 24,
+          "over50": 0
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 21,
+          "max": 21,
+          "over50": 0
+        },
+        {
+          "stage": "restore",
+          "count": 2,
+          "p95": 21,
+          "max": 21,
+          "over50": 0
+        },
+        {
+          "stage": "restore-surface",
+          "count": 1,
+          "p95": 21,
+          "max": 21,
+          "over50": 0
+        },
+        {
+          "stage": "restore-interaction",
+          "count": 2,
+          "p95": 21,
+          "max": 21,
+          "over50": 0
+        },
+        {
+          "stage": "bytes",
+          "count": 7,
+          "p95": 24,
+          "max": 24,
+          "over50": 0
+        },
+        {
+          "stage": "byte-allocation",
+          "count": 1,
+          "p95": 9,
+          "max": 9,
+          "over50": 0
+        },
+        {
+          "stage": "utf8-chunk",
+          "count": 7,
+          "p95": 24,
+          "max": 24,
+          "over50": 0
+        }
+      ],
+      "batchSchedule": [
+        {
+          "batchKind": "edge-batch",
+          "count": 63,
+          "total": 3997,
+          "min": 29,
+          "max": 64
+        },
+        {
+          "batchKind": "batch",
+          "count": 192,
+          "total": 2000,
+          "min": 4,
+          "max": 16
+        }
+      ]
+    },
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-31.svg · 29984 × 19614",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 2729,
+        "frameP95Ms": 20,
+        "frameMaxMs": 38,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12154,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21313428,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 2675,
+        "validationMs": 29,
+        "nativeSaveMs": 25,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 34,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 30,
+          "max": 30
+        },
+        "capture": {
+          "count": 1,
+          "sum": 2523,
+          "max": 2523
+        },
+        "edge-commit": {
+          "count": 63,
+          "sum": 21,
+          "max": 1
+        },
+        "edge-read": {
+          "count": 63,
+          "sum": 90,
+          "max": 2
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 111,
+          "max": 3
+        },
+        "table-commit": {
+          "count": 191,
+          "sum": 171,
+          "max": 5
+        },
+        "batch": {
+          "count": 191,
+          "sum": 1505,
+          "max": 18
+        },
+        "read": {
+          "count": 191,
+          "sum": 1334,
+          "max": 17
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 6,
+          "max": 6
+        },
+        "restore-surface": {
+          "count": 1,
+          "sum": 0,
+          "max": 0
+        },
+        "restore-interaction": {
+          "count": 1,
+          "sum": 34,
+          "max": 34
+        },
+        "restore": {
+          "count": 1,
+          "sum": 34,
+          "max": 34
+        },
+        "byte-allocation": {
+          "count": 1,
+          "sum": 0,
+          "max": 0
+        },
+        "utf8-chunk": {
+          "count": 163,
+          "sum": 52,
+          "max": 1
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 98,
+          "max": 98
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 2,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "edge-batch",
+          "count": 14,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "edge-commit",
+          "count": 14,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "edge-read",
+          "count": 14,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "batch",
+          "count": 134,
+          "p95": 19,
+          "max": 30,
+          "over50": 0
+        },
+        {
+          "stage": "table-commit",
+          "count": 134,
+          "p95": 19,
+          "max": 30,
+          "over50": 0
+        },
+        {
+          "stage": "read",
+          "count": 134,
+          "p95": 19,
+          "max": 30,
+          "over50": 0
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 20,
+          "max": 20,
+          "over50": 0
+        },
+        {
+          "stage": "restore",
+          "count": 2,
+          "p95": 20,
+          "max": 20,
+          "over50": 0
+        },
+        {
+          "stage": "restore-surface",
+          "count": 1,
+          "p95": 20,
+          "max": 20,
+          "over50": 0
+        },
+        {
+          "stage": "restore-interaction",
+          "count": 2,
+          "p95": 20,
+          "max": 20,
+          "over50": 0
+        },
+        {
+          "stage": "bytes",
+          "count": 7,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        },
+        {
+          "stage": "byte-allocation",
+          "count": 0,
+          "p95": 0,
+          "max": 0,
+          "over50": 0
+        },
+        {
+          "stage": "utf8-chunk",
+          "count": 7,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        }
+      ],
+      "batchSchedule": [
+        {
+          "batchKind": "edge-batch",
+          "count": 63,
+          "total": 3997,
+          "min": 29,
+          "max": 64
+        },
+        {
+          "batchKind": "batch",
+          "count": 191,
+          "total": 2000,
+          "min": 2,
+          "max": 16
+        }
+      ]
+    },
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-32.svg · 29984 × 19614",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 2621,
+        "frameP95Ms": 19,
+        "frameMaxMs": 36,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12155,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21313428,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 2572,
+        "validationMs": 28,
+        "nativeSaveMs": 21,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 30,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 31,
+          "max": 31
+        },
+        "capture": {
+          "count": 1,
+          "sum": 2416,
+          "max": 2416
+        },
+        "edge-commit": {
+          "count": 63,
+          "sum": 22,
+          "max": 1
+        },
+        "edge-read": {
+          "count": 63,
+          "sum": 86,
+          "max": 2
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 108,
+          "max": 2
+        },
+        "table-commit": {
+          "count": 187,
+          "sum": 157,
+          "max": 2
+        },
+        "batch": {
+          "count": 187,
+          "sum": 1469,
+          "max": 17
+        },
+        "read": {
+          "count": 187,
+          "sum": 1309,
+          "max": 16
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 5,
+          "max": 5
+        },
+        "restore-surface": {
+          "count": 1,
+          "sum": 1,
+          "max": 1
+        },
+        "restore": {
+          "count": 1,
+          "sum": 30,
+          "max": 30
+        },
+        "restore-interaction": {
+          "count": 1,
+          "sum": 29,
+          "max": 29
+        },
+        "byte-allocation": {
+          "count": 1,
+          "sum": 1,
+          "max": 1
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 104,
+          "max": 104
+        },
+        "utf8-chunk": {
+          "count": 163,
+          "sum": 53,
+          "max": 1
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 2,
+          "p95": 31,
+          "max": 31,
+          "over50": 0
+        },
+        {
+          "stage": "edge-batch",
+          "count": 13,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "edge-commit",
+          "count": 13,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "edge-read",
+          "count": 13,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "batch",
+          "count": 128,
+          "p95": 19,
+          "max": 20,
+          "over50": 0
+        },
+        {
+          "stage": "table-commit",
+          "count": 128,
+          "p95": 19,
+          "max": 20,
+          "over50": 0
+        },
+        {
+          "stage": "read",
+          "count": 128,
+          "p95": 19,
+          "max": 20,
+          "over50": 0
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "restore",
+          "count": 2,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "restore-surface",
+          "count": 1,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "restore-interaction",
+          "count": 2,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "bytes",
+          "count": 7,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        },
+        {
+          "stage": "byte-allocation",
+          "count": 1,
+          "p95": 15,
+          "max": 15,
+          "over50": 0
+        },
+        {
+          "stage": "utf8-chunk",
+          "count": 7,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        }
+      ],
+      "batchSchedule": [
+        {
+          "batchKind": "edge-batch",
+          "count": 63,
+          "total": 3997,
+          "min": 29,
+          "max": 64
+        },
+        {
+          "batchKind": "batch",
+          "count": 187,
+          "total": 2000,
+          "min": 5,
+          "max": 16
+        }
+      ]
+    },
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-33.svg · 29984 × 19615",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 2694,
+        "frameP95Ms": 19,
+        "frameMaxMs": 35,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10264,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21432005,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 2639,
+        "validationMs": 27,
+        "nativeSaveMs": 28,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 36,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "capture": {
+          "count": 1,
+          "sum": 2490,
+          "max": 2490
+        },
+        "mount": {
+          "count": 1,
+          "sum": 37,
+          "max": 37
+        },
+        "edge-commit": {
+          "count": 63,
+          "sum": 25,
+          "max": 1
+        },
+        "edge-read": {
+          "count": 63,
+          "sum": 87,
+          "max": 2
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 112,
+          "max": 3
+        },
+        "table-commit": {
+          "count": 187,
+          "sum": 166,
+          "max": 2
+        },
+        "batch": {
+          "count": 187,
+          "sum": 1466,
+          "max": 16
+        },
+        "read": {
+          "count": 187,
+          "sum": 1299,
+          "max": 15
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 4,
+          "max": 4
+        },
+        "restore-surface": {
+          "count": 1,
+          "sum": 0,
+          "max": 0
+        },
+        "restore-interaction": {
+          "count": 1,
+          "sum": 36,
+          "max": 36
+        },
+        "restore": {
+          "count": 1,
+          "sum": 36,
+          "max": 36
+        },
+        "byte-allocation": {
+          "count": 1,
+          "sum": 0,
+          "max": 0
+        },
+        "utf8-chunk": {
+          "count": 164,
+          "sum": 54,
+          "max": 1
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 99,
+          "max": 99
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 3,
+          "p95": 24,
+          "max": 24,
+          "over50": 0
+        },
+        {
+          "stage": "edge-batch",
+          "count": 14,
+          "p95": 17,
+          "max": 17,
+          "over50": 0
+        },
+        {
+          "stage": "edge-commit",
+          "count": 14,
+          "p95": 17,
+          "max": 17,
+          "over50": 0
+        },
+        {
+          "stage": "edge-read",
+          "count": 14,
+          "p95": 17,
+          "max": 17,
+          "over50": 0
+        },
+        {
+          "stage": "batch",
+          "count": 132,
+          "p95": 19,
+          "max": 25,
+          "over50": 0
+        },
+        {
+          "stage": "table-commit",
+          "count": 132,
+          "p95": 19,
+          "max": 25,
+          "over50": 0
+        },
+        {
+          "stage": "read",
+          "count": 132,
+          "p95": 19,
+          "max": 25,
+          "over50": 0
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 19,
+          "max": 19,
+          "over50": 0
+        },
+        {
+          "stage": "restore",
+          "count": 2,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        },
+        {
+          "stage": "restore-surface",
+          "count": 1,
+          "p95": 19,
+          "max": 19,
+          "over50": 0
+        },
+        {
+          "stage": "restore-interaction",
+          "count": 2,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        },
+        {
+          "stage": "bytes",
+          "count": 7,
+          "p95": 21,
+          "max": 21,
+          "over50": 0
+        },
+        {
+          "stage": "byte-allocation",
+          "count": 0,
+          "p95": 0,
+          "max": 0,
+          "over50": 0
+        },
+        {
+          "stage": "utf8-chunk",
+          "count": 7,
+          "p95": 21,
+          "max": 21,
+          "over50": 0
+        }
+      ],
+      "batchSchedule": [
+        {
+          "batchKind": "edge-batch",
+          "count": 63,
+          "total": 3997,
+          "min": 29,
+          "max": 64
+        },
+        {
+          "batchKind": "batch",
+          "count": 187,
+          "total": 2000,
+          "min": 1,
+          "max": 16
+        }
+      ]
+    }
+  ],
+  "fileVerification": [
+    {
+      "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-30.svg",
+      "bytes": 21313428,
+      "sha256": "309a9d6acabdf7c2dd3f6dcc4324e29bb73f37ca66e03b35d70ac294ae91bbe7",
+      "uniqueTables": 2000,
+      "uniqueTableColumnPairs": 40000,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "visibleColumnNamesPresent": true,
+      "legendAndThemePresent": true,
+      "markerReferencesResolved": true,
+      "pathNumbersFinite": true,
+      "scriptsOrExternalResources": false,
+      "dimensions": [
+        29984,
+        19614
+      ]
+    },
+    {
+      "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-31.svg",
+      "bytes": 21313428,
+      "sha256": "309a9d6acabdf7c2dd3f6dcc4324e29bb73f37ca66e03b35d70ac294ae91bbe7",
+      "uniqueTables": 2000,
+      "uniqueTableColumnPairs": 40000,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "visibleColumnNamesPresent": true,
+      "legendAndThemePresent": true,
+      "markerReferencesResolved": true,
+      "pathNumbersFinite": true,
+      "scriptsOrExternalResources": false,
+      "dimensions": [
+        29984,
+        19614
+      ]
+    },
+    {
+      "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-32.svg",
+      "bytes": 21313428,
+      "sha256": "309a9d6acabdf7c2dd3f6dcc4324e29bb73f37ca66e03b35d70ac294ae91bbe7",
+      "uniqueTables": 2000,
+      "uniqueTableColumnPairs": 40000,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "visibleColumnNamesPresent": true,
+      "legendAndThemePresent": true,
+      "markerReferencesResolved": true,
+      "pathNumbersFinite": true,
+      "scriptsOrExternalResources": false,
+      "dimensions": [
+        29984,
+        19614
+      ]
+    },
+    {
+      "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-33.svg",
+      "bytes": 21432005,
+      "sha256": "88ded092023a77390efb3a77c978fcf4bd8fdbe08030def855afc57c2d969f38",
+      "uniqueTables": 2000,
+      "uniqueTableColumnPairs": 40000,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "visibleColumnNamesPresent": true,
+      "legendAndThemePresent": true,
+      "markerReferencesResolved": true,
+      "pathNumbersFinite": true,
+      "scriptsOrExternalResources": false,
+      "dimensions": [
+        29984,
+        19615
+      ]
+    }
+  ],
+  "equalityChecks": {
+    "threeFinalOverviewFilesByteIdentical": true,
+    "finalOverviewByteIdenticalToQuietBaselinesAndPreviousTaskOverview": true,
+    "overviewSha256": "309a9d6acabdf7c2dd3f6dcc4324e29bb73f37ca66e03b35d70ac294ae91bbe7"
+  },
+  "fullScenario": [
+    {
+      "phase": "first-load",
+      "wallMs": 1231,
+      "frameP95Ms": 134,
+      "frameMaxMs": 224,
+      "framesOver50Ms": 7,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 264,
+      "mountedEdges": 1214,
+      "paintedSvgRoots": 1,
+      "domElements": 12165,
+      "workerMs": [
+        76
+      ],
+      "hidden": false
+    },
+    {
+      "phase": "auto-layout",
+      "wallMs": 219,
+      "frameP95Ms": 34,
+      "frameMaxMs": 34,
+      "framesOver50Ms": 0,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 264,
+      "mountedEdges": 1214,
+      "paintedSvgRoots": 1,
+      "domElements": 12171,
+      "workerMs": [
+        123
+      ],
+      "hidden": false
+    },
+    {
+      "phase": "scripted-pointer-drag",
+      "wallMs": 2334,
+      "frameP95Ms": 59,
+      "frameMaxMs": 82,
+      "framesOver50Ms": 6,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 5,
+      "mountedEdges": 1539,
+      "paintedSvgRoots": 1,
+      "domElements": 10274,
+      "workerMs": [],
+      "hidden": false,
+      "movedGestures": 6,
+      "temporarilyMutedEdges": 1536,
+      "mutedEdgesAfter": 0
+    }
+  ],
+  "postExportDrag": {
+    "phase": "scripted-pointer-drag",
+    "wallMs": 2326,
+    "frameP95Ms": 56,
+    "frameMaxMs": 78,
+    "framesOver50Ms": 6,
+    "longTasks": null,
+    "longestTaskMs": null,
+    "mountedTables": 5,
+    "mountedEdges": 1539,
+    "paintedSvgRoots": 1,
+    "domElements": 10280,
+    "workerMs": [],
+    "hidden": false,
+    "movedGestures": 6,
+    "temporarilyMutedEdges": 1536,
+    "mutedEdgesAfter": 0
+  },
+  "postExportLayout": {
+    "phase": "auto-layout",
+    "wallMs": 340,
+    "frameP95Ms": 37,
+    "frameMaxMs": 37,
+    "framesOver50Ms": 0,
+    "longTasks": null,
+    "longestTaskMs": null,
+    "mountedTables": 264,
+    "mountedEdges": 1214,
+    "paintedSvgRoots": 1,
+    "domElements": 12187,
+    "workerMs": [
+      46
+    ],
+    "hidden": false
+  },
+  "crashReportAudit": {
+    "directories": [
+      "DiagnosticReports",
+      "DiagnosticReports/Retired"
+    ],
+    "historicalWebKitReports": 6,
+    "newWebKitOrNodalReportsObserved": 0,
+    "latestWebKitReport": "com.apple.WebKit.WebContent-2026-10-15-192828.ips"
+  },
+  "checks": {
+    "frontendTests": 451,
+    "frontendTestFiles": 86,
+    "typecheck": true,
+    "lint": true,
+    "standardDesktopBuild": true,
+    "isolatedNativeBuild": true,
+    "gitDiffCheck": true,
+    "rustSourceChangedThisTask": false
+  },
+  "remainingLimits": [
+    "First load and drag still have >50 ms frame intervals; they were functionally checked, not optimized in this change.",
+    "An 8 ms cooperative target cannot preempt a single complex synchronous table read or platform work.",
+    "No new RSS time-series was collected; the preceding report memory window remains historical evidence only."
+  ]
+}

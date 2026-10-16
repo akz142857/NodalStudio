@@ -28,27 +28,27 @@ export function splitLayoutComponents(nodes: LayoutNodeInput[], edges: LayoutEdg
     adjacency.get(edge.source)?.add(edge.target);
     adjacency.get(edge.target)?.add(edge.source);
   }
-  const visited = new Set<string>();
+  const byNode = new Map<string, LayoutComponent>();
   const components: LayoutComponent[] = [];
   for (const node of nodes) {
-    if (visited.has(node.id)) continue;
+    if (byNode.has(node.id)) continue;
+    const component: LayoutComponent = { nodes: [], edges: [] };
     const queue = [node.id];
-    const ids = new Set<string>();
-    visited.add(node.id);
-    while (queue.length) {
-      const id = queue.shift();
-      if (!id) continue;
-      ids.add(id);
+    byNode.set(node.id, component);
+    for (let head = 0; head < queue.length; head += 1) {
+      const id = queue[head];
       for (const related of adjacency.get(id) ?? []) {
-        if (visited.has(related)) continue;
-        visited.add(related);
+        if (byNode.has(related)) continue;
+        byNode.set(related, component);
         queue.push(related);
       }
     }
-    components.push({
-      nodes: nodes.filter((candidate) => ids.has(candidate.id)),
-      edges: edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)),
-    });
+    components.push(component);
+  }
+  for (const node of nodes) byNode.get(node.id)!.nodes.push(node);
+  for (const edge of edges) {
+    const component = byNode.get(edge.source);
+    if (component && component === byNode.get(edge.target)) component.edges.push(edge);
   }
   return components.sort((left, right) => right.nodes.length - left.nodes.length);
 }

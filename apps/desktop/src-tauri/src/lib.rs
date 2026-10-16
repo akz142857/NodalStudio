@@ -87,6 +87,21 @@ async fn save_diagram_export(
         .await
         .map_err(|_| "Unable to finish the diagram export.".to_owned())?
 }
+// Raw IPC avoids millions of JSON number values for a single generated image.
+#[tauri::command]
+async fn save_diagram_export_binary(
+    app: tauri::AppHandle,
+    request: tauri::ipc::Request<'_>,
+) -> Result<diagram_export::DiagramExportReceipt, String> {
+    let input = diagram_export::from_binary(request.body(), request.headers())?;
+    let directory = app
+        .path()
+        .download_dir()
+        .map_err(|_| "The Downloads directory is unavailable.".to_owned())?;
+    tokio::task::spawn_blocking(move || diagram_export::save(&input, &directory))
+        .await
+        .map_err(|_| "Unable to finish the diagram export.".to_owned())?
+}
 use tokio::sync::{Mutex, Semaphore};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -4773,6 +4788,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             save_diagram_export,
+            save_diagram_export_binary,
             save_schema_report,
             get_runtime_info,
             get_diagnostic_info,

@@ -1,7 +1,7 @@
 export interface DiagramExportInput {
   fileName: string;
   format: "svg" | "png";
-  data: number[];
+  data: Uint8Array | number[];
 }
 
 export interface FileExportReceipt {

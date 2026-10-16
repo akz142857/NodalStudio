@@ -1,3 +1,4 @@
+import { seedCanvasGeometry } from "./canvas-geometry";
 import { setTablePinned } from "./table-position";
 import type { Edge } from "@xyflow/react";
 import type { CanvasNodeLayout } from "../platform/types";
@@ -166,7 +167,7 @@ interface StoredNodeLayout {
 function applyStoredNodeLayout(node: TableNode, stored: StoredNodeLayout): TableNode {
   const width = validDimension(stored.width) ? stored.width : undefined;
   const height = validDimension(stored.height) ? stored.height : undefined;
-  return {
+  const restored: TableNode = {
     ...setTablePinned(node, stored.pinned === true),
     position: { x: stored.x, y: stored.y },
     style: {
@@ -175,6 +176,7 @@ function applyStoredNodeLayout(node: TableNode, stored: StoredNodeLayout): Table
       height: height ?? nodeDimension(node, "height") ?? estimatedTableNodeHeight(node.data.table),
     },
   };
+  return node.data.initialGeometryOptions ? seedCanvasGeometry(restored, node.data.initialGeometryOptions?.fieldLevel ?? true, node.data.initialGeometryOptions?.showComments ?? true) : restored;
 }
 
 export function nodeDimension(node: TableNode, dimension: "width" | "height"): number | undefined {

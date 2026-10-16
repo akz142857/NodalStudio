@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { DatabaseSnapshot, NodalStudioPlatform, SemanticBundle } from "../platform";
 import { createSchemaReport, schemaReportFileName } from "../reports/schema-report";
 import { OperationFeedback } from "./OperationFeedback";
+import { IconButton } from "./IconButton";
 import { useOperation } from "./use-operation";
 
 interface SchemaReportExportActionProps {
@@ -31,14 +32,12 @@ export function SchemaReportExportAction({ snapshot, semantics, platform }: Sche
   };
 
   return <div className="schema-report-export">
-    <button type="button" disabled={!semantics || operation.busy} onClick={() => void exportReport()}
-      title={!semantics ? "The semantic model must finish loading before exporting a report" : "Export a standalone HTML data dictionary for the entire loaded snapshot, with saved business semantics"}>
-      {operation.busy && format === "report" ? "Exporting report…" : "Export HTML report"}
-    </button>
-    <button type="button" disabled={!semantics || operation.busy} onClick={() => void exportReport("viewer")}
-      title={!semantics ? "The current semantic model must finish loading before export" : "Export one entire loaded snapshot and current saved semantics as a read-only offline HTML Viewer; no history, database access or writeback. Independent of Diagram filters; maximum 500 tables / 5,000 columns / 5,000 relationships."}>
-      {operation.busy && format === "viewer" ? "Exporting offline Viewer…" : "Export offline Viewer"}
-    </button>
+    <IconButton icon="report" label={operation.busy && format === "report" ? "Exporting report…" : "Export HTML report"}
+      aria-busy={operation.busy && format === "report"} disabled={!semantics || operation.busy} onClick={() => void exportReport()}
+      description={!semantics ? "The semantic model must finish loading before exporting a report" : "Export a standalone HTML data dictionary for the entire loaded snapshot, with saved business semantics"} />
+    <IconButton icon="viewer" label={operation.busy && format === "viewer" ? "Exporting offline Viewer…" : "Export offline Viewer"}
+      aria-busy={operation.busy && format === "viewer"} disabled={!semantics || operation.busy} onClick={() => void exportReport("viewer")}
+      description={!semantics ? "The current semantic model must finish loading before export" : "Export one entire loaded snapshot and current saved semantics as a read-only offline HTML Viewer; no history, database access or writeback. Independent of Diagram filters; maximum 500 tables / 5,000 columns / 5,000 relationships."} />
     {operation.state ? <div className="schema-report-result">
       <OperationFeedback label="HTML export" state={operation.state} onRetry={() => void exportReport(format)} retryLabel={format === "viewer" ? "Retry Viewer export" : "Retry report export"} retryDisabled={!semantics} onDismiss={operation.dismiss} dismissLabel="Dismiss report export result" />
     </div> : null}

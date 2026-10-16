@@ -25,6 +25,8 @@ describe("App", () => {
       screen.getByRole("heading", { name: "Your database model, kept visible." }),
     ).toBeVisible();
     expect(await screen.findByText("Web runtime")).toBeVisible();
+    expect(screen.getByTestId("runtime-badge").closest(".brand-block")).toHaveAttribute("title", "Web runtime");
+    expect(screen.getByRole("searchbox", { name: "Search schema" })).toBeDisabled();
   });
 
   it("says so when stored settings cannot be loaded instead of quietly using defaults", async () => {

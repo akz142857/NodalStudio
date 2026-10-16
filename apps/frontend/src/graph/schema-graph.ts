@@ -1,3 +1,4 @@
+import { seedCanvasGeometry } from "./canvas-geometry";
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
 import { comparisonTables, type ChangeStatus } from "./schema-comparison";
 export type { ChangeStatus } from "./schema-comparison";
@@ -20,6 +21,8 @@ export interface TableNodeData extends Record<string, unknown> {
   columnChanges?: Record<string, ChangeStatus | undefined>;
   columnNotes?: Record<string, string>;
   visibleColumnNames?: string[];
+  initialColumnCenters?: Record<string, number>;
+  initialGeometryOptions?: { fieldLevel: boolean; showComments: boolean };
   isCore?: boolean;
   domainColor?: string;
   annotation?: ObjectAnnotation;
@@ -413,7 +416,7 @@ export function buildSchemaGraph(
     : [];
 
   return {
-    nodes,
+    nodes: nodes.length >= 100 ? nodes.map((node) => seedCanvasGeometry(node, options.fieldLevelEdges !== false, options.showTableComments !== false)) : nodes,
     edges: [...physicalEdges, ...logicalEdges, ...inferredEdges],
     physicalRelationshipCount,
     logicalRelationshipCount: logicalRelationships.filter((relationship) => relationship.status !== "disabled").length,
@@ -472,18 +475,10 @@ export function orientFieldEdges(edges: FieldEdge[], nodes: TableNode[]): FieldE
     const verticallyAligned = Math.abs(source.x - target.x) < 80;
     const sourceSide = verticallyAligned || source.x < target.x ? "right" : "left";
     const targetSide = verticallyAligned ? "right" : sourceSide === "right" ? "left" : "right";
-    if (!edge.data.fieldLevel) {
-      return {
-        ...edge,
-        sourceHandle: `table-source-${sourceSide}`,
-        targetHandle: `table-target-${targetSide}`,
-      };
-    }
-    return {
-      ...edge,
-      sourceHandle: fieldHandleId("source", edge.data.sourceColumn, sourceSide),
-      targetHandle: fieldHandleId("target", edge.data.targetColumn, targetSide),
-    };
+    const sourceHandle = edge.data.fieldLevel ? fieldHandleId("source", edge.data.sourceColumn, sourceSide) : `table-source-${sourceSide}`;
+    const targetHandle = edge.data.fieldLevel ? fieldHandleId("target", edge.data.targetColumn, targetSide) : `table-target-${targetSide}`;
+    return edge.sourceHandle === sourceHandle && edge.targetHandle === targetHandle
+      ? edge : { ...edge, sourceHandle, targetHandle };
   });
 }
 
@@ -529,13 +524,28 @@ export function inferRelationships(
   const candidates = tables.filter(({ table }) =>
     table.primaryKey?.columns.includes("id"),
   );
+  // Index exact names and underscore suffixes once. Looking through every table
+  // for every *_id field otherwise becomes quadratic on large schemas.
+  const exactNames = new Map<string, typeof candidates>();
+  const suffixNames = new Map<string, typeof candidates>();
+  for (const candidate of candidates) {
+    const name = candidate.table.key.name;
+    exactNames.set(name, [...(exactNames.get(name) ?? []), candidate]);
+    const parts = name.split("_");
+    for (let start = 0; start < parts.length; start += 1) {
+      const suffix = parts.slice(start).join("_");
+      suffixNames.set(suffix, [...(suffixNames.get(suffix) ?? []), candidate]);
+    }
+  }
   const relationships: InferredRelationship[] = [];
   for (const { schema, table } of tables) {
     const declaredColumns = new Set(table.foreignKeys.flatMap((key) => key.columns));
     for (const column of table.columns) {
       if (!column.name.endsWith("_id") || declaredColumns.has(column.name)) continue;
       const stem = column.name.slice(0, -3);
-      const resolved = resolveInferredTarget(candidates, schema, table.key.name, stem);
+      const plural = stem.endsWith("y") ? `${stem.slice(0, -1)}ies` : `${stem}s`;
+      const matches = [...new Set([...(exactNames.get(stem) ?? []), ...(suffixNames.get(plural) ?? [])])];
+      const resolved = resolveInferredTarget(matches, schema, table.key.name, stem);
       if (!resolved) continue;
       const targetColumn = resolved.table.columns.find((candidate) => candidate.name === "id");
       const typeMatches = targetColumn?.typeName === column.typeName
@@ -560,11 +570,6 @@ export function inferRelationships(
   return relationships;
 }
 
-function tableNameMatchesStem(tableName: string, stem: string): boolean {
-  const plural = stem.endsWith("y") ? `${stem.slice(0, -1)}ies` : `${stem}s`;
-  return tableName === stem || tableName === plural || tableName.endsWith(`_${plural}`);
-}
-
 function resolveInferredTarget(
   candidates: Array<{ schema: string; table: TableDefinition }>,
   sourceSchema: string,
@@ -572,7 +577,6 @@ function resolveInferredTarget(
   stem: string,
 ): { schema: string; table: TableDefinition } | undefined {
   const scored = candidates
-    .filter(({ table }) => tableNameMatchesStem(table.key.name, stem))
     .map((candidate) => ({
       candidate,
       score:

@@ -7,8 +7,14 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["vite.config.ts", "eslint.config.js"]
+  "include": [
+    "vite.config.ts",
+    "benchmark.vite.config.ts",
+    "eslint.config.js",
+    "benchmark-react-flow-timing.ts"
+  ]
 }
-

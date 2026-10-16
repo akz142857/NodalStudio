@@ -1,8 +1,10 @@
+import { SvgTree } from "./svg-tree";
 import type { Viewport } from "@xyflow/react";
 import type { DatabaseSnapshot, SchemaChangeSet } from "../platform";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MAX_EXPORT_BYTES = 32 * 1024 * 1024;
+type TextStyles = Map<string, { className: string; declarations: string }>;
 type Box = { x: number; y: number; width: number; height: number };
 
 export interface DiagramExportOptions {
@@ -13,21 +15,27 @@ export interface DiagramExportOptions {
   beforeSnapshot?: DatabaseSnapshot;
   colorBlindPalette?: boolean;
   scope?: string;
+  /** Bounded export surfaces supply expected identities before any DOM mounts. */
+  tableIds?: ReadonlySet<string>;
+  edgeIds?: ReadonlySet<string>;
+  markerRoot?: HTMLElement;
 }
 
 export interface DiagramSvg {
   svg: string;
+  /** Exact escaped UTF-8 size, already checked by the serializer. */
+  byteLength?: number;
   width: number;
   height: number;
 }
 
-function element<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<string, string | number> = {}) {
-  const node = document.createElementNS(SVG_NS, tag);
-  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+function element(tag: keyof SVGElementTagNameMap, attributes: Record<string, string | number> = {}) {
+  const node = new SvgTree(tag);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, (typeof value === "number" ? String(Math.round(value * 100) / 100) : value));
   return node;
 }
 
-function text(parent: SVGElement, value: string, x: number, y: number, color: string, size = 11) {
+function text(parent: SvgTree, value: string, x: number, y: number, color: string, size = 11) {
   const node = element("text", { x, y, fill: color, "font-size": size });
   node.textContent = value;
   parent.append(node);
@@ -48,6 +56,14 @@ export function pngDimensions(width: number, height: number) {
 
 /** Native SVG text/shapes keep PNG rasterization independent of foreignObject support. */
 export function captureDiagramSvg(options: DiagramExportOptions): DiagramSvg {
+  const capture = createDiagramSvgCapture(options);
+  capture.appendTables();
+  return capture.finish();
+}
+
+/** Hold the common legend/relationships once, then collect full table cards in
+ * bounded commits. Callers can return each batch to overview before continuing. */
+export function createDiagramSvgCapture(options: DiagramExportOptions) {
   const { root, viewport, snapshot, changeSet, beforeSnapshot, colorBlindPalette } = options;
   if (!Number.isFinite(viewport.zoom) || viewport.zoom <= 0) throw new Error("The diagram is not ready to export.");
   const flowBox = root.getBoundingClientRect();
@@ -57,35 +73,36 @@ export function captureDiagramSvg(options: DiagramExportOptions): DiagramSvg {
     width: rect.width / viewport.zoom, height: rect.height / viewport.zoom,
   });
   const tables = Array.from(root.querySelectorAll<HTMLElement>(".table-node"));
-  const edges = Array.from(root.querySelectorAll<SVGGElement>(".react-flow__edge"));
-  if (!tables.length) throw new Error("There are no tables in this diagram to export.");
+  const edges = Array.from(root.querySelectorAll<SVGGElement>(".react-flow__edge")).filter((edge) => edge.querySelector("path"));
+  const tableCount = options.tableIds?.size ?? tables.length;
+  const streaming = options.tableIds !== undefined;
+  if (!tableCount) throw new Error("There are no tables in this diagram to export.");
   const boxes = [...tables, ...edges].map((node) => toBox(node.getBoundingClientRect())).filter((box) => box.width > 0 && box.height > 0);
-  if (!boxes.length) throw new Error("The diagram is still being laid out. Try again when it is ready.");
-  const left = Math.min(...boxes.map((box) => box.x));
-  const top = Math.min(...boxes.map((box) => box.y));
-  const right = Math.max(...boxes.map((box) => box.x + box.width));
-  const bottom = Math.max(...boxes.map((box) => box.y + box.height));
+  if (!boxes.length && !streaming) throw new Error("The diagram is still being laid out. Try again when it is ready.");
   const partial = Boolean(changeSet && !beforeSnapshot);
   const headerHeight = changeSet ? partial ? 174 : 154 : 108;
-  const width = Math.ceil(Math.max(920, right - left + 64));
-  const height = Math.ceil(bottom - top + headerHeight + 64);
   const theme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
   const pageStyle = getComputedStyle(document.documentElement);
   const background = !pageStyle.backgroundColor || ["rgba(0, 0, 0, 0)", "transparent"].includes(pageStyle.backgroundColor) ? theme === "light" ? "#eef0f5" : "#111318" : pageStyle.backgroundColor;
   const foreground = theme === "light" ? "#20242c" : "#e7e9ef";
   const muted = theme === "light" ? "#586274" : "#aab4c3";
-  const svg = element("svg", { width, height, viewBox: `0 0 ${width} ${height}`, "data-theme": theme, "font-family": pageStyle.fontFamily || "system-ui, sans-serif" });
+  const svg = element("svg", { xmlns: SVG_NS, "data-theme": theme, "font-family": pageStyle.fontFamily || "system-ui, sans-serif" });
   const title = element("title"); title.textContent = `${snapshot.database.name} · Diagram`;
   const description = element("desc");
-  description.textContent = `Current diagram: ${tables.length} tables. ${options.scope ?? "All tables"}. ${changeSet ? "Comparison direction: Before → After. Deleted objects use Before definitions." : "Current snapshot."} Inferred candidates are not database constraints.`;
-  svg.append(title, description, element("rect", { width, height, fill: background }));
+  description.textContent = `Current diagram: ${tableCount} tables. ${options.scope ?? "All tables"}. ${changeSet ? "Comparison direction: Before → After. Deleted objects use Before definitions." : "Current snapshot."} Inferred candidates are not database constraints.`;
+  const backgroundRect = element("rect", { fill: background });
+  svg.append(title, description, backgroundRect);
   const defs = element("defs"); svg.append(defs);
-  for (const markerDefs of root.querySelectorAll(".react-flow__edges defs, .react-flow__marker defs")) {
-    for (const child of markerDefs.children) defs.append(cloneSvg(child));
+  let serializedBytes = 0;
+  const appendFragment = (parent: SvgTree, child: SvgTree) => {
+    serializedBytes += parent.appendSerialized(child, MAX_EXPORT_BYTES - serializedBytes);
+  };
+  for (const markerDefs of (options.markerRoot ?? root).querySelectorAll(".react-flow__edges defs, .react-flow__marker defs")) {
+    for (const child of markerDefs.children) appendFragment(defs, cloneSvg(child));
   }
   const heading = element("g"); svg.append(heading);
   text(heading, `${snapshot.database.name} · Diagram`, 20, 30, foreground, 18);
-  text(heading, `${tables.length} tables · ${options.scope ?? "All tables"} · Snapshot ${snapshot.fingerprint.slice(0, 12)}`, 20, 52, muted);
+  text(heading, `${tableCount} tables · ${options.scope ?? "All tables"} · Snapshot ${snapshot.fingerprint.slice(0, 12)}`, 20, 52, muted);
   const relationships = [
     { x: 20, label: "Physical FK", color: colorBlindPalette ? "#0072b2" : "#2563eb", dash: "" },
     { x: 215, label: "Logical relationship", color: "#7c3aed", dash: "8 5" },
@@ -110,20 +127,39 @@ export function captureDiagramSvg(options: DiagramExportOptions): DiagramSvg {
     text(heading, `Before ${beforeSnapshot?.fingerprint.slice(0, 12) ?? "unavailable"} → After ${snapshot.fingerprint.slice(0, 12)}`, 20, 145, foreground);
     if (partial) text(heading, "Partial comparison: Before snapshot unavailable; deleted objects cannot be shown.", 20, 166, muted);
   }
-  const content = element("g", { transform: `translate(${32 - left} ${headerHeight + 32 - top})` }); svg.append(content);
-  for (const edge of edges) content.append(cloneSvg(edge));
+  const content = element("g"); svg.append(content);
+  const capturedEdges = new Set<string>();
+  const appendEdges = (batch: Element[] = Array.from(root.querySelectorAll(".react-flow__edge")).filter((edge) => edge.querySelector("path"))) => {
+    for (const edge of batch) {
+      const id = edge.getAttribute("data-id") ?? "";
+      if (options.edgeIds && (!options.edgeIds.has(id) || capturedEdges.has(id))) throw new Error("The diagram relationships changed during export. Try again.");
+      if (streaming) boxes.push(toBox(edge.getBoundingClientRect()));
+      appendFragment(content, cloneSvg(edge)); capturedEdges.add(id);
+    }
+  };
+  if (!streaming) appendEdges(edges);
   let clipIndex = 0;
-  const renderHtml = (source: HTMLElement, parent: SVGElement) => {
+  const textStyles: TextStyles = new Map();
+  // WebKit registers live Ranges with the document. Creating one per text run
+  // makes every later batch removal walk thousands of range boundaries until
+  // GC happens. A single synchronous measurement cursor has bounded cost.
+  const textRange = document.createRange();
+  const renderHtml = (source: HTMLElement, parent: SvgTree) => {
     if (source.closest(".table-node-actions")) return;
     const style = getComputedStyle(source);
     if (style.display === "none" || style.visibility === "hidden") return;
     const box = toBox(source.getBoundingClientRect());
     if (!box.width || !box.height) return;
     const group = element("g"); parent.append(group);
+    if (source.classList.contains("table-node")) group.setAttribute("data-table-id", source.closest(".react-flow__node")?.getAttribute("data-id") ?? "");
+    if (source.dataset.columnName) group.setAttribute("data-column-name", source.dataset.columnName);
     const radius = parseFloat(style.borderTopLeftRadius) || 0;
-    if ([style.overflow, style.overflowX, style.overflowY].some((value) => value === "hidden" || value === "clip")) {
+    const clips = [style.overflow, style.overflowX, style.overflowY].some((value) => value === "hidden" || value === "clip");
+    // A CSS overflow rule does not need an SVG clip when all content fits.
+    // Keep the conservative path when the environment cannot measure client size.
+    if (clips && (!source.clientWidth || !source.clientHeight || source.scrollWidth > source.clientWidth || source.scrollHeight > source.clientHeight)) {
       const id = `diagram-clip-${clipIndex++}`;
-      const clip = element("clipPath", { id }); clip.append(element("rect", { ...box, rx: radius })); defs.append(clip);
+      const clip = element("clipPath", { id }); clip.append(element("rect", { ...box, rx: radius })); appendFragment(defs, clip);
       group.setAttribute("clip-path", `url(#${id})`);
     }
     if (style.backgroundColor !== "rgba(0, 0, 0, 0)" && style.backgroundColor !== "transparent") group.append(element("rect", { ...box, rx: radius, fill: style.backgroundColor }));
@@ -137,16 +173,46 @@ export function captureDiagramSvg(options: DiagramExportOptions): DiagramSvg {
     }
     for (const child of source.childNodes) {
       if (child instanceof HTMLElement) renderHtml(child, group);
-      else if (child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) drawText(child as Text, group, style, toBox);
+      else if (child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) drawText(child as Text, group, style, toBox, textStyles, textRange);
     }
   };
-  for (const table of tables) renderHtml(table, content);
-  const payload = new XMLSerializer().serializeToString(svg);
-  if (new TextEncoder().encode(payload).length > MAX_EXPORT_BYTES) throw new Error("The SVG exceeds 32 MB. Export a smaller filtered view.");
-  return { svg: payload, width, height };
+  const expected = new Set<string | HTMLElement>(options.tableIds ?? tables);
+  const captured = new Set<string | HTMLElement>();
+  return {
+    appendEdges,
+    appendTables(batch: HTMLElement[] = tables) {
+      for (const table of batch) {
+        const identity = streaming ? table.closest(".react-flow__node")?.getAttribute("data-id") ?? "" : table;
+        if (!expected.has(identity) || captured.has(identity)) throw new Error("The diagram changed during export. Try again.");
+        if (table.dataset.overview === "true") throw new Error("Table details are not ready to export.");
+        if (streaming) boxes.push(toBox(table.getBoundingClientRect()));
+        const fragment = element("g");
+        renderHtml(table, fragment);
+        appendFragment(content, fragment);
+        captured.add(identity);
+      }
+    },
+    finish(): DiagramSvg {
+      if (captured.size !== expected.size) throw new Error("Some tables were not captured. Try exporting again.");
+      if (options.edgeIds && capturedEdges.size !== options.edgeIds.size) throw new Error("Some relationships were not captured. Try exporting again.");
+      const validBoxes = boxes.filter((box) => box.width > 0 && box.height > 0);
+      if (!validBoxes.length) throw new Error("The diagram is still being laid out. Try again when it is ready.");
+      const left = Math.min(...validBoxes.map((box) => box.x)), top = Math.min(...validBoxes.map((box) => box.y));
+      const right = Math.max(...validBoxes.map((box) => box.x + box.width)), bottom = Math.max(...validBoxes.map((box) => box.y + box.height));
+      const width = Math.ceil(Math.max(920, right - left + 64)), height = Math.ceil(bottom - top + headerHeight + 64);
+      svg.setAttribute("width", String(width)); svg.setAttribute("height", String(height)); svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      backgroundRect.setAttribute("width", String(width)); backgroundRect.setAttribute("height", String(height));
+      content.setAttribute("transform", `translate(${Math.round((32 - left) * 100) / 100} ${Math.round((headerHeight + 32 - top) * 100) / 100})`);
+      const stylesheet = element("style");
+      stylesheet.textContent = [...textStyles.values()].map(({ declarations, className }) => `.${className}{${declarations}}`).join("\n");
+      defs.append(stylesheet);
+      const payload = svg.serializeWithSize(MAX_EXPORT_BYTES);
+      return { svg: payload.xml, byteLength: payload.bytes, width, height };
+    },
+  };
 }
 
-function drawBorders(parent: SVGElement, box: Box, style: CSSStyleDeclaration, radius: number) {
+function drawBorders(parent: SvgTree, box: Box, style: CSSStyleDeclaration, radius: number) {
   const sides = ["Top", "Right", "Bottom", "Left"] as const;
   if (sides.every((side) => style[`border${side}Width`] === style.borderTopWidth && style[`border${side}Style`] === style.borderTopStyle && style[`border${side}Color`] === style.borderTopColor)) {
     const strokeWidth = parseFloat(style.borderTopWidth);
@@ -165,8 +231,8 @@ function drawBorders(parent: SVGElement, box: Box, style: CSSStyleDeclaration, r
   });
 }
 
-function drawText(source: Text, parent: SVGElement, style: CSSStyleDeclaration, toBox: (rect: DOMRect) => Box) {
-  const range = document.createRange(); range.selectNodeContents(source);
+function drawText(source: Text, parent: SvgTree, style: CSSStyleDeclaration, toBox: (rect: DOMRect) => Box, styles: TextStyles, range: Range) {
+  range.selectNodeContents(source);
   const rects = Array.from(range.getClientRects());
   const runs: { value: string; box: Box }[] = [];
   if (rects.length <= 1) runs.push({ value: source.data, box: toBox(range.getBoundingClientRect()) });
@@ -183,16 +249,28 @@ function drawText(source: Text, parent: SVGElement, style: CSSStyleDeclaration, 
   for (const run of runs) {
     if (!run.box.height) continue;
     const value = style.textTransform === "uppercase" ? run.value.toUpperCase() : style.textTransform === "lowercase" ? run.value.toLowerCase() : style.textTransform === "capitalize" ? run.value.replace(/\b\w/g, (letter) => letter.toUpperCase()) : run.value;
-    const node = text(parent, value, run.box.x, run.box.y + run.box.height * 0.8, style.color, parseFloat(style.fontSize) || 12);
-    if (style.fontFamily) node.setAttribute("font-family", style.fontFamily);
-    if (style.fontWeight) node.setAttribute("font-weight", style.fontWeight);
-    if (style.fontStyle) node.setAttribute("font-style", style.fontStyle);
-    node.setAttribute("text-decoration", style.textDecorationLine);
+    const properties = ["color", "font-size", "font-family", "font-weight", "font-style", "text-decoration-line"];
+    const values = properties.map((property) => style.getPropertyValue(property));
+    const key = JSON.stringify(values);
+    let cached = styles.get(key);
+    if (!cached) {
+      const declaration = document.createElement("span").style;
+      properties.forEach((property, index) => {
+        if (values[index]) declaration.setProperty(property === "color" ? "fill" : property === "text-decoration-line" ? "text-decoration" : property, values[index]);
+      });
+      cached = { className: `diagram-text-${styles.size}`, declarations: declaration.cssText };
+      styles.set(key, cached);
+    }
+    const className = cached.className;
+    const node = element("text", { x: run.box.x, y: run.box.y + run.box.height * 0.8, class: className });
+    node.textContent = value; parent.append(node);
   }
 }
 
-function cloneSvg(source: Element): SVGElement {
-  const clone = source.cloneNode(false) as SVGElement;
+function cloneSvg(source: Element): SvgTree {
+  const clone = new SvgTree(source.localName);
+  for (const attribute of source.attributes) if (attribute.name !== "style") clone.setAttribute(attribute.name, attribute.value);
+  if (source instanceof SVGElement) for (const name of Array.from(source.style)) clone.style.setProperty(name, source.style.getPropertyValue(name), source.style.getPropertyPriority(name));
   const style = getComputedStyle(source);
   for (const property of ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "opacity", "fill-opacity", "stroke-opacity", "font-family", "font-size", "font-weight", "font-style", "text-anchor", "dominant-baseline", "marker-start", "marker-end"]) {
     const value = style.getPropertyValue(property).replace(/url\(["']?([^"')]+)["']?\)/g, (_match, url: string) => {
@@ -203,7 +281,7 @@ function cloneSvg(source: Element): SVGElement {
   }
   for (const child of source.childNodes) {
     if (child instanceof Element && !child.classList.contains("react-flow__edge-interaction")) clone.append(cloneSvg(child));
-    else if (child.nodeType === Node.TEXT_NODE) clone.append(child.cloneNode());
+    else if (child.nodeType === Node.TEXT_NODE) clone.append(child.textContent ?? "");
   }
   return clone;
 }

@@ -5,9 +5,11 @@ import { InspectorPanel } from "./components/InspectorPanel";
 import { Segmented } from "./components/Segmented";
 import { SchemaPreflightPanel } from "./components/SchemaPreflightPanel";
 import { OperationFeedback } from "./components/OperationFeedback";
+import { ActionIcon } from "./components/ActionIcon";
+import { IconButton } from "./components/IconButton";
 import { useOperation } from "./components/use-operation";
 import { resolveCapability } from "./platform/capabilities";
-import { SchemaCanvas } from "./components/SchemaCanvas";
+import { SchemaCanvas, type CanvasLocateRequest } from "./components/SchemaCanvas";
 import { SchemaChangesPanel } from "./components/SchemaChangesPanel";
 import { SchemaChangesDiagram } from "./components/SchemaChangesDiagram";
 import { SchemaTree } from "./components/SchemaTree";
@@ -83,6 +85,11 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSearchResult, setActiveSearchResult] = useState(0);
   const [selectedTable, setSelectedTable] = useState<TableDefinition>();
+  const [semanticsSettledSnapshot, setSemanticsSettledSnapshot] = useState<DatabaseSnapshot>();
+  const [locateRequest, setLocateRequest] = useState<CanvasLocateRequest>();
+  const locateRevision = useRef(0);
+  const inspectTable = useCallback((table: TableDefinition | undefined) => { setSelectedTable(table); setLocateRequest(undefined); }, []);
+  const finishLocate = useCallback((request: CanvasLocateRequest) => setLocateRequest((current) => current === request ? undefined : current), []);
   const [semantics, setSemantics] = useState<SemanticBundle>(emptySemantics);
   const [semanticsSnapshot, setSemanticsSnapshot] = useState<DatabaseSnapshot>();
   const [savedView, setSavedView] = useState<SavedView>();
@@ -156,18 +163,18 @@ export function App() {
     });
   }, []);
 
-  const locateSearchResult = useCallback((result: SchemaSearchResult) => {
+  const locateTable = useCallback((table: TableDefinition) => {
+    if (!snapshot) return;
     setMode("explore");
     setPreflightOpen(false);
     setQuery("");
     setSearchOpen(false);
     setSavedView(undefined);
-    setSelectedTable(result.table);
-    const nodeId = `${result.schema}.${result.table.key.name}`;
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      window.dispatchEvent(new CustomEvent("nodalstudio:locate-table", { detail: { nodeId } }));
-    }));
-  }, []);
+    setSelectedTable(table);
+    setLocateRequest({ sourceId: snapshot.sourceId, snapshotId: snapshot.id,
+      nodeId: `${table.key.schema}.${table.key.name}`, revision: ++locateRevision.current });
+  }, [snapshot]);
+  const locateSearchResult = useCallback((result: SchemaSearchResult) => locateTable(result.table), [locateTable]);
 
   const publishNotice = useCallback((notice: AppNotice) => {
     if (isQuietHours(settings.app.notifications)) return;
@@ -193,6 +200,7 @@ export function App() {
     setChangesView("list");
     setMode(result.changeSet ? "changes" : "explore");
     setSelectedTable(undefined);
+    setLocateRequest(undefined);
     setSavedView(undefined);
     const notificationSettings = settings.app.notifications;
     const schemaNotificationLevel =
@@ -547,6 +555,7 @@ export function App() {
         if (active) {
           setSemantics(bundle);
           setSemanticsSnapshot(snapshot);
+          setSemanticsSettledSnapshot(snapshot);
         }
       })
       .catch((reason: unknown) => {
@@ -556,6 +565,7 @@ export function App() {
         if (!active) return;
         setSemantics(emptySemantics);
         setSemanticsSnapshot(undefined);
+        setSemanticsSettledSnapshot(snapshot);
         publishNoticeRef.current({
           id: `semantics-load-failed-${snapshot.sourceId}`,
           title: "Semantic model could not be loaded",
@@ -666,6 +676,7 @@ export function App() {
     // a mode of its own — "history" never had a branch in the main area.
     setMode("explore");
     setSelectedTable(undefined);
+    setLocateRequest(undefined);
     setSavedView(undefined);
   }
 
@@ -675,12 +686,14 @@ export function App() {
     setChangesView("list");
     setMode("changes");
     setSelectedTable(undefined);
+    setLocateRequest(undefined);
     setSavedView(undefined);
   }
 
   const openTableInQuery = useCallback((table: TableDefinition) => {
     if (!querySupported) return;
     setPreflightOpen(false);
+    setLocateRequest(undefined);
     setOpenQueryRequest({ id: Date.now(), sql: tablePreviewSql(table) });
     setMode("query");
   }, [querySupported]);
@@ -696,14 +709,15 @@ export function App() {
             setLeftPanel((current) => ({ ...current, expanded: !current.expanded }))
           }
         />
-        <div className="brand-block">
+        <div className="brand-block" title={runtime.isPending ? "Detecting runtime…" : runtime.data?.label}>
           <p className="eyebrow">LIVING SYSTEM BLUEPRINT</p>
           <h1>Nodal Studio</h1>
+          <span className="visually-hidden" data-testid="runtime-badge">{runtime.isPending ? "Detecting runtime…" : runtime.data?.label}</span>
         </div>
         <Segmented
           label="View mode"
           value={mode}
-          onChange={(next) => { setPreflightOpen(false); setMode(next); }}
+          onChange={(next) => { setPreflightOpen(false); setLocateRequest(undefined); setMode(next); }}
           options={[
             { value: "explore", label: "Database" },
             {
@@ -716,7 +730,8 @@ export function App() {
           ]}
         />
         <label className="global-search">
-          <span>Search schema</span>
+          <span className="visually-hidden">Search schema</span>
+          <ActionIcon name="search" />
           <input
             ref={searchInputRef}
             type="search"
@@ -763,40 +778,35 @@ export function App() {
             </button>) : <p>No matching tables or fields</p>}
           </div> : null}
         </label>
-        <div className="runtime-actions">
-          <button type="button" className="preflight-open-button" onClick={() => setDdlPreviewOpen(true)} title="Open a temporary PostgreSQL/MySQL file or clipboard model; never execute SQL">Import DDL</button>
+        <div className="runtime-actions" role="group" aria-label="Application tools">
+          <IconButton icon="import" label="Import DDL" onClick={() => setDdlPreviewOpen(true)} description="Open a temporary PostgreSQL/MySQL file or clipboard model; never execute SQL" />
           {refreshOperation.state ? <div className="refresh-operation-result"><OperationFeedback label="Snapshot refresh" state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel="Retry snapshot refresh" onDismiss={refreshOperation.dismiss} /></div> : null}
-          {snapshot ? <button type="button" className="preflight-open-button" aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} title="Check the entire loaded snapshot with dialect-aware metadata rules">Structure preflight</button> : null}
+          {snapshot ? <IconButton icon="preflight" label="Structure preflight" aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} description="Check the entire loaded snapshot with dialect-aware metadata rules" /> : null}
           {snapshot ? <SchemaReportExportAction key={snapshot.id} snapshot={snapshot} semantics={semanticsSnapshot === snapshot ? semantics : undefined} platform={platform} /> : null}
           {snapshot && runtime.data?.kind === "desktop" ? (
-            <button
-              type="button"
+            <IconButton
+              icon="refresh"
               className="refresh-button"
               onClick={() => void refreshActive()}
               disabled={refreshState === "refreshing"}
-              title={refreshState === "error" ? "Last refresh failed" : "Refresh schema now"}
-            >
-              {refreshState === "refreshing"
+              aria-busy={refreshState === "refreshing"}
+              description={refreshState === "error" ? "Last refresh failed. Try refreshing the schema again." : "Refresh schema now"}
+              label={refreshState === "refreshing"
                 ? "Refreshing…"
                 : refreshState === "error"
                   ? "Retry refresh"
                   : "Refresh"}
-            </button>
+            />
           ) : null}
-          <span className="runtime-badge" data-testid="runtime-badge">
-            {runtime.isPending ? "Detecting runtime…" : runtime.data?.label}
-          </span>
-          <button
-            type="button"
-            className="settings-button"
-            aria-label="Open Settings"
-            title="Settings (⌘,)"
+          <span className="toolbar-separator" aria-hidden="true" />
+          <IconButton
+            icon="settings"
+            label="Open Settings"
+            description="Settings (⌘,)"
             onClick={() => openSettings()}
-          >
-            ⚙
-          </button>
-          <button type="button" className="command-button" aria-label="Open command palette" title="Command palette (⌘⇧P)" onClick={() => setCommandPaletteOpen(true)}>⌘</button>
-          <button type="button" className="notification-button" aria-label="Open notifications" onClick={() => setNoticesOpen((value) => !value)}>●{notices.length ? <b>{notices.length}</b> : null}</button>
+          />
+          <IconButton icon="command" label="Open command palette" description="Command palette (⌘⇧P)" onClick={() => setCommandPaletteOpen(true)} />
+          <IconButton icon="bell" label="Open notifications" description={notices.length ? `${notices.length} notifications` : "No notifications"} className="notification-button" aria-expanded={noticesOpen} onClick={() => setNoticesOpen((value) => !value)}>{notices.length ? <b aria-hidden="true">{notices.length > 99 ? "99+" : notices.length}</b> : null}</IconButton>
           {noticesOpen ? <section className="notification-popover" aria-label="Notifications"><header><strong>Notifications</strong><button type="button" onClick={() => setNotices([])}>Clear</button></header>{notices.length ? notices.map((notice) => <article key={notice.id}><strong>{notice.title}</strong><p>{notice.message}</p><small>{new Date(notice.createdAt).toLocaleTimeString()}</small></article>) : <p>No notifications.</p>}</section> : null}
         </div>
         <HeaderSidebarToggle
@@ -830,6 +840,7 @@ export function App() {
                 setSnapshot(undefined);
                 setChangeSet(undefined);
                 setSelectedTable(undefined);
+                setLocateRequest(undefined);
                 setSemantics(emptySemantics);
                 setSavedView(undefined);
               }
@@ -842,7 +853,8 @@ export function App() {
               <SchemaTree
                 snapshot={snapshot}
                 selectedTable={selectedTable}
-                onSelectTable={setSelectedTable}
+                onSelectTable={locateTable}
+                onOpenQuery={querySupported ? openTableInQuery : undefined}
               />
             ) : null}
           </ConnectionPanel>
@@ -909,8 +921,11 @@ export function App() {
               snapshot={snapshot}
               query={query}
               changeSet={mode === "changes" ? changeSet : undefined}
-              onSelectTable={setSelectedTable}
+              onSelectTable={inspectTable}
               selectedTable={selectedTable}
+              locateRequest={mode === "explore" ? locateRequest : undefined}
+              onLocateComplete={finishLocate}
+              navigationReady={semanticsSettledSnapshot === snapshot}
               semantics={semantics}
               onAddTablesToDomain={runtime.data?.kind === "desktop" && mode === "explore" && semanticsSnapshot === snapshot ? addTablesToDomain : undefined}
               savedView={savedView}
@@ -1011,6 +1026,7 @@ export function App() {
             setSnapshot(undefined);
             setChangeSet(undefined);
             setSelectedTable(undefined);
+            setLocateRequest(undefined);
             setSemantics(emptySemantics);
             setDataSources([]);
             setSettings(defaultEffectiveSettings());

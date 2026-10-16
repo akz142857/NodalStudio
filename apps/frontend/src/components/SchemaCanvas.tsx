@@ -1,7 +1,6 @@
 import {
   Background,
   Controls,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   SelectionMode,
@@ -9,13 +8,14 @@ import {
   useEdgesState,
   useKeyPress,
   useNodesState,
+  useNodesInitialized,
   useReactFlow,
-  useViewport,
+  useOnViewportChange,
   type Connection,
   type NodeChange,
   type NodeTypes,
 } from "@xyflow/react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   DatabaseSnapshot,
   AppSettings,
@@ -33,8 +33,11 @@ import type {
   ObjectKey,
 } from "../platform";
 import { getPlatform } from "../platform";
-import { captureDiagramSvg, diagramFileName } from "../graph/diagram-export";
+import { captureDiagramSvg, createDiagramSvgCapture, diagramFileName } from "../graph/diagram-export";
+import { captureExportBatches } from "../graph/export-batches";
 import type { OperationFeedbackState } from "./OperationFeedback";
+import { DiagramExportSurface, type DiagramExportSurfaceHandle } from "./DiagramExportSurface";
+import { guardExportInput } from "./export-input-guard";
 import { DiagramExportActions } from "./DiagramExportActions";
 import { DiagramSelectionActions } from "./DiagramSelectionActions";
 import { DiagramLayoutActions } from "./DiagramLayoutActions";
@@ -59,7 +62,10 @@ import {
   inferredRelationshipRuleKey,
 } from "../graph/schema-graph";
 import { TableNode } from "./TableNode";
+import { DiagramMiniMap } from "./DiagramMiniMap";
 import { relationshipEndpointFromHandle, sameRelationshipEndpoint } from "../graph/relationship-interaction";
+import { presentEdgesDuringDrag, prioritiseMovingEdges } from "../graph/drag-edge-presentation";
+import { useProgressiveEdges } from "./use-progressive-edges";
 import { CanvasInteractionProvider } from "./CanvasInteractionContext";
 import { CanvasSettingsProvider } from "./CanvasSettingsContext";
 import { RelationshipCreatePopover, type RelationshipDraft } from "./relationships/RelationshipCreatePopover";
@@ -67,12 +73,21 @@ import { RelationshipInspector } from "./relationships/RelationshipInspector";
 import { RelationshipManager } from "./relationships/RelationshipManager";
 import { RelationshipTargetPicker } from "./relationships/RelationshipTargetPicker";
 import { ComparisonEdge } from "./relationships/ComparisonEdge";
+import { SharedEdge, SharedEdgeLayer, type EdgeActivationEvent } from "./relationships/SharedEdgeLayer";
 import "@xyflow/react/dist/style.css";
 
 const nodeTypes = { table: TableNode } satisfies NodeTypes;
 const edgeTypes = { comparison: ComparisonEdge };
+const sharedEdgeTypes = { comparison: SharedEdge, default: SharedEdge, smoothstep: SharedEdge };
 const multiSelectionKeys = ["Shift", "Meta", "Control"];
 const emptyDomainGroups: DomainGroup[] = [];
+
+export interface CanvasLocateRequest {
+  sourceId: string;
+  snapshotId: string;
+  nodeId: string;
+  revision: number;
+}
 
 export interface SchemaCanvasProps {
   platform?: NodalStudioPlatform;
@@ -84,6 +99,9 @@ export interface SchemaCanvasProps {
   beforeSnapshot?: DatabaseSnapshot;
   onSelectTable: (table: TableDefinition | undefined) => void;
   selectedTable?: TableDefinition;
+  locateRequest?: CanvasLocateRequest;
+  onLocateComplete?: (request: CanvasLocateRequest) => void;
+  navigationReady?: boolean;
   semantics?: SemanticBundle;
   savedView?: SavedView;
   layoutLoaded?: boolean;
@@ -128,6 +146,9 @@ function SchemaCanvasInner({
   beforeSnapshot,
   onSelectTable,
   selectedTable,
+  locateRequest,
+  onLocateComplete,
+  navigationReady = true,
   semantics,
   savedView,
   layoutLoaded = true,
@@ -146,17 +167,24 @@ function SchemaCanvasInner({
   onClearSearch,
   onAddTablesToDomain,
 }: SchemaCanvasProps) {
+  const canvasId = useId();
   const layoutFingerprint = `${JSON.stringify(snapshot.sourceId)}:${changeSet
     ? `comparison:${changeSet.id}:${beforeSnapshot?.fingerprint ?? "partial"}:${snapshot.fingerprint}`
     : snapshot.fingerprint}`;
   const [focusNodeId, setFocusNodeId] = useState<string>();
+  const locateKey = locateRequest?.sourceId === snapshot.sourceId && locateRequest.snapshotId === snapshot.id ? JSON.stringify(locateRequest) : undefined;
+  const [previousLocate, setPreviousLocate] = useState<string>();
+  if (locateKey && previousLocate !== locateKey) { setPreviousLocate(locateKey); setFocusNodeId(undefined); }
   const [boxSelectMode, setBoxSelectMode] = useState(false);
   const spacePanMode = useKeyPress("Space");
   const { fitView, getNodes, getViewport } = useReactFlow<TableNodeType, FieldEdge>();
+  const nodesInitialized = useNodesInitialized();
+  const handledLocate = useRef<string | undefined>(undefined);
   const flowRef = useRef<HTMLDivElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const [readyGraph, setReadyGraph] = useState<ReturnType<typeof buildSchemaGraph>>();
-  const viewport = useViewport();
-  const viewportRevision = `${viewport.x}:${viewport.y}:${viewport.zoom}`;
+  const [exportRendering, setExportRendering] = useState(false);
+  const exportSurface = useRef<DiagramExportSurfaceHandle>(null);
   const [inferredRelationshipOverride, setInferredRelationshipOverride] = useState<boolean>();
   const [physicalRelationshipOverride, setPhysicalRelationshipOverride] = useState<boolean>();
   const [showLogicalRelationships, setShowLogicalRelationships] = useState(true);
@@ -213,7 +241,7 @@ function SchemaCanvasInner({
         } })),
       } : built;
     },
-    [beforeSnapshot, canvasSettings.edgeStyle, canvasSettings.fieldLevelEdges, canvasSettings.indexes, canvasSettings.maxInitialColumns, canvasSettings.relationshipHighlightDepth, canvasSettings.showCardinality, canvasSettings.showReferentialActions, canvasSettings.showRelationNames, canvasSettings.showTableComments, changeSet, colorBlindPalette, focusNodeId, highContrastRelations, onOpenQuery, query, readOnlyPreview, relationshipsEditable, savedView, semantics, showInferredRelationships, showInvalidRelationships, showLogicalRelationships, showPhysicalRelationships, snapshot],
+    [beforeSnapshot, canvasSettings.edgeStyle, canvasSettings.fieldLevelEdges, canvasSettings.indexes, canvasSettings.maxInitialColumns, canvasSettings.relationshipHighlightDepth, canvasSettings.showCardinality, canvasSettings.showReferentialActions, canvasSettings.showRelationNames, canvasSettings.showTableComments, changeSet, colorBlindPalette, focusNodeId, highContrastRelations, onOpenQuery, query, readOnlyPreview, relationshipsEditable, savedView, semantics?.annotations, semantics?.domainGroups, semantics?.logicalRelationships, semantics?.ignoredRelationshipInferences, showInferredRelationships, showInvalidRelationships, showLogicalRelationships, showPhysicalRelationships, snapshot],
   );
   const [nodes, setNodes] = useNodesState<TableNodeType>(graph.nodes);
   const latestNodes = useRef(nodes);
@@ -223,6 +251,25 @@ function SchemaCanvasInner({
     selectedNodeIds.current = new Set(nodes.filter((node) => node.selected).map((node) => node.id));
   }, [nodes]);
   const layoutReady = readyGraph === graph;
+  useEffect(() => {
+    if (!locateRequest || locateRequest.sourceId !== snapshot.sourceId || locateRequest.snapshotId !== snapshot.id) return;
+    const key = JSON.stringify(locateRequest);
+    if (handledLocate.current === key) return;
+    // A sidebar jump leaves an isolated relationship view before waiting for
+    // the full graph's layout and measured node sizes, rather than racing it.
+    if (focusNodeId) return;
+    if (!navigationReady || !layoutReady || !nodesInitialized || query || savedView) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = getNodes().find((node) => node.id === locateRequest.nodeId);
+      if (!target) return;
+      handledLocate.current = key;
+      setSelectedEdgeId(undefined);
+      setNodes((current) => current.map((node) => ({ ...node, selected: node.id === target.id })));
+      void fitView({ nodes: [target], duration: 300, padding: 0.25, minZoom: 0.1, maxZoom: 1 });
+      onLocateComplete?.(locateRequest);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [locateRequest, snapshot.sourceId, snapshot.id, focusNodeId, navigationReady, layoutReady, nodesInitialized, query, savedView, getNodes, setNodes, fitView, onLocateComplete]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
   const pendingGeometryCommit = useRef(false);
   const draggingRef = useRef(false);
@@ -231,9 +278,10 @@ function SchemaCanvasInner({
   const lastSelectionScope = useRef<string | undefined>(undefined);
   const temporaryReason = readOnlyPreview ? "Read-only DDL preview; no source workspace or database connection." : changeSet ? "Comparison diagram." : runtimeKind === "web" ? "Shared Web diagram."
     : savedView ? "Business domain / saved view." : query ? "Search results." : focusNodeId ? "Focused diagram." : undefined;
-  const canvasInteraction = useMemo(() => ({ spacePanMode, layoutEditingDisabled: !layoutReady || (!temporaryReason && !layoutLoaded) }), [spacePanMode, layoutReady, temporaryReason, layoutLoaded]);
+  const inPlaceExport = exportRendering && nodes.length < 100;
+  const canvasInteraction = useMemo(() => ({ spacePanMode, overviewEnabled: nodes.length >= 100, exportRendering: inPlaceExport, layoutEditingDisabled: inPlaceExport || !layoutReady || (!temporaryReason && !layoutLoaded) }), [spacePanMode, layoutReady, temporaryReason, layoutLoaded, nodes.length, inPlaceExport]);
   const layoutScope = JSON.stringify([selectionScope, query, focusNodeId, savedView?.id, runtimeKind, layoutLoaded, readOnlyPreview]);
-  const historyScope = JSON.stringify([layoutScope, graph.nodes.map((node) => node.id).sort()]);
+  const historyScope = useMemo(() => JSON.stringify([layoutScope, graph.nodes.map((node) => node.id).sort()]), [layoutScope, graph.nodes]);
   const layoutHistory = useRef(new DiagramLayoutHistory());
   const gesture = useRef<{ scope: string; before: LayoutFrame; label: string } | undefined>(undefined);
   const [historyActions, setHistoryActions] = useState<{ scope: string; undo?: string; redo?: string }>({ scope: historyScope });
@@ -245,7 +293,7 @@ function SchemaCanvasInner({
     draggingRef.current = false;
   }, [historyScope]);
   const geometryGestureActive = nodes.some((node) => node.dragging || node.resizing);
-  const layoutActionsDisabled = canvasInteraction.layoutEditingDisabled || geometryGestureActive;
+  const layoutActionsDisabled = canvasInteraction.layoutEditingDisabled || geometryGestureActive || exportRendering;
   const currentLayoutScope = useRef(layoutScope);
   const previousLayoutScope = useRef<string | undefined>(undefined);
   const fullLayouts = useRef(new Map<string, ReturnType<typeof serializeCanvasLayout>>());
@@ -306,8 +354,8 @@ function SchemaCanvasInner({
     setEdges(orientFieldEdges(graph.edges, restored.nodes));
     // A disabled undo/redo button can drop focus to the page body. Keep subsequent
     // shortcuts in the diagram, without stealing focus from a selected node.
-    if (document.activeElement?.tagName === "BUTTON" && flowRef.current?.parentElement?.contains(document.activeElement)) {
-      flowRef.current.focus({ preventScroll: true });
+    if (document.activeElement?.tagName === "BUTTON" && workspaceRef.current?.contains(document.activeElement)) {
+      flowRef.current?.focus({ preventScroll: true });
     }
     if (temporaryReason) setLayoutFeedback({ scope: layoutScope, state: { phase: "success", summary: `${direction === "undo" ? "Undid" : "Redid"} ${restored.label} for this view only.` } });
     else saveLayout(restored.nodes);
@@ -319,7 +367,7 @@ function SchemaCanvasInner({
       const target = event.target;
       if (!(target instanceof HTMLElement) || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="dialog"]')) return;
       // Leave other editors and inspectors' shortcuts alone. Diagram controls and nodes are in this main area.
-      if (!flowRef.current?.parentElement?.contains(target)) return;
+      if (!workspaceRef.current?.contains(target)) return;
       const key = event.key.toLowerCase();
       const direction = key === "z" ? (event.shiftKey ? "redo" : "undo") : key === "y" && event.ctrlKey && !event.metaKey && !event.shiftKey ? "redo" : undefined;
       if (direction && restoreLayoutEdit(direction)) event.preventDefault();
@@ -332,23 +380,30 @@ function SchemaCanvasInner({
     ? `${selectedTable.key.schema}.${selectedTable.key.name}`
     : undefined;
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
-  useLayoutEffect(() => {
-    void viewportRevision;
-    if (!selectedEdge || draggingRef.current) return;
-    const frame = window.requestAnimationFrame(() => {
-      const edgeElement = Array.from(document.querySelectorAll<SVGGElement>(".schema-canvas-flow .react-flow__edge"))
-        .find((element) => element.dataset.id === selectedEdge.id);
+  const anchorFrame = useRef<number | undefined>(undefined);
+  const updateEdgeAnchor = useCallback(() => {
+    if (!selectedEdge || draggingRef.current || anchorFrame.current !== undefined) return;
+    anchorFrame.current = window.requestAnimationFrame(() => {
+      anchorFrame.current = undefined;
+      const edgeElement = Array.from(flowRef.current?.querySelectorAll<SVGGElement>(".react-flow__edge") ?? []).find((element) => element.dataset.id === selectedEdge.id && element.querySelector(".react-flow__edge-path"));
       const edgePath = edgeElement?.querySelector<SVGPathElement>(".react-flow__edge-path");
       if (!edgePath) return;
       const bounds = edgePath.getBoundingClientRect();
-      setSelectedEdgeAnchor({
-        edgeId: selectedEdge.id,
-        x: bounds.left + bounds.width / 2,
-        y: bounds.top + bounds.height / 2,
-      });
+      const x = bounds.left + bounds.width / 2;
+      const y = bounds.top + bounds.height / 2;
+      setSelectedEdgeAnchor((current) => current?.edgeId === selectedEdge.id && current.x === x && current.y === y
+        ? current : { edgeId: selectedEdge.id, x, y });
     });
-    return () => window.cancelAnimationFrame(frame);
-  }, [nodes, selectedEdge, viewportRevision]);
+  }, [selectedEdge]);
+  // Panning must not subscribe the entire canvas (and its menus) to every frame.
+  useOnViewportChange({ onChange: updateEdgeAnchor });
+  useLayoutEffect(() => {
+    updateEdgeAnchor();
+    return () => {
+      if (anchorFrame.current !== undefined) window.cancelAnimationFrame(anchorFrame.current);
+      anchorFrame.current = undefined;
+    };
+  }, [nodes, updateEdgeAnchor]);
   const displayedEdges = useMemo(() => edges.map((edge) => {
     if (!selectedEdge) return edge;
     const highlighted = edge.id === selectedEdge.id;
@@ -370,14 +425,58 @@ function SchemaCanvasInner({
       labelBgStyle: { ...edge.labelBgStyle, fillOpacity: highlighted ? 0.94 : 0.08 },
     };
   }), [edges, selectedEdge]);
+  const movingNodeKey = JSON.stringify(nodes.filter((node) => node.dragging || node.resizing).map((node) => node.id).sort());
+  const denseModel = graph.nodes.length >= 500 && graph.edges.length >= 1000;
+  const denseGesture = denseModel && movingNodeKey !== "[]" && !exportRendering;
+  const [lastGesture, setLastGesture] = useState({ graph, key: "[]" });
+  if (lastGesture.graph !== graph || (denseGesture && lastGesture.key !== movingNodeKey)) setLastGesture({ graph, key: denseGesture ? movingNodeKey : "[]" });
+  const gestureEdges = useMemo(() => {
+    if (!denseModel) return displayedEdges;
+    const ids = new Set(JSON.parse(denseGesture ? movingNodeKey : lastGesture.key) as string[]);
+    return denseGesture ? presentEdgesDuringDrag(displayedEdges, ids) : prioritiseMovingEdges(displayedEdges, ids);
+  }, [denseGesture, denseModel, displayedEdges, lastGesture.key, movingNodeKey]);
+  const edgePresentation = useMemo(() => ({ graph, denseGesture }), [graph, denseGesture]);
+  const { renderedEdges, pending: edgesRendering } = useProgressiveEdges(gestureEdges, edgePresentation, denseModel, layoutReady, denseGesture, !denseGesture && lastGesture.graph === graph && lastGesture.key !== "[]");
+  const projectFlowEdges = useMemo(() => {
+    const cache = new WeakMap<FieldEdge, FieldEdge>();
+    return (edges: FieldEdge[]) => edges.map((edge) => {
+      let projected = cache.get(edge);
+      if (!projected) {
+        projected = { ...edge, className: [edge.className, "diagram-edge-proxy"].filter(Boolean).join(" "), focusable: false, domAttributes: { ...edge.domAttributes, "aria-hidden": true as const } };
+        cache.set(edge, projected);
+      }
+      return projected;
+    });
+  }, []);
+  const flowEdges = useMemo(() => denseModel ? projectFlowEdges(renderedEdges) : renderedEdges, [denseModel, renderedEdges, projectFlowEdges]);
+  const activateSharedEdge = useCallback((event: EdgeActivationEvent, id: string, edit: boolean) => {
+    const edge = edges.find((candidate) => candidate.id === id);
+    if (!edge) return;
+    event.preventDefault(); event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    onSelectTable(undefined);
+    setNodes((current) => current.map((node) => node.selected ? { ...node, selected: false } : node));
+    setEdges((current) => current.map((candidate) => Boolean(candidate.selected) === (candidate.id === id) ? candidate : { ...candidate, selected: candidate.id === id }));
+    setSelectedEdgeId(id);
+    setSelectedEdgeAnchor({ edgeId: id, x: "clientX" in event ? event.clientX : rect.left + rect.width / 2, y: "clientY" in event ? event.clientY : rect.top + rect.height / 2 });
+    if (edit && relationshipsEditable && edge.data?.relationshipKind === "logical") {
+      const relationship = semantics?.logicalRelationships.find((item) => item.id === edge.data?.relationshipId);
+      if (relationship) setRelationshipDraft({ source: relationship.source, target: relationship.target, relationship });
+    }
+  }, [edges, onSelectTable, relationshipsEditable, semantics?.logicalRelationships, setEdges, setNodes]);
+  const clearSharedEdge = useCallback(() => {
+    setSelectedEdgeId(undefined);
+    setEdges((current) => current.map((edge) => edge.selected ? { ...edge, selected: false } : edge));
+  }, [setEdges]);
+
   const activeRelationshipSource = relationshipPickSource ?? connectionDragSource;
-  const displayedNodes = useMemo(() => {
+  const presentNodes = useMemo(() => {
     // Hoisted out of the map: this lookup does not vary per node.
     const sourceNode = activeRelationshipSource
       ? graph.nodes.find((candidate) => candidate.id === `${activeRelationshipSource.schema}.${activeRelationshipSource.table}`)
       : undefined;
     const sourceColumn = sourceNode?.data.table.columns.find((column) => column.name === activeRelationshipSource?.columns[0]);
-    return nodes.map((node) => {
+    const flags = new Map(graph.nodes.map((node) => {
       const isSource = node.id === selectedEdge?.source;
       const isTarget = node.id === selectedEdge?.target;
       const relationshipConnectTargets = sourceColumn && activeRelationshipSource
@@ -389,8 +488,8 @@ function SchemaCanvasInner({
             return [column.name, sameField ? "invalid" : compatible ? "valid" : "warning"];
           })) as Record<string, "valid" | "warning" | "invalid">
         : undefined;
-      const inspectorFocused = node.id === selectedTableNodeId;
-      const relationshipHighlighted = selectedEdge ? isSource || isTarget : undefined;
+      const inspectorFocused = node.id === selectedTableNodeId ? true : undefined;
+      const relationshipHighlighted = selectedEdge && (isSource || isTarget) ? true : undefined;
       const relationshipColumn = selectedEdge
         ? isSource
           ? selectedEdge.data?.sourceColumn
@@ -398,28 +497,18 @@ function SchemaCanvasInner({
             ? selectedEdge.data?.targetColumn
             : undefined
         : undefined;
-      // Reuse the existing object when nothing this memo derives has changed, so
-      // dragging one table does not hand every other node a fresh `data` identity.
-      if (
-        node.data.inspectorFocused === inspectorFocused
-        && node.data.relationshipHighlighted === relationshipHighlighted
-        && node.data.relationshipColumn === relationshipColumn
-        && node.data.relationshipConnectTargets === relationshipConnectTargets
-      ) {
-        return node;
-      }
-      return {
-        ...node,
-        data: {
-          ...node.data,
-          inspectorFocused,
-          relationshipHighlighted,
-          relationshipColumn,
-          relationshipConnectTargets,
-        },
-      };
+      return [node.id, { inspectorFocused, relationshipHighlighted, relationshipColumn, relationshipConnectTargets }] as const;
+    }));
+    const cache = new WeakMap<TableNodeType["data"], TableNodeType["data"]>();
+    return (current: TableNodeType[]) => current.map((node) => {
+      const overlay = flags.get(node.id);
+      if (!overlay || Object.entries(overlay).every(([key, value]) => node.data[key] === value)) return node;
+      let data = cache.get(node.data);
+      if (!data) { data = { ...node.data, ...overlay }; cache.set(node.data, data); }
+      return { ...node, data };
     });
-  }, [activeRelationshipSource, graph.nodes, nodes, selectedEdge, selectedTableNodeId]);
+  }, [activeRelationshipSource, graph.nodes, selectedEdge, selectedTableNodeId]);
+  const displayedNodes = useMemo(() => presentNodes(nodes), [presentNodes, nodes]);
 
   const endpointFromHandle = useCallback((nodeId: string | null | undefined, handleId: string | null | undefined): RelationshipEndpoint | undefined => {
     return relationshipEndpointFromHandle(graph.nodes, nodeId, handleId);
@@ -533,7 +622,7 @@ function SchemaCanvasInner({
             setReadyGraph(graph);
             if (shouldAutoFit) {
               lastAutoFitFingerprint.current = layoutFingerprint;
-              void fitView({ duration: 300, padding: 0.12, maxZoom: 1 });
+              void fitView({ duration: graph.nodes.length >= 500 ? 0 : 300, padding: 0.12, maxZoom: 1 });
             }
           }
         });
@@ -597,9 +686,9 @@ function SchemaCanvasInner({
     gesture.current = undefined;
     if (edit?.scope !== historyScope) return;
     recordLayout(edit.before, nodes, edit.label);
-    setEdges(orientFieldEdges(graph.edges, nodes));
+    setEdges((current) => orientFieldEdges(current, nodes));
     saveLayout(nodes);
-  }, [graph.edges, historyScope, nodes, recordLayout, saveLayout, setEdges]);
+  }, [historyScope, nodes, recordLayout, saveLayout, setEdges]);
 
   const autoLayoutTables = useCallback((selectedOnly: boolean) => {
     if (layoutActionsDisabled || draggingRef.current || gesture.current) return;
@@ -621,12 +710,12 @@ function SchemaCanvasInner({
       if (temporaryReason) setLayoutFeedback({ scope: layoutScope, state: { phase: "success", summary: `${label} applied for this view only. ${selectedOnly ? current.filter((node) => node.selected && !node.data.layoutPinned).length : current.filter((node) => !node.data.layoutPinned).length} tables arranged.` } });
       else saveLayout(next);
       if (!selectedOnly) window.requestAnimationFrame(() => {
-        if (currentLayoutScope.current === layoutScope && revision === layoutRevision.current) void fitView({ duration: 300, padding: 0.12, maxZoom: 1 });
+        if (currentLayoutScope.current === layoutScope && revision === layoutRevision.current) void fitView({ duration: graph.nodes.length >= 500 ? 0 : 300, padding: 0.12, maxZoom: 1 });
       });
     }).catch((reason: unknown) => {
       if (currentLayoutScope.current === layoutScope && revision === layoutRevision.current) setLayoutFeedback({ scope: layoutScope, state: { phase: "error", summary: `${label} failed. Current positions remain visible.`, details: reason instanceof Error ? reason.message : String(reason) }, retry: selectedOnly ? "selected" : "auto" });
     });
-  }, [canvasSettings, fitView, getNodes, graph.edges, layoutActionsDisabled, layoutScope, layoutWorkerTimeoutMs, recordLayout, saveLayout, setEdges, setNodes, temporaryReason]);
+  }, [canvasSettings, fitView, getNodes, graph.edges, graph.nodes.length, layoutActionsDisabled, layoutScope, layoutWorkerTimeoutMs, recordLayout, saveLayout, setEdges, setNodes, temporaryReason]);
 
   useEffect(() => {
     function fitCanvas() {
@@ -643,46 +732,34 @@ function SchemaCanvasInner({
       if (focusNodeId) {
         setFocusNodeId(undefined);
       } else {
-        void fitView({ duration: 300, padding: 0.12, maxZoom: 1 });
+        void fitView({ duration: graph.nodes.length >= 500 ? 0 : 300, padding: 0.12, maxZoom: 1 });
       }
-    }
-    function locateTable(event: Event) {
-      const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
-      if (!nodeId) return;
-      setFocusNodeId(undefined);
-      setSelectedEdgeId(undefined);
-      const node = nodes.find((candidate) => candidate.id === nodeId);
-      if (node) window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-        void fitView({ nodes: [node], duration: 350, padding: 0.8, minZoom: 0.75, maxZoom: 1.2 });
-      }));
     }
     window.addEventListener("nodalstudio:fit-canvas", fitCanvas);
     window.addEventListener("nodalstudio:relayout-canvas", relayoutCanvas);
     window.addEventListener("nodalstudio:focus-selected-table", focusSelectedTable);
     window.addEventListener("nodalstudio:view-all-tables", viewAllTables);
-    window.addEventListener("nodalstudio:locate-table", locateTable);
     return () => {
       window.removeEventListener("nodalstudio:fit-canvas", fitCanvas);
       window.removeEventListener("nodalstudio:relayout-canvas", relayoutCanvas);
       window.removeEventListener("nodalstudio:focus-selected-table", focusSelectedTable);
       window.removeEventListener("nodalstudio:view-all-tables", viewAllTables);
-      window.removeEventListener("nodalstudio:locate-table", locateTable);
     };
-  }, [autoLayoutTables, fitView, focusNodeId, nodes, onSelectTable, selectedTable, setNodes]);
+  }, [autoLayoutTables, fitView, focusNodeId, graph.nodes.length, nodes, onSelectTable, selectedTable, setNodes]);
 
   const finishNodeDrag = useCallback(() => {
     draggingRef.current = false;
     // React Flow can still expose the previous dragging flag in its stop callback.
     const movedNodes = getNodes().map((node) => node.dragging ? { ...node, dragging: false } : node);
     setNodes(movedNodes);
-    setEdges(orientFieldEdges(graph.edges, movedNodes));
+    setEdges((current) => orientFieldEdges(current, movedNodes));
     layoutRevision.current += 1;
     const edit = gesture.current;
     gesture.current = undefined;
     pendingGeometryCommit.current = false;
     if (edit?.scope === historyScope) recordLayout(edit.before, movedNodes, edit.label);
     saveLayout(movedNodes);
-  }, [getNodes, graph.edges, historyScope, recordLayout, saveLayout, setEdges, setNodes]);
+  }, [getNodes, historyScope, recordLayout, saveLayout, setEdges, setNodes]);
   const arrangeSelectedTables = (action: TableArrangement) => {
     if (layoutActionsDisabled || draggingRef.current || gesture.current) return;
     try {
@@ -708,7 +785,7 @@ function SchemaCanvasInner({
     layoutRevision.current += 1;
     recordLayout(captureLayoutFrame(current), next, pinned ? "Fix table positions" : "Unlock table positions");
     // Fix/unlock disables the button just used; keep layout shortcuts available.
-    if (document.activeElement?.tagName === "BUTTON" && flowRef.current?.parentElement?.contains(document.activeElement)) flowRef.current.focus({ preventScroll: true });
+    if (document.activeElement?.tagName === "BUTTON" && workspaceRef.current?.contains(document.activeElement)) flowRef.current?.focus({ preventScroll: true });
     setNodes(next);
     if (temporaryReason) setLayoutFeedback({ scope: layoutScope, state: { phase: "success", summary: "Fixed states adjusted for this view only." } });
     else saveLayout(next);
@@ -718,21 +795,54 @@ function SchemaCanvasInner({
   const selectedTableKeys = selectedCurrentTableKeys(selectedNodes, snapshot);
 
   return (
-    <>
+    <div className="schema-canvas-workspace" ref={workspaceRef} aria-busy={exportRendering}>
+      {nodes.length ? <DiagramSelectionActions key={selectionScope} snapshot={snapshot} selectedCount={selectedNodes.length} selectedTableKeys={selectedTableKeys}
+        domainGroups={semantics?.domainGroups ?? emptyDomainGroups} disabled={!layoutReady || exportRendering}
+        readOnlyReason={readOnlyPreview ? "DDL previews cannot edit business semantics or become database sources." : changeSet ? "Comparison diagrams are read only. Open Database to edit business domains." : runtimeKind === "web" ? "Shared diagrams are read only." : undefined}
+        onAddTablesToDomain={readOnlyPreview || changeSet || runtimeKind === "web" ? undefined : onAddTablesToDomain}
+        layoutActions={<DiagramLayoutActions selectedCount={selectedNodes.length}
+          pinnedCount={selectedNodes.filter((node) => node.data.layoutPinned).length} movableCount={selectedNodes.filter((node) => !node.data.layoutPinned).length}
+          onPin={() => fixSelectedTables(true)} onUnpin={() => fixSelectedTables(false)} onAutoLayoutSelected={() => autoLayoutTables(true)} disabled={layoutActionsDisabled} waitingForLayout={!temporaryReason && !layoutLoaded}
+          undoLabel={historyActions.scope === historyScope ? historyActions.undo : undefined} redoLabel={historyActions.scope === historyScope ? historyActions.redo : undefined}
+          onUndo={() => restoreLayoutEdit("undo")} onRedo={() => restoreLayoutEdit("redo")}
+          onDismissFeedback={() => setLayoutFeedback(undefined)} temporaryReason={temporaryReason} feedback={layoutFeedback?.scope === layoutScope ? layoutFeedback.state : undefined}
+          onArrange={arrangeSelectedTables} retryLabel={layoutFeedback?.retry === "save" ? "Retry layout save" : "Retry arrangement"}
+          onRetry={layoutFeedback?.scope === layoutScope && layoutFeedback.retry ? () => {
+            if (layoutFeedback.retry === "save") saveLayout(getNodes());
+            else if (layoutFeedback.retry === "auto" || layoutFeedback.retry === "selected") autoLayoutTables(layoutFeedback.retry === "selected");
+            else if (layoutFeedback.retry) arrangeSelectedTables(layoutFeedback.retry);
+          } : undefined} />}
+        boxSelectionActive={boxSelectMode} onToggleBoxSelection={() => setBoxSelectMode((value) => !value)}
+        onClear={() => setNodes((current) => current.map((node) => node.selected ? { ...node, selected: false } : node))} /> : null}
+      <div className="schema-canvas-surface" data-exporting={exportRendering || undefined}
+        onPointerDownCapture={(event) => { guardExportInput(event, exportRendering); }}
+        onMouseDownCapture={(event) => { guardExportInput(event, exportRendering); }}
+        onClickCapture={(event) => { guardExportInput(event, exportRendering); }}
+        onDoubleClickCapture={(event) => { guardExportInput(event, exportRendering); }}
+        onKeyDownCapture={(event) => { guardExportInput(event, exportRendering); }}
+        onWheelCapture={(event) => { guardExportInput(event, exportRendering); }}
+        onTouchStartCapture={(event) => { guardExportInput(event, exportRendering); }}
+        onContextMenuCapture={(event) => { guardExportInput(event, exportRendering); }}>
       <CanvasInteractionProvider value={canvasInteraction}>
+      <SharedEdgeLayer enabled={denseModel} activate={activateSharedEdge} clear={clearSharedEdge} graphScope={graph}>
       <ReactFlow<TableNodeType, FieldEdge>
+        id={canvasId}
         ref={flowRef}
         tabIndex={0}
+        inert={inPlaceExport}
+        aria-hidden={inPlaceExport || undefined}
+        aria-disabled={exportRendering || undefined}
         className={[
           "schema-canvas-flow",
-          nodes.length >= Math.min(canvasSettings.largeModelThreshold, renderDegradeThreshold) ? "large-model-mode" : "",
+          nodes.length >= Math.min(100, canvasSettings.largeModelThreshold, renderDegradeThreshold) ? "large-model-mode" : "",
           spacePanMode ? "space-pan-mode" : "",
           activeRelationshipSource || relationshipRebindSourceSelection ? "relationship-picking-mode" : "",
         ].filter(Boolean).join(" ")}
         nodes={displayedNodes}
-        edges={displayedEdges}
+        edges={graph.nodes.length >= 500 && !layoutReady ? [] : flowEdges}
+        onlyRenderVisibleElements={nodes.length >= 100}
         nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
+        edgeTypes={denseModel ? sharedEdgeTypes : edgeTypes}
         onNodesChange={(incoming: NodeChange<TableNodeType>[]) => {
           const fixed = new Set(latestNodes.current.filter((node) => node.data.layoutPinned).map((node) => node.id));
           const changes = incoming.filter((change) => !("id" in change && fixed.has(change.id) && (change.type === "position" || (change.type === "dimensions" && change.resizing !== undefined))));
@@ -827,7 +937,7 @@ function SchemaCanvasInner({
             if (additive && nextSelection.has(node.id)) nextSelection.delete(node.id);
             else nextSelection.add(node.id);
             selectedNodeIds.current = nextSelection;
-            setNodes((current) => current.map((candidate) => ({ ...candidate, selected: nextSelection.has(candidate.id) })));
+            setNodes((current) => current.map((candidate) => Boolean(candidate.selected) === nextSelection.has(candidate.id) ? candidate : { ...candidate, selected: nextSelection.has(candidate.id) }));
             onSelectTable(node.data.inspectionTable ?? node.data.table);
           }
         }}
@@ -875,28 +985,12 @@ function SchemaCanvasInner({
         colorMode="light"
       >
         <Background gap={20} size={1} />
-        <MiniMap pannable zoomable />
+        <DiagramMiniMap dense={graph.nodes.length >= 500} />
         <Controls />
       </ReactFlow>
+      </SharedEdgeLayer>
       </CanvasInteractionProvider>
-      {nodes.length ? <DiagramSelectionActions key={selectionScope} snapshot={snapshot} selectedCount={selectedNodes.length} selectedTableKeys={selectedTableKeys}
-        domainGroups={semantics?.domainGroups ?? emptyDomainGroups} disabled={!layoutReady}
-        readOnlyReason={readOnlyPreview ? "DDL previews cannot edit business semantics or become database sources." : changeSet ? "Comparison diagrams are read only. Open Database to edit business domains." : runtimeKind === "web" ? "Shared diagrams are read only." : undefined}
-        onAddTablesToDomain={readOnlyPreview || changeSet || runtimeKind === "web" ? undefined : onAddTablesToDomain}
-        layoutActions={<DiagramLayoutActions selectedCount={selectedNodes.length}
-          pinnedCount={selectedNodes.filter((node) => node.data.layoutPinned).length} movableCount={selectedNodes.filter((node) => !node.data.layoutPinned).length}
-          onPin={() => fixSelectedTables(true)} onUnpin={() => fixSelectedTables(false)} onAutoLayoutSelected={() => autoLayoutTables(true)} disabled={layoutActionsDisabled} waitingForLayout={!temporaryReason && !layoutLoaded}
-          undoLabel={historyActions.scope === historyScope ? historyActions.undo : undefined} redoLabel={historyActions.scope === historyScope ? historyActions.redo : undefined}
-          onUndo={() => restoreLayoutEdit("undo")} onRedo={() => restoreLayoutEdit("redo")}
-          temporaryReason={temporaryReason} feedback={layoutFeedback?.scope === layoutScope ? layoutFeedback.state : undefined}
-          onArrange={arrangeSelectedTables} retryLabel={layoutFeedback?.retry === "save" ? "Retry layout save" : "Retry arrangement"}
-          onRetry={layoutFeedback?.scope === layoutScope && layoutFeedback.retry ? () => {
-            if (layoutFeedback.retry === "save") saveLayout(getNodes());
-            else if (layoutFeedback.retry === "auto" || layoutFeedback.retry === "selected") autoLayoutTables(layoutFeedback.retry === "selected");
-            else if (layoutFeedback.retry) arrangeSelectedTables(layoutFeedback.retry);
-          } : undefined} />}
-        boxSelectionActive={boxSelectMode} onToggleBoxSelection={() => setBoxSelectMode((value) => !value)}
-        onClear={() => setNodes((current) => current.map((node) => node.selected ? { ...node, selected: false } : node))} /> : null}
+      <DiagramExportSurface ref={exportSurface} />
       {columnContextMenu ? (
         <div className="relationship-context-menu" role="menu" style={{ left: columnContextMenu.x, top: columnContextMenu.y }}>
           <button type="button" role="menuitem" onClick={() => {
@@ -1018,11 +1112,13 @@ function SchemaCanvasInner({
       /> : null}
       {relationshipActionError ? <div className="relationship-action-error" role="alert">{relationshipActionError}<button type="button" onClick={() => setRelationshipActionError("")}>Dismiss</button></div> : null}
       <div className="canvas-status">
+        {edgesRendering && layoutReady ? <span role="status">Drawing relationships…</span> : null}
+        {denseGesture ? <span role="status">Moving tables · Showing connected relationships</span> : null}
         <span>{nodes.length} tables{changeSet ? beforeSnapshot ? " · Before + After" : " · After" : ""}</span>
-        <button type="button" className="relationship-filter relationship-filter-physical" data-active={showPhysicalRelationships || undefined} onClick={() => setPhysicalRelationshipOverride(!showPhysicalRelationships)}>{showPhysicalRelationships ? "✓" : ""} {graph.physicalRelationshipCount} {readOnlyPreview ? "declared FKs" : "physical"}{changeSet ? " versions" : ""}</button>
-        <button type="button" className="relationship-filter relationship-filter-logical" data-active={showLogicalRelationships || undefined} onClick={() => setShowLogicalRelationships((value) => !value)}>{showLogicalRelationships ? "✓" : ""} {graph.logicalRelationshipCount} logical</button>
+        <button type="button" disabled={exportRendering} className="relationship-filter relationship-filter-physical" data-active={showPhysicalRelationships || undefined} onClick={() => setPhysicalRelationshipOverride(!showPhysicalRelationships)}>{showPhysicalRelationships ? "✓" : ""} {graph.physicalRelationshipCount} {readOnlyPreview ? "declared FKs" : "physical"}{changeSet ? " versions" : ""}</button>
+        <button type="button" disabled={exportRendering} className="relationship-filter relationship-filter-logical" data-active={showLogicalRelationships || undefined} onClick={() => setShowLogicalRelationships((value) => !value)}>{showLogicalRelationships ? "✓" : ""} {graph.logicalRelationshipCount} logical</button>
         <button type="button" onClick={() => window.dispatchEvent(new Event("nodalstudio:view-all-tables"))} title="Exit table focus and fit every table into the viewport">View all</button>
-        <button type="button" disabled={layoutActionsDisabled || nodes.every((node) => node.data.layoutPinned)} onClick={() => autoLayoutTables(false)} title="Arrange movable tables into compact groups; fixed tables stay in place">Auto layout</button>
+        <button type="button" disabled={layoutActionsDisabled || edgesRendering || nodes.every((node) => node.data.layoutPinned)} onClick={() => autoLayoutTables(false)} title="Arrange movable tables into compact groups; fixed tables stay in place. Groups of 200+ tables use compact relationship-guided placement to keep layout responsive.">Auto layout</button>
         {relationshipsEditable ? <button type="button" onClick={() => setRelationshipManagerOpen(true)}>Manage relationships</button> : null}
         {semantics?.logicalRelationships.some((relationship) => relationship.status !== "active") ? <button type="button" data-active={showInvalidRelationships || undefined} onClick={() => setShowInvalidRelationships((value) => !value)}>{showInvalidRelationships ? "Hide" : "Show"} inactive</button> : null}
         {selectedEdge ? <><span className="selected-relation-summary" title={selectedEdge.data?.relationshipKind === "logical" ? "Double-click to edit · Delete or Backspace to remove" : undefined}>{selectedEdge.data?.constraintName ?? selectedEdge.data?.relationshipKind}: {selectedEdge.source}.{selectedEdge.data?.sourceColumn} → {selectedEdge.target}.{selectedEdge.data?.targetColumn}</span><button type="button" onClick={() => setSelectedEdgeId(undefined)}>Clear relation</button></> : null}
@@ -1051,14 +1147,63 @@ function SchemaCanvasInner({
       </div>
       {!readOnlyPreview ? <DiagramExportActions scope={layoutScope}
         platform={platform}
-        disabled={!layoutReady || !nodes.length}
+        disabled={!layoutReady || !nodes.length || edgesRendering || geometryGestureActive}
         fileName={(format) => diagramFileName(snapshot.database.name, snapshot.fingerprint, format)}
-        capture={() => {
-          if (!flowRef.current) throw new Error("The diagram is no longer open.");
-          return captureDiagramSvg({ root: flowRef.current, viewport: getViewport(), snapshot, changeSet, beforeSnapshot, colorBlindPalette,
-            scope: [savedView?.name, query ? `Filtered by “${query}”` : "", focusNodeId ? `Focus: ${focusNodeId}` : ""].filter(Boolean).join(" · ") || "All tables" });
+        capture={async () => {
+          const root = flowRef.current;
+          if (!root) throw new Error("The diagram is no longer open.");
+          const batched = nodes.length >= 100;
+          const settle = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
+          const assertCurrent = () => {
+            if (flowRef.current !== root || !root.isConnected || currentLayoutScope.current !== layoutScope) throw new Error("The diagram is no longer open.");
+          };
+          const options = { root, viewport: getViewport(), snapshot, changeSet, beforeSnapshot, colorBlindPalette,
+            scope: [savedView?.name, query ? `Filtered by “${query}”` : "", focusNodeId ? `Focus: ${focusNodeId}` : ""].filter(Boolean).join(" · ") || "All tables" };
+          setExportRendering(true);
+          const mountStarted = performance.now();
+          try {
+            await settle(); assertCurrent();
+            performance.measure("diagram-export:mount", { start: mountStarted, end: performance.now() });
+            if (!batched) return captureDiagramSvg(options);
+            const surface = exportSurface.current;
+            const exportRoot = surface?.root();
+            if (!surface || !exportRoot) throw new Error("The diagram export surface is unavailable.");
+            const exportNodes = displayedNodes.filter((node) => !node.hidden);
+            const indexExpansion = new Map([...root.querySelectorAll<HTMLElement>(".table-node[data-indexes-expanded]")].map((table) =>
+              [table.closest(".react-flow__node")!.getAttribute("data-id")!, table.dataset.indexesExpanded === "true"] as const));
+            // Match the shared layer's inferred/normal/selected stacking groups.
+            const exportEdges = displayedEdges.filter((edge) => !edge.hidden).sort((a, b) =>
+              (a.selected ? 2 : a.data?.relationshipKind === "inferred" ? 0 : 1) - (b.selected ? 2 : b.data?.relationshipKind === "inferred" ? 0 : 1));
+            const capture = createDiagramSvgCapture({ ...options, root: exportRoot, markerRoot: root,
+              tableIds: new Set(exportNodes.map((node) => node.id)), edgeIds: new Set(exportEdges.map((edge) => edge.id)) });
+            await captureExportBatches({ items: exportEdges, maxBatchSize: 64, kind: "edge", assertCurrent,
+              render: (edges) => surface.render({ nodes: [], edges, viewport: options.viewport, className: root.className }),
+              ready: () => ![...exportRoot.querySelectorAll('.react-flow__edge-textwrapper[visibility="hidden"]')].some((label) => label.textContent?.trim()),
+              read: () => capture.appendEdges() });
+            await captureExportBatches({ items: exportNodes, maxBatchSize: 16, kind: "table", assertCurrent,
+              render: (nodes) => surface.render({ nodes, edges: [], viewport: options.viewport, indexExpansion, className: root.className }),
+              read: () => capture.appendTables([...exportRoot.querySelectorAll<HTMLElement>(".table-node")]) });
+            const serializationStarted = performance.now();
+            const result = capture.finish();
+            performance.measure("diagram-export:serialize", { start: serializationStarted, end: performance.now() });
+            return result;
+          } finally {
+            const restoreStarted = performance.now();
+            // Only the final bounded batch is removed; the interactive canvas
+            // never left viewport culling or changed its node/edge identities.
+            const cleanupStarted = performance.now();
+            exportSurface.current?.render();
+            performance.measure("diagram-export:restore-surface", { start: cleanupStarted, end: performance.now() });
+            const interactionStarted = performance.now();
+            setExportRendering(false);
+            await settle();
+            performance.measure("diagram-export:restore-interaction", { start: interactionStarted, end: performance.now() });
+            performance.clearMeasures("diagram-export:restore");
+            performance.measure("diagram-export:restore", { start: restoreStarted, end: performance.now() });
+          }
         }}
       /> : null}
-    </>
+      </div>
+    </div>
   );
 }

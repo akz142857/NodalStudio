@@ -1,5 +1,9 @@
-import { ReactFlowProvider, type NodeProps } from "@xyflow/react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { createExportDetailStore } from "./export-detail-store";
+import { useEffect } from "react";
+import { ReactFlowProvider, useStoreApi, type NodeProps } from "@xyflow/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { getEdgePosition, getHandleBounds } from "@xyflow/system";
+import { seedCanvasGeometry } from "../graph/canvas-geometry";
 import { describe, expect, it, vi } from "vitest";
 import type { TableNode as TableNodeType } from "../graph/schema-graph";
 import { CanvasInteractionProvider } from "./CanvasInteractionContext";
@@ -205,4 +209,98 @@ describe("TableNode", () => {
     expect(node?.style.borderTopColor).toBe("");
     expect(node).toHaveAttribute("data-change", "added");
   });
+});
+
+function TestZoom({ zoom }: { zoom: number }) {
+  const store = useStoreApi();
+  useEffect(() => { store.setState({ transform: [0, 0, zoom] }); }, [store, zoom]);
+  return null;
+}
+
+it("retains seeded and measured anchors without overview Handle subscriptions, restoring them for selection and connecting", async () => {
+  const graph = buildSchemaGraph(diagramAfter);
+  const nodes = graph.nodes.map((node) => seedCanvasGeometry(node, true));
+  const node = nodes.find((item) => item.id === "public.orders")!;
+  const edge = graph.edges.find((item) => item.source === node.id)!;
+  const props = { ...node, selected: false, dragging: false, zIndex: 0, isConnectable: false, positionAbsoluteX: 0, positionAbsoluteY: 0 } as NodeProps<TableNodeType>;
+  let store: ReturnType<typeof useStoreApi>;
+  function Probe() { const value = useStoreApi(); useEffect(() => { store = value; }, [value]); return null; }
+  function Diagram({ selected = false, connecting = false }: { selected?: boolean; connecting?: boolean }) {
+    return <ReactFlowProvider initialNodes={nodes}><TestZoom zoom={.2} /><Probe />
+      <CanvasInteractionProvider value={{ spacePanMode: false, overviewEnabled: true }}>
+        <TableNode {...props} selected={selected} data={connecting ? { ...node.data, relationshipConnectTargets: { user_id: "valid" } } : node.data} />
+      </CanvasInteractionProvider>
+    </ReactFlowProvider>;
+  }
+  const { container, rerender } = render(<Diagram />);
+  const position = () => {
+    const state = store!.getState();
+    return getEdgePosition({ id: edge.id, sourceNode: state.nodeLookup.get(edge.source)!, targetNode: state.nodeLookup.get(edge.target)!,
+      sourceHandle: edge.sourceHandle ?? null, targetHandle: edge.targetHandle ?? null, connectionMode: state.connectionMode });
+  };
+  const seeded = position();
+  expect(seeded).not.toBeNull();
+  expect(container.querySelector(".table-node")).toHaveAttribute("data-overview", "true");
+  expect(container.querySelector(".react-flow__handle")).toHaveAttribute("data-passive-handle", "true");
+  expect(getHandleBounds("source", container as HTMLDivElement, container.getBoundingClientRect(), .2, node.id)?.length).toBeGreaterThan(0);
+  expect(store!.getState().nodes.find((item) => item.id === node.id)?.handles?.length).toBeGreaterThan(0);
+  rerender(<Diagram selected />);
+  await act(async () => { await Promise.resolve(); });
+  expect(container.querySelector('[data-handleid="source:user_id:right"]')).not.toBeNull();
+  expect(container.querySelector("[data-passive-handle]")).toBeNull();
+  const measured = position();
+  expect(measured).not.toBeNull();
+  rerender(<Diagram />);
+  expect(container.querySelector(".react-flow__handle")).toHaveAttribute("data-passive-handle", "true");
+  expect(getHandleBounds("source", container as HTMLDivElement, container.getBoundingClientRect(), .2, node.id)?.length).toBeGreaterThan(0);
+  expect(position()).toEqual(measured);
+  rerender(<Diagram connecting />);
+  expect(container.querySelector(".table-node")).not.toHaveAttribute("data-overview");
+  expect(container.querySelector('[data-handleid="source:user_id:right"]')).not.toBeNull();
+  expect(position()).not.toBeNull();
+  expect(container.querySelector("[data-passive-handle]")).toBeNull();
+});
+
+it("collapses unreadable fields in overview, keeps relation anchors and restores detail for selection, zoom and export", () => {
+  const top = vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockReturnValue(42);
+  const rowHeight = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(27);
+  const node = buildSchemaGraph(diagramAfter, { beforeSnapshot: diagramBefore, changeSet: diagramChangeSet }).nodes.find((item) => item.id === "public.orders")!;
+  const props = { ...node, selected: false, dragging: false, zIndex: 0, isConnectable: false, positionAbsoluteX: 0, positionAbsoluteY: 0 } as NodeProps<TableNodeType>;
+  function Diagram({ zoom = .2, selected = false, exporting = false, exportTableIds }: { zoom?: number; selected?: boolean; exporting?: boolean; exportTableIds?: ReadonlySet<string> }) {
+    return <ReactFlowProvider><TestZoom zoom={zoom} /><CanvasInteractionProvider value={{ spacePanMode: false, overviewEnabled: true, exportRendering: exporting, exportDetails: (() => { const store = createExportDetailStore(); store.set(exportTableIds); return store; })() }}><TableNode {...props} selected={selected} /></CanvasInteractionProvider></ReactFlowProvider>;
+  }
+  const { container, rerender } = render(<Diagram />);
+  expect(container.querySelector(".table-node")).toHaveAttribute("data-overview", "true");
+  expect(container.querySelectorAll(".table-column")).toHaveLength(0);
+  expect(screen.getByText(/Zoom in for details/)).toHaveTextContent(/changed/);
+  expect(screen.getByText(/~ modified/)).toBeInTheDocument();
+  const handle = container.querySelector<HTMLElement>('[data-handleid="source:user_id:right"]');
+  expect(handle).toBeInTheDocument();
+  const anchor = handle?.parentElement?.style.top;
+  rerender(<Diagram selected />);
+  expect(container.querySelector('[data-column-name="legacy_note"]')).toHaveAttribute("data-change", "deleted");
+  expect(container.querySelector('[data-handleid="source:user_id:right"]')?.parentElement?.style.top).toBe(anchor);
+  rerender(<Diagram zoom={.6} />);
+  expect(container.querySelectorAll(".table-column").length).toBeGreaterThan(0);
+  rerender(<Diagram exporting />);
+  expect(container.querySelectorAll(".table-column").length).toBeGreaterThan(0);
+  const measuredBeforeBatch = top.mock.calls.length;
+  // Even selected close-up cards stay compact outside the active export batch.
+  rerender(<Diagram zoom={1} selected exporting exportTableIds={new Set()} />);
+  expect(container.querySelectorAll(".table-column")).toHaveLength(0);
+  // In-place (small diagram) export must keep anchors for its live edges.
+  expect(container.querySelector('[data-handleid="source:user_id:right"]')).toBeInTheDocument();
+  rerender(<Diagram zoom={1} selected exporting exportTableIds={new Set([node.id])} />);
+  expect(container.querySelector('[data-column-name="legacy_note"]')).toHaveAttribute("data-change", "deleted");
+  // React Flow applies viewport culling in a later commit. Keep the explicit
+  // overview override during that gap even after exportRendering becomes false.
+  rerender(<Diagram zoom={1} selected exportTableIds={new Set()} />);
+  expect(container.querySelectorAll(".table-column")).toHaveLength(0);
+  expect(top).toHaveBeenCalledTimes(measuredBeforeBatch);
+  rerender(<Diagram zoom={1} selected />);
+  expect(container.querySelectorAll(".table-column").length).toBeGreaterThan(0);
+  expect(top.mock.calls.length).toBeGreaterThan(measuredBeforeBatch);
+  rerender(<Diagram />);
+  expect(container.querySelectorAll(".table-column")).toHaveLength(0);
+  top.mockRestore(); rowHeight.mockRestore();
 });

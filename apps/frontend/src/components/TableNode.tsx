@@ -2,23 +2,31 @@ import {
   Handle,
   NodeResizer,
   Position,
-  useUpdateNodeInternals,
+  useStore,
   type NodeProps,
 } from "@xyflow/react";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ComponentProps } from "react";
 import type { TableNode as TableNodeType } from "../graph/schema-graph";
 import { changeMarker } from "../graph/schema-graph";
-import { useCanvasInteraction } from "./CanvasInteractionContext";
+import { startCanvasWork } from "../graph/canvas-work";
+import { useCanvasInteraction, useExportTableDetail } from "./CanvasInteractionContext";
+import { useBatchedNodeInternals } from "./use-batched-node-internals";
 import { useCanvasSettings } from "./CanvasSettingsContext";
 
-function TableNodeComponent({ id, data, selected, width, height }: NodeProps<TableNodeType>) {
+function TableNodeComponent({ id, data, selected, width, height, exportIndexesExpanded }: NodeProps<TableNodeType> & { exportIndexesExpanded?: boolean }) {
   const settings = useCanvasSettings();
-  const { spacePanMode, layoutEditingDisabled } = useCanvasInteraction();
-  const updateNodeInternals = useUpdateNodeInternals();
-  const [indexesExpanded, setIndexesExpanded] = useState(settings.indexes === "expanded");
+  const { spacePanMode, layoutEditingDisabled, overviewEnabled, exportRendering, exportReplica } = useCanvasInteraction();
+  const exportDetail = useExportTableDetail(id);
+  const measurementPaused = exportRendering || exportDetail !== undefined;
+  const updateNodeInternals = useBatchedNodeInternals();
+  const [indexesExpanded, setIndexesExpanded] = useState(exportIndexesExpanded ?? settings.indexes === "expanded");
+  // The bounded export surface reuses card slots across different table ids.
+  // Visible interactive cards retain their own local expansion state.
+  const showIndexes = exportReplica ? exportIndexesExpanded ?? settings.indexes === "expanded" : indexesExpanded;
   const [actionsOpen, setActionsOpen] = useState(false);
   const [hoveredColumn, setHoveredColumn] = useState<string>();
-  const [columnCenters, setColumnCenters] = useState<Record<string, number>>({});
+  const [columnCenters, setColumnCenters] = useState<Record<string, number>>(data.initialColumnCenters ?? {});
+  const [measuredLayout, setMeasuredLayout] = useState<string>();
   const tableNodeRef = useRef<HTMLElement>(null);
   const columnRefs = useRef(new Map<string, HTMLDivElement>());
   const hoverClearTimer = useRef<number | undefined>(undefined);
@@ -40,42 +48,58 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
   // land on a column that has no relationship yet.
   const revealAllHandles = data.relationshipConnectTargets !== undefined;
 
+  // A boolean selector only notifies nodes when crossing the detail threshold.
+  const overviewZoom = useStore((state) => state.transform[2] < 0.35);
+  const measurementKey = JSON.stringify([visibleColumns.map((column) => column.name), settings.showTableComments && data.table.comment, width, height]);
+  const compact = exportDetail !== undefined ? !exportDetail : Boolean(overviewEnabled && overviewZoom && !exportRendering && !selected
+    && !data.inspectorFocused && !data.relationshipHighlighted && !revealAllHandles
+    && (measuredLayout === measurementKey || data.initialColumnCenters !== undefined));
+  // Overview keeps measurable ports for React Flow's own ResizeObserver, but
+  // needs no connection-state subscriptions. Selection / connecting restores
+  // interactive Handles before a user can start or finish a relationship.
+  const passivePorts = compact && !measurementPaused;
+
   useEffect(() => {
-    updateNodeInternals(id);
-  }, [height, id, updateNodeInternals, width]);
+    if (!measurementPaused) updateNodeInternals(id);
+  }, [height, id, updateNodeInternals, width, measurementPaused]);
 
   const measureColumnCenters = useCallback(() => {
     const tableNode = tableNodeRef.current;
     if (!tableNode) return;
-    const next = Object.fromEntries(visibleColumns.flatMap((column) => {
-      const row = columnRefs.current.get(column.name);
-      if (!row) return [];
-      // React Flow applies zoom with a CSS transform. Bounding client rects are
-      // therefore screen-scaled, while Handle positions are node-local CSS
-      // coordinates. offsetTop/offsetHeight keep both values in the same,
-      // unscaled coordinate system and prevent handles drifting as zoom changes.
-      return [[column.name, row.offsetTop - tableNode.offsetTop + row.offsetHeight / 2]];
-    }));
-    setColumnCenters((current) => {
-      const keys = Object.keys(next);
-      const unchanged = keys.length === Object.keys(current).length
-        && keys.every((key) => Math.abs((current[key] ?? -1) - next[key]) < 0.5);
-      return unchanged ? current : next;
-    });
-  }, [visibleColumns]);
+    const end = startCanvasWork("column-centers", visibleColumns.length);
+    try {
+      const next = Object.fromEntries(visibleColumns.flatMap((column) => {
+        const row = columnRefs.current.get(column.name);
+        if (!row) return [];
+        // React Flow applies zoom with a CSS transform. Bounding client rects are
+        // therefore screen-scaled, while Handle positions are node-local CSS
+        // coordinates. offsetTop/offsetHeight keep both values in the same,
+        // unscaled coordinate system and prevent handles drifting as zoom changes.
+        return [[column.name, row.offsetTop - tableNode.offsetTop + row.offsetHeight / 2]];
+      }));
+      setMeasuredLayout(measurementKey);
+      setColumnCenters((current) => {
+        const keys = Object.keys(next);
+        const unchanged = keys.length === Object.keys(current).length
+          && keys.every((key) => Math.abs((current[key] ?? -1) - next[key]) < 0.5);
+        return unchanged ? current : next;
+      });
+    } finally { end(); }
+  }, [measurementKey, visibleColumns]);
 
   useLayoutEffect(() => {
+    if (compact || measurementPaused) return;
     measureColumnCenters();
     const tableNode = tableNodeRef.current;
     if (!tableNode || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measureColumnCenters);
     observer.observe(tableNode);
     return () => observer.disconnect();
-  }, [height, measureColumnCenters, settings.showTableComments, width]);
+  }, [compact, height, measureColumnCenters, settings.showTableComments, width, measurementPaused]);
 
   useEffect(() => {
-    updateNodeInternals(id);
-  }, [columnCenters, hoveredColumn, id, revealAllHandles, updateNodeInternals]);
+    if (!measurementPaused) updateNodeInternals(id);
+  }, [columnCenters, hoveredColumn, id, revealAllHandles, updateNodeInternals, measurementPaused]);
 
   useEffect(() => () => {
     if (hoverClearTimer.current !== undefined) window.clearTimeout(hoverClearTimer.current);
@@ -97,7 +121,7 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
 
   return (
     <>
-      <NodeResizer
+      {!exportReplica ? <NodeResizer
         isVisible={selected && !data.layoutPinned && !spacePanMode && !layoutEditingDisabled}
         minWidth={240}
         minHeight={120}
@@ -105,7 +129,7 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
         maxHeight={1_600}
         handleClassName="table-resize-handle"
         lineClassName="table-resize-line"
-      />
+      /> : null}
       {/* The domain colour travels as a custom property rather than a concrete
           style: border and box-shadow already carry selection / change /
           relationship state, so it gets its own channels (header tint and left
@@ -113,6 +137,7 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
       <article
         ref={tableNodeRef}
         className="table-node"
+        data-overview={compact || undefined}
         data-selected={selected || undefined}
         data-inspector-focused={data.inspectorFocused || undefined}
         data-change={data.changeStatus}
@@ -120,9 +145,10 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
         data-pinned={data.layoutPinned || undefined}
         data-relationship-highlighted={data.relationshipHighlighted || undefined}
         data-domain={data.domainColor ? "true" : undefined}
+        data-indexes-expanded={showIndexes}
         style={data.domainColor ? ({ "--domain-color": data.domainColor } as CSSProperties) : undefined}
       >
-      {!settings.fieldLevelEdges ? <><Handle id="table-target-left" type="target" position={Position.Left} isConnectable={false} /><Handle id="table-target-right" type="target" position={Position.Right} isConnectable={false} /><Handle id="table-source-left" type="source" position={Position.Left} isConnectable={false} /><Handle id="table-source-right" type="source" position={Position.Right} isConnectable={false} /></> : null}
+      {!exportReplica && !settings.fieldLevelEdges ? <><Port passive={passivePorts} nodeId={id} id="table-target-left" type="target" position={Position.Left} isConnectable={false} /><Port passive={passivePorts} nodeId={id} id="table-target-right" type="target" position={Position.Right} isConnectable={false} /><Port passive={passivePorts} nodeId={id} id="table-source-left" type="source" position={Position.Left} isConnectable={false} /><Port passive={passivePorts} nodeId={id} id="table-source-right" type="source" position={Position.Right} isConnectable={false} /></> : null}
       <header>
         {settings.showSchema ? <span>{data.schema}</span> : null}
         <strong>{data.isCore ? "★ " : ""}{data.table.key.name}</strong>
@@ -133,10 +159,11 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
           {actionsOpen ? <div role="menu"><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>Preview rows</button><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>Open in Query</button></div> : null}
         </div> : null}
       </header>
-      {settings.showTableComments && data.table.comment ? (
+      {compact ? <p className="table-overview-summary">{data.table.columns.length} fields · Zoom in for details{data.columnChanges ? ` · ${Object.keys(data.columnChanges).length} changed` : ""}</p> : null}
+      {!compact && settings.showTableComments && data.table.comment ? (
         <p className="table-node-comment">{data.table.comment}</p>
       ) : null}
-      <div className="table-columns">
+      {!compact ? <div className="table-columns">
         {visibleColumns.map((column) => {
           const changeStatus = data.columnChanges?.[column.name];
           return (
@@ -187,30 +214,30 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
         {data.table.columns.length > visibleColumns.length ? (
           <p className="table-columns-more">+{data.table.columns.length - visibleColumns.length} more {data.columnChanges ? "unchanged " : ""}fields</p>
         ) : null}
-      </div>
-      {data.table.indexes.length > 0 && settings.indexes !== "hidden" ? (
+      </div> : null}
+      {!compact && data.table.indexes.length > 0 && settings.indexes !== "hidden" ? (
         <div className="table-indexes" aria-label="Indexes">
           {settings.indexes === "collapsed" ? (
             <button type="button" className="table-index-toggle" onClick={() => setIndexesExpanded((value) => !value)}>
-              {indexesExpanded ? "Hide" : "Show"} {data.table.indexes.length} indexes
+              {showIndexes ? "Hide" : "Show"} {data.table.indexes.length} indexes
             </button>
           ) : null}
-          {indexesExpanded || settings.indexes === "expanded" ? data.table.indexes.slice(0, 5).map((index) => (
+          {showIndexes || settings.indexes === "expanded" ? data.table.indexes.slice(0, 5).map((index) => (
             <div key={index.name} title={`${index.name} (${index.columns.join(", ")})`}>
               <b>{index.primary ? "PK" : index.unique ? "UQ" : "IX"}</b>
               <span>{index.name}</span>
               <small>{index.columns.join(", ")}</small>
             </div>
           )) : null}
-          {(indexesExpanded || settings.indexes === "expanded") && data.table.indexes.length > 5 ? (
+          {(showIndexes || settings.indexes === "expanded") && data.table.indexes.length > 5 ? (
             <p>+{data.table.indexes.length - 5} more indexes</p>
           ) : null}
         </div>
       ) : null}
       </article>
-      {visibleColumns.map((column) => {
-        const top = columnCenters[column.name];
-        if (!Number.isFinite(top)) return null;
+      {!exportReplica && visibleColumns.map((column) => {
+        const top = compact && measuredLayout !== measurementKey ? data.initialColumnCenters?.[column.name] : columnCenters[column.name];
+        if (top === undefined || !Number.isFinite(top)) return null;
         // Columns that carry an actual relationship need a mounted handle at all
         // times, otherwise their edge has nothing to attach to. Every other column
         // only needs one while it is hovered (to start a drag from it) or while a
@@ -227,12 +254,12 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
           && (foreignColumns.has(column.name) || inferredColumns.has(column.name) || logicalColumns.has(column.name) || data.relationshipsEditable);
         return <div className="field-handle-row" key={column.name} style={{ top }}>
           {targetEnabled ? <>
-            <Handle id={`target:${column.name}:left`} className="field-handle field-handle-left field-handle-target" type="target" position={Position.Left} isConnectable={data.relationshipsEditable} />
-            <Handle id={`target:${column.name}:right`} className="field-handle field-handle-right field-handle-target" type="target" position={Position.Right} isConnectable={data.relationshipsEditable} />
+            <Port passive={passivePorts} nodeId={id} id={`target:${column.name}:left`} className="field-handle field-handle-left field-handle-target" type="target" position={Position.Left} isConnectable={data.relationshipsEditable} />
+            <Port passive={passivePorts} nodeId={id} id={`target:${column.name}:right`} className="field-handle field-handle-right field-handle-target" type="target" position={Position.Right} isConnectable={data.relationshipsEditable} />
           </> : null}
           {sourceEnabled ? <>
-            <Handle id={`source:${column.name}:left`} className={`field-handle field-handle-left field-handle-source${hoveredColumn === column.name ? " field-handle-visible" : ""}`} type="source" position={Position.Left} isConnectable={data.relationshipsEditable} onMouseEnter={() => showColumnHandles(column.name)} onMouseLeave={() => hideColumnHandlesSoon(column.name)} />
-            <Handle id={`source:${column.name}:right`} className={`field-handle field-handle-right field-handle-source${hoveredColumn === column.name ? " field-handle-visible" : ""}`} type="source" position={Position.Right} isConnectable={data.relationshipsEditable} onMouseEnter={() => showColumnHandles(column.name)} onMouseLeave={() => hideColumnHandlesSoon(column.name)} />
+            <Port passive={passivePorts} nodeId={id} id={`source:${column.name}:left`} className={`field-handle field-handle-left field-handle-source${hoveredColumn === column.name ? " field-handle-visible" : ""}`} type="source" position={Position.Left} isConnectable={data.relationshipsEditable} onMouseEnter={() => showColumnHandles(column.name)} onMouseLeave={() => hideColumnHandlesSoon(column.name)} />
+            <Port passive={passivePorts} nodeId={id} id={`source:${column.name}:right`} className={`field-handle field-handle-right field-handle-source${hoveredColumn === column.name ? " field-handle-visible" : ""}`} type="source" position={Position.Right} isConnectable={data.relationshipsEditable} onMouseEnter={() => showColumnHandles(column.name)} onMouseLeave={() => hideColumnHandlesSoon(column.name)} />
           </> : null}
         </div>;
       })}
@@ -240,4 +267,14 @@ function TableNodeComponent({ id, data, selected, width, height }: NodeProps<Tab
   );
 }
 
-export const TableNode = memo(TableNodeComponent);
+export const TableNode = memo(TableNodeComponent, (before, after) =>
+  before.id === after.id && before.data === after.data && before.selected === after.selected
+  && before.width === after.width && before.height === after.height && before.exportIndexesExpanded === after.exportIndexesExpanded);
+
+/** The geometry contract matches Handle's measurable DOM. Overview ports cannot
+ * initiate or accept connections; the interactive component is restored first. */
+function Port({ passive, nodeId, id, type = "source", position = Position.Top, className, ...props }: ComponentProps<typeof Handle> & { passive: boolean; nodeId: string }) {
+  return passive ? <div data-handleid={id} data-nodeid={nodeId} data-handlepos={position} data-passive-handle="true" aria-hidden="true"
+    className={`react-flow__handle react-flow__handle-${position} nodrag nopan ${type}${className ? ` ${className}` : ""}`} />
+    : <Handle id={id} type={type} position={position} className={className} {...props} />;
+}

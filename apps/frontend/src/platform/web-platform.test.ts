@@ -34,7 +34,7 @@ describe("WebPlatform", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it.each(["svg", "html"] as const)("downloads generated %s locally and cleans up the temporary link and URL", async (format) => {
+  it.each(["svg", "html", "svg-bytes"] as const)("downloads generated %s locally and cleans up the temporary link and URL", async (format) => {
     vi.useFakeTimers();
     const createObjectURL = vi.fn().mockReturnValue("blob:diagram-export");
     const revokeObjectURL = vi.fn();
@@ -53,11 +53,11 @@ describe("WebPlatform", () => {
     const platform = new WebPlatform();
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    await expect(format === "html" ? platform.saveSchemaReport({ fileName: "model.html", html }) : platform.saveDiagramExport({ fileName: "model.svg", format: "svg", data: Array.from(bytes) })).resolves.toEqual({ path: null });
+    await expect(format === "html" ? platform.saveSchemaReport({ fileName: "model.html", html }) : platform.saveDiagramExport({ fileName: "model.svg", format: "svg", data: format === "svg-bytes" ? bytes : Array.from(bytes) })).resolves.toEqual({ path: null });
     const blob = createObjectURL.mock.calls[0][0] as Blob;
     expect(blob.type).toBe(format === "html" ? "text/html;charset=utf-8" : "image/svg+xml");
     expect(Array.from(new Uint8Array(await blob.arrayBuffer()))).toEqual(Array.from(bytes));
-    expect(filename).toBe(`model.${format}`);
+    expect(filename).toBe(`model.${format === "svg-bytes" ? "svg" : format}`);
     expect(document.querySelector(`a[download="model.${format}"]`)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(revokeObjectURL).not.toHaveBeenCalled();

@@ -15,6 +15,8 @@ describe("DiagramSelectionActions", () => {
     const input = props();
     render(<DiagramSelectionActions {...input} />);
     expect(screen.getByText("2 tables selected")).toBeVisible();
+    expect(screen.getByRole("toolbar", { name: "Diagram tools" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Business domain" }));
     expect(screen.getByRole("button", { name: "Add to domain" })).toBeDisabled();
     fireEvent.change(screen.getByRole("combobox", { name: "Existing business domain" }), { target: { value: input.domainGroups[0].id } });
     fireEvent.click(screen.getByRole("button", { name: "Add to domain" }));
@@ -27,8 +29,9 @@ describe("DiagramSelectionActions", () => {
   it("does not save when all selected tables already belong to the domain", () => {
     const input = { ...props(), selectedTableKeys: reportSemantics.domainGroups[0].tableKeys };
     render(<DiagramSelectionActions {...input} />);
+    fireEvent.click(screen.getByRole("button", { name: "Business domain" }));
     fireEvent.change(screen.getByRole("combobox"), { target: { value: input.domainGroups[0].id } });
-    expect(screen.getByText("All selected tables already belong to Commerce.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add to domain" })).toHaveAttribute("title", "All selected tables already belong to Commerce.");
     expect(screen.getByRole("button", { name: "Add to domain" })).toBeDisabled();
     expect(input.onAddTablesToDomain).not.toHaveBeenCalled();
   });
@@ -38,6 +41,7 @@ describe("DiagramSelectionActions", () => {
     const save = vi.fn<NonNullable<DiagramSelectionActionsProps["onAddTablesToDomain"]>>().mockRejectedValueOnce(new Error("Local store unavailable")).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     const input = { ...props(), onAddTablesToDomain: save };
     render(<DiagramSelectionActions {...input} />);
+    fireEvent.click(screen.getByRole("button", { name: "Business domain" }));
     fireEvent.change(screen.getByRole("combobox"), { target: { value: input.domainGroups[0].id } });
     fireEvent.click(screen.getByRole("button", { name: "Add to domain" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Local store unavailable");
@@ -57,6 +61,7 @@ describe("DiagramSelectionActions", () => {
     let finish!: (group: DomainGroup) => void;
     const input = { ...props(), onAddTablesToDomain: vi.fn(() => new Promise<DomainGroup>((resolve) => { finish = resolve; })) };
     const { rerender } = render(<DiagramSelectionActions {...input} />);
+    fireEvent.click(screen.getByRole("button", { name: "Business domain" }));
     fireEvent.change(screen.getByRole("combobox"), { target: { value: input.domainGroups[0].id } });
     fireEvent.click(screen.getByRole("button", { name: "Add to domain" }));
     rerender(<DiagramSelectionActions {...input} selectedCount={1} selectedTableKeys={[input.selectedTableKeys[0]]} />);
@@ -67,15 +72,15 @@ describe("DiagramSelectionActions", () => {
   it("handles missing domains, unavailable semantics, comparison and Web read-only diagrams", () => {
     const input = props();
     const { rerender } = render(<DiagramSelectionActions {...input} domainGroups={[]} />);
-    expect(screen.getByText(/Create a business domain/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Add to domain" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Business domain" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Business domain" })).toHaveAttribute("title", "Create a business domain in Semantics first.");
     rerender(<DiagramSelectionActions {...input} onAddTablesToDomain={undefined} />);
-    expect(screen.getByText(/must finish loading/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Business domain" })).toHaveAttribute("title", expect.stringContaining("must finish loading"));
     rerender(<DiagramSelectionActions {...input} readOnlyReason="Comparison diagrams are read only." />);
-    expect(screen.getByText("Comparison diagrams are read only.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Business domain" })).toHaveAttribute("title", "Comparison diagrams are read only.");
     expect(screen.queryByRole("button", { name: "Add to domain" })).not.toBeInTheDocument();
     rerender(<DiagramSelectionActions {...input} readOnlyReason="Shared diagrams are read only." />);
-    expect(screen.getByText("Shared diagrams are read only.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Business domain" })).toHaveAttribute("title", "Shared diagrams are read only.");
     expect(input.onAddTablesToDomain).not.toHaveBeenCalled();
   });
 });

@@ -1,0 +1,3541 @@
+{
+  "date": "2026-10-16",
+  "status": "completed-with-remaining-reload-and-drag-long-frames",
+  "environment": {
+    "runtime": "native Tauri WKWebView",
+    "frontend": "production Vite assets; profiling build only where explicitly labeled",
+    "bundle": "isolated debug app",
+    "viewportCssPixels": [
+      1280,
+      868
+    ],
+    "devicePixelRatio": 2,
+    "tables": 2000,
+    "columns": 40000,
+    "relationships": 3997,
+    "topology": "single connected graph"
+  },
+  "historicalBaseline": [
+    {
+      "label": "new process",
+      "sample": 1,
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1201,
+          "frameP95Ms": 51,
+          "frameMaxMs": 54,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10132,
+          "workerMs": [
+            47
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 343,
+          "frameP95Ms": 291,
+          "frameMaxMs": 291,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            243
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2535,
+          "frameP95Ms": 35,
+          "frameMaxMs": 81,
+          "framesOver50Ms": 5,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8243,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ]
+    },
+    {
+      "label": "same-process reload",
+      "sample": 2,
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1307,
+          "frameP95Ms": 56,
+          "frameMaxMs": 204,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10135,
+          "workerMs": [
+            42
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 307,
+          "frameP95Ms": 230,
+          "frameMaxMs": 230,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            220
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2467,
+          "frameP95Ms": 33,
+          "frameMaxMs": 78,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8244,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ]
+    },
+    {
+      "label": "new process",
+      "sample": 3,
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1201,
+          "frameP95Ms": 42,
+          "frameMaxMs": 53,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10132,
+          "workerMs": [
+            45
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 208,
+          "frameP95Ms": 38,
+          "frameMaxMs": 38,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            124
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2363,
+          "frameP95Ms": 32,
+          "frameMaxMs": 60,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8243,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ]
+    },
+    {
+      "label": "same-process reload",
+      "sample": 4,
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1450,
+          "frameP95Ms": 83,
+          "frameMaxMs": 208,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10135,
+          "workerMs": [
+            55
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 196,
+          "frameP95Ms": 33,
+          "frameMaxMs": 33,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            111
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2464,
+          "frameP95Ms": 33,
+          "frameMaxMs": 83,
+          "framesOver50Ms": 4,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8244,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ]
+    }
+  ],
+  "currentHarnessControls": [
+    {
+      "label": "control-cold",
+      "notes": "Original runtime sources in an isolated control app; current focus audit and selected-target readiness guard",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1134,
+          "frameP95Ms": 45,
+          "frameMaxMs": 48,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10133,
+          "workerMs": [
+            44
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 226,
+          "frameP95Ms": 37,
+          "frameMaxMs": 37,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            175
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2566,
+          "frameP95Ms": 39,
+          "frameMaxMs": 93,
+          "framesOver50Ms": 5,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8246,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "control-hot",
+      "notes": "Same control process; original one-pass measurements, 1x1 SVG overflow and default marker namespace",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1248,
+          "frameP95Ms": 51,
+          "frameMaxMs": 110,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            42
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 102,
+          "frameP95Ms": 30,
+          "frameMaxMs": 30,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10145,
+          "workerMs": [
+            39
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2483,
+          "frameP95Ms": 33,
+          "frameMaxMs": 80,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8248,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    }
+  ],
+  "diagnosticRuns": [
+    {
+      "label": "profile-cold",
+      "notes": "Optional React profiling build, cold",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1250,
+          "frameP95Ms": 47,
+          "frameMaxMs": 57,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10133,
+          "workerMs": [
+            46
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 355,
+          "frameP95Ms": 274,
+          "frameMaxMs": 274,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10152,
+          "workerMs": [
+            255
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2590,
+          "frameP95Ms": 42,
+          "frameMaxMs": 85,
+          "framesOver50Ms": 6,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8262,
+          "workerMs": [],
+          "hidden": false
+        }
+      ],
+      "diagnostics": [
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "mount",
+            "actualMs": 34,
+            "commitMs": 1,
+            "start": 4178,
+            "end": 4213
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 6,
+            "commitMs": 6,
+            "start": 4243,
+            "end": 4255
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 10,
+            "commitMs": 2,
+            "start": 4325,
+            "end": 4337
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 8,
+            "commitMs": 4,
+            "start": 4898,
+            "end": 4910
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 8,
+            "commitMs": 4,
+            "start": 4959,
+            "end": 4971
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 8,
+            "commitMs": 3,
+            "start": 4784,
+            "end": 4795
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 8,
+            "commitMs": 3,
+            "start": 4845,
+            "end": 4856
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 3,
+            "start": 4818,
+            "end": 4828
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "spike": {
+            "detail": "canvas-render-and-paint",
+            "ms": 50,
+            "tables": 0,
+            "edges": 0,
+            "at": 4224
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "spike": {
+            "detail": "canvas-render-and-paint",
+            "ms": 47,
+            "tables": 80,
+            "edges": 0,
+            "at": 4271
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "spike": {
+            "detail": "canvas-render-and-paint",
+            "ms": 57,
+            "tables": 264,
+            "edges": 0,
+            "at": 4381
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "spike": {
+            "detail": "canvas-render-and-paint",
+            "ms": 47,
+            "tables": 264,
+            "edges": 1161,
+            "at": 4991
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 5,
+            "start": 5436,
+            "end": 5450
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "commit": {
+            "phase": "update",
+            "actualMs": 5,
+            "commitMs": 4,
+            "start": 5691,
+            "end": 5703
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "commit": {
+            "phase": "update",
+            "actualMs": 5,
+            "commitMs": 4,
+            "start": 5727,
+            "end": 5738
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "commit": {
+            "phase": "update",
+            "actualMs": 0,
+            "commitMs": 1,
+            "start": 5744,
+            "end": 5745
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "commit": {
+            "phase": "update",
+            "actualMs": 0,
+            "commitMs": 0,
+            "start": 5468,
+            "end": 5468
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "spike": {
+            "detail": "auto-layout",
+            "ms": 274,
+            "tables": 264,
+            "edges": 1214,
+            "at": 5739
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 2,
+            "commitMs": 28,
+            "start": 6414,
+            "end": 6444
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 9,
+            "commitMs": 8,
+            "start": 8626,
+            "end": 8643
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 11,
+            "commitMs": 5,
+            "start": 6359,
+            "end": 6375
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 8,
+            "commitMs": 6,
+            "start": 8544,
+            "end": 8558
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 8,
+            "commitMs": 5,
+            "start": 8710,
+            "end": 8724
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 4,
+            "start": 8487,
+            "end": 8499
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 4,
+            "start": 8590,
+            "end": 8601
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 4,
+            "start": 8680,
+            "end": 8693
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "spike": {
+            "detail": "gesture-0:move-4",
+            "ms": 72,
+            "tables": 5,
+            "edges": 3,
+            "at": 6448
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "spike": {
+            "detail": "gesture-0:move-5",
+            "ms": 70,
+            "tables": 5,
+            "edges": 3,
+            "at": 6518
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "spike": {
+            "detail": "recover",
+            "ms": 55,
+            "tables": 5,
+            "edges": 1246,
+            "at": 8585
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "spike": {
+            "detail": "recover",
+            "ms": 74,
+            "tables": 5,
+            "edges": 1384,
+            "at": 8675
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "spike": {
+            "detail": "recover",
+            "ms": 55,
+            "tables": 5,
+            "edges": 1482,
+            "at": 8748
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "spike": {
+            "detail": "recover",
+            "ms": 85,
+            "tables": 5,
+            "edges": 1539,
+            "at": 8897
+          }
+        }
+      ],
+      "focus": []
+    },
+    {
+      "label": "profile-hot",
+      "notes": "Optional React profiling build, reload",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1439,
+          "frameP95Ms": 70,
+          "frameMaxMs": 225,
+          "framesOver50Ms": 4,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10168,
+          "workerMs": [
+            46
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 336,
+          "frameP95Ms": 252,
+          "frameMaxMs": 252,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10175,
+          "workerMs": [
+            237
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2382,
+          "frameP95Ms": 29,
+          "frameMaxMs": 69,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8278,
+          "workerMs": [],
+          "hidden": false
+        }
+      ],
+      "diagnostics": [
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "mount",
+            "actualMs": 23,
+            "commitMs": 1,
+            "start": 62011,
+            "end": 62035
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 14,
+            "commitMs": 4,
+            "start": 62698,
+            "end": 62717
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 8,
+            "commitMs": 4,
+            "start": 62732,
+            "end": 62744
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 3,
+            "start": 62612,
+            "end": 62622
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 3,
+            "start": 62662,
+            "end": 62673
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 3,
+            "start": 62798,
+            "end": 62810
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 6,
+            "commitMs": 4,
+            "start": 62840,
+            "end": 62852
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "commit": {
+            "phase": "update",
+            "actualMs": 8,
+            "commitMs": 1,
+            "start": 62123,
+            "end": 62132
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "spike": {
+            "detail": "canvas-render-and-paint",
+            "ms": 90,
+            "tables": 264,
+            "edges": 0,
+            "at": 62212
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "spike": {
+            "detail": "canvas-render-and-paint",
+            "ms": 46,
+            "tables": 264,
+            "edges": 1067,
+            "at": 62763
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "spike": {
+            "detail": "canvas-render-and-paint",
+            "ms": 52,
+            "tables": 264,
+            "edges": 1161,
+            "at": 62833
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "spike": {
+            "detail": "canvas-render-and-paint",
+            "ms": 225,
+            "tables": 264,
+            "edges": 1214,
+            "at": 63077
+          }
+        },
+        {
+          "diagnosticPhase": "first-load",
+          "spike": {
+            "detail": "canvas-render-and-paint",
+            "ms": 70,
+            "tables": 264,
+            "edges": 1214,
+            "at": 63167
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "commit": {
+            "phase": "update",
+            "actualMs": 9,
+            "commitMs": 4,
+            "start": 63457,
+            "end": 63472
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 4,
+            "start": 63694,
+            "end": 63706
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 3,
+            "start": 63730,
+            "end": 63740
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "commit": {
+            "phase": "update",
+            "actualMs": 0,
+            "commitMs": 1,
+            "start": 63746,
+            "end": 63747
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "commit": {
+            "phase": "update",
+            "actualMs": 0,
+            "commitMs": 0,
+            "start": 63492,
+            "end": 63492
+          }
+        },
+        {
+          "diagnosticPhase": "auto-layout",
+          "spike": {
+            "detail": "auto-layout",
+            "ms": 252,
+            "tables": 264,
+            "edges": 1214,
+            "at": 63741
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 1,
+            "commitMs": 30,
+            "start": 64390,
+            "end": 64421
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 9,
+            "commitMs": 8,
+            "start": 66604,
+            "end": 66622
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 8,
+            "commitMs": 6,
+            "start": 66527,
+            "end": 66542
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 5,
+            "start": 64356,
+            "end": 64370
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 4,
+            "start": 66579,
+            "end": 66590
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 3,
+            "start": 66473,
+            "end": 66484
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 6,
+            "commitMs": 4,
+            "start": 66505,
+            "end": 66515
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "commit": {
+            "phase": "update",
+            "actualMs": 7,
+            "commitMs": 2,
+            "start": 66375,
+            "end": 66384
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "spike": {
+            "detail": "gesture-0:move-3",
+            "ms": 69,
+            "tables": 5,
+            "edges": 3,
+            "at": 64424
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "spike": {
+            "detail": "recover",
+            "ms": 57,
+            "tables": 5,
+            "edges": 1384,
+            "at": 66572
+          }
+        },
+        {
+          "diagnosticPhase": "scripted-pointer-drag",
+          "spike": {
+            "detail": "recover",
+            "ms": 66,
+            "tables": 5,
+            "edges": 1539,
+            "at": 66656
+          }
+        }
+      ],
+      "focus": []
+    },
+    {
+      "label": "clip-cold",
+      "notes": "Only explicit viewport clipping",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1199,
+          "frameP95Ms": 51,
+          "frameMaxMs": 54,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10132,
+          "workerMs": [
+            46
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 397,
+          "frameP95Ms": 254,
+          "frameMaxMs": 254,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            230
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2384,
+          "frameP95Ms": 30,
+          "frameMaxMs": 61,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8243,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": []
+    },
+    {
+      "label": "clip-hot",
+      "notes": "Only explicit viewport clipping, reload",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1351,
+          "frameP95Ms": 57,
+          "frameMaxMs": 207,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10135,
+          "workerMs": [
+            49
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 334,
+          "frameP95Ms": 212,
+          "frameMaxMs": 212,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            198
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2263,
+          "frameP95Ms": 28,
+          "frameMaxMs": 60,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8244,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": []
+    },
+    {
+      "label": "aria-probe-cold",
+      "notes": "Rejected: hiding normal relationship accessibility loses keyboard access",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1251,
+          "frameP95Ms": 42,
+          "frameMaxMs": 52,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10132,
+          "workerMs": [
+            45
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 223,
+          "frameP95Ms": 38,
+          "frameMaxMs": 38,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            171
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2430,
+          "frameP95Ms": 32,
+          "frameMaxMs": 69,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8243,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": []
+    },
+    {
+      "label": "aria-probe-hot",
+      "notes": "Rejected accessibility prototype, reload",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1333,
+          "frameP95Ms": 92,
+          "frameMaxMs": 152,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10135,
+          "workerMs": [
+            52
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 216,
+          "frameP95Ms": 30,
+          "frameMaxMs": 30,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            138
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2416,
+          "frameP95Ms": 32,
+          "frameMaxMs": 64,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8244,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": []
+    },
+    {
+      "label": "worker-probe-cold",
+      "notes": "Rejected: unbounded Worker reuse prototype",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1201,
+          "frameP95Ms": 43,
+          "frameMaxMs": 52,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10132,
+          "workerMs": [
+            45
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 216,
+          "frameP95Ms": 42,
+          "frameMaxMs": 42,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            30
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2387,
+          "frameP95Ms": 29,
+          "frameMaxMs": 65,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8243,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": []
+    },
+    {
+      "label": "worker-probe-hot",
+      "notes": "Rejected Worker reuse, reload",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1359,
+          "frameP95Ms": 70,
+          "frameMaxMs": 175,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10135,
+          "workerMs": [
+            43
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 206,
+          "frameP95Ms": 39,
+          "frameMaxMs": 39,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            29
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2389,
+          "frameP95Ms": 27,
+          "frameMaxMs": 66,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8244,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": []
+    },
+    {
+      "label": "id-cold",
+      "notes": "Viewport clipping plus unique namespace, early diagnostic",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1219,
+          "frameP95Ms": 46,
+          "frameMaxMs": 52,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10132,
+          "workerMs": [
+            46
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 243,
+          "frameP95Ms": 39,
+          "frameMaxMs": 39,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            193
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2500,
+          "frameP95Ms": 35,
+          "frameMaxMs": 73,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8243,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": []
+    },
+    {
+      "label": "id-hot",
+      "notes": "Early namespace hot sample retrieved after unlock; no focus audit",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1255,
+          "frameP95Ms": 85,
+          "frameMaxMs": 100,
+          "framesOver50Ms": 4,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10135,
+          "workerMs": [
+            49
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 319,
+          "frameP95Ms": 60,
+          "frameMaxMs": 60,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            91
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2430,
+          "frameP95Ms": 28,
+          "frameMaxMs": 70,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8244,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": []
+    },
+    {
+      "label": "buckets-locate-race",
+      "notes": "Invalid harness attempt: zero effective gestures; nested roots counter wrong; excluded",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1233,
+          "frameP95Ms": 56,
+          "frameMaxMs": 65,
+          "framesOver50Ms": 5,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 0,
+          "domElements": 10196,
+          "workerMs": [
+            48
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 784,
+          "frameP95Ms": 41,
+          "frameMaxMs": 41,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 0,
+          "domElements": 10204,
+          "workerMs": [
+            594
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 1,
+          "frameP95Ms": 0,
+          "frameMaxMs": 0,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 0,
+          "domElements": 10216,
+          "workerMs": [],
+          "hidden": false
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "buckets-cold",
+      "notes": "Rejected 16-bucket renderer, corrected harness",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1251,
+          "frameP95Ms": 52,
+          "frameMaxMs": 59,
+          "framesOver50Ms": 4,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 16,
+          "domElements": 10196,
+          "workerMs": [
+            48
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 730,
+          "frameP95Ms": 39,
+          "frameMaxMs": 39,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 16,
+          "domElements": 10204,
+          "workerMs": [
+            539
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2431,
+          "frameP95Ms": 35,
+          "frameMaxMs": 66,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 16,
+          "domElements": 8309,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "buckets-hot",
+      "notes": "Rejected 16-bucket renderer: 644 ms reload regression",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 3069,
+          "frameP95Ms": 448,
+          "frameMaxMs": 644,
+          "framesOver50Ms": 9,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 16,
+          "domElements": 10202,
+          "workerMs": [
+            295
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 558,
+          "frameP95Ms": 39,
+          "frameMaxMs": 39,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 16,
+          "domElements": 10208,
+          "workerMs": [
+            442
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2438,
+          "frameP95Ms": 36,
+          "frameMaxMs": 57,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 16,
+          "domElements": 8311,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "inline-cold",
+      "notes": "Rejected inline arrows; no convincing gain",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1217,
+          "frameP95Ms": 48,
+          "frameMaxMs": 51,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 11347,
+          "workerMs": [
+            44
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 276,
+          "frameP95Ms": 42,
+          "frameMaxMs": 42,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 11355,
+          "workerMs": [
+            213
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2465,
+          "frameP95Ms": 39,
+          "frameMaxMs": 60,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 9785,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "inline-hot",
+      "notes": "Rejected inline arrows, reload",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1386,
+          "frameP95Ms": 50,
+          "frameMaxMs": 196,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 11353,
+          "workerMs": [
+            49
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 150,
+          "frameP95Ms": 31,
+          "frameMaxMs": 31,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 11359,
+          "workerMs": [
+            70
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2379,
+          "frameP95Ms": 31,
+          "frameMaxMs": 67,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 9787,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "measure-cold",
+      "notes": "Rejected 32-card-per-frame measurement prototype",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1217,
+          "frameP95Ms": 45,
+          "frameMaxMs": 52,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10133,
+          "workerMs": [
+            43
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 382,
+          "frameP95Ms": 270,
+          "frameMaxMs": 270,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            251
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2417,
+          "frameP95Ms": 27,
+          "frameMaxMs": 60,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8246,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "measure-hot",
+      "notes": "Rejected 32-card prototype, reload one",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1385,
+          "frameP95Ms": 49,
+          "frameMaxMs": 188,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            47
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 163,
+          "frameP95Ms": 34,
+          "frameMaxMs": 34,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10145,
+          "workerMs": [
+            86
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2366,
+          "frameP95Ms": 26,
+          "frameMaxMs": 57,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8248,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "measure-hot2",
+      "notes": "Rejected 32-card prototype, reload two",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1361,
+          "frameP95Ms": 49,
+          "frameMaxMs": 189,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            48
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 163,
+          "frameP95Ms": 38,
+          "frameMaxMs": 38,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10145,
+          "workerMs": [
+            80
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2350,
+          "frameP95Ms": 23,
+          "frameMaxMs": 56,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8248,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "measure-hot3",
+      "notes": "Rejected 32-card prototype, reload three",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1327,
+          "frameP95Ms": 61,
+          "frameMaxMs": 184,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            48
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 309,
+          "frameP95Ms": 200,
+          "frameMaxMs": 200,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10145,
+          "workerMs": [
+            180
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2418,
+          "frameP95Ms": 33,
+          "frameMaxMs": 58,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8248,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "final-cold",
+      "notes": "Rejected 32-card prototype rebuilt; new process",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1150,
+          "frameP95Ms": 45,
+          "frameMaxMs": 52,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10133,
+          "workerMs": [
+            42
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 381,
+          "frameP95Ms": 280,
+          "frameMaxMs": 280,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            260
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2383,
+          "frameP95Ms": 28,
+          "frameMaxMs": 65,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8246,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "final-hot",
+      "notes": "Rejected 32-card prototype rebuilt; 214 ms reload outlier",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1392,
+          "frameP95Ms": 61,
+          "frameMaxMs": 214,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            50
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 273,
+          "frameP95Ms": 91,
+          "frameMaxMs": 91,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10145,
+          "workerMs": [
+            109
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2350,
+          "frameP95Ms": 32,
+          "frameMaxMs": 61,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8248,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "measure-cpu-diagnostic",
+      "notes": "CPU-sampled diagnostic, NOT scored: initial viewport inventory incomplete",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1439,
+          "frameP95Ms": 80,
+          "frameMaxMs": 127,
+          "framesOver50Ms": 4,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 0,
+          "mountedEdges": 2,
+          "paintedSvgRoots": 1,
+          "domElements": 119,
+          "workerMs": [
+            234
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 184,
+          "frameP95Ms": 55,
+          "frameMaxMs": 55,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 0,
+          "mountedEdges": 0,
+          "paintedSvgRoots": 0,
+          "domElements": 115,
+          "workerMs": [
+            75
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2325,
+          "frameP95Ms": 26,
+          "frameMaxMs": 58,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8248,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    }
+  ],
+  "finalScenarios": [
+    {
+      "label": "single-cold",
+      "notes": "new process one",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1181,
+          "frameP95Ms": 46,
+          "frameMaxMs": 52,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10133,
+          "workerMs": [
+            46
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 193,
+          "frameP95Ms": 32,
+          "frameMaxMs": 32,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            107
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2416,
+          "frameP95Ms": 30,
+          "frameMaxMs": 65,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8246,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "single-hot",
+      "notes": "same-process reload one",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1375,
+          "frameP95Ms": 68,
+          "frameMaxMs": 149,
+          "framesOver50Ms": 3,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            48
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 188,
+          "frameP95Ms": 35,
+          "frameMaxMs": 35,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10145,
+          "workerMs": [
+            105
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2366,
+          "frameP95Ms": 29,
+          "frameMaxMs": 67,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8248,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "single-hot2",
+      "notes": "same-process reload two",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1247,
+          "frameP95Ms": 87,
+          "frameMaxMs": 131,
+          "framesOver50Ms": 4,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            51
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 187,
+          "frameP95Ms": 33,
+          "frameMaxMs": 33,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10145,
+          "workerMs": [
+            105
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2366,
+          "frameP95Ms": 26,
+          "frameMaxMs": 69,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8248,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "single-cold2",
+      "notes": "new process two",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1250,
+          "frameP95Ms": 49,
+          "frameMaxMs": 55,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10133,
+          "workerMs": [
+            47
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 242,
+          "frameP95Ms": 33,
+          "frameMaxMs": 33,
+          "framesOver50Ms": 0,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10141,
+          "workerMs": [
+            193
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2437,
+          "frameP95Ms": 31,
+          "frameMaxMs": 72,
+          "framesOver50Ms": 1,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8246,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    },
+    {
+      "label": "single-hot3",
+      "notes": "same-process reload three",
+      "measurements": [
+        {
+          "phase": "first-load",
+          "wallMs": 1303,
+          "frameP95Ms": 60,
+          "frameMaxMs": 100,
+          "framesOver50Ms": 5,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10139,
+          "workerMs": [
+            50
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "auto-layout",
+          "wallMs": 319,
+          "frameP95Ms": 178,
+          "frameMaxMs": 178,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 264,
+          "mountedEdges": 1214,
+          "paintedSvgRoots": 1,
+          "domElements": 10145,
+          "workerMs": [
+            101
+          ],
+          "hidden": false
+        },
+        {
+          "phase": "scripted-pointer-drag",
+          "wallMs": 2365,
+          "frameP95Ms": 27,
+          "frameMaxMs": 62,
+          "framesOver50Ms": 2,
+          "longTasks": null,
+          "longestTaskMs": null,
+          "mountedTables": 5,
+          "mountedEdges": 1539,
+          "paintedSvgRoots": 1,
+          "domElements": 8248,
+          "workerMs": [],
+          "hidden": false,
+          "movedGestures": 6,
+          "temporarilyMutedEdges": 1536,
+          "mutedEdgesAfter": 0
+        }
+      ],
+      "diagnostics": [],
+      "focus": [
+        {
+          "focusPhase": "first-load",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "auto-layout",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        },
+        {
+          "focusPhase": "scripted-pointer-drag",
+          "focusedAtStart": true,
+          "focusedAtEnd": true,
+          "focusLost": false
+        }
+      ]
+    }
+  ],
+  "implementation": {
+    "paintedSvgRoots": 1,
+    "explicitViewportClipping": true,
+    "uniqueCanvasMarkerAndA11yNamespace": true,
+    "originalMeasurementBatchingRetained": true,
+    "originalMarkersAndKeyboardAccessRetained": true,
+    "fullModelAndExportsUnchanged": true
+  },
+  "checks": {
+    "fullFrontendSuite": {
+      "tests": 459,
+      "files": 89,
+      "passed": true
+    },
+    "typecheck": true,
+    "lint": true,
+    "standardDesktopBuild": true,
+    "finalNativeBuildAndRetest": true,
+    "gitDiffCheck": true,
+    "rustUnchangedThisRequest": true,
+    "allFinalViewportAndGestureInventoriesPassed": true,
+    "allScoredFocusAuditsPassed": true,
+    "independentFinalSvgXmlVerification": true,
+    "nativeMiniMapWheelZoomAndRelocate": true,
+    "keyboardSelectionAndFocus": "real-model automated regression; not claimed as native OS-keyboard sampling"
+  },
+  "limitations": [
+    "Small sample series from one Mac and deterministic fixture, not a universal FPS guarantee or statistical proof.",
+    "First-load wallMs includes fixture creation, canvas/layout/render readiness and 350 ms settling; excludes process startup and database/network operations.",
+    "Reload means canvas unmount/remount inside one native process, not Vite code HMR.",
+    "Dragging uses six real DOM/React Flow gestures, 90 mousemove steps and full recovery; not OS pointer dispatch.",
+    "Current controls use the same selected-target readiness guard; the final harness additionally rejects an empty viewport at readiness. Valid scored samples have the same complete viewport geometry.",
+    "Profiling/CPU-sampled runs are diagnostic only. React commit callbacks omit later browser, passive-effect and scheduling costs.",
+    "No mid-sample AX/screenshot reads, tests, builds or stack sampling in scored runs; all their raw focus audits are retained.",
+    "WebKit Long Tasks API is unavailable: null does not mean no long tasks.",
+    "No new memory-performance claim is made."
+  ],
+  "invalidControlBuild": {
+    "counted": false,
+    "cause": "Temporary source-copy import rewrite also rewrote dot-prefixed CSS selectors; fixed and rebuilt before the valid controls. Production source unchanged."
+  },
+  "cpuDiagnostic": {
+    "scored": false,
+    "observations": "Mixed unsymbolized JavaScript, Map/string operations, render-tree and collector activity. Cannot align any exact formal long frame to a single native stack.",
+    "physicalFootprintClaim": false
+  },
+  "finalExport": {
+    "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-2.svg · 29984 × 19615",
+    "measurement": {
+      "phase": "svg-export",
+      "wallMs": 2758,
+      "frameP95Ms": 18,
+      "frameMaxMs": 26,
+      "framesOver50Ms": 0,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 5,
+      "mountedEdges": 1539,
+      "paintedSvgRoots": 1,
+      "domElements": 8253,
+      "workerMs": [],
+      "hidden": false
+    },
+    "validation": {
+      "bytes": 21400352,
+      "tables": 2000,
+      "columns": 40000,
+      "edges": 3997,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "theme": "dark",
+      "validation": "String inventory only; validate the saved file with an independent XML parser.",
+      "preparedWallMs": 2705,
+      "validationMs": 29,
+      "nativeSaveMs": 24,
+      "savedToDisk": true,
+      "transport": "binary",
+      "restoreMs": 35,
+      "peakDetailedTables": 16,
+      "viewportRestored": true,
+      "selectionRestored": true
+    },
+    "stages": {
+      "mount": {
+        "count": 1,
+        "sum": 33,
+        "max": 33
+      },
+      "capture": {
+        "count": 1,
+        "sum": 2590,
+        "max": 2590
+      },
+      "edge-commit": {
+        "count": 63,
+        "sum": 25,
+        "max": 1
+      },
+      "edge-batch": {
+        "count": 63,
+        "sum": 116,
+        "max": 4
+      },
+      "edge-read": {
+        "count": 63,
+        "sum": 90,
+        "max": 3
+      },
+      "table-commit": {
+        "count": 193,
+        "sum": 164,
+        "max": 2
+      },
+      "batch": {
+        "count": 193,
+        "sum": 1519,
+        "max": 20
+      },
+      "read": {
+        "count": 193,
+        "sum": 1354,
+        "max": 18
+      },
+      "serialize": {
+        "count": 1,
+        "sum": 5,
+        "max": 5
+      },
+      "restore-surface": {
+        "count": 1,
+        "sum": 1,
+        "max": 1
+      },
+      "restore": {
+        "count": 1,
+        "sum": 35,
+        "max": 35
+      },
+      "restore-interaction": {
+        "count": 1,
+        "sum": 34,
+        "max": 34
+      },
+      "bytes": {
+        "count": 1,
+        "sum": 98,
+        "max": 98
+      },
+      "byte-allocation": {
+        "count": 1,
+        "sum": 0,
+        "max": 0
+      },
+      "utf8-chunk": {
+        "count": 164,
+        "sum": 53,
+        "max": 1
+      }
+    },
+    "overlappingStageFrameWindows": [
+      {
+        "stage": "mount",
+        "count": 2,
+        "p95": 26,
+        "max": 26,
+        "over50": 0
+      },
+      {
+        "stage": "edge-batch",
+        "count": 14,
+        "p95": 22,
+        "max": 22,
+        "over50": 0
+      },
+      {
+        "stage": "edge-commit",
+        "count": 14,
+        "p95": 22,
+        "max": 22,
+        "over50": 0
+      },
+      {
+        "stage": "edge-read",
+        "count": 14,
+        "p95": 22,
+        "max": 22,
+        "over50": 0
+      },
+      {
+        "stage": "batch",
+        "count": 137,
+        "p95": 18,
+        "max": 21,
+        "over50": 0
+      },
+      {
+        "stage": "table-commit",
+        "count": 137,
+        "p95": 18,
+        "max": 21,
+        "over50": 0
+      },
+      {
+        "stage": "read",
+        "count": 137,
+        "p95": 18,
+        "max": 21,
+        "over50": 0
+      },
+      {
+        "stage": "serialize",
+        "count": 1,
+        "p95": 25,
+        "max": 25,
+        "over50": 0
+      },
+      {
+        "stage": "restore",
+        "count": 2,
+        "p95": 25,
+        "max": 25,
+        "over50": 0
+      },
+      {
+        "stage": "restore-surface",
+        "count": 1,
+        "p95": 25,
+        "max": 25,
+        "over50": 0
+      },
+      {
+        "stage": "restore-interaction",
+        "count": 2,
+        "p95": 25,
+        "max": 25,
+        "over50": 0
+      },
+      {
+        "stage": "bytes",
+        "count": 7,
+        "p95": 22,
+        "max": 22,
+        "over50": 0
+      },
+      {
+        "stage": "byte-allocation",
+        "count": 1,
+        "p95": 9,
+        "max": 9,
+        "over50": 0
+      },
+      {
+        "stage": "utf8-chunk",
+        "count": 7,
+        "p95": 22,
+        "max": 22,
+        "over50": 0
+      }
+    ]
+  },
+  "fileVerification": {
+    "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-2.svg",
+    "bytes": 21400352,
+    "sha256": "a290c0454c9f7650e7c57e35d0c849b2130c495b5c86357e51d6fe8714e6f3f0",
+    "uniqueTables": 2000,
+    "uniqueTableColumnPairs": 40000,
+    "uniqueEdges": 3997,
+    "arrowheads": 3997,
+    "visibleColumnNamesPresent": true,
+    "legendAndThemePresent": true,
+    "markerReferencesResolved": true,
+    "pathNumbersFinite": true,
+    "scriptsOrExternalResources": false,
+    "dimensions": [
+      29984,
+      19615
+    ]
+  },
+  "postExportDrag": {
+    "phase": "scripted-pointer-drag",
+    "wallMs": 2372,
+    "frameP95Ms": 29,
+    "frameMaxMs": 67,
+    "framesOver50Ms": 3,
+    "longTasks": null,
+    "longestTaskMs": null,
+    "mountedTables": 5,
+    "mountedEdges": 1539,
+    "paintedSvgRoots": 1,
+    "domElements": 8285,
+    "workerMs": [],
+    "hidden": false,
+    "movedGestures": 6,
+    "temporarilyMutedEdges": 1536,
+    "mutedEdgesAfter": 0
+  },
+  "exportFocus": [
+    {
+      "focusPhase": "svg-export",
+      "focusedAtStart": true,
+      "focusedAtEnd": true,
+      "focusLost": false
+    }
+  ],
+  "rejectedPrototypeExport": {
+    "label": "32-card measurement prototype, not final runtime",
+    "capture": {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-1.svg · 29984 × 19615",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 2458,
+        "frameP95Ms": 20,
+        "frameMaxMs": 30,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 8253,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21261839,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 2405,
+        "validationMs": 29,
+        "nativeSaveMs": 23,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 33,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "capture": {
+          "count": 1,
+          "sum": 2288,
+          "max": 2288
+        },
+        "mount": {
+          "count": 1,
+          "sum": 33,
+          "max": 33
+        },
+        "edge-commit": {
+          "count": 63,
+          "sum": 24,
+          "max": 1
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 113,
+          "max": 5
+        },
+        "edge-read": {
+          "count": 63,
+          "sum": 89,
+          "max": 4
+        },
+        "table-commit": {
+          "count": 182,
+          "sum": 148,
+          "max": 2
+        },
+        "batch": {
+          "count": 182,
+          "sum": 1434,
+          "max": 18
+        },
+        "read": {
+          "count": 182,
+          "sum": 1284,
+          "max": 16
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 5,
+          "max": 5
+        },
+        "restore-surface": {
+          "count": 1,
+          "sum": 0,
+          "max": 0
+        },
+        "restore-interaction": {
+          "count": 1,
+          "sum": 33,
+          "max": 33
+        },
+        "restore": {
+          "count": 1,
+          "sum": 33,
+          "max": 33
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 99,
+          "max": 99
+        },
+        "byte-allocation": {
+          "count": 1,
+          "sum": 0,
+          "max": 0
+        },
+        "utf8-chunk": {
+          "count": 163,
+          "sum": 51,
+          "max": 1
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 3,
+          "p95": 30,
+          "max": 30,
+          "over50": 0
+        },
+        {
+          "stage": "edge-batch",
+          "count": 14,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "edge-commit",
+          "count": 14,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "edge-read",
+          "count": 14,
+          "p95": 18,
+          "max": 18,
+          "over50": 0
+        },
+        {
+          "stage": "batch",
+          "count": 119,
+          "p95": 19,
+          "max": 24,
+          "over50": 0
+        },
+        {
+          "stage": "table-commit",
+          "count": 119,
+          "p95": 19,
+          "max": 24,
+          "over50": 0
+        },
+        {
+          "stage": "read",
+          "count": 119,
+          "p95": 19,
+          "max": 24,
+          "over50": 0
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        },
+        {
+          "stage": "restore",
+          "count": 2,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        },
+        {
+          "stage": "restore-surface",
+          "count": 1,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        },
+        {
+          "stage": "restore-interaction",
+          "count": 2,
+          "p95": 22,
+          "max": 22,
+          "over50": 0
+        },
+        {
+          "stage": "bytes",
+          "count": 7,
+          "p95": 21,
+          "max": 21,
+          "over50": 0
+        },
+        {
+          "stage": "byte-allocation",
+          "count": 1,
+          "p95": 14,
+          "max": 14,
+          "over50": 0
+        },
+        {
+          "stage": "utf8-chunk",
+          "count": 7,
+          "p95": 21,
+          "max": 21,
+          "over50": 0
+        }
+      ]
+    },
+    "fileVerification": {
+      "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-1.svg",
+      "bytes": 21261839,
+      "sha256": "807ed0b7ce17b9bf0d523e06d36cb68e3795230957f12461f03312e5db26e6ea",
+      "uniqueTables": 2000,
+      "uniqueTableColumnPairs": 40000,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "visibleColumnNamesPresent": true,
+      "legendAndThemePresent": true,
+      "markerReferencesResolved": true,
+      "pathNumbersFinite": true,
+      "scriptsOrExternalResources": false,
+      "dimensions": [
+        29984,
+        19615
+      ]
+    }
+  },
+  "crashAudit": {
+    "checkedAt": "2026-10-16T18:19:22.881133+08:00",
+    "directories": [
+      "DiagnosticReports",
+      "DiagnosticReports/Retired"
+    ],
+    "historicalWebKitReports": 6,
+    "latestHistoricalReport": "2026-10-15 19:28:28",
+    "newNodalOrWebKitReportsObserved": 0
+  },
+  "conclusion": {
+    "dragP95MsRange": [
+      26,
+      31
+    ],
+    "dragMaximumMsRange": [
+      62,
+      72
+    ],
+    "reloadMaximumMs": [
+      149,
+      131,
+      100
+    ],
+    "consistentReloadImprovementEstablished": false,
+    "coldLoadImprovementEstablished": false,
+    "remainingLongFrames": true,
+    "failedPrototypesWithdrawn": true
+  },
+  "screenshot": "diagram-reload-drag-2026-10-16.png"
+}

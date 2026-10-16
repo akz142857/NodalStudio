@@ -1,0 +1,5633 @@
+{
+  "date": "2026-10-16",
+  "environment": {
+    "engine": "native Tauri WKWebView",
+    "bundle": "isolated Nodal Diagram Benchmark",
+    "frontend": "production Vite assets",
+    "rust": "debug app bundle",
+    "viewportCssPixels": [
+      1280,
+      868
+    ],
+    "devicePixelRatio": 2,
+    "tables": 2000,
+    "columns": 40000,
+    "relationships": 3997,
+    "topology": "single connected dense graph",
+    "diagnosticPaintFlags": false,
+    "concurrentBuildsOrTests": false
+  },
+  "contract": {
+    "wallMs": "capture, restoration, byte preparation, lightweight inventory, actual native disk save",
+    "frameIntervals": "requestAnimationFrame; native Long Tasks API unavailable (null)",
+    "stageDurations": "nested and overlapping; not additive",
+    "stageFrameWindows": "a frame spanning multiple stage boundaries appears in each overlapping stage. E.g. third run bytes frame overlaps end of restore; do not attribute all 188ms to the 53ms restore stage.",
+    "details": "peakDetailedTables now counts only the isolated export surface; interactive viewport remains mounted separately",
+    "memory": "requested 0.2 second interval; sampled RSS maxima, not exact allocation or physical peaks"
+  },
+  "previousFinalExports": [
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-6.svg · 29984 × 19615",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 5404,
+        "frameP95Ms": 52,
+        "frameMaxMs": 587,
+        "framesOver50Ms": 8,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10241,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 22803013,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 5324,
+        "validationMs": 17,
+        "nativeSaveMs": 63,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 381,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "capture": {
+          "count": 1,
+          "sum": 5251,
+          "max": 5251
+        },
+        "mount": {
+          "count": 1,
+          "sum": 638,
+          "max": 638
+        },
+        "relationships": {
+          "count": 1,
+          "sum": 110,
+          "max": 110
+        },
+        "batch": {
+          "count": 125,
+          "sum": 4098,
+          "max": 68
+        },
+        "read": {
+          "count": 125,
+          "sum": 1469,
+          "max": 15
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 20,
+          "max": 20
+        },
+        "restore": {
+          "count": 1,
+          "sum": 381,
+          "max": 381
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 55,
+          "max": 55
+        }
+      }
+    },
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-7.svg · 29984 × 19615",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 5449,
+        "frameP95Ms": 59,
+        "frameMaxMs": 559,
+        "framesOver50Ms": 8,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10241,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 22803013,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 5403,
+        "validationMs": 20,
+        "nativeSaveMs": 26,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 450,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 612,
+          "max": 612
+        },
+        "capture": {
+          "count": 1,
+          "sum": 5306,
+          "max": 5306
+        },
+        "relationships": {
+          "count": 1,
+          "sum": 111,
+          "max": 111
+        },
+        "batch": {
+          "count": 125,
+          "sum": 4107,
+          "max": 68
+        },
+        "read": {
+          "count": 125,
+          "sum": 1440,
+          "max": 13
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 23,
+          "max": 23
+        },
+        "restore": {
+          "count": 1,
+          "sum": 450,
+          "max": 450
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 53,
+          "max": 53
+        }
+      }
+    },
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-8.svg · 29984 × 19615",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 5221,
+        "frameP95Ms": 44,
+        "frameMaxMs": 490,
+        "framesOver50Ms": 6,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10241,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 22803013,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 5179,
+        "validationMs": 22,
+        "nativeSaveMs": 20,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 372,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 543,
+          "max": 543
+        },
+        "capture": {
+          "count": 1,
+          "sum": 5069,
+          "max": 5069
+        },
+        "relationships": {
+          "count": 1,
+          "sum": 109,
+          "max": 109
+        },
+        "batch": {
+          "count": 125,
+          "sum": 3963,
+          "max": 62
+        },
+        "read": {
+          "count": 125,
+          "sum": 1428,
+          "max": 14
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 20,
+          "max": 20
+        },
+        "restore": {
+          "count": 1,
+          "sum": 372,
+          "max": 372
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 62,
+          "max": 62
+        }
+      }
+    }
+  ],
+  "rejectedHiddenProjection": {
+    "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-9.svg · 29984 × 19615",
+    "measurement": {
+      "phase": "svg-export",
+      "wallMs": 18459,
+      "frameP95Ms": 228,
+      "frameMaxMs": 502,
+      "framesOver50Ms": 91,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 5,
+      "mountedEdges": 1539,
+      "paintedSvgRoots": 1,
+      "domElements": 10242,
+      "workerMs": [],
+      "hidden": false
+    },
+    "validation": {
+      "bytes": 22551290,
+      "tables": 2000,
+      "columns": 40000,
+      "edges": 3843,
+      "uniqueEdges": 3843,
+      "arrowheads": 3843,
+      "theme": "dark",
+      "validation": "String inventory only; validate the saved file with an independent XML parser.",
+      "preparedWallMs": 18407,
+      "validationMs": 19,
+      "nativeSaveMs": 33,
+      "savedToDisk": true,
+      "transport": "binary",
+      "restoreMs": 7314,
+      "peakDetailedTables": 16,
+      "viewportRestored": true,
+      "selectionRestored": true
+    },
+    "stages": {
+      "unavailable": "prototype AX stage block exceeded text limit; measurement and validation preserved"
+    },
+    "overlappingStageFrameWindows": [
+      {
+        "stage": "mount-prepare",
+        "count": 2,
+        "p95": 336,
+        "max": 336,
+        "over50": 1
+      },
+      {
+        "stage": "mount-nodes",
+        "count": 33,
+        "p95": 155,
+        "max": 159,
+        "over50": 32
+      },
+      {
+        "stage": "mount-edges",
+        "count": 21,
+        "p95": 235,
+        "max": 237,
+        "over50": 9
+      },
+      {
+        "stage": "relationships",
+        "count": 1,
+        "p95": 237,
+        "max": 237,
+        "over50": 1
+      },
+      {
+        "stage": "batch",
+        "count": 126,
+        "p95": 41,
+        "max": 237,
+        "over50": 3
+      },
+      {
+        "stage": "serialize",
+        "count": 1,
+        "p95": 41,
+        "max": 41,
+        "over50": 0
+      },
+      {
+        "stage": "restore-edges",
+        "count": 21,
+        "p95": 251,
+        "max": 271,
+        "over50": 13
+      },
+      {
+        "stage": "restore-nodes",
+        "count": 32,
+        "p95": 175,
+        "max": 279,
+        "over50": 31
+      },
+      {
+        "stage": "restore-culling",
+        "count": 4,
+        "p95": 502,
+        "max": 502,
+        "over50": 3
+      },
+      {
+        "stage": "bytes",
+        "count": 2,
+        "p95": 52,
+        "max": 52,
+        "over50": 1
+      }
+    ]
+  },
+  "surfacePrototype": {
+    "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-10.svg · 29984 × 19615",
+    "measurement": {
+      "phase": "svg-export",
+      "wallMs": 3819,
+      "frameP95Ms": 27,
+      "frameMaxMs": 90,
+      "framesOver50Ms": 5,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 5,
+      "mountedEdges": 1539,
+      "paintedSvgRoots": 1,
+      "domElements": 10247,
+      "workerMs": [],
+      "hidden": false
+    },
+    "validation": {
+      "bytes": 21361235,
+      "tables": 2000,
+      "columns": 40000,
+      "edges": 3997,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "theme": "dark",
+      "validation": "String inventory only; validate the saved file with an independent XML parser.",
+      "preparedWallMs": 3771,
+      "validationMs": 17,
+      "nativeSaveMs": 31,
+      "savedToDisk": true,
+      "transport": "binary",
+      "restoreMs": 113,
+      "peakDetailedTables": 16,
+      "viewportRestored": true,
+      "selectionRestored": true
+    },
+    "stages": {
+      "mount": {
+        "count": 1,
+        "sum": 132,
+        "max": 132
+      },
+      "capture": {
+        "count": 1,
+        "sum": 3687,
+        "max": 3687
+      },
+      "edge-batch": {
+        "count": 63,
+        "sum": 1099,
+        "max": 76
+      },
+      "batch": {
+        "count": 125,
+        "sum": 2322,
+        "max": 32
+      },
+      "read": {
+        "count": 125,
+        "sum": 1169,
+        "max": 14
+      },
+      "serialize": {
+        "count": 1,
+        "sum": 18,
+        "max": 18
+      },
+      "restore": {
+        "count": 1,
+        "sum": 113,
+        "max": 113
+      },
+      "bytes": {
+        "count": 1,
+        "sum": 53,
+        "max": 53
+      }
+    },
+    "overlappingStageFrameWindows": [
+      {
+        "stage": "mount",
+        "count": 3,
+        "p95": 90,
+        "max": 90,
+        "over50": 2
+      },
+      {
+        "stage": "edge-batch",
+        "count": 64,
+        "p95": 18,
+        "max": 76,
+        "over50": 1
+      },
+      {
+        "stage": "batch",
+        "count": 126,
+        "p95": 25,
+        "max": 87,
+        "over50": 1
+      },
+      {
+        "stage": "serialize",
+        "count": 1,
+        "p95": 87,
+        "max": 87,
+        "over50": 1
+      },
+      {
+        "stage": "restore",
+        "count": 3,
+        "p95": 87,
+        "max": 87,
+        "over50": 3
+      },
+      {
+        "stage": "bytes",
+        "count": 1,
+        "p95": 70,
+        "max": 70,
+        "over50": 1
+      }
+    ]
+  },
+  "finalExports": [
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-11.svg · 29984 × 19615",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 3886,
+        "frameP95Ms": 26,
+        "frameMaxMs": 161,
+        "framesOver50Ms": 2,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10247,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21412062,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 3829,
+        "validationMs": 32,
+        "nativeSaveMs": 25,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 47,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 150,
+          "max": 150
+        },
+        "capture": {
+          "count": 1,
+          "sum": 3656,
+          "max": 3656
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 1030,
+          "max": 27
+        },
+        "batch": {
+          "count": 125,
+          "sum": 2408,
+          "max": 33
+        },
+        "read": {
+          "count": 125,
+          "sum": 1169,
+          "max": 13
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 18,
+          "max": 18
+        },
+        "restore": {
+          "count": 1,
+          "sum": 47,
+          "max": 47
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 145,
+          "max": 145
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 2,
+          "p95": 111,
+          "max": 111,
+          "over50": 1
+        },
+        {
+          "stage": "edge-batch",
+          "count": 64,
+          "p95": 18,
+          "max": 27,
+          "over50": 0
+        },
+        {
+          "stage": "batch",
+          "count": 126,
+          "p95": 25,
+          "max": 32,
+          "over50": 0
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 30,
+          "max": 30,
+          "over50": 0
+        },
+        {
+          "stage": "restore",
+          "count": 2,
+          "p95": 45,
+          "max": 45,
+          "over50": 0
+        },
+        {
+          "stage": "bytes",
+          "count": 1,
+          "p95": 161,
+          "max": 161,
+          "over50": 1
+        }
+      ]
+    },
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-12.svg · 29984 × 19615",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 3890,
+        "frameP95Ms": 27,
+        "frameMaxMs": 182,
+        "framesOver50Ms": 2,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10253,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21361205,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 3849,
+        "validationMs": 20,
+        "nativeSaveMs": 21,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 50,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 155,
+          "max": 155
+        },
+        "capture": {
+          "count": 1,
+          "sum": 3640,
+          "max": 3640
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 1036,
+          "max": 24
+        },
+        "batch": {
+          "count": 125,
+          "sum": 2377,
+          "max": 30
+        },
+        "read": {
+          "count": 125,
+          "sum": 1161,
+          "max": 11
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 20,
+          "max": 20
+        },
+        "restore": {
+          "count": 1,
+          "sum": 50,
+          "max": 50
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 168,
+          "max": 168
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 2,
+          "p95": 118,
+          "max": 118,
+          "over50": 1
+        },
+        {
+          "stage": "edge-batch",
+          "count": 64,
+          "p95": 20,
+          "max": 24,
+          "over50": 0
+        },
+        {
+          "stage": "batch",
+          "count": 126,
+          "p95": 26,
+          "max": 32,
+          "over50": 0
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 32,
+          "max": 32,
+          "over50": 0
+        },
+        {
+          "stage": "restore",
+          "count": 2,
+          "p95": 47,
+          "max": 47,
+          "over50": 0
+        },
+        {
+          "stage": "bytes",
+          "count": 1,
+          "p95": 182,
+          "max": 182,
+          "over50": 1
+        }
+      ]
+    },
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-13.svg · 29984 × 19615",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 3864,
+        "frameP95Ms": 27,
+        "frameMaxMs": 188,
+        "framesOver50Ms": 2,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10253,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21361205,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 3828,
+        "validationMs": 15,
+        "nativeSaveMs": 21,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 53,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 158,
+          "max": 158
+        },
+        "capture": {
+          "count": 1,
+          "sum": 3619,
+          "max": 3619
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 1024,
+          "max": 20
+        },
+        "batch": {
+          "count": 125,
+          "sum": 2363,
+          "max": 31
+        },
+        "read": {
+          "count": 125,
+          "sum": 1147,
+          "max": 11
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 18,
+          "max": 18
+        },
+        "restore": {
+          "count": 1,
+          "sum": 53,
+          "max": 53
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 173,
+          "max": 173
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 2,
+          "p95": 119,
+          "max": 119,
+          "over50": 1
+        },
+        {
+          "stage": "edge-batch",
+          "count": 64,
+          "p95": 17,
+          "max": 20,
+          "over50": 0
+        },
+        {
+          "stage": "batch",
+          "count": 126,
+          "p95": 26,
+          "max": 30,
+          "over50": 0
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 29,
+          "max": 29,
+          "over50": 0
+        },
+        {
+          "stage": "restore",
+          "count": 3,
+          "p95": 188,
+          "max": 188,
+          "over50": 1
+        },
+        {
+          "stage": "bytes",
+          "count": 1,
+          "p95": 188,
+          "max": 188,
+          "over50": 1
+        }
+      ]
+    },
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-14.svg · 29984 × 19614",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 4166,
+        "frameP95Ms": 28,
+        "frameMaxMs": 176,
+        "framesOver50Ms": 4,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12160,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21359060,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 4125,
+        "validationMs": 21,
+        "nativeSaveMs": 20,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 228,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 215,
+          "max": 215
+        },
+        "capture": {
+          "count": 1,
+          "sum": 4042,
+          "max": 4042
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 1057,
+          "max": 27
+        },
+        "batch": {
+          "count": 125,
+          "sum": 2520,
+          "max": 35
+        },
+        "read": {
+          "count": 125,
+          "sum": 1191,
+          "max": 11
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 19,
+          "max": 19
+        },
+        "restore": {
+          "count": 1,
+          "sum": 228,
+          "max": 228
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 44,
+          "max": 44
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 3,
+          "p95": 176,
+          "max": 176,
+          "over50": 1
+        },
+        {
+          "stage": "edge-batch",
+          "count": 64,
+          "p95": 23,
+          "max": 27,
+          "over50": 0
+        },
+        {
+          "stage": "batch",
+          "count": 126,
+          "p95": 27,
+          "max": 91,
+          "over50": 1
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 91,
+          "max": 91,
+          "over50": 1
+        },
+        {
+          "stage": "restore",
+          "count": 2,
+          "p95": 166,
+          "max": 166,
+          "over50": 2
+        },
+        {
+          "stage": "bytes",
+          "count": 1,
+          "p95": 61,
+          "max": 61,
+          "over50": 1
+        }
+      ]
+    },
+    {
+      "receipt": "Completed · Saved to /Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-15.svg · 29984 × 19615",
+      "measurement": {
+        "phase": "svg-export",
+        "wallMs": 3959,
+        "frameP95Ms": 28,
+        "frameMaxMs": 96,
+        "framesOver50Ms": 2,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10247,
+        "workerMs": [],
+        "hidden": false
+      },
+      "validation": {
+        "bytes": 21440967,
+        "tables": 2000,
+        "columns": 40000,
+        "edges": 3997,
+        "uniqueEdges": 3997,
+        "arrowheads": 3997,
+        "theme": "dark",
+        "validation": "String inventory only; validate the saved file with an independent XML parser.",
+        "preparedWallMs": 3887,
+        "validationMs": 42,
+        "nativeSaveMs": 30,
+        "savedToDisk": true,
+        "transport": "binary",
+        "restoreMs": 52,
+        "peakDetailedTables": 16,
+        "viewportRestored": true,
+        "selectionRestored": true
+      },
+      "stages": {
+        "mount": {
+          "count": 1,
+          "sum": 112,
+          "max": 112
+        },
+        "capture": {
+          "count": 1,
+          "sum": 3791,
+          "max": 3791
+        },
+        "edge-batch": {
+          "count": 63,
+          "sum": 1021,
+          "max": 20
+        },
+        "batch": {
+          "count": 125,
+          "sum": 2585,
+          "max": 36
+        },
+        "read": {
+          "count": 125,
+          "sum": 1195,
+          "max": 13
+        },
+        "serialize": {
+          "count": 1,
+          "sum": 18,
+          "max": 18
+        },
+        "restore": {
+          "count": 1,
+          "sum": 52,
+          "max": 52
+        },
+        "bytes": {
+          "count": 1,
+          "sum": 76,
+          "max": 76
+        }
+      },
+      "overlappingStageFrameWindows": [
+        {
+          "stage": "mount",
+          "count": 3,
+          "p95": 65,
+          "max": 65,
+          "over50": 1
+        },
+        {
+          "stage": "edge-batch",
+          "count": 64,
+          "p95": 18,
+          "max": 20,
+          "over50": 0
+        },
+        {
+          "stage": "batch",
+          "count": 126,
+          "p95": 28,
+          "max": 35,
+          "over50": 0
+        },
+        {
+          "stage": "serialize",
+          "count": 1,
+          "p95": 32,
+          "max": 32,
+          "over50": 0
+        },
+        {
+          "stage": "restore",
+          "count": 2,
+          "p95": 47,
+          "max": 47,
+          "over50": 0
+        },
+        {
+          "stage": "bytes",
+          "count": 1,
+          "p95": 96,
+          "max": 96,
+          "over50": 1
+        }
+      ]
+    }
+  ],
+  "finalExportViews": [
+    "closeup/new process",
+    "closeup/after hot reload",
+    "closeup/same graph repeat",
+    "whole-diagram overview after auto layout",
+    "new-process confirmation after small-diagram port compatibility fix"
+  ],
+  "scenarios": [
+    [
+      {
+        "phase": "first-load",
+        "wallMs": 1202,
+        "frameP95Ms": 74,
+        "frameMaxMs": 134,
+        "framesOver50Ms": 7,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12130,
+        "workerMs": [
+          84
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "auto-layout",
+        "wallMs": 285,
+        "frameP95Ms": 42,
+        "frameMaxMs": 42,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12137,
+        "workerMs": [
+          220
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "scripted-pointer-drag",
+        "wallMs": 2134,
+        "frameP95Ms": 31,
+        "frameMaxMs": 76,
+        "framesOver50Ms": 3,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10241,
+        "workerMs": [],
+        "hidden": false,
+        "movedGestures": 6,
+        "temporarilyMutedEdges": 1536,
+        "mutedEdgesAfter": 0
+      }
+    ],
+    [
+      {
+        "phase": "first-load",
+        "wallMs": 1358,
+        "frameP95Ms": 98,
+        "frameMaxMs": 171,
+        "framesOver50Ms": 8,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12139,
+        "workerMs": [
+          76
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "auto-layout",
+        "wallMs": 227,
+        "frameP95Ms": 36,
+        "frameMaxMs": 36,
+        "framesOver50Ms": 0,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 264,
+        "mountedEdges": 1214,
+        "paintedSvgRoots": 1,
+        "domElements": 12145,
+        "workerMs": [
+          132
+        ],
+        "hidden": false
+      },
+      {
+        "phase": "scripted-pointer-drag",
+        "wallMs": 2267,
+        "frameP95Ms": 47,
+        "frameMaxMs": 88,
+        "framesOver50Ms": 5,
+        "longTasks": null,
+        "longestTaskMs": null,
+        "mountedTables": 5,
+        "mountedEdges": 1539,
+        "paintedSvgRoots": 1,
+        "domElements": 10248,
+        "workerMs": [],
+        "hidden": false,
+        "movedGestures": 6,
+        "temporarilyMutedEdges": 1536,
+        "mutedEdgesAfter": 0
+      }
+    ]
+  ],
+  "fileVerification": [
+    {
+      "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-11.svg",
+      "bytes": 21412062,
+      "sha256": "3d3838606a7f350bc2aef7e96c5bbf8ed66fdf80dbbc71a392e33fc9f61b966a",
+      "uniqueTables": 2000,
+      "uniqueTableColumnPairs": 40000,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "columnNamesPresent": true,
+      "legendAndThemePresent": true,
+      "markerReferencesResolved": true,
+      "finitePathGeometry": true,
+      "scriptsAndExternalResources": false,
+      "dimensions": [
+        29984,
+        19615
+      ]
+    },
+    {
+      "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-12.svg",
+      "bytes": 21361205,
+      "sha256": "5b0995ee63d6aca2f733233a7b94ca836f75aa5cd4557936020053595db35eb9",
+      "uniqueTables": 2000,
+      "uniqueTableColumnPairs": 40000,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "columnNamesPresent": true,
+      "legendAndThemePresent": true,
+      "markerReferencesResolved": true,
+      "finitePathGeometry": true,
+      "scriptsAndExternalResources": false,
+      "dimensions": [
+        29984,
+        19615
+      ]
+    },
+    {
+      "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-13.svg",
+      "bytes": 21361205,
+      "sha256": "5b0995ee63d6aca2f733233a7b94ca836f75aa5cd4557936020053595db35eb9",
+      "uniqueTables": 2000,
+      "uniqueTableColumnPairs": 40000,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "columnNamesPresent": true,
+      "legendAndThemePresent": true,
+      "markerReferencesResolved": true,
+      "finitePathGeometry": true,
+      "scriptsAndExternalResources": false,
+      "dimensions": [
+        29984,
+        19615
+      ]
+    },
+    {
+      "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-14.svg",
+      "bytes": 21359060,
+      "sha256": "e0b601cdab6f46e734965e77fe6aa00eeb5ce3d176d6276a28c36204ec36f67d",
+      "uniqueTables": 2000,
+      "uniqueTableColumnPairs": 40000,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "columnNamesPresent": true,
+      "legendAndThemePresent": true,
+      "markerReferencesResolved": true,
+      "finitePathGeometry": true,
+      "scriptsAndExternalResources": false,
+      "dimensions": [
+        29984,
+        19614
+      ]
+    },
+    {
+      "file": "/Users/ziy/Downloads/Synthetic-benchmark-only-diagram-bench2000tru-15.svg",
+      "bytes": 21440967,
+      "sha256": "3397a92852881c35cee70177cbc3dbe070049fe060991d1389ff0f2e6e3c88c7",
+      "uniqueTables": 2000,
+      "uniqueTableColumnPairs": 40000,
+      "uniqueEdges": 3997,
+      "arrowheads": 3997,
+      "columnNamesPresent": true,
+      "legendAndThemePresent": true,
+      "markerReferencesResolved": true,
+      "finitePathGeometry": true,
+      "scriptsAndExternalResources": false,
+      "dimensions": [
+        29984,
+        19615
+      ]
+    }
+  ],
+  "renderingComparison": [
+    {
+      "reference": "previous full-overview mount export -8.svg",
+      "exactTableVectorTrees": 2000,
+      "tableTextsAndElementCountsIdentical": true,
+      "maxTableCoordinateDeltaPx": 0.0,
+      "edgePathCommandsIdentical": true,
+      "maxEdgeCoordinateDeltaPx": 1.0001042283856805,
+      "explanation": "new export uses current canvas cached/provisional ports; previous export mounted all nodes and remeasured offscreen ports. No model geometry is modified now. Metadata, marker instance IDs, attribute ordering and viewport rounding can change file hashes."
+    },
+    {
+      "reference": "previous full-overview mount export -8.svg",
+      "exactTableVectorTrees": 2000,
+      "tableTextsAndElementCountsIdentical": true,
+      "maxTableCoordinateDeltaPx": 0.0,
+      "edgePathCommandsIdentical": true,
+      "maxEdgeCoordinateDeltaPx": 1.0001042283856805,
+      "explanation": "new export uses current canvas cached/provisional ports; previous export mounted all nodes and remeasured offscreen ports. No model geometry is modified now. Metadata, marker instance IDs, attribute ordering and viewport rounding can change file hashes."
+    },
+    {
+      "reference": "previous full-overview mount export -8.svg",
+      "exactTableVectorTrees": 2000,
+      "tableTextsAndElementCountsIdentical": true,
+      "maxTableCoordinateDeltaPx": 0.0,
+      "edgePathCommandsIdentical": true,
+      "maxEdgeCoordinateDeltaPx": 1.0001042283856805,
+      "explanation": "new export uses current canvas cached/provisional ports; previous export mounted all nodes and remeasured offscreen ports. No model geometry is modified now. Metadata, marker instance IDs, attribute ordering and viewport rounding can change file hashes."
+    },
+    {
+      "reference": "previous full-overview mount export -8.svg",
+      "exactTableVectorTrees": 1923,
+      "tableTextsAndElementCountsIdentical": true,
+      "maxTableCoordinateDeltaPx": 0.010000000000218279,
+      "edgePathCommandsIdentical": true,
+      "maxEdgeCoordinateDeltaPx": 1.0001042283856805,
+      "explanation": "new export uses current canvas cached/provisional ports; previous export mounted all nodes and remeasured offscreen ports. No model geometry is modified now. Metadata, marker instance IDs, attribute ordering and viewport rounding can change file hashes."
+    },
+    {
+      "reference": "previous full-overview mount export -8.svg",
+      "exactTableVectorTrees": 2000,
+      "tableTextsAndElementCountsIdentical": true,
+      "maxTableCoordinateDeltaPx": 0.0,
+      "edgePathCommandsIdentical": true,
+      "maxEdgeCoordinateDeltaPx": 1.0001042283856805,
+      "explanation": "new export uses current canvas cached/provisional ports; previous export mounted all nodes and remeasured offscreen ports. No model geometry is modified now. Metadata, marker instance IDs, attribute ordering and viewport rounding can change file hashes."
+    }
+  ],
+  "memoryWindows": [
+    {
+      "intervalSeconds": 0.2,
+      "unit": "KiB RSS; sampled values, not exact allocator/physical peaks",
+      "samples": [
+        {
+          "elapsedSeconds": 0.01,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 0.228,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 0.452,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 0.672,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 0.896,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 1.113,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 1.336,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 1.56,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 1.785,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 4.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 2.006,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 2.227,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 2.442,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 2.661,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729088,
+              "cpuPercent": 3.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 2.882,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 3.099,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 3.319,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 3.543,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 3.761,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 3.985,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 4.211,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 4.432,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 4.656,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 4.881,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 5.101,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 5.329,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 5.545,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729040,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 5.757,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124608,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729072,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 5.971,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124512,
+              "cpuPercent": 5.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 729712,
+              "cpuPercent": 19.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 6.185,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 3.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 735728,
+              "cpuPercent": 30.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 6.402,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124544,
+              "cpuPercent": 5.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 746144,
+              "cpuPercent": 38.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 6.614,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124544,
+              "cpuPercent": 4.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 748736,
+              "cpuPercent": 37.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 6.831,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 3.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 751680,
+              "cpuPercent": 39.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 7.054,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124592,
+              "cpuPercent": 3.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 754464,
+              "cpuPercent": 36.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 7.275,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 3.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 788496,
+              "cpuPercent": 50.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 7.496,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 827360,
+              "cpuPercent": 98.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 7.711,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 1.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 837536,
+              "cpuPercent": 101.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 7.93,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 1.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 849600,
+              "cpuPercent": 103.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 8.152,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 1.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 851920,
+              "cpuPercent": 106.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 8.37,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 1.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 853952,
+              "cpuPercent": 123.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 8.594,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 0.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 856848,
+              "cpuPercent": 110.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 8.813,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 0.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 858160,
+              "cpuPercent": 107.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 9.033,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 0.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 859984,
+              "cpuPercent": 103.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 9.25,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 0.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 862128,
+              "cpuPercent": 104.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 9.471,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 0.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 864576,
+              "cpuPercent": 103.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 9.693,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 124640,
+              "cpuPercent": 0.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 950576,
+              "cpuPercent": 105.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 9.92,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208800,
+              "cpuPercent": 4.7
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 102.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 10.142,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208784,
+              "cpuPercent": 2.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 56.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 10.358,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208800,
+              "cpuPercent": 3.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 40.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 10.569,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208800,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 26.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 10.784,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208800,
+              "cpuPercent": 5.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 13.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 10.999,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208800,
+              "cpuPercent": 5.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 6.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 11.222,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 3.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 4.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 11.441,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 3.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 11.657,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 2.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 11.878,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 2.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 12.096,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 2.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 3.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 12.313,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 1.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 2.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 12.534,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 2.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 3.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 12.756,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 1.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 2.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 12.976,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 3.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 13.199,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 13.424,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 2.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 3.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 13.645,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 2.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 3.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 13.867,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 14.091,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 14.306,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 3.7
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992576,
+              "cpuPercent": 7.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 14.518,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 3.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992832,
+              "cpuPercent": 38.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 14.736,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208848,
+              "cpuPercent": 6.7
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 992864,
+              "cpuPercent": 86.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 14.952,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208880,
+              "cpuPercent": 6.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 993136,
+              "cpuPercent": 109.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 15.168,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 5.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 993744,
+              "cpuPercent": 115.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 15.379,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208880,
+              "cpuPercent": 2.7
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994096,
+              "cpuPercent": 92.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 15.595,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 5.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994016,
+              "cpuPercent": 64.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 15.811,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208944,
+              "cpuPercent": 3.7
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994048,
+              "cpuPercent": 41.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 16.03,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208944,
+              "cpuPercent": 4.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994320,
+              "cpuPercent": 57.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 16.245,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208976,
+              "cpuPercent": 5.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994736,
+              "cpuPercent": 73.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 16.46,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208976,
+              "cpuPercent": 3.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994880,
+              "cpuPercent": 95.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 16.676,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208976,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994880,
+              "cpuPercent": 60.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 16.888,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208992,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994896,
+              "cpuPercent": 64.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 17.104,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208992,
+              "cpuPercent": 2.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994896,
+              "cpuPercent": 66.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 17.329,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208992,
+              "cpuPercent": 3.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994896,
+              "cpuPercent": 83.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 17.548,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208992,
+              "cpuPercent": 3.7
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994896,
+              "cpuPercent": 73.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 17.764,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208992,
+              "cpuPercent": 3.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994896,
+              "cpuPercent": 67.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 17.985,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208992,
+              "cpuPercent": 3.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994912,
+              "cpuPercent": 64.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 18.21,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208992,
+              "cpuPercent": 3.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994944,
+              "cpuPercent": 68.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 18.436,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208992,
+              "cpuPercent": 4.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 995184,
+              "cpuPercent": 71.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 18.659,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208992,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 995184,
+              "cpuPercent": 104.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 18.883,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 1.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 83.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 19.108,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 1.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 50.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 19.333,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 1.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 46.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 19.554,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 2.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 30.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 19.773,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 13.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 19.989,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 8.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 20.207,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 4.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 20.424,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 4.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 20.64,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 4.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 20.855,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 21.07,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 209008,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 21.281,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 1.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 21.493,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 21.709,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 21.925,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 22.141,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 22.361,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 22.583,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 22.807,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 23.028,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 23.254,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 23.475,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 23.695,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 23.92,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 24.14,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 24.361,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 24.582,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994816,
+              "cpuPercent": 4.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 24.795,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 25.013,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 25.232,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 25.455,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 25.676,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 25.9,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 26.12,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 26.352,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 26.577,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 1.7
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 26.799,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 27.025,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 27.25,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 27.469,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 27.692,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 27.91,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 28.128,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 28.352,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994752,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 28.572,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994704,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 28.792,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994704,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 29.012,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994656,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 29.235,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994656,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 29.459,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994448,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 29.683,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994448,
+              "cpuPercent": 3.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 29.909,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208864,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 994448,
+              "cpuPercent": 3.5
+            }
+          ]
+        }
+      ],
+      "label": "first export and subsequent hot reload window",
+      "summary": {
+        "desktop": {
+          "firstRssKiB": 124592,
+          "sampledMaxRssKiB": 209008,
+          "lastRssKiB": 208864
+        },
+        "webContent": {
+          "firstRssKiB": 729088,
+          "sampledMaxRssKiB": 995184,
+          "lastRssKiB": 994448
+        }
+      }
+    },
+    {
+      "intervalSeconds": 0.2,
+      "unit": "KiB RSS; sampled values, not exact allocator/physical peaks",
+      "samples": [
+        {
+          "elapsedSeconds": 0.01,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 0.226,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 0.445,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 0.664,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 0.889,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 1.107,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 1.32,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 1.544,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 1.762,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 1.978,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 2.197,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 1.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 2.416,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 2.634,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 2.856,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 3.077,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 3.298,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 3.515,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 3.735,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 3.954,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 4.176,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208560,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 2.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 4.388,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208592,
+              "cpuPercent": 5.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000608,
+              "cpuPercent": 20.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 4.604,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208880,
+              "cpuPercent": 5.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000624,
+              "cpuPercent": 23.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 4.818,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 5.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000736,
+              "cpuPercent": 46.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 5.031,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 4.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000848,
+              "cpuPercent": 33.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 5.254,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208896,
+              "cpuPercent": 4.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000912,
+              "cpuPercent": 40.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 5.476,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 3.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000944,
+              "cpuPercent": 35.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 5.688,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 3.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1000992,
+              "cpuPercent": 34.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 5.91,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1001264,
+              "cpuPercent": 72.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 6.133,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1001280,
+              "cpuPercent": 83.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 6.353,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 1.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1001280,
+              "cpuPercent": 102.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 6.574,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 1.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1001280,
+              "cpuPercent": 104.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 6.793,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 1.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1001328,
+              "cpuPercent": 103.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 7.014,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 1.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1001408,
+              "cpuPercent": 107.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 7.244,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 0.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1001408,
+              "cpuPercent": 105.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 7.465,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 0.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1001408,
+              "cpuPercent": 103.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 7.681,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 0.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002256,
+              "cpuPercent": 102.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 7.9,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 0.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002368,
+              "cpuPercent": 117.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 8.125,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208912,
+              "cpuPercent": 0.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002992,
+              "cpuPercent": 110.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 8.345,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208928,
+              "cpuPercent": 0.7
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002992,
+              "cpuPercent": 84.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 8.569,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208928,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 56.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 8.784,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208928,
+              "cpuPercent": 3.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 43.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 9.001,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208832,
+              "cpuPercent": 2.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 48.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 9.217,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208784,
+              "cpuPercent": 1.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 21.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 9.433,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208704,
+              "cpuPercent": 3.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 8.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 9.651,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208704,
+              "cpuPercent": 4.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 6.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 9.87,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 4.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 4.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 10.088,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 10.31,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 10.527,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 10.747,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 10.972,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 11.195,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 11.416,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 4.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 11.636,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 11.862,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 12.081,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 12.308,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 4.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 12.526,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 12.745,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 12.964,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 13.186,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 13.404,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 13.625,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 13.841,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 14.06,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 14.281,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 14.503,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208720,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 14.727,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 1.7
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 14.948,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 1.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 15.171,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 1.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 15.394,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 15.612,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 15.836,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 16.06,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 16.286,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 16.512,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 16.737,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 4.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 16.96,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 17.177,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 17.391,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 17.604,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 17.821,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 18.034,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 18.249,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208640,
+              "cpuPercent": 1.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003152,
+              "cpuPercent": 3.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 18.462,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208624,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003008,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 18.677,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208624,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1003008,
+              "cpuPercent": 3.1
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 18.89,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208624,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 19.101,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208624,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 19.316,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208624,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 19.532,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208624,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 19.748,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208624,
+              "cpuPercent": 1.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 2.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 19.962,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208624,
+              "cpuPercent": 1.9
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 2.9
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 20.174,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 2.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 20.391,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 20.608,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 20.835,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 21.06,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 21.273,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 21.49,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 21.705,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 21.918,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 22.133,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 22.351,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 22.565,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 22.779,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 5.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 9.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 22.995,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 4.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 20.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 23.211,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208704,
+              "cpuPercent": 3.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 20.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 23.428,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 4.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 8.8
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 23.645,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208656,
+              "cpuPercent": 5.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 5.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 23.863,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 4.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 4.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 24.086,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 3.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 24.303,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.6
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.7
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 24.523,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 24.746,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.0
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 24.966,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 25.187,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 25.413,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 25.635,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 25.859,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 26.077,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 26.301,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 26.515,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.4
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 26.738,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.2
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 26.964,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.5
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 27.189,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 27.409,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 27.628,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 27.852,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.5
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 28.074,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.6
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 28.297,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.3
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 28.514,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208672,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 28.738,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208608,
+              "cpuPercent": 1.8
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 28.962,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208608,
+              "cpuPercent": 2.0
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 29.181,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208608,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.4
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 29.405,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208608,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 29.628,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208608,
+              "cpuPercent": 2.1
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.3
+            }
+          ]
+        },
+        {
+          "elapsedSeconds": 29.845,
+          "processes": [
+            {
+              "pid": 44003,
+              "rssKiB": 208608,
+              "cpuPercent": 2.2
+            },
+            {
+              "pid": 44029,
+              "rssKiB": 1002816,
+              "cpuPercent": 3.3
+            }
+          ]
+        }
+      ],
+      "label": "same-graph repeated export window",
+      "summary": {
+        "desktop": {
+          "firstRssKiB": 208560,
+          "sampledMaxRssKiB": 208928,
+          "lastRssKiB": 208608
+        },
+        "webContent": {
+          "firstRssKiB": 1000608,
+          "sampledMaxRssKiB": 1003152,
+          "lastRssKiB": 1002816
+        }
+      }
+    }
+  ],
+  "checks": {
+    "frontendTests": 442,
+    "frontendTestFiles": 83,
+    "typecheck": true,
+    "lint": true,
+    "standardDesktopBuild": true,
+    "isolatedNativeBuild": true,
+    "gitDiffCheck": true
+  },
+  "screenshot": "diagram-svg-batches-2026-10-16.png",
+  "postExportDrag": {
+    "phase": "scripted-pointer-drag",
+    "wallMs": 2338,
+    "frameP95Ms": 53,
+    "frameMaxMs": 77,
+    "framesOver50Ms": 6,
+    "longTasks": null,
+    "longestTaskMs": null,
+    "mountedTables": 5,
+    "mountedEdges": 1539,
+    "paintedSvgRoots": 1,
+    "domElements": 10254,
+    "workerMs": [],
+    "hidden": false,
+    "movedGestures": 6,
+    "temporarilyMutedEdges": 1536,
+    "mutedEdgesAfter": 0
+  },
+  "postExportLayout": {
+    "phase": "auto-layout",
+    "wallMs": 403,
+    "frameP95Ms": 37,
+    "frameMaxMs": 37,
+    "framesOver50Ms": 0,
+    "longTasks": null,
+    "longestTaskMs": null,
+    "mountedTables": 264,
+    "mountedEdges": 1214,
+    "paintedSvgRoots": 1,
+    "domElements": 12161,
+    "workerMs": [
+      44
+    ],
+    "hidden": false
+  },
+  "compatibilityFixScenario": [
+    {
+      "phase": "first-load",
+      "wallMs": 1217,
+      "frameP95Ms": 77,
+      "frameMaxMs": 129,
+      "framesOver50Ms": 6,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 264,
+      "mountedEdges": 1214,
+      "paintedSvgRoots": 1,
+      "domElements": 12130,
+      "workerMs": [
+        85
+      ],
+      "hidden": false
+    },
+    {
+      "phase": "auto-layout",
+      "wallMs": 400,
+      "frameP95Ms": 46,
+      "frameMaxMs": 46,
+      "framesOver50Ms": 0,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 264,
+      "mountedEdges": 1214,
+      "paintedSvgRoots": 1,
+      "domElements": 12137,
+      "workerMs": [
+        319
+      ],
+      "hidden": false
+    },
+    {
+      "phase": "scripted-pointer-drag",
+      "wallMs": 2313,
+      "frameP95Ms": 44,
+      "frameMaxMs": 95,
+      "framesOver50Ms": 5,
+      "longTasks": null,
+      "longestTaskMs": null,
+      "mountedTables": 5,
+      "mountedEdges": 1539,
+      "paintedSvgRoots": 1,
+      "domElements": 10241,
+      "workerMs": [],
+      "hidden": false,
+      "movedGestures": 6,
+      "temporarilyMutedEdges": 1536,
+      "mutedEdgesAfter": 0
+    }
+  ],
+  "crashReportAudit": {
+    "newWebKitReportsObserved": false,
+    "historicalReports": 6,
+    "lastHistoricalReport": "2026-10-15 19:28:28",
+    "directoriesChecked": [
+      "DiagnosticReports",
+      "DiagnosticReports/Retired"
+    ]
+  }
+}
