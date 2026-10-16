@@ -59,6 +59,10 @@ The sidebar has its own table/view name filter; it does not filter the Diagram. 
 
 Navigation changes the viewport and selection only; it does not move or resize tables or save a new arrangement. Saved layout loading is allowed to settle before navigation, including falling back to the rendered graph if local semantics cannot load. View results expose their captured SQL definition read-only; views are not rendered as physical table cards. Sidebar right-click actions never rename/drop database objects or execute queries automatically.
 
+Clicking the active data source toggles its directory locally, without loading another snapshot or changing the Diagram. Collapsing retains the tree's search and group disclosure state; refreshing the same source keeps it collapsed, while selecting another source opens that source's directory. Source, schema and type rows share a compact SVG disclosure chevron, with rotation disabled when reduced motion is requested.
+
+Enum rows open read-only details with every value in declared order, including empty strings, and table/field usage across the captured schemas. References match the exact type schema/name; enum arrays also use the captured formatted type, including quoted identifiers, rather than guessing from generated array names. Domains and view-column dependencies are not present in the snapshot model and are not inferred. Same-named enums in different schemas remain distinct. Table links use the same Diagram location request as table rows, so they leave preflight/filtered views, select and center the table, and support repeat clicks. Enum details stay open for further navigation. Refresh updates the values/references, deleting an enum or changing source closes stale details, and Escape/close restores focus to the object row or search. This does not execute SQL or modify layouts.
+
 ## 大图渲染与导出
 
 100 张表及以上，从初次绘制起仅挂载视口可见的表和关系。固定卡片尺寸及临时端口先由字段模型声明，避免必须挂载/测量全部字段才能启用裁剪；卡片进入详细视图后以 DOM 测量修正端口，撤去临时端口声明，避免下一次拖动覆盖已测量锚点。恢复已保存的尺寸时同时更新初始几何。节点更新按画布、按提交批量测量，不再为每张表分别触发全图关系计算。

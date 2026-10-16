@@ -5,11 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { getPlatform, type CaptureSnapshotResult, type SchemaChangeSet } from "./platform";
 import { reportSemantics, reportSnapshot } from "./test/schema-report-fixture";
+import { enumSnapshot } from "./test/enum-fixture";
 import type { CanvasLocateRequest, SchemaCanvasProps } from "./components/SchemaCanvas";
 const changes: SchemaChangeSet = { id: "changes", beforeSnapshotId: "before", afterSnapshotId: reportSnapshot.id, createdAt: reportSnapshot.capturedAt, operations: [], riskSummary: { high: 0, medium: 0, low: 0, informational: 0 } };
 vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot, children }: { onSnapshot: (result: CaptureSnapshotResult) => void; children: ReactNode }) => <>
   <button onClick={() => onSnapshot({ snapshot: reportSnapshot, stored: false, changeSet: null })}>Load navigation fixture</button>
   <button onClick={() => onSnapshot({ snapshot: reportSnapshot, stored: false, changeSet: changes })}>Load changed fixture</button>
+  <button onClick={() => onSnapshot({ snapshot: enumSnapshot, stored: false, changeSet: null })}>Load enum fixture</button>
   {children}
 </> }));
 vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: (props: SchemaCanvasProps) => <section aria-label="Navigation canvas">
@@ -34,6 +36,26 @@ const pickOrders = () => {
 };
 describe("App sidebar object navigation", () => {
   beforeEach(() => localStorage.clear()); afterEach(() => vi.restoreAllMocks());
+  it("locates a cross-schema enum usage from preflight, clears Diagram filters and supports repeated location without closing details", async () => {
+    await mount(); fireEvent.click(screen.getByRole("button", { name: "Load enum fixture" }));
+    const tree = within(screen.getByRole("region", { name: "Database structure" }));
+    fireEvent.click(tree.getByRole("button", { name: /^public/ }));
+    fireEvent.click(tree.getByRole("button", { name: /^Enums/ }));
+    fireEvent.click(tree.getByRole("button", { name: "order_status" }));
+    const details = tree.getByRole("region", { name: "Enum details for public.order_status" });
+    expect(screen.getByTestId("locate-request")).toHaveTextContent("none");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search schema" }), { target: { value: "no-matching-tables" } });
+    fireEvent.click(screen.getByRole("button", { name: "Structure preflight" }));
+    fireEvent.click(within(details).getByRole("button", { name: "Locate archive.orders in diagram" }));
+    expect(screen.getByRole("region", { name: "Navigation canvas" })).toBeVisible();
+    expect(screen.getByRole("searchbox", { name: "Search schema" })).toHaveValue("");
+    expect(requested()).toEqual({ sourceId: enumSnapshot.sourceId, snapshotId: enumSnapshot.id, nodeId: "archive.orders", revision: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge navigation" }));
+    fireEvent.click(within(details).getByRole("button", { name: "Locate archive.orders in diagram" }));
+    expect(requested().revision).toBe(2); expect(details).toBeVisible();
+    fireEvent.click(within(details).getByRole("button", { name: "Locate public.orders in diagram" }));
+    expect(requested().nodeId).toBe("public.orders"); expect(requested().revision).toBe(3);
+  });
   it("keeps sidebar search independent, reveals filtered tables, and issues a new request for repeated clicks", async () => {
     await mount(); fireEvent.click(screen.getByRole("button", { name: "Load navigation fixture" }));
     const globalSearch = screen.getByRole("searchbox", { name: "Search schema" });

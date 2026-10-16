@@ -1,4 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { TreeDisclosureIcon } from "./TreeDisclosureIcon";
 import type {
   DataSourceProfile,
   CaptureSnapshotResult,
@@ -74,6 +75,10 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
   const [pending, setPending] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<DataSourceProfile>();
+  const [disclosure, setDisclosure] = useState({ sourceId: activeSourceId, collapsed: false });
+  // Selecting another source opens its directory; refreshing this source keeps
+  // the user's disclosure choice and never reloads the canvas just to toggle it.
+  if (disclosure.sourceId !== activeSourceId) setDisclosure({ sourceId: activeSourceId, collapsed: false });
   const requiresLiveVerification = editingProfile
     ? connectionDetailsDiffer(editingProfile, form)
     : false;
@@ -255,23 +260,23 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
         <div className="saved-sources">
           {profiles.map((profile) => {
             const active = profile.id === activeSourceId;
+            const expanded = active && !(disclosure.sourceId === profile.id && disclosure.collapsed);
             return (
               <div className="tree-node" key={profile.id}>
                 <div className="tree-row tree-row-source" data-active={active || undefined}>
                   <button
                     type="button"
                     className="tree-row-main"
-                    aria-label={`Open local snapshot for ${profile.displayName}`}
-                    aria-expanded={active}
+                    aria-label={active ? `${expanded ? "Collapse" : "Expand"} ${profile.displayName}` : `Open local snapshot for ${profile.displayName}`}
+                    aria-expanded={expanded}
                     title={`${profile.host}:${profile.port}/${profile.database}`}
                     disabled={pending}
-                    onClick={() => void handleExistingOpen(profile)}
+                    onClick={() => {
+                      if (active) setDisclosure({ sourceId: profile.id, collapsed: expanded });
+                      else void handleExistingOpen(profile);
+                    }}
                   >
-                    <span
-                      className="tree-twisty"
-                      data-open={active || undefined}
-                      aria-hidden="true"
-                    />
+                    <TreeDisclosureIcon open={expanded} />
                     <span className="tree-label">{profile.displayName}</span>
                   </button>
                   <button
@@ -285,7 +290,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                     <span aria-hidden="true">✎</span>
                   </button>
                 </div>
-                {active ? children : null}
+                {active ? <div hidden={!expanded}>{children}</div> : null}
               </div>
             );
           })}

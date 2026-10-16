@@ -1,10 +1,12 @@
 import { useCallback, useState, type MouseEvent, type KeyboardEvent } from "react";
 import type { DatabaseSnapshot, ObjectKey, TableDefinition } from "../platform";
-import type { ViewDefinition } from "../platform/types";
+import type { EnumDefinition, ViewDefinition } from "../platform/types";
 import { ActionIcon } from "./ActionIcon";
 import { OperationFeedback } from "./OperationFeedback";
 import { SchemaObjectMenu, type SchemaObjectMenuAction } from "./SchemaObjectMenu";
 import { useOperation } from "./use-operation";
+import { TreeDisclosureIcon } from "./TreeDisclosureIcon";
+import { SchemaEnumDetails } from "./SchemaEnumDetails";
 
 interface SchemaTreeProps {
   snapshot: DatabaseSnapshot;
@@ -16,7 +18,8 @@ interface SchemaTreeProps {
 type OpenState = Record<string, boolean>;
 const TYPE_LABEL = { tables: "Tables", views: "Views", enums: "Enums" } as const;
 type ObjectType = keyof typeof TYPE_LABEL;
-type MenuTarget = { object: TableDefinition | ViewDefinition; trigger: HTMLButtonElement; x: number; y: number; scope: string };
+type MenuObject = TableDefinition | ViewDefinition | EnumDefinition;
+type MenuTarget = { object: MenuObject; trigger: HTMLButtonElement; x: number; y: number; scope: string };
 
 /** Filtering expands matches without changing the user's normal disclosure state. */
 export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery }: SchemaTreeProps) {
@@ -47,28 +50,32 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     return { ...schema, tables: schema.tables.filter((table) => matches(table.key)), views: schema.views.filter((view) => matches(view.key)), enums: filtering ? [] : schema.enums };
   }).filter((schema) => !filtering || schema.tables.length + schema.views.length > 0);
   const totals = visible.reduce((sum, schema) => sum + schema.tables.length + schema.views.length + schema.enums.length, 0);
-  const preview = previewKey ? snapshot.schemas.flatMap((schema) => schema.views).find((view) => view.key.schema === previewKey.schema && view.key.name === previewKey.name) : undefined;
-  const selectedId = selectedTable && !preview ? `${selectedTable.key.schema}.${selectedTable.key.name}` : undefined;
+  const preview = previewKey?.kind === "view" ? snapshot.schemas.flatMap((schema) => schema.views).find((view) => view.key.schema === previewKey.schema && view.key.name === previewKey.name) : undefined;
+  const enumPreview = previewKey?.kind === "enum" ? snapshot.schemas.flatMap((schema) => schema.enums).find((item) => item.key.schema === previewKey.schema && item.key.name === previewKey.name) : undefined;
+  if (previewKey && !preview && !enumPreview) setPreviewKey(undefined);
+  const selectedId = selectedTable && !preview && !enumPreview ? `${selectedTable.key.schema}.${selectedTable.key.name}` : undefined;
 
   const closeMenu = useCallback((restoreFocus: boolean) => {
     setContext(undefined);
     if (restoreFocus && context?.trigger.isConnected) context.trigger.focus();
   }, [context]);
-  const showMenu = (event: MouseEvent<HTMLButtonElement> | KeyboardEvent<HTMLButtonElement>, object: TableDefinition | ViewDefinition) => {
+  const showMenu = (event: MouseEvent<HTMLButtonElement> | KeyboardEvent<HTMLButtonElement>, object: MenuObject) => {
     event.preventDefault(); event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     const pointer = "clientX" in event && (event.clientX !== 0 || event.clientY !== 0);
     setContext({ object, trigger: event.currentTarget, scope: menuScope,
       x: pointer ? event.clientX : rect.left + 16, y: pointer ? event.clientY : rect.bottom });
   };
-  const contextKeys = (event: KeyboardEvent<HTMLButtonElement>, object: TableDefinition | ViewDefinition) => {
+  const contextKeys = (event: KeyboardEvent<HTMLButtonElement>, object: MenuObject) => {
     if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) showMenu(event, object);
   };
   const chooseTable = (table: TableDefinition) => { setPreviewKey(undefined); onSelectTable(table); };
   const showView = (view: ViewDefinition) => setPreviewKey(view.key);
+  const showEnum = (item: EnumDefinition) => setPreviewKey(item.key);
   const closePreview = (event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => {
-    const row = event.currentTarget.closest(".schema-tree")?.querySelector<HTMLButtonElement>('.tree-row[aria-current="true"]');
-    setPreviewKey(undefined); row?.focus();
+    const tree = event.currentTarget.closest(".schema-tree");
+    const target = tree?.querySelector<HTMLButtonElement>('.tree-row[aria-current="true"]') ?? tree?.querySelector<HTMLInputElement>('input[type="search"]');
+    setPreviewKey(undefined); target?.focus();
   };
   const copyName = (key: ObjectKey) => {
     setLastCopy(key);
@@ -83,7 +90,8 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     ...("columns" in activeMenu.object ? [
       { label: "Locate in diagram", run: () => chooseTable(activeMenu.object as TableDefinition) },
       ...(onOpenQuery ? [{ label: "Open read-only query…", run: () => onOpenQuery(activeMenu.object as TableDefinition) }] : []),
-    ] : [{ label: "Show view definition", run: () => showView(activeMenu.object as ViewDefinition) }]),
+    ] : "values" in activeMenu.object ? [{ label: "Show enum details", run: () => showEnum(activeMenu.object as EnumDefinition) }]
+      : [{ label: "Show view definition", run: () => showView(activeMenu.object as ViewDefinition) }]),
     { label: "Copy qualified name", run: () => copyName(activeMenu.object.key) },
   ] : [];
 
@@ -101,24 +109,25 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     {filtering ? <p className="schema-search-count" role="status">{totals} {totals === 1 ? "match" : "matches"}</p> : null}
     {filtering && !totals ? <p className="schema-search-empty">No matching tables or views.</p> : null}
     {copy.state ? <OperationFeedback label="Object name copy" state={copy.state} onRetry={lastCopy ? () => copyName(lastCopy) : undefined} retryLabel="Retry name copy" onDismiss={copy.dismiss} /> : null}
-    {preview ? <section className="schema-view-preview" aria-label={`Definition of ${preview.key.schema}.${preview.key.name}`} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closePreview(event); } }}>
+    {preview ? <section className="schema-object-preview schema-view-preview" aria-label={`Definition of ${preview.key.schema}.${preview.key.name}`} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closePreview(event); } }}>
       <header><strong>{preview.materialized ? "Materialized view" : "View"} · {preview.key.schema}.{preview.key.name}</strong><button type="button" aria-label="Close view definition" onClick={closePreview}>×</button></header>
       <p>Read-only definition · Views are not drawn in Diagram.</p>
       {preview.comment ? <p>{preview.comment}</p> : null}
       <pre tabIndex={0}>{preview.definition || "Definition is not available in this snapshot."}</pre>
     </section> : null}
+    {enumPreview ? <SchemaEnumDetails snapshot={snapshot} item={enumPreview} onLocate={onSelectTable} onClose={closePreview} /> : null}
     {visible.map((schema) => {
       const schemaOpen = expanded(schema.name);
       const counts: Record<ObjectType, number> = { tables: schema.tables.length, views: schema.views.length, enums: schema.enums.length };
       return <div className="tree-node" key={schema.name}>
         <button type="button" className="tree-row tree-row-schema" aria-expanded={schemaOpen} onClick={() => toggle(schema.name)}>
-          <span className="tree-twisty" data-open={schemaOpen || undefined} aria-hidden="true" /><span className="tree-label">{schema.name}</span><small>{counts.tables + counts.views + counts.enums}</small>
+          <TreeDisclosureIcon open={schemaOpen} /><span className="tree-label">{schema.name}</span><small>{counts.tables + counts.views + counts.enums}</small>
         </button>
         {schemaOpen ? (Object.keys(TYPE_LABEL) as ObjectType[]).filter((type) => !filtering || counts[type] > 0).map((type) => {
           const key = `${schema.name}:${type}`; const typeOpen = expanded(key); const count = counts[type];
           return <div className="tree-node tree-node-type" key={key}>
             <button type="button" className="tree-row tree-row-type" aria-expanded={typeOpen} disabled={count === 0} onClick={() => toggle(key)}>
-              <span className="tree-twisty" data-open={typeOpen || undefined} aria-hidden="true" /><span className="tree-label">{TYPE_LABEL[type]}</span><small>{count}</small>
+              <TreeDisclosureIcon open={typeOpen} /><span className="tree-label">{TYPE_LABEL[type]}</span><small>{count}</small>
             </button>
             {typeOpen && type === "tables" ? schema.tables.map((table) => <button type="button" key={table.key.name} className="tree-row tree-row-object"
               aria-current={`${schema.name}.${table.key.name}` === selectedId ? "true" : undefined} aria-haspopup="menu"
@@ -130,7 +139,11 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
               onClick={() => showView(view)} onContextMenu={(event) => showMenu(event, view)} onKeyDown={(event) => contextKeys(event, view)} onDragStart={(event) => event.preventDefault()}>
               <span className="tree-label">{view.key.name}</span>
             </button>) : null}
-            {typeOpen && type === "enums" ? schema.enums.map((item) => <div className="tree-row tree-row-object is-static" key={item.key.name} onContextMenu={(event) => event.preventDefault()}><span className="tree-label">{item.key.name}</span></div>) : null}
+            {typeOpen && type === "enums" ? schema.enums.map((item) => <button type="button" className="tree-row tree-row-object" key={item.key.name}
+              aria-current={enumPreview?.key.schema === item.key.schema && enumPreview.key.name === item.key.name ? "true" : undefined} aria-haspopup="menu"
+              onClick={() => showEnum(item)} onContextMenu={(event) => showMenu(event, item)} onKeyDown={(event) => contextKeys(event, item)} onDragStart={(event) => event.preventDefault()}>
+              <span className="tree-label">{item.key.name}</span>
+            </button>) : null}
           </div>;
         }) : null}
       </div>;

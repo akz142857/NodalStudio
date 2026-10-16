@@ -7,6 +7,8 @@ import type {
   NodalStudioPlatform,
 } from "../platform";
 import { ConnectionPanel } from "./ConnectionPanel";
+import { SchemaTree } from "./SchemaTree";
+import { reportSnapshot } from "../test/schema-report-fixture";
 
 afterEach(() => {
   cleanup();
@@ -74,6 +76,64 @@ function renderPanel(platform = platformMock()) {
 }
 
 describe("ConnectionPanel", () => {
+  it("collapses the active source locally and restores the same search and group state without reopening its snapshot", async () => {
+    const listSnapshots = vi.fn(), getSnapshot = vi.fn(), capturePostgresSnapshot = vi.fn();
+    const platform = platformMock({ listSnapshots, getSnapshot, capturePostgresSnapshot }), onSnapshot = vi.fn();
+    const model = { ...reportSnapshot, sourceId: profile.id, schemas: [reportSnapshot.schemas[0]] };
+    const panel = (snapshot = model) => <ConnectionPanel enabled activeSourceId={profile.id} platform={platform}
+      onSnapshot={onSnapshot} defaultDatabaseType="mySql" defaultSslMode="prefer">
+      <SchemaTree snapshot={snapshot} onSelectTable={vi.fn()} />
+    </ConnectionPanel>;
+    const { rerender } = render(panel());
+    await screen.findByRole("button", { name: "Collapse Flow" });
+    fireEvent.click(screen.getByRole("button", { name: /Tables/ }));
+    const search = screen.getByRole("searchbox", { name: "Search tables and views" });
+    fireEvent.change(search, { target: { value: "orders" } });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Flow" }));
+    expect(screen.getByRole("button", { name: "Expand Flow" })).toHaveAttribute("aria-expanded", "false");
+    expect(search).not.toBeVisible();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    // A fresh snapshot for the same source must not reopen the directory.
+    rerender(panel({ ...model, id: "refreshed" }));
+    expect(screen.getByRole("button", { name: "Expand Flow" })).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Expand Flow" }));
+    expect(screen.getByRole("button", { name: "Collapse Flow" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("searchbox")).toBe(search);
+    expect(search).toBeVisible(); expect(search).toHaveValue("orders");
+    fireEvent.click(screen.getByRole("button", { name: "Clear object search" }));
+    expect(screen.getByRole("button", { name: /Tables/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /^customers/ })).toBeVisible();
+    expect(listSnapshots).not.toHaveBeenCalled();
+    expect(getSnapshot).not.toHaveBeenCalled();
+    expect(capturePostgresSnapshot).not.toHaveBeenCalled();
+    expect(onSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("opens a newly selected source after collapsing the previous source and leaves editing independent", async () => {
+    const other = { ...profile, id: "source-2", displayName: "Other" };
+    const listSnapshots = vi.fn().mockResolvedValue([{ id: "other-snapshot", sourceId: other.id }]);
+    const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listSnapshots,
+      getSnapshot: vi.fn().mockResolvedValue({ ...captureResult.snapshot, sourceId: other.id }) });
+    const onSnapshot = vi.fn();
+    const panel = (id: string) => <ConnectionPanel enabled activeSourceId={id} platform={platform}
+      onSnapshot={onSnapshot} defaultDatabaseType="mySql" defaultSslMode="prefer"><input aria-label="Source content" /></ConnectionPanel>;
+    const { rerender } = render(panel(profile.id));
+    fireEvent.click(await screen.findByRole("button", { name: "Collapse Flow" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Flow" }));
+    expect(screen.getByRole("dialog", { name: "Edit Flow" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Expand Flow" })).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open local snapshot for Other" }));
+    await waitFor(() => expect(onSnapshot).toHaveBeenCalledOnce());
+    expect(listSnapshots).toHaveBeenCalledWith(other.id);
+    rerender(panel(other.id));
+    expect(screen.getByRole("button", { name: "Collapse Other" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("textbox", { name: "Source content" })).toBeVisible();
+    // Returning to a source is a new selection, so a stale collapsed state must not leak.
+    rerender(panel(profile.id));
+    expect(screen.getByRole("button", { name: "Collapse Flow" })).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("keeps connection fields in a create dialog", async () => {
     renderPanel();
 
