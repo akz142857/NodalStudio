@@ -53,3 +53,42 @@ it("leaves a recovery frame between batches, preserves every edge and cancels ei
   rerender({ scope: {} }); frame(); frame();
   expect(frames.size).toBe(1); unmount(); expect(frames.size).toBe(0);
 });
+
+it.each(["settle", "advance"])("cancels the pending %s frame when another drag interrupts recovery, then restores the latest edges", (pendingPhase) => {
+  let sequence = 0, time = 0;
+  const frames = new Map<number, FrameRequestCallback>();
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { frames.set(++sequence, callback); return sequence; });
+  const cancel = vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => { frames.delete(id); });
+  const frame = () => act(() => {
+    time += 250;
+    for (const [id, callback] of [...frames]) if (frames.delete(id)) callback(time);
+  });
+  const edges = Array.from({ length: 1000 }, (_, id) => ({ id }));
+  const { result, rerender, unmount } = renderHook(({ scope, edges, dragging }) =>
+    useProgressiveEdges(edges, scope, true, true, dragging, !dragging),
+  { initialProps: { scope: {}, edges, dragging: false } });
+  frame();
+  expect(result.current.pending).toBe(true);
+  expect(result.current.renderedEdges.length).toBeLessThan(edges.length);
+  if (pendingPhase === "advance") frame();
+  const obsoleteFrame = [...frames.keys()][0];
+
+  const connected = [edges[50], edges[51]];
+  rerender({ scope: {}, edges: connected, dragging: true });
+  expect(cancel).toHaveBeenCalledWith(obsoleteFrame);
+  expect(frames.has(obsoleteFrame)).toBe(false);
+  frame();
+  expect(result.current.renderedEdges).toBe(connected);
+  expect(result.current.pending).toBe(false);
+
+  const latest = edges.map((edge) => ({ id: edge.id + 1000 }));
+  rerender({ scope: {}, edges: latest, dragging: false });
+  const started = time;
+  for (let i = 0; i < 20 && result.current.pending; i++) frame();
+  expect(time - started).toBeGreaterThan(1000);
+  expect(result.current.renderedEdges).toBe(latest);
+  expect(new Set(result.current.renderedEdges.map((edge) => edge.id)).size).toBe(1000);
+  expect(result.current.pending).toBe(false);
+  expect(frames.size).toBe(0);
+  unmount();
+});

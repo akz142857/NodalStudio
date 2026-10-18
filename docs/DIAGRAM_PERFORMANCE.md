@@ -363,3 +363,19 @@ SVG 输出改为轻量数据树，文字样式共享、空分组省略、几何�
 全部八轮诊断摘要及最慢窗口事件、两次原生 CPU 分类/叶栈、旧实现对照、四轮计分、最终文件校验和限制见 [diagram-attribution-2026-10-16.json](./performance/diagram-attribution-2026-10-16.json)。重复诊断可用 `NODAL_BENCH_PROFILE=1 pnpm --filter @nodalstudio/frontend benchmark:build`；不设置该变量即为正式计分构建。独立原生 app 仍使用本节的生产构建资源和合成夹具，运行完成后再保存 trace。原生 CPU 对照使用 `xcrun xctrace record --template 'Time Profiler' --attach <隔离 WebContent PID> --time-limit 15s --output <trace>`，导出 time-profile 表后按 anchor 对齐；原始机器身份和 Instruments toc 不纳入仓库。
 
 ![阶段归因优化后的最终原生导出与画布恢复](./performance/diagram-attribution-2026-10-16.png)
+
+### 2026-10-18：密集图 CI 回归的帧调度修复
+
+阶段一提交 `4246933` 的 [CI 运行](https://github.com/akz142857/NodalStudio/actions/runs/39113150930) 连续两次在 `SchemaCanvas.dense.test.tsx` 拖动结束后的关系恢复断言失败：预期 1,000 条实际路径，分别观察到 928 和 672 条，其他 523 项前端测试通过。该提交未修改密集图实现或该测试。
+
+根因是测试使用 Testing Library 默认 1 秒的 `waitFor`，而生产恢复流程从 32 条开始，每批增加 128 条，并在批次间留一帧。两次观察值恰为未完成的批次进度；CI 中 React/DOM 提交与其他测试共享 CPU，使完整恢复超过这个固定窗口。诊断时仅将松开后的动画帧延迟到 100 ms，即稳定复现 672/1,000；继续执行帧后，完整 1,000 条关系以及后续导出、筛选检查全部通过，未发现永久丢边。
+
+本次修复仅调整测试调度，不改变生产绘制、批次大小、恢复策略或 CI 并发配置：
+
+- 真实 SchemaCanvas/React Flow 组件仍参与测试；显式排队和逐帧执行 `requestAnimationFrame`，每帧等待 React 提交及异步导出续步。以有限帧预算检测停滞，不再把关系恢复当作 1 秒性能承诺。
+- 原完整流程分别用 16 ms 和 250 ms 模拟帧时间戳执行。检查恢复中的路径不完整、状态提示与导出禁用，间隔帧不增加路径；恢复后完整身份集合与唯一性、导出可用、共享根身份、选择、键盘、完整批次导出、异常清理和筛选重建继续验证。慢帧场景明确跨越 1 秒模拟时间。
+- 额外验证恢复中的间隔帧或推进帧被下一次拖动取消；新恢复只能包含最新关系集合，最终完整且没有遗留帧。
+
+本地验证：`pnpm typecheck`、`pnpm lint` 通过；密集画布、分帧恢复、共享关系层、绘制提交边界、手势、性能策略、拖动呈现和导出批次共 8 个测试文件、20 项测试通过；使用 CI 默认并行配置的 `CI=true pnpm test` 全量通过（96 个文件、527 项测试）。远程 CI 结论以本次修复提交对应的 GitHub Actions 结果为准。
+
+回归入口：[真实密集图流程](../apps/frontend/src/components/SchemaCanvas.dense.test.tsx)、[分帧恢复与取消](../apps/frontend/src/components/use-progressive-edges.test.tsx)。诊断失败、延迟后完成及本地验证日志留在本机 `target/ci-dense-fix/`，不纳入 Git。本节属于 CI 正确性测试修复，没有新的原生性能采样、帧率或数据库验收结论，也不进入 AI 阶段二。

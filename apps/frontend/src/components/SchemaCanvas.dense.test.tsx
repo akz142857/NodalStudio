@@ -1,5 +1,5 @@
 import { memo, useEffect } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useStoreApi, type NodeProps } from "@xyflow/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { TableNode } from "../graph/schema-graph";
@@ -27,7 +27,39 @@ vi.mock("../graph/elk-layout", async (load) => ({ ...await load<typeof import(".
 }));
 afterEach(() => { document.querySelectorAll("style[data-canvas-regression]").forEach((style) => style.remove()); vi.restoreAllMocks(); vi.unstubAllGlobals(); probe.store = undefined; });
 
-it("retains the full dense model, selects shared paths, exports every edge once and rebuilds the layer after filtering", async () => {
+// Drive real React/React Flow commits one frame at a time. Recovery deliberately
+// leaves a frame between batches, so completion has no one-second wall-clock SLA.
+function animationFrames(interval: number) {
+  let sequence = 0, time = 0;
+  const pending = new Map<number, FrameRequestCallback>();
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { pending.set(++sequence, callback); return sequence; });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => { pending.delete(id); });
+  const advance = async () => {
+    time += interval;
+    await act(async () => {
+      for (const [id, callback] of [...pending]) {
+        if (pending.delete(id)) callback(time);
+      }
+      await Promise.resolve(); // Let frame-driven export continuations commit too.
+    });
+  };
+  return {
+    advance,
+    now: () => time,
+    async until(assertion: () => void) {
+      // A finite frame budget catches a stalled sequence without depending on CI
+      // CPU speed. Includes the bounded export's table and relationship batches.
+      for (let frame = 0; frame < 160; frame++) {
+        await advance();
+        try { assertion(); return; } catch { /* Retry after the next committed frame. */ }
+      }
+      assertion();
+    },
+  };
+}
+
+it.each([16, 250])("retains the dense model, selects, exports and rebuilds all edges with %i ms frames", async (interval) => {
+  const frames = animationFrames(interval);
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal("DOMMatrixReadOnly", class { m22 = 1; });
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1200);
@@ -39,13 +71,22 @@ it("retains the full dense model, selects shared paths, exports every edge once 
   const onSelectTable = vi.fn();
   const { container } = render(<SchemaCanvas snapshot={snapshot} query="" canvasSettings={defaultAppSettings().canvas}
     runtimeKind="web" onSelectTable={onSelectTable} platform={{ saveDiagramExport } as unknown as NodalStudioPlatform} />);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Export SVG" })).toBeEnabled());
+  const exportButton = screen.getByRole("button", { name: "Export SVG" });
+  await frames.until(() => expect(exportButton).toBeEnabled());
   const store = probe.store!;
   act(() => { store.setState({ width: 1200, height: 700, transform: [0, 0, 1] }); });
   const paths = () => container.querySelectorAll('[data-shared-edge="true"] .react-flow__edge-path');
   const stylesheet = document.createElement("style"); stylesheet.dataset.canvasRegression = ""; stylesheet.textContent = canvasStyles; document.head.append(stylesheet);
 
-  await waitFor(() => expect(paths()).toHaveLength(1000));
+  await frames.until(() => expect(paths()).toHaveLength(1000));
+  const allEdgeIds = new Set(store.getState().edges.map((edge) => edge.id));
+  const expectCompletePaint = () => {
+    const painted = [...container.querySelectorAll('[data-shared-edge="true"]')].map((edge) => edge.getAttribute("data-id"));
+    expect(paths()).toHaveLength(1000);
+    expect(painted).toHaveLength(allEdgeIds.size);
+    expect(new Set(painted)).toEqual(allEdgeIds);
+  };
+  expectCompletePaint();
   expect(store.getState().nodes).toHaveLength(500); expect(store.getState().edges).toHaveLength(1000);
   expect(container.querySelectorAll("[data-shared-edge-layer]")).toHaveLength(1);
   const proxies = container.querySelectorAll<SVGGElement>("g.diagram-edge-proxy");
@@ -66,7 +107,7 @@ it("retains the full dense model, selects shared paths, exports every edge once 
   const path = paths()[4]; const id = path.parentElement!.getAttribute("data-id")!;
   fireEvent.click(path, { clientX: 350, clientY: 150 });
   expect(onSelectTable).toHaveBeenCalledWith(undefined);
-  expect(await screen.findByLabelText("Relationship details")).toBeVisible();
+  expect(screen.getByLabelText("Relationship details")).toBeVisible();
   expect(store.getState().edges.find((edge) => edge.id === id)?.selected).toBe(true);
   expect(container.querySelector('[data-shared-edge="true"].selected')).not.toBeNull();
   fireEvent.keyDown(container.querySelector('[data-shared-edge="true"].selected')!, { key: "Escape" });
@@ -74,19 +115,30 @@ it("retains the full dense model, selects shared paths, exports every edge once 
   expect(store.getState().edges.some((edge) => edge.selected)).toBe(false);
   const keyboardEdge = container.querySelector<SVGGElement>(`[data-shared-edge="true"][data-id="${id}"]`)!;
   keyboardEdge.focus(); fireEvent.keyDown(keyboardEdge, { key: "Enter" });
-  await waitFor(() => expect(container.querySelector('[data-shared-edge="true"].selected')).toHaveFocus());
+  await frames.until(() => expect(container.querySelector('[data-shared-edge="true"].selected')).toHaveFocus());
   fireEvent.keyDown(container.querySelector('[data-shared-edge="true"].selected')!, { key: "Escape" });
   const paintRoot = container.querySelector("[data-shared-edge-layer]");
   const stableEdge = store.getState().edges.find((edge) => edge.source === "public.t100")!;
   const moving = store.getState().nodes.find((node) => node.id === "public.t4")!;
   act(() => store.getState().triggerNodeChanges([{ type: "position", id: moving.id, position: { x: moving.position.x + 10, y: moving.position.y }, dragging: true }]));
-  await waitFor(() => expect(paths().length).toBeLessThan(10));
+  await frames.until(() => expect(paths().length).toBeLessThan(10));
   expect(container.querySelector("[data-shared-edge-layer]")).toBe(paintRoot);
   expect(paintRoot?.isConnected).toBe(true);
   expect(store.getState().nodes).toHaveLength(500);
   expect(screen.getByRole("button", { name: "Export SVG" })).toBeDisabled();
   act(() => store.getState().triggerNodeChanges([{ type: "position", id: moving.id, position: { x: moving.position.x + 10, y: moving.position.y }, dragging: false }]));
-  await waitFor(() => expect(paths()).toHaveLength(1000));
+  const recoveryStarted = frames.now();
+  await frames.advance();
+  const partialCount = paths().length;
+  expect(partialCount).toBeGreaterThan(0); expect(partialCount).toBeLessThan(1000);
+  expect(screen.getByText("Drawing relationships…")).toBeVisible();
+  expect(exportButton).toBeDisabled();
+  await frames.advance();
+  expect(paths()).toHaveLength(partialCount); // Recovery yields between batches.
+  await frames.until(expectCompletePaint);
+  if (interval === 250) expect(frames.now() - recoveryStarted).toBeGreaterThan(1000);
+  expect(screen.queryByText("Drawing relationships…")).not.toBeInTheDocument();
+  expect(exportButton).toBeEnabled();
   expect(store.getState().edges.find((edge) => edge.id === stableEdge.id)).toBe(stableEdge);
   expect(container.querySelector("[data-shared-edge-layer]")).toBe(paintRoot);
   const captured = new Set<string>();
@@ -112,16 +164,16 @@ it("retains the full dense model, selects shared paths, exports every edge once 
     }, appendTables: append, finish: () => { expect(captured.size).toBe(500); expect(capturedEdges.size).toBe(1000); return { svg: "<svg/>", width: 160000, height: 1000 }; } };
   });
   fireEvent.click(screen.getByRole("button", { name: "Export SVG" }));
-  await waitFor(() => expect(capture).toHaveBeenCalledOnce());
-  await waitFor(() => expect(saveDiagramExport).toHaveBeenCalledOnce(), { timeout: 10000 });
+  await frames.until(() => expect(capture).toHaveBeenCalledOnce());
+  await frames.until(() => expect(saveDiagramExport).toHaveBeenCalledOnce());
   expect(append.mock.calls.reduce((sum, [batch]) => sum + batch.length, 0)).toBe(500);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Export SVG" })).toBeEnabled());
+  await frames.until(() => expect(exportButton).toBeEnabled());
   const flow = container.querySelector<HTMLElement>(".schema-canvas-flow")!;
   expect(flow.inert).toBeFalsy(); expect(flow).not.toHaveAttribute("aria-hidden");
   const transform = store.getState().transform;
   append.mockImplementationOnce(() => { throw new Error("batch failed"); });
   fireEvent.click(screen.getByRole("button", { name: "Export SVG" }));
-  await screen.findByText(/Unable to export SVG diagram/, {}, { timeout: 10000 });
+  await frames.until(() => expect(screen.getByText(/Unable to export SVG diagram/)).toBeVisible());
   expect(flow.inert).toBeFalsy(); expect(flow).not.toHaveAttribute("aria-hidden");
   expect(store.getState().transform).toEqual(transform);
   expect(store.getState().nodes).toHaveLength(500);
@@ -129,8 +181,8 @@ it("retains the full dense model, selects shared paths, exports every edge once 
   expect(saveDiagramExport).toHaveBeenCalledOnce();
   stylesheet.remove();
   fireEvent.click(screen.getByRole("button", { name: /1000 physical/ }));
-  await waitFor(() => expect(container.querySelectorAll("[data-shared-edge-layer]")).toHaveLength(0));
+  await frames.until(() => expect(container.querySelectorAll("[data-shared-edge-layer]")).toHaveLength(0));
   fireEvent.click(screen.getByRole("button", { name: /1000 physical/ }));
-  await waitFor(() => expect(paths()).toHaveLength(1000));
+  await frames.until(expectCompletePaint);
   expect(container.querySelectorAll("[data-shared-edge-layer]")).toHaveLength(1);
 }, 25000);
