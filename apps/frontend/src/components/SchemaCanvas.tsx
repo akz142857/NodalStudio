@@ -93,6 +93,8 @@ export interface SchemaCanvasProps {
   platform?: NodalStudioPlatform;
   runtimeKind?: RuntimeInfo["kind"];
   readOnlyPreview?: boolean;
+  temporaryViewLabel?: string;
+  interactionPaused?: boolean;
   snapshot: DatabaseSnapshot;
   query: string;
   changeSet?: SchemaChangeSet;
@@ -140,6 +142,8 @@ function SchemaCanvasInner({
   platform = getPlatform(),
   runtimeKind,
   readOnlyPreview = false,
+  temporaryViewLabel,
+  interactionPaused = false,
   snapshot,
   query,
   changeSet,
@@ -276,8 +280,8 @@ function SchemaCanvasInner({
   const lastAutoFitFingerprint = useRef<string | undefined>(undefined);
   const selectionScope = `${snapshot.sourceId}:${snapshot.id}:${changeSet?.id ?? "current"}`;
   const lastSelectionScope = useRef<string | undefined>(undefined);
-  const temporaryReason = readOnlyPreview ? "Read-only DDL preview; no source workspace or database connection." : changeSet ? "Comparison diagram." : runtimeKind === "web" ? "Shared Web diagram."
-    : savedView ? "Business domain / saved view." : query ? "Search results." : focusNodeId ? "Focused diagram." : undefined;
+  const temporaryReason = temporaryViewLabel || (readOnlyPreview ? "Read-only DDL preview; no source workspace or database connection." : changeSet ? "Comparison diagram." : runtimeKind === "web" ? "Shared Web diagram."
+    : savedView ? "Business domain / saved view." : query ? "Search results." : focusNodeId ? "Focused diagram." : undefined);
   const inPlaceExport = exportRendering && nodes.length < 100;
   const canvasInteraction = useMemo(() => ({ spacePanMode, overviewEnabled: nodes.length >= 100, exportRendering: inPlaceExport, layoutEditingDisabled: inPlaceExport || !layoutReady || (!temporaryReason && !layoutLoaded) }), [spacePanMode, layoutReady, temporaryReason, layoutLoaded, nodes.length, inPlaceExport]);
   const layoutScope = JSON.stringify([selectionScope, query, focusNodeId, savedView?.id, runtimeKind, layoutLoaded, readOnlyPreview]);
@@ -362,6 +366,7 @@ function SchemaCanvasInner({
     return true;
   }, [getNodes, graph.edges, historyScope, layoutActionsDisabled, layoutScope, saveLayout, setEdges, setNodes, temporaryReason]);
   useEffect(() => {
+    if (interactionPaused) return;
     const onLayoutHistoryKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.altKey || !(event.metaKey || event.ctrlKey)) return;
       const target = event.target;
@@ -374,7 +379,7 @@ function SchemaCanvasInner({
     };
     window.addEventListener("keydown", onLayoutHistoryKey);
     return () => window.removeEventListener("keydown", onLayoutHistoryKey);
-  }, [restoreLayoutEdit]);
+  }, [restoreLayoutEdit, interactionPaused]);
 
   const selectedTableNodeId = selectedTable
     ? `${selectedTable.key.schema}.${selectedTable.key.name}`
@@ -577,6 +582,7 @@ function SchemaCanvasInner({
   }, [relationshipPickExisting, relationshipPickSource]);
 
   useEffect(() => {
+    if (interactionPaused) return;
     const clearRelationship = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setSelectedEdgeId(undefined);
@@ -590,9 +596,10 @@ function SchemaCanvasInner({
     };
     window.addEventListener("keydown", clearRelationship);
     return () => window.removeEventListener("keydown", clearRelationship);
-  }, []);
+  }, [interactionPaused]);
 
   useEffect(() => {
+    if (interactionPaused) return;
     const deleteSelectedRelationship = (event: KeyboardEvent) => {
       if (event.key !== "Delete" && event.key !== "Backspace") return;
       const target = event.target;
@@ -603,7 +610,7 @@ function SchemaCanvasInner({
     };
     window.addEventListener("keydown", deleteSelectedRelationship);
     return () => window.removeEventListener("keydown", deleteSelectedRelationship);
-  }, [deleteSelectedLogicalRelationship, relationshipsEditable, selectedLogicalRelationship]);
+  }, [deleteSelectedLogicalRelationship, relationshipsEditable, selectedLogicalRelationship, interactionPaused]);
 
   useEffect(() => {
     let active = true;
@@ -718,6 +725,7 @@ function SchemaCanvasInner({
   }, [canvasSettings, fitView, getNodes, graph.edges, graph.nodes.length, layoutActionsDisabled, layoutScope, layoutWorkerTimeoutMs, recordLayout, saveLayout, setEdges, setNodes, temporaryReason]);
 
   useEffect(() => {
+    if (interactionPaused) return;
     function fitCanvas() {
       void fitView({ duration: 250, padding: 0.12 });
     }
@@ -745,7 +753,7 @@ function SchemaCanvasInner({
       window.removeEventListener("nodalstudio:focus-selected-table", focusSelectedTable);
       window.removeEventListener("nodalstudio:view-all-tables", viewAllTables);
     };
-  }, [autoLayoutTables, fitView, focusNodeId, graph.nodes.length, nodes, onSelectTable, selectedTable, setNodes]);
+  }, [autoLayoutTables, fitView, focusNodeId, graph.nodes.length, nodes, onSelectTable, selectedTable, setNodes, interactionPaused]);
 
   const finishNodeDrag = useCallback(() => {
     draggingRef.current = false;
@@ -795,7 +803,7 @@ function SchemaCanvasInner({
   const selectedTableKeys = selectedCurrentTableKeys(selectedNodes, snapshot);
 
   return (
-    <div className="schema-canvas-workspace" ref={workspaceRef} aria-busy={exportRendering}>
+    <div className="schema-canvas-workspace" ref={workspaceRef} aria-busy={exportRendering} inert={interactionPaused}>
       {nodes.length ? <DiagramSelectionActions key={selectionScope} snapshot={snapshot} selectedCount={selectedNodes.length} selectedTableKeys={selectedTableKeys}
         domainGroups={semantics?.domainGroups ?? emptyDomainGroups} disabled={!layoutReady || exportRendering}
         readOnlyReason={readOnlyPreview ? "DDL previews cannot edit business semantics or become database sources." : changeSet ? "Comparison diagrams are read only. Open Database to edit business domains." : runtimeKind === "web" ? "Shared diagrams are read only." : undefined}

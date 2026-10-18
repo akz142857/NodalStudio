@@ -57,6 +57,18 @@ import type {
 } from "./settings-types";
 
 export class TauriPlatform implements NodalStudioPlatform {
+  prepareKnowledgeDraft(input: import("./knowledge-types").KnowledgeDraftInput): Promise<import("./knowledge-types").KnowledgeDraft> { return invoke("prepare_knowledge_draft", { input }); }
+  confirmKnowledgeDraft(id: string, text: string): Promise<ObjectAnnotation> { return invoke("confirm_knowledge_draft", { id, text }); }
+  cancelKnowledgeDraft(id: string): Promise<void> { return invoke("cancel_knowledge_draft", { id }); }
+  prepareDiscovery(input: import("./discovery-types").DiscoveryInput): Promise<import("./discovery-types").DiscoveryPreview> {
+    return invoke("prepare_discovery", { input });
+  }
+  runDiscovery(requestId: string): Promise<import("./discovery-types").DiscoveryResult> {
+    return invoke("run_discovery", { requestId });
+  }
+  cancelDiscovery(requestId: string): Promise<void> {
+    return invoke("cancel_discovery", { requestId });
+  }
   prepareTableExplanation(input: import("./table-ai-types").TableAiInput): Promise<import("./table-ai-types").TableAiPreview> {
     return invoke("prepare_table_explanation", { input });
   }

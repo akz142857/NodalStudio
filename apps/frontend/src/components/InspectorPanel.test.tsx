@@ -49,7 +49,7 @@ function renderPanel(overrides: Partial<Parameters<typeof InspectorPanel>[0]> = 
       platform={platform}
       historyRevision="snapshot"
       onSaveAnnotation={vi.fn().mockResolvedValue(undefined)}
-      onSemanticsChange={vi.fn()}
+      onRefreshSemantics={async () => {}} onSemanticsChange={vi.fn()}
       onApplyView={vi.fn()}
       onOpenSettings={vi.fn()}
       onSelectSnapshot={vi.fn()}

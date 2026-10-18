@@ -64,4 +64,7 @@ export type {
 } from "./types";
 export type * from "./settings-types";
 export type * from "./table-ai-types";
+export type * from "./discovery-types";
 export { defaultAppSettings, defaultDataSourceSettings, defaultEffectiveSettings, defaultProjectSettings } from "./settings-defaults";
+
+export type * from "./knowledge-types";

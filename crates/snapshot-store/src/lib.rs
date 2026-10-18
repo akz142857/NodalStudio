@@ -17,7 +17,10 @@ use sqlx::{Row, SqlitePool, sqlite::SqliteConnectOptions, sqlite::SqlitePoolOpti
 use thiserror::Error;
 use uuid::Uuid;
 
-const LOCAL_SCHEMA_VERSION: i64 = 3;
+mod knowledge;
+mod snapshot_history;
+
+const LOCAL_SCHEMA_VERSION: i64 = 5;
 
 #[derive(Debug, Error)]
 pub enum SnapshotStoreError {
@@ -29,8 +32,19 @@ pub enum SnapshotStoreError {
     Identifier(#[from] uuid::Error),
     #[error("local database schema version {0} is newer than this application supports")]
     UnsupportedSchema(i64),
+    #[error("{0}")]
+    KnowledgeConflict(String),
     #[error("local database backup failed: {0}")]
     Io(#[from] std::io::Error),
+}
+
+/// A capture result always references a persisted snapshot, including an unchanged model.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredSnapshotCapture {
+    pub snapshot: DatabaseSnapshot,
+    pub stored: bool,
+    pub change_set: Option<SchemaChangeSet>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -204,6 +218,17 @@ impl LocalSnapshotStore {
         &self,
         profile: &DataSourceProfile,
     ) -> Result<(), SnapshotStoreError> {
+        let mut tx = self.pool.begin().await?;
+        Self::save_profile_in(&mut tx, profile).await?;
+        knowledge::states_in(&mut tx, profile.id).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn save_profile_in(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        profile: &DataSourceProfile,
+    ) -> Result<(), SnapshotStoreError> {
         sqlx::query(
             r"
             INSERT INTO data_sources (id, display_name, updated_at, payload_json)
@@ -218,9 +243,130 @@ impl LocalSnapshotStore {
         .bind(&profile.display_name)
         .bind(profile.updated_at.to_rfc3339())
         .bind(serde_json::to_string(profile)?)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         Ok(())
+    }
+
+    /// Atomically accept a successfully inspected connection and its snapshot.
+    /// # Errors
+    /// Returns an error without changing the old profile or confirmation if persistence fails.
+    pub async fn save_verified_source(
+        &self,
+        profile: &DataSourceProfile,
+        snapshot: &DatabaseSnapshot,
+    ) -> Result<StoredSnapshotCapture, SnapshotStoreError> {
+        if profile.id != snapshot.source_id {
+            return Err(SnapshotStoreError::KnowledgeConflict(
+                "Snapshot source does not match the verified connection.".into(),
+            ));
+        }
+        self.save_capture(snapshot, Some(profile)).await
+    }
+
+    /// Accept an inspected snapshot, change set, outbox event and retention atomically.
+    /// Consecutive identical captures reuse the persisted current snapshot.
+    /// # Errors
+    /// Returns an error without changing storage when persistence fails.
+    pub async fn save_captured_snapshot(
+        &self,
+        snapshot: &DatabaseSnapshot,
+    ) -> Result<StoredSnapshotCapture, SnapshotStoreError> {
+        self.save_capture(snapshot, None).await
+    }
+
+    async fn save_capture(
+        &self,
+        snapshot: &DatabaseSnapshot,
+        profile: Option<&DataSourceProfile>,
+    ) -> Result<StoredSnapshotCapture, SnapshotStoreError> {
+        let mut tx = self.pool.begin().await?;
+        let previous = sqlx::query("SELECT payload_json FROM schema_snapshots WHERE source_id=? ORDER BY captured_at DESC LIMIT 1")
+            .bind(snapshot.source_id.to_string()).fetch_optional(&mut *tx).await?
+            .map(|r| serde_json::from_str::<DatabaseSnapshot>(r.get("payload_json"))).transpose()?;
+        if let Some(profile) = profile {
+            Self::save_profile_in(&mut tx, profile).await?;
+        }
+        let (snapshot, stored) = if let Some(current) = previous
+            .as_ref()
+            .filter(|current| current.fingerprint == snapshot.fingerprint)
+        {
+            (current.clone(), false)
+        } else {
+            if !Self::save_snapshot_in(&mut tx, snapshot).await? {
+                return Err(SnapshotStoreError::KnowledgeConflict(
+                    "The capture identity already belongs to a different stored model.".into(),
+                ));
+            }
+            (snapshot.clone(), true)
+        };
+        let change = if stored {
+            previous.map(|before| schema_diff::diff_snapshots(&before, &snapshot))
+        } else {
+            None
+        };
+        if let Some(change) = &change {
+            Self::save_change_set_in(&mut tx, change).await?;
+        }
+        if stored {
+            Self::enqueue_sync_in(
+                &mut tx,
+                &SyncQueueItem {
+                    id: Uuid::new_v4(),
+                    source_id: snapshot.source_id,
+                    event_kind: "snapshot.capture".into(),
+                    idempotency_key: format!(
+                        "{}:snapshot.capture:{}",
+                        snapshot.source_id, snapshot.id
+                    ),
+                    payload: serde_json::json!({"snapshot": snapshot, "changeSet": change}),
+                    base_version: 0,
+                    attempts: 0,
+                    state: "pending".into(),
+                    created_at: Utc::now().to_rfc3339(),
+                },
+            )
+            .await?;
+            let settings =
+                sqlx::query("SELECT payload_json FROM data_source_settings WHERE source_id=?")
+                    .bind(snapshot.source_id.to_string())
+                    .fetch_optional(&mut *tx)
+                    .await?
+                    .map(|r| serde_json::from_str::<DataSourceSettings>(r.get("payload_json")))
+                    .transpose()?
+                    .unwrap_or_else(|| DataSourceSettings::defaults_for(snapshot.source_id));
+            let (count, cutoff) = match settings.storage.retention {
+                settings_model::RetentionPolicy::Forever => (None, None),
+                settings_model::RetentionPolicy::Count => {
+                    (Some(usize::from(settings.storage.retention_value)), None)
+                }
+                settings_model::RetentionPolicy::Days => (
+                    None,
+                    Some(
+                        (Utc::now()
+                            - chrono::Duration::days(i64::from(settings.storage.retention_value)))
+                        .to_rfc3339(),
+                    ),
+                ),
+            };
+            if count.is_some() || cutoff.is_some() {
+                Self::prune_snapshots_in(
+                    &mut tx,
+                    snapshot.source_id,
+                    count,
+                    cutoff.as_deref(),
+                    settings.storage.preserve_high_risk,
+                )
+                .await?;
+            }
+        }
+        knowledge::states_in(&mut tx, snapshot.source_id).await?;
+        tx.commit().await?;
+        Ok(StoredSnapshotCapture {
+            snapshot,
+            stored,
+            change_set: change,
+        })
     }
 
     /// Lists all non-sensitive data-source profiles by display name.
@@ -662,6 +808,7 @@ impl LocalSnapshotStore {
                 .await?
                 .rows_affected();
         }
+        knowledge::states_in(&mut transaction, source_id).await?;
         transaction.commit().await?;
         Ok(affected)
     }
@@ -1002,9 +1149,9 @@ impl LocalSnapshotStore {
             .map_err(Into::into)
     }
 
-    /// Stores a snapshot once per `(source_id, fingerprint)` pair.
+    /// Stores a snapshot unless the current model already has the same fingerprint.
     ///
-    /// Returns `true` when a new row was inserted and `false` for an existing model.
+    /// Returns `true` for an inserted row. A return to an older structure is a new capture.
     ///
     /// # Errors
     ///
@@ -1013,20 +1160,27 @@ impl LocalSnapshotStore {
         &self,
         snapshot: &DatabaseSnapshot,
     ) -> Result<bool, SnapshotStoreError> {
-        let result = sqlx::query(
-            r"
-            INSERT OR IGNORE INTO schema_snapshots (
-                id, source_id, captured_at, fingerprint, payload_json
-            ) VALUES (?, ?, ?, ?, ?)
-            ",
-        )
-        .bind(snapshot.id.to_string())
-        .bind(snapshot.source_id.to_string())
-        .bind(snapshot.captured_at.to_rfc3339())
-        .bind(&snapshot.fingerprint)
-        .bind(serde_json::to_string(snapshot)?)
-        .execute(&self.pool)
-        .await?;
+        let mut tx = self.pool.begin().await?;
+        let stored = Self::save_snapshot_in(&mut tx, snapshot).await?;
+        knowledge::states_in(&mut tx, snapshot.source_id).await?;
+        tx.commit().await?;
+        Ok(stored)
+    }
+
+    async fn save_snapshot_in(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        snapshot: &DatabaseSnapshot,
+    ) -> Result<bool, SnapshotStoreError> {
+        let current_fingerprint = sqlx::query_scalar::<_, String>(
+            "SELECT fingerprint FROM schema_snapshots WHERE source_id=? ORDER BY captured_at DESC LIMIT 1",
+        ).bind(snapshot.source_id.to_string()).fetch_optional(&mut **tx).await?;
+        if current_fingerprint.as_ref() == Some(&snapshot.fingerprint) {
+            return Ok(false);
+        }
+        let result = sqlx::query("INSERT OR IGNORE INTO schema_snapshots (id,source_id,captured_at,fingerprint,payload_json) VALUES (?,?,?,?,?)")
+            .bind(snapshot.id.to_string()).bind(snapshot.source_id.to_string())
+            .bind(snapshot.captured_at.to_rfc3339()).bind(&snapshot.fingerprint)
+            .bind(serde_json::to_string(snapshot)?).execute(&mut **tx).await?;
         Ok(result.rows_affected() == 1)
     }
 
@@ -1108,11 +1262,31 @@ impl LocalSnapshotStore {
         captured_after: Option<&str>,
         preserve_high_risk: bool,
     ) -> Result<u64, SnapshotStoreError> {
+        let mut tx = self.pool.begin().await?;
+        let removed = Self::prune_snapshots_in(
+            &mut tx,
+            source_id,
+            retain_count,
+            captured_after,
+            preserve_high_risk,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(removed)
+    }
+
+    async fn prune_snapshots_in(
+        transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        source_id: Uuid,
+        retain_count: Option<usize>,
+        captured_after: Option<&str>,
+        preserve_high_risk: bool,
+    ) -> Result<u64, SnapshotStoreError> {
         let rows = sqlx::query(
             "SELECT id, captured_at FROM schema_snapshots WHERE source_id = ? ORDER BY captured_at DESC",
         )
         .bind(source_id.to_string())
-        .fetch_all(&self.pool)
+        .fetch_all(&mut **transaction)
         .await?;
         let mut retained: BTreeSet<String> = rows
             .iter()
@@ -1131,7 +1305,7 @@ impl LocalSnapshotStore {
                 "SELECT c.before_snapshot_id, c.after_snapshot_id, c.payload_json FROM schema_change_sets c JOIN schema_snapshots s ON s.id = c.after_snapshot_id WHERE s.source_id = ?",
             )
             .bind(source_id.to_string())
-            .fetch_all(&self.pool)
+            .fetch_all(&mut **transaction)
             .await?;
             for row in changes {
                 let change: SchemaChangeSet = serde_json::from_str(row.get("payload_json"))?;
@@ -1146,28 +1320,27 @@ impl LocalSnapshotStore {
             .map(|row| row.get("id"))
             .filter(|id| !retained.contains(id))
             .collect();
-        let mut transaction = self.pool.begin().await?;
         for snapshot_id in &removed {
             sqlx::query(
                 "DELETE FROM change_provenance WHERE change_set_id IN (SELECT id FROM schema_change_sets WHERE before_snapshot_id = ? OR after_snapshot_id = ?)",
             )
             .bind(snapshot_id)
             .bind(snapshot_id)
-            .execute(&mut *transaction)
+            .execute(&mut **transaction)
             .await?;
             sqlx::query(
                 "DELETE FROM schema_change_sets WHERE before_snapshot_id = ? OR after_snapshot_id = ?",
             )
             .bind(snapshot_id)
             .bind(snapshot_id)
-            .execute(&mut *transaction)
+            .execute(&mut **transaction)
             .await?;
             sqlx::query("DELETE FROM schema_snapshots WHERE id = ?")
                 .bind(snapshot_id)
-                .execute(&mut *transaction)
+                .execute(&mut **transaction)
                 .await?;
         }
-        transaction.commit().await?;
+        knowledge::states_in(transaction, source_id).await?;
         Ok(removed.len() as u64)
     }
 
@@ -1206,6 +1379,16 @@ impl LocalSnapshotStore {
         &self,
         change_set: &SchemaChangeSet,
     ) -> Result<(), SnapshotStoreError> {
+        let mut tx = self.pool.begin().await?;
+        Self::save_change_set_in(&mut tx, change_set).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn save_change_set_in(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        change_set: &SchemaChangeSet,
+    ) -> Result<(), SnapshotStoreError> {
         sqlx::query(
             r"
             INSERT OR REPLACE INTO schema_change_sets (
@@ -1218,7 +1401,7 @@ impl LocalSnapshotStore {
         .bind(change_set.after_snapshot_id.to_string())
         .bind(change_set.created_at.to_rfc3339())
         .bind(serde_json::to_string(change_set)?)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         Ok(())
     }
@@ -1254,6 +1437,16 @@ impl LocalSnapshotStore {
     ///
     /// Returns an error when serialization or `SQLite` persistence fails.
     pub async fn enqueue_sync(&self, item: &SyncQueueItem) -> Result<(), SnapshotStoreError> {
+        let mut tx = self.pool.begin().await?;
+        Self::enqueue_sync_in(&mut tx, item).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn enqueue_sync_in(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        item: &SyncQueueItem,
+    ) -> Result<(), SnapshotStoreError> {
         sqlx::query(
             r"
             INSERT OR IGNORE INTO sync_queue (
@@ -1271,7 +1464,7 @@ impl LocalSnapshotStore {
         .bind(item.attempts)
         .bind(&item.state)
         .bind(&item.created_at)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         Ok(())
     }
@@ -1528,6 +1721,7 @@ impl LocalSnapshotStore {
             .execute(&mut *transaction)
             .await?;
         }
+        knowledge::states_in(&mut transaction, bundle.source_id).await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -1810,7 +2004,11 @@ impl LocalSnapshotStore {
         )
         .execute(&self.pool)
         .await?;
+        if version < 5 {
+            self.migrate_snapshot_history().await?;
+        }
         self.initialize_semantic_tables().await?;
+        self.initialize_knowledge().await?;
         self.initialize_sync_tables().await?;
         self.initialize_extension_tables().await?;
         self.remove_retired_project_tables().await?;
@@ -1826,7 +2024,7 @@ impl LocalSnapshotStore {
         .bind(Utc::now().to_rfc3339())
         .execute(&self.pool)
         .await?;
-        sqlx::query("PRAGMA user_version = 3")
+        sqlx::query("PRAGMA user_version = 5")
             .execute(&self.pool)
             .await?;
         Ok(())
@@ -2075,7 +2273,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stores_each_source_fingerprint_once() {
+    async fn deduplicates_consecutive_captures_without_changing_the_stored_snapshot() {
         let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
         let source_id = Uuid::new_v4();
         let first = snapshot(source_id, "app");

@@ -57,7 +57,7 @@ export function AiAssistant({ platform, input, onConfirmCandidate, enabled, prov
         <h3>AI explanation</h3>
         <span className="ai-provider-status">{enabled ? providerLabel : "Off"}</span>
       </div>
-      <p className="ai-policy">Disabled by default · schema metadata only · no rows or credentials</p>
+      <p className="ai-policy">Disabled by default · schema metadata only · no rows or credentials. Team descriptions are excluded from change and domain explanations.</p>
       {enabled ? (
         <>
           <textarea

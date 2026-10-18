@@ -18,7 +18,17 @@ tracked in [docs/IMPLEMENTATION_STATUS.md](./docs/IMPLEMENTATION_STATUS.md).
 The desktop AI single-table understanding flow now includes an exact request
 preview, controlled metadata scope, evidence navigation, and cancellation/expiry
 handling. See the [stage-one delivery and review record](./docs/AI_DATABASE_UNDERSTANDING_STAGE_ONE.md)
-for implementation boundaries, validation, and a synthetic UI preview.
+for implementation boundaries and validation. Stage two adds business-language
+table discovery, scope-limited candidate ranking, verified relationship paths and
+a temporary local graph. See the [stage-two implementation record](./docs/AI_DATABASE_UNDERSTANDING_STAGE_TWO.md)
+for workflow, send-scope rules, regression coverage and its synthetic UI preview.
+Stage three adds editable per-interpretation drafts, explicit local confirmation,
+evidence validity and conservative re-review for imported descriptions. Only current
+confirmed team statements are reused. See the [stage-three implementation record](./docs/AI_DATABASE_UNDERSTANDING_STAGE_THREE.md)
+for workflows, isolated A/B receiver tests and remaining real-environment acceptance.
+The [delivery summary](./docs/AI_DATABASE_UNDERSTANDING_DELIVERY.md) links the implementation,
+review fixes and acceptance evidence. Independent user evaluation, physical two-device
+round trips and production-environment acceptance remain pending.
 
 ## Prerequisites
 

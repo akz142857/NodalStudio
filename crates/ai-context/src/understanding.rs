@@ -155,7 +155,7 @@ pub fn build_context(
         dialect: snapshot.database.database_type, tables: Vec::new(), evidence: Vec::new(),
         coverage: vec![
             "Snapshot metadata only; no application rows or execution behavior were inspected.".into(),
-            "Saved annotations are excluded because their evidence has not been reviewed for this request.".into(),
+            "Unreviewed annotations are excluded. Eligible locally confirmed team statements, when enabled, are labelled separately.".into(),
             "Business grain, state meanings, units and workflow remain unverified unless independently supported.".into(),
         ],
     };
@@ -178,11 +178,62 @@ pub fn build_context(
         columns += table.columns.len();
         context.tables.push(key);
     }
-    let included: BTreeSet<_> = context.tables.iter().cloned().collect();
+    let (evidence, omitted_relations) =
+        selected_evidence(snapshot, &context.tables, logical, include_comments)?;
+    context.evidence = evidence;
+    if omitted_relations {
+        context.coverage.push("Some relationships are outside the permitted scope or lack complete endpoints; their names and mappings are not sent.".into());
+    }
+    context.coverage.sort();
+    context.coverage.dedup();
+    if context.evidence.len() > MAX_EVIDENCE || json(&context)?.len() > MAX_CONTEXT_BYTES {
+        return Err("The selected context exceeds the AI evidence/128 KiB budget. Use Current table scope or disable comments; no request was sent.".into());
+    }
+    Ok(context)
+}
+
+/// Collect only evidence whose objects and relationship endpoints are in `keys`.
+/// Shared by single-table and discovery requests; never includes saved annotations.
+///
+/// # Errors
+/// Rejects absent tables and evidence that cannot be serialized.
+pub fn selected_evidence(
+    snapshot: &DatabaseSnapshot,
+    keys: &[ObjectKey],
+    logical: &[LogicalRelationship],
+    include_comments: bool,
+) -> Result<(Vec<Evidence>, bool), String> {
+    let tables: BTreeMap<_, _> = snapshot
+        .schemas
+        .iter()
+        .flat_map(|s| &s.tables)
+        .map(|t| (t.key.clone(), t))
+        .collect();
+    if keys.iter().any(|key| !tables.contains_key(key)) {
+        return Err("An evidence table is no longer available.".into());
+    }
+    let active = logical
+        .iter()
+        .filter(|r| {
+            r.source_id == snapshot.source_id && r.status == LogicalRelationshipStatus::Active
+        })
+        .filter(|r| {
+            endpoints_exist(
+                &tables,
+                &r.source.schema,
+                &r.source.table,
+                &r.source.columns,
+                &r.target.schema,
+                &r.target.table,
+                &r.target.columns,
+            )
+        });
+    let mut evidence = Vec::new();
+    let included: BTreeSet<_> = keys.iter().cloned().collect();
     let mut omitted_relations = false;
-    for key in context.tables.clone() {
+    for key in keys.iter().cloned() {
         let table = tables[&key];
-        add_table_evidence(&mut context, table, include_comments)?;
+        add_table_evidence(&mut evidence, table, include_comments)?;
         for fk in &table.foreign_keys {
             let other = ObjectKey::table(&fk.referenced_schema, &fk.referenced_table);
             if included.contains(&other)
@@ -197,7 +248,7 @@ pub fn build_context(
                 )
             {
                 add_evidence(
-                    &mut context,
+                    &mut evidence,
                     &key,
                     ObjectKind::ForeignKey,
                     &fk.name,
@@ -214,12 +265,12 @@ pub fn build_context(
         let from = ObjectKey::table(&relation.source.schema, &relation.source.table);
         let to = ObjectKey::table(&relation.target.schema, &relation.target.table);
         if included.contains(&from) && included.contains(&to) {
-            // No user-authored relationship note/evidence is sent in stage one.
+            // User-authored relationship notes/evidence are not confirmed knowledge.
             let detail = json(
                 &serde_json::json!({"source":relation.source,"target":relation.target,"kind":"model-only logical relationship; not a database constraint"}),
             )?;
             add_evidence(
-                &mut context,
+                &mut evidence,
                 &from,
                 ObjectKind::Table,
                 &from.name,
@@ -231,15 +282,7 @@ pub fn build_context(
             omitted_relations = true;
         }
     }
-    if omitted_relations {
-        context.coverage.push("Some relationships are outside the permitted scope or lack complete endpoints; their names and mappings are not sent.".into());
-    }
-    context.coverage.sort();
-    context.coverage.dedup();
-    if context.evidence.len() > MAX_EVIDENCE || json(&context)?.len() > MAX_CONTEXT_BYTES {
-        return Err("The selected context exceeds the AI evidence/128 KiB budget. Use Current table scope or disable comments; no request was sent.".into());
-    }
-    Ok(context)
+    Ok((evidence, omitted_relations))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -273,12 +316,12 @@ fn json(value: &impl Serialize) -> Result<String, String> {
 }
 
 fn add_table_evidence(
-    context: &mut TableContext,
+    evidence: &mut Vec<Evidence>,
     table: &TableDefinition,
     comments: bool,
 ) -> Result<(), String> {
     add_evidence(
-        context,
+        evidence,
         &table.key,
         ObjectKind::Table,
         &table.key.name,
@@ -290,7 +333,7 @@ fn add_table_evidence(
     );
     if comments && let Some(comment) = &table.comment {
         add_evidence(
-            context,
+            evidence,
             &table.key,
             ObjectKind::Table,
             &table.key.name,
@@ -305,7 +348,7 @@ fn add_table_evidence(
             column.comment = None;
         }
         add_evidence(
-            context,
+            evidence,
             &table.key,
             ObjectKind::Column,
             &column.name,
@@ -316,7 +359,7 @@ fn add_table_evidence(
     }
     if let Some(pk) = &table.primary_key {
         add_evidence(
-            context,
+            evidence,
             &table.key,
             ObjectKind::PrimaryKey,
             &pk.name,
@@ -327,7 +370,7 @@ fn add_table_evidence(
     }
     for index in &table.indexes {
         add_evidence(
-            context,
+            evidence,
             &table.key,
             ObjectKind::Index,
             &index.name,
@@ -338,7 +381,7 @@ fn add_table_evidence(
     }
     for constraint in &table.constraints {
         add_evidence(
-            context,
+            evidence,
             &table.key,
             ObjectKind::Constraint,
             &constraint.name,
@@ -351,7 +394,7 @@ fn add_table_evidence(
 }
 
 fn add_evidence(
-    context: &mut TableContext,
+    evidence: &mut Vec<Evidence>,
     table: &ObjectKey,
     kind: ObjectKind,
     name: &str,
@@ -359,8 +402,8 @@ fn add_evidence(
     detail: String,
     columns: Vec<String>,
 ) {
-    context.evidence.push(Evidence {
-        id: format!("e{}", context.evidence.len() + 1),
+    evidence.push(Evidence {
+        id: format!("e{}", evidence.len() + 1),
         table_key: table.clone(),
         object_key: if kind == ObjectKind::Table {
             table.clone()
@@ -416,4 +459,51 @@ pub fn offline_understanding() -> ModelUnderstanding {
         "Status meanings, amount units, retry behavior and workflow order require business or code evidence.".into(),
         "Offline mode shows deterministic structural evidence, not language-model inference.".into(),
     ] }
+}
+
+/// Append only locally verified team statements whose complete basis fits the send scope.
+/// # Errors
+/// Rejects evidence/context budget overflow rather than sending an implicit summary.
+pub fn append_confirmed_notes(
+    snapshot: &DatabaseSnapshot,
+    tables: &[ObjectKey],
+    evidence: &mut Vec<Evidence>,
+    states: &[semantic_model::knowledge::KnowledgeState],
+) -> Result<bool, String> {
+    use semantic_model::knowledge::{KnowledgeStatus, owning_table};
+    let mut omitted = false;
+    for state in states
+        .iter()
+        .filter(|s| s.status == KnowledgeStatus::Confirmed && s.source_id == snapshot.source_id)
+    {
+        let Some(record) = &state.confirmation else {
+            continue;
+        };
+        let Some(table) = owning_table(snapshot, &state.object_key) else {
+            continue;
+        };
+        if !tables.contains(&table) {
+            continue;
+        }
+        if record
+            .basis
+            .tables
+            .iter()
+            .any(|(key, _)| !tables.contains(key))
+        {
+            omitted = true;
+            continue;
+        }
+        evidence.push(Evidence {
+            id: format!("e{}", evidence.len() + 1), table_key: table,
+            object_key: state.object_key.clone(), kind: "teamStatement".into(),
+            label: format!("{}.{} · confirmed team statement", state.object_key.schema, state.object_key.name),
+            detail: json(&serde_json::json!({"text": record.final_text,"confirmationId":record.id,"descriptionDigest":record.description_digest,"confirmedAt":record.confirmed_at,"status":"confirmed on this device; not a database fact"}))?,
+            columns: if state.object_key.kind == ObjectKind::Column { vec![state.object_key.name.clone()] } else { vec![] },
+        });
+    }
+    if evidence.len() > MAX_EVIDENCE || json(evidence)?.len() > MAX_CONTEXT_BYTES {
+        return Err("Confirmed team statements exceed the context budget. Narrow the scope or disable confirmed semantics.".into());
+    }
+    Ok(omitted)
 }

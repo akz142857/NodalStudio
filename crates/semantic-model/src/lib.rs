@@ -233,3 +233,5 @@ mod tests {
         assert_eq!(annotation.owner, None);
     }
 }
+
+pub mod knowledge;

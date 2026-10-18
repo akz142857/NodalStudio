@@ -1,3 +1,4 @@
+import { KnowledgeEditor } from "./KnowledgeReview";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DatabaseSnapshot, DomainGroup, EffectiveSettings, NodalStudioPlatform, TableAiEvidence, TableAiPreview, TableAiResult, TableDefinition } from "../platform";
 
@@ -10,6 +11,7 @@ interface Props {
   desktop: boolean;
   onOpenSettings: () => void;
   onLocateEvidence: (evidence: TableAiEvidence, requestId: string) => void;
+  onKnowledgeSaved?: () => Promise<void>;
   onTaskChange: (requestId: string | undefined) => void;
 }
 
@@ -17,7 +19,7 @@ const QUESTIONS = ["What does one row represent?", "How is this table related to
 const SCOPE_LABELS = { currentTable: "Current table only", oneHop: "Current table + one hop", domain: "One explicitly selected business domain" };
 
 /** Parent keys this task by source/snapshot/target/effective settings and model relationships. */
-export function TableAiAssistant({ platform, snapshot, table, settings, domains, desktop, onOpenSettings, onLocateEvidence, onTaskChange }: Props) {
+export function TableAiAssistant({ platform, snapshot, table, settings, domains, desktop, onOpenSettings, onLocateEvidence, onTaskChange, onKnowledgeSaved }: Props) {
   const ai = settings.source?.ai;
   const remote = ai?.provider === "openAiCompatible";
   const settingsReady = settings.source?.sourceId === snapshot.sourceId;
@@ -119,7 +121,7 @@ export function TableAiAssistant({ platform, snapshot, table, settings, domains,
     } catch (reason) {
       if (current === epoch.current) { setError(String(reason instanceof Error ? reason.message : reason)); setPhase("error"); }
     } finally {
-      if (current === epoch.current) { requestId.current = undefined; busy.current = false; }
+      if (current === epoch.current) { busy.current = false; }
     }
   }
 
@@ -133,7 +135,7 @@ export function TableAiAssistant({ platform, snapshot, table, settings, domains,
       <label className="ai-control">Focus field<select value={focusColumn} onChange={(event) => { invalidate(); setFocusColumn(event.target.value); }}><option value="">Whole table</option>{table.columns.map((column) => <option key={column.name} value={column.name}>{column.name}</option>)}</select></label>
       <p className="ai-scope"><b>AI scope:</b> {SCOPE_LABELS[ai?.contextScope ?? "currentTable"]} <button type="button" onClick={onOpenSettings}>Change in Settings</button></p>
       {ai?.contextScope === "domain" ? <label className="ai-control">Business domain<select value={domainId} onChange={(event) => { invalidate(); setDomainId(event.target.value); }}><option value="">Select one domain…</option>{availableDomains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select><small>Only a domain containing this table can be selected. Domains are never combined.</small></label> : null}
-      <p className="ai-policy">Existing notes are excluded from the request. Explanations stay in this panel and are not saved as team knowledge.</p>
+      <p className="ai-policy">Only locally confirmed, current team statements may be included when enabled. Interpretations remain unsaved until you review and confirm an individual draft.</p>
       <div className="ai-actions"><button type="button" onClick={() => void prepare()} disabled={phase === "preparing" || phase === "running" || (ai?.contextScope === "domain" && !domainId)}>{phase === "preparing" ? "Preparing…" : "Prepare request preview"}</button>
         {phase === "preparing" || phase === "running" || phase === "ready" ? <button type="button" onClick={() => invalidate("cancelled")}>Cancel</button> : null}</div>
     </>}
@@ -144,7 +146,7 @@ export function TableAiAssistant({ platform, snapshot, table, settings, domains,
       {result.answer.interpretations.length ? result.answer.interpretations.map((claim, index) => <div key={index} className="ai-claim"><p>{claim.text}</p><div className="ai-evidence-links">{claim.evidenceIds.map((id) => {
         const evidence = preview.context.evidence.find((item) => item.id === id);
         return evidence ? <button type="button" key={id} onClick={() => onLocateEvidence(evidence, preview.requestId)} aria-label={`Inspect evidence ${id}`}>{id}</button> : null;
-      })}</div></div>) : <p>{result.provider === "offline-schema" ? "No business meaning was inferred by the offline provider." : "The supplied evidence did not support a business interpretation."}</p>}
+      })}</div>{onKnowledgeSaved && desktop ? <KnowledgeEditor platform={platform} input={{ snapshotId: snapshot.id, target: table.key, requestId: result.requestId, interpretationIndex: index }} sourceId={snapshot.sourceId} label="Generate annotation draft" onSaved={onKnowledgeSaved} /> : null}</div>) : <p>{result.provider === "offline-schema" ? "No business meaning was inferred by the offline provider." : "The supplied evidence did not support a business interpretation."}</p>}
       <h4>Still to confirm</h4><ul>{result.answer.unknowns.map((item, index) => <li key={index}>{item}</li>)}</ul>
       <small>{result.provider}{result.model ? ` · ${result.model}` : ""} · {new Date(result.generatedAt).toLocaleString()}</small>
     </div> : null}
@@ -159,9 +161,10 @@ export function TableAiAssistant({ platform, snapshot, table, settings, domains,
         <details open><summary>Coverage and limits</summary><ul>{preview.context.coverage.map((item) => <li key={item}>{item}</li>)}</ul></details>
         {phase === "ready" && enabled && matchesSettings(preview) ? <button type="button" onClick={() => void run()}>{preview.provider === "openai-compatible" ? "Send this request" : "Show offline explanation"}</button> : null}
       </section>
+      {preview.context.evidence.some((e) => e.kind === "teamStatement") ? <section aria-label="Confirmed team statements"><h4>Team statements · confirmed locally, not structural facts</h4>{preview.context.evidence.filter((e) => e.kind === "teamStatement").map((e) => <div key={e.id}><button onClick={() => onLocateEvidence(e, preview.requestId)}>{e.id} · {e.label}</button><pre>{e.detail}</pre></div>)}</section> : null}
       <section aria-label="Structural evidence"><h4>Structural evidence</h4><p className="ai-policy">Read from the snapshot; database comments and model-only relationships are labelled separately.</p>
-        <ol className="ai-evidence-list">{preview.context.evidence.slice(0, visibleFacts).map((evidence) => <li key={evidence.id}><span className="ai-evidence-kind">{evidence.kind}</span><button type="button" onClick={() => onLocateEvidence(evidence, preview.requestId)} aria-label={`Locate evidence ${evidence.id}: ${evidence.label}`}>{evidence.id} · {evidence.label}</button><details><summary>View captured value</summary><pre>{evidence.detail}</pre></details></li>)}</ol>
-        {visibleFacts < preview.context.evidence.length ? <button type="button" onClick={() => setVisibleFacts((n) => n + 20)}>Show more evidence</button> : null}
+        <ol className="ai-evidence-list">{preview.context.evidence.filter((item) => item.kind !== "teamStatement").slice(0, visibleFacts).map((evidence) => <li key={evidence.id}><span className="ai-evidence-kind">{evidence.kind}</span><button type="button" onClick={() => onLocateEvidence(evidence, preview.requestId)} aria-label={`Locate evidence ${evidence.id}: ${evidence.label}`}>{evidence.id} · {evidence.label}</button><details><summary>View captured value</summary><pre>{evidence.detail}</pre></details></li>)}</ol>
+        {visibleFacts < preview.context.evidence.filter((item) => item.kind !== "teamStatement").length ? <button type="button" onClick={() => setVisibleFacts((n) => n + 20)}>Show more evidence</button> : null}
       </section>
     </> : null}
 

@@ -114,6 +114,82 @@ fn answer() -> String {
     serde_json::json!({"choices":[{"message":{"content":r#"{"interpretations":[{"text":"Possibly an order record; grain needs confirmation.","evidenceIds":["e1"]}],"unknowns":["What identifies one order?"]}"#}}]}).to_string()
 }
 
+fn completed_result(task: &Task) -> TableResult {
+    let preview = &task.prepared.preview;
+    TableResult {
+        request_id: preview.request_id,
+        source_id: preview.source_id,
+        snapshot_id: preview.snapshot_id,
+        target: preview.context.target.clone(),
+        provider: preview.provider.clone(),
+        model: preview.model.clone(),
+        generated_at: "2026-10-18T10:00:00Z".into(),
+        answer: ModelUnderstanding {
+            interpretations: vec![understanding::Interpretation {
+                text: "Possibly an order record; grain needs confirmation.".into(),
+                evidence_ids: vec!["e1".into()],
+            }],
+            unknowns: vec!["What identifies one order?".into()],
+        },
+    }
+}
+
+#[tokio::test]
+async fn knowledge_draft_uses_one_current_claim_and_cancel_prevents_late_answer_caching() {
+    let (app, input, mut settings) = fixture("http://localhost:9").await;
+    let tasks = TableAiState::default();
+    let request = Arc::new(task(prepare(&app, input.clone()).await.unwrap()));
+    let id = request.prepared.preview.request_id;
+    tasks.tasks.lock().await.insert(id, request.clone());
+    let result = completed_result(&request);
+    tasks.finish(id, request, Ok(result)).await.unwrap();
+    let (preview, draft, origin) = tasks.draft_source(&app, id, 0).await.unwrap();
+    assert_eq!(preview.request_id, id);
+    assert_eq!(draft, "Possibly an order record; grain needs confirmation.");
+    assert_eq!(origin.generated_at.as_deref(), Some("2026-10-18T10:00:00Z"));
+    assert_eq!(origin.evidence["unknowns"][0], "What identifies one order?");
+    assert_eq!(
+        origin.evidence["evidence"],
+        serde_json::to_value(&preview.context.evidence).unwrap()
+    );
+    assert!(tasks.draft_source(&app, id, 1).await.is_err());
+    settings.ai.include_comments = !settings.ai.include_comments;
+    app.store
+        .save_data_source_settings(&settings)
+        .await
+        .unwrap();
+    assert!(tasks.draft_source(&app, id, 0).await.is_err());
+    tasks.cancel(id).await;
+    assert!(tasks.completed.lock().await.is_empty());
+
+    // Cancellation can win before finish, or after finish: neither order leaves a draft source.
+    let request = Arc::new(task(prepare(&app, input.clone()).await.unwrap()));
+    let id = request.prepared.preview.request_id;
+    let result = completed_result(&request);
+    tasks.tasks.lock().await.insert(id, request.clone());
+    tasks.cancel(id).await;
+    assert!(tasks.finish(id, request, Ok(result)).await.is_err());
+    assert!(tasks.draft_source(&app, id, 0).await.is_err());
+
+    let mut expired = task(prepare(&app, input).await.unwrap());
+    expired.created = Instant::now().checked_sub(PREVIEW_LIFETIME).unwrap();
+    let result = completed_result(&expired);
+    let id = result.request_id;
+    tasks
+        .completed
+        .lock()
+        .await
+        .insert(id, (Arc::new(expired), result.answer, result.generated_at));
+    assert!(
+        tasks
+            .draft_source(&app, id, 0)
+            .await
+            .err()
+            .unwrap()
+            .contains("expired")
+    );
+}
+
 #[tokio::test]
 async fn wire_body_equals_reviewed_preview_and_excludes_unrelated_metadata() {
     let (endpoint, received, respond, server) = server().await;
@@ -528,4 +604,31 @@ async fn absolute_deadline_is_serialized_but_does_not_change_request_identity() 
     assert_eq!(json["expiresAt"], prepared.preview.expires_at);
     assert!(json.get("expiresInSeconds").is_none());
     validate_current(&app, &task(prepared)).await.unwrap();
+}
+
+#[tokio::test]
+async fn prepared_response_is_stale_when_endpoint_changes_even_with_identical_snapshot() {
+    let (app, input, _) = fixture("https://example.invalid/v1").await;
+    let prepared = prepare(&app, input.clone()).await.unwrap();
+    let source = prepared.preview.source_id;
+    let profile = schema_model::DataSourceProfile {
+        id: source,
+        display_name: "Same model, different endpoint".into(),
+        host: "replacement.example".into(),
+        port: 5432,
+        database: "private-database-name".into(),
+        username: "reader".into(),
+        database_type: DatabaseType::PostgreSql,
+        ssl_mode: schema_model::SslMode::Prefer,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+    app.store.save_data_source(&profile).await.unwrap();
+    assert!(validate_current(&app, &task(prepared)).await.is_err());
+    let fresh = prepare(&app, input).await.unwrap();
+    let mut rename = profile;
+    rename.display_name = "Only a label change".into();
+    rename.updated_at = chrono::Utc::now();
+    app.store.save_data_source(&rename).await.unwrap();
+    validate_current(&app, &task(fresh)).await.unwrap();
 }

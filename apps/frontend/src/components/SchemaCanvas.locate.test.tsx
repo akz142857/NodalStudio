@@ -1,3 +1,7 @@
+import { BusinessExplorer } from "./BusinessExplorer";
+import { discoverySettings } from "../test/discovery-fixture";
+import { objectId } from "../graph/business-discovery";
+import type { NodalStudioPlatform } from "../platform";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultAppSettings } from "../platform";
@@ -78,4 +82,35 @@ describe("SchemaCanvas requested navigation", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
     expect(fits()).toHaveLength(0); expect(done).not.toHaveBeenCalled();
   });
+  it("pauses background canvas commands while a temporary explorer is open, then resumes them", async () => {
+    const props = { snapshot: reportSnapshot, semantics: reportSemantics, query: "", canvasSettings: canvas, onSelectTable: vi.fn(), runtimeKind: "web" as const };
+    const view = render(<SchemaCanvas {...props} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
+    view.rerender(<SchemaCanvas {...props} interactionPaused />);
+    const calls = vi.mocked(layoutSchemaGraph).mock.calls.length;
+    fireEvent(window, new Event("nodalstudio:view-all-tables"));
+    fireEvent(window, new Event("nodalstudio:relayout-canvas"));
+    expect(props.onSelectTable).not.toHaveBeenCalled(); expect(vi.mocked(layoutSchemaGraph)).toHaveBeenCalledTimes(calls);
+    expect(view.container.querySelector(".schema-canvas-workspace")).toHaveAttribute("inert");
+    view.rerender(<SchemaCanvas {...props} />);
+    fireEvent(window, new Event("nodalstudio:view-all-tables"));
+    expect(props.onSelectTable).toHaveBeenCalledWith(undefined);
+  });
+
+  it("focuses the selected local node without changing the explicit AI root", async () => {
+    const platform = { listSnapshots: vi.fn().mockResolvedValue([{ id: reportSnapshot.id }]) } as unknown as NodalStudioPlatform;
+    const view = render(<BusinessExplorer snapshot={reportSnapshot} semantics={reportSemantics} settings={discoverySettings()} platform={platform} desktop onClose={vi.fn()} onLocate={vi.fn()} onExplain={vi.fn()} onOpenSettings={vi.fn()} />);
+    const root = reportSnapshot.schemas[0].tables[0];
+    fireEvent.change(screen.getByLabelText("Explicit root table"), { target: { value: objectId(root.key) } });
+    fireEvent.change(screen.getByLabelText("Local graph depth"), { target: { value: "2" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
+    fireEvent.click(view.container.querySelector('.react-flow__node[data-id="archive.orders"]')!);
+    expect(view.container.querySelector('.react-flow__node[data-id="archive.orders"]')).toHaveClass("selected");
+    fireEvent(window, new Event("nodalstudio:focus-selected-table"));
+    await screen.findByRole("button", { name: "Show all relations" });
+    expect(view.container.querySelector('.react-flow__node[data-id="archive.orders"]')).not.toBeNull();
+    expect(view.container.querySelector('.react-flow__node[data-id="public.customers"]')).toBeNull();
+    expect(screen.getByLabelText("Explicit root table")).toHaveValue(objectId(root.key));
+  });
+
 });

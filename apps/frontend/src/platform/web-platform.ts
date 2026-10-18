@@ -113,6 +113,16 @@ function downloadFile(blob: Blob, fileName: string): Promise<FileExportReceipt> 
 }
 
 export class WebPlatform implements NodalStudioPlatform {
+  prepareKnowledgeDraft(): Promise<never> { return Promise.reject(new Error("Knowledge confirmation requires the desktop app.")); }
+  confirmKnowledgeDraft(): Promise<never> { return Promise.reject(new Error("Knowledge confirmation requires the desktop app.")); }
+  cancelKnowledgeDraft(): Promise<void> { return Promise.resolve(); }
+  prepareDiscovery(): Promise<never> {
+    return Promise.reject(new Error("Business discovery AI requires the desktop app."));
+  }
+  runDiscovery(): Promise<never> {
+    return Promise.reject(new Error("Business discovery AI requires the desktop app."));
+  }
+  cancelDiscovery(): Promise<void> { return Promise.resolve(); }
   prepareTableExplanation(): Promise<never> {
     return Promise.reject(new Error("Table understanding requires the desktop app."));
   }

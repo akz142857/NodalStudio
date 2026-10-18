@@ -1,0 +1,40 @@
+.business-explorer { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; background: var(--surface, #fff); color: var(--text, #15212f); }
+.discovery-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 22px; border-bottom: 1px solid var(--border, #dbe2e8); }
+.discovery-header h2 { margin: 2px 0; font-size: 20px; }
+.discovery-header .eyebrow { margin: 0; }
+.discovery-workspace { display: grid; grid-template-columns: minmax(310px, 38%) minmax(0, 1fr); min-height: 0; flex: 1; }
+.discovery-search-pane { padding: 18px; overflow: auto; border-right: 1px solid var(--border, #dbe2e8); }
+.discovery-search-pane h3, .discovery-path h3 { margin: 20px 0 10px; font-size: 15px; }
+.discovery-candidate { border: 1px solid var(--border, #dbe2e8); border-radius: 9px; padding: 12px; margin: 10px 0; }
+.discovery-candidate h4 { margin: 0 0 5px; overflow-wrap: anywhere; }
+.discovery-candidate p, .discovery-candidate li, .discovery-path li { font-size: 12px; overflow-wrap: anywhere; }
+.discovery-candidate ul { padding-left: 17px; }
+.discovery-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.business-explorer button { padding: 6px 9px; font-size: 12px; }
+.discovery-map-pane { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+.discovery-map-controls { padding: 16px 18px; display: grid; grid-template-columns: 1fr 130px; gap: 10px; }
+.discovery-map-controls .ai-policy { grid-column: 1 / -1; margin: 0; }
+.discovery-local-canvas { position: relative; min-height: 390px; flex: 1; overflow: hidden; }
+.discovery-map-empty { padding: 60px 35px; color: var(--text-muted, #667085); flex: 1; }
+.discovery-path { padding: 4px 18px 18px; border-top: 1px solid var(--border, #dbe2e8); }
+.discovery-path > p { font-size: 12px; }
+.discovery-assistant { padding: 0; border: 0; }
+.discovery-assistant pre, .discovery-evidence pre { overflow: auto; max-height: 260px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.discovery-ambiguity { margin: 12px 0; padding: 10px; background: var(--surface-subtle, #f6f8fb); font-size: 12px; }
+.discovery-ambiguity button { margin: 3px; }
+.discovery-evidence { margin-top: 12px; border-top: 2px solid var(--border, #dbe2e8); padding-top: 12px; }
+.discovery-ai-controls { margin-top: 20px; border-top: 1px solid var(--border, #dbe2e8); }
+.discovery-map-controls select { width: 100%; }
+@media (max-width: 900px) { .discovery-workspace { grid-template-columns: 1fr; overflow: auto; } .discovery-search-pane { overflow: visible; } .discovery-map-pane { overflow: visible; } }
+.business-explorer .ai-control { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; font-size: 12px; font-weight: 600; }
+.business-explorer .ai-control textarea, .business-explorer .ai-control select { border: 1px solid #cbd5df; border-radius: 7px; background: #fff; color: #253749; font: inherit; font-weight: 400; padding: 9px 10px; width: 100%; }
+.business-explorer .ai-control textarea { resize: vertical; min-height: 76px; line-height: 1.6; }
+.business-explorer .discovery-search-pane button, .business-explorer .discovery-header button { border: 1px solid #cbd5df; border-radius: 6px; color: #234564; background: #f5f8fc; cursor: pointer; }
+.business-explorer .discovery-search-pane button:hover, .business-explorer .discovery-header button:hover { background: #e9f1fb; }
+.business-explorer button:disabled { opacity: .5; cursor: default; }
+.business-explorer .ai-policy, .discovery-candidate small { color: #627082; font-size: 12px; line-height: 1.55; }
+.discovery-assistant .ai-preview, .discovery-assistant .ai-result { padding: 12px; background: #f5f8fc; border: 1px solid #dbe4ee; border-radius: 8px; margin-top: 12px; }
+.discovery-assistant .ai-result { background: #f1f7f5; }
+.discovery-assistant .ai-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.discovery-assistant p, .discovery-assistant li { font-size: 12px; line-height: 1.6; }
+.discovery-map-controls .ai-control { margin-bottom: 0; }

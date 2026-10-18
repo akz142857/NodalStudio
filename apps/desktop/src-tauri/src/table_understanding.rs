@@ -24,6 +24,30 @@ use crate::{
     AI_KEYRING_SERVICE, AppState, effective_settings, remote_chat_endpoint, safe_store_error,
 };
 
+#[cfg(test)]
+pub(crate) async fn run_live_acceptance(
+    app: &AppState,
+    input: TableInput,
+    send: bool,
+) -> Result<(Value, Value), String> {
+    let prepared = prepare(app, input).await?;
+    let preview = serde_json::to_value(&prepared.preview).map_err(|e| e.to_string())?;
+    if !send {
+        return Ok((preview, Value::Null));
+    }
+    let task = Task {
+        prepared,
+        created: Instant::now(),
+        cancellation: CancellationToken::new(),
+        started: AtomicBool::new(false),
+    };
+    let result = execute(app, &task, Some("local-acceptance-bridge")).await?;
+    Ok((
+        preview,
+        serde_json::to_value(result).map_err(|e| e.to_string())?,
+    ))
+}
+
 const PREVIEW_LIFETIME: Duration = Duration::from_mins(5);
 const MAX_PREPARED: usize = 16;
 const MAX_RESPONSE_BYTES: usize = 131_072;
@@ -81,8 +105,11 @@ struct Task {
     started: AtomicBool,
 }
 
+type CompletedAnswer = (Arc<Task>, ModelUnderstanding, String);
+
 #[derive(Default)]
 pub struct TableAiState {
+    completed: Mutex<HashMap<Uuid, CompletedAnswer>>,
     tasks: Mutex<HashMap<Uuid, Arc<Task>>>,
 }
 
@@ -125,9 +152,7 @@ pub async fn cancel_table_explanation(
     request_id: Uuid,
     tasks: State<'_, TableAiState>,
 ) -> Result<(), String> {
-    if let Some(task) = tasks.tasks.lock().await.remove(&request_id) {
-        task.cancellation.cancel();
-    }
+    tasks.cancel(request_id).await;
     Ok(())
 }
 
@@ -167,10 +192,10 @@ pub async fn run_table_explanation(
         execute(&app, &task, key.as_deref()).await
     }
     .await;
-    tasks.tasks.lock().await.remove(&request_id);
-    result
+    tasks.finish(request_id, task, result).await
 }
 
+#[allow(clippy::too_many_lines)]
 async fn prepare(app: &AppState, input: TableInput) -> Result<Prepared, String> {
     if input.question.chars().count() > understanding::MAX_QUESTION_CHARS {
         return Err("The question must contain at most 2,000 characters.".into());
@@ -222,7 +247,7 @@ async fn prepare(app: &AppState, input: TableInput) -> Result<Prepared, String> 
         .await
         .map_err(safe_store_error)?;
     let current_logical = current_logical_relationships(&snapshot, &logical);
-    let context = understanding::build_context(
+    let mut context = understanding::build_context(
         &snapshot,
         &input.target,
         input.focus_column.as_deref(),
@@ -231,13 +256,45 @@ async fn prepare(app: &AppState, input: TableInput) -> Result<Prepared, String> 
         &current_logical,
         ai.include_comments,
     )?;
+    if ai.include_confirmed_semantics {
+        let states = app
+            .store
+            .knowledge_states(snapshot.source_id)
+            .await
+            .map_err(safe_store_error)?;
+        if ai_context::understanding::append_confirmed_notes(
+            &snapshot,
+            &context.tables,
+            &mut context.evidence,
+            &states,
+        )? {
+            context.coverage.push(
+                "Some team statements depend on objects outside this send scope and were omitted."
+                    .into(),
+            );
+        }
+        if serde_json::to_vec(&context)
+            .map_err(|_| "Unable to serialize context.")?
+            .len()
+            > ai_context::understanding::MAX_CONTEXT_BYTES
+        {
+            return Err("Confirmed team statements exceed the context budget.".into());
+        }
+    }
     let (endpoint, body) = request_body(&ai, &input, &context)?;
     let domain_identity = if scope == SendScope::Domain {
         domain
     } else {
         None
     };
+    let profile = app
+        .store
+        .get_data_source(snapshot.source_id)
+        .await
+        .map_err(safe_store_error)?;
+    let source_identity = semantic_model::knowledge::source_identity(profile.as_ref());
     let signature_bytes = serde_json::to_vec(&(
+        source_identity,
         &input,
         &ai,
         &context,
@@ -272,7 +329,7 @@ async fn prepare(app: &AppState, input: TableInput) -> Result<Prepared, String> 
     })
 }
 
-fn current_logical_relationships(
+pub(super) fn current_logical_relationships(
     snapshot: &DatabaseSnapshot,
     logical: &[LogicalRelationship],
 ) -> Vec<LogicalRelationship> {
@@ -300,6 +357,19 @@ fn request_body(
     input: &TableInput,
     context: &TableContext,
 ) -> Result<(Option<String>, Value), String> {
+    let prompt = format!(
+        "Question: {}\n\nMetadata evidence:\n{}",
+        input.question,
+        serde_json::to_string(&context).map_err(|_| "Unable to serialize the context.")?
+    );
+    remote_request_body(ai, SYSTEM_PROMPT, &prompt)
+}
+
+pub(super) fn remote_request_body(
+    ai: &AiSettings,
+    system: &str,
+    prompt: &str,
+) -> Result<(Option<String>, Value), String> {
     if ai.provider == AiProviderKind::Offline {
         return Ok((None, Value::Null));
     }
@@ -320,15 +390,10 @@ fn request_body(
     {
         return Err("Use an AI endpoint without URL credentials, query parameters or fragments. Store the API key in Keychain.".into());
     }
-    let prompt = format!(
-        "Question: {}\n\nMetadata evidence:\n{}",
-        input.question,
-        serde_json::to_string(&context).map_err(|_| "Unable to serialize the context.")?
-    );
     let request = (
         Some(endpoint.to_string()),
         serde_json::json!({
-            "model": ai.model, "messages": [{"role":"system","content":SYSTEM_PROMPT},{"role":"user","content":prompt}],
+            "model": ai.model, "messages": [{"role":"system","content":system},{"role":"user","content":prompt}],
             "temperature":0.2, "max_tokens":2048
         }),
     );
@@ -425,15 +490,28 @@ async fn send_once(
     preview: &TablePreview,
     key: &str,
 ) -> Result<String, (String, bool)> {
+    send_request(
+        client,
+        preview
+            .endpoint
+            .as_deref()
+            .ok_or_else(|| ("AI endpoint is unavailable.".into(), false))?,
+        &preview.request_body,
+        key,
+    )
+    .await
+}
+
+pub(super) async fn send_request(
+    client: &reqwest::Client,
+    endpoint: &str,
+    body: &Value,
+    key: &str,
+) -> Result<String, (String, bool)> {
     let mut response = client
-        .post(
-            preview
-                .endpoint
-                .as_ref()
-                .ok_or_else(|| ("AI endpoint is unavailable.".into(), false))?,
-        )
+        .post(endpoint)
         .bearer_auth(key)
-        .json(&preview.request_body)
+        .json(body)
         .send()
         .await
         .map_err(|_| ("AI request timed out or could not connect.".into(), true))?;
@@ -472,3 +550,83 @@ async fn send_once(
 #[cfg(test)]
 #[path = "table_understanding_tests.rs"]
 mod tests;
+
+impl TableAiState {
+    async fn cancel(&self, id: Uuid) {
+        // Keep removal and completed-answer invalidation in the same lock order as finish.
+        // Otherwise cancellation can fall between removing a running task and caching it.
+        let mut tasks = self.tasks.lock().await;
+        if let Some(task) = tasks.remove(&id) {
+            task.cancellation.cancel();
+        }
+        self.completed.lock().await.remove(&id);
+    }
+
+    async fn finish(
+        &self,
+        id: Uuid,
+        task: Arc<Task>,
+        result: Result<TableResult, String>,
+    ) -> Result<TableResult, String> {
+        let mut tasks = self.tasks.lock().await;
+        let current = tasks
+            .remove(&id)
+            .is_some_and(|active| Arc::ptr_eq(&active, &task));
+        if !current || task.cancellation.is_cancelled() {
+            return Err("This explanation was cancelled. Prepare a new preview.".into());
+        }
+        if let Ok(answer) = &result {
+            let mut completed = self.completed.lock().await;
+            completed.retain(|_, (t, _, _)| t.created.elapsed() < PREVIEW_LIFETIME);
+            if completed.len() >= MAX_PREPARED
+                && let Some(key) = completed.keys().next().copied()
+            {
+                completed.remove(&key);
+            }
+            completed.insert(
+                id,
+                (task, answer.answer.clone(), answer.generated_at.clone()),
+            );
+        }
+        result
+    }
+
+    pub(super) async fn draft_source(
+        &self,
+        app: &AppState,
+        id: Uuid,
+        index: usize,
+    ) -> Result<
+        (
+            TablePreview,
+            String,
+            semantic_model::knowledge::KnowledgeOrigin,
+        ),
+        String,
+    > {
+        let (task, answer, generated_at) = self
+            .completed
+            .lock()
+            .await
+            .get(&id)
+            .cloned()
+            .ok_or("This answer is no longer available. Generate a fresh explanation.")?;
+        validate_current(app, &task).await?;
+        let claim = answer
+            .interpretations
+            .get(index)
+            .ok_or("Choose one existing interpretation for the draft.")?;
+        Ok((
+            task.prepared.preview.clone(),
+            claim.text.clone(),
+            semantic_model::knowledge::KnowledgeOrigin {
+                kind: "modelInterpretation".into(),
+                request_id: Some(id),
+                provider: Some(task.prepared.preview.provider.clone()),
+                model: task.prepared.preview.model.clone(),
+                generated_at: Some(generated_at),
+                evidence: serde_json::json!({"interpretation":claim,"unknowns":answer.unknowns,"evidence":task.prepared.preview.context.evidence}),
+            },
+        ))
+    }
+}

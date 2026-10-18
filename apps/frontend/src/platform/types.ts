@@ -274,6 +274,7 @@ export interface RelationshipValidation {
 }
 
 export interface SemanticBundle {
+  knowledge?: import("./knowledge-types").KnowledgeState[];
   annotations: ObjectAnnotation[];
   orphanedAnnotations: ObjectAnnotation[];
   domainGroups: DomainGroup[];
@@ -519,6 +520,12 @@ export interface QueryHistoryEntry {
 }
 
 export interface NodalStudioPlatform {
+  prepareDiscovery(input: import("./discovery-types").DiscoveryInput): Promise<import("./discovery-types").DiscoveryPreview>;
+  runDiscovery(requestId: string): Promise<import("./discovery-types").DiscoveryResult>;
+  cancelDiscovery(requestId: string): Promise<void>;
+  prepareKnowledgeDraft(input: import("./knowledge-types").KnowledgeDraftInput): Promise<import("./knowledge-types").KnowledgeDraft>;
+  confirmKnowledgeDraft(id: string, text: string): Promise<ObjectAnnotation>;
+  cancelKnowledgeDraft(id: string): Promise<void>;
   prepareTableExplanation(input: import("./table-ai-types").TableAiInput): Promise<import("./table-ai-types").TableAiPreview>;
   runTableExplanation(requestId: string): Promise<import("./table-ai-types").TableAiResult>;
   cancelTableExplanation(requestId: string): Promise<void>;

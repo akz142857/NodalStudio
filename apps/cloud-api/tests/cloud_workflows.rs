@@ -48,7 +48,7 @@ async fn database() -> Option<PgPool> {
         .max_connections(8)
         .connect(&url)
         .await
-        .ok()?;
+        .expect("configured disposable Cloud test database must be reachable");
     sqlx::query("DROP SCHEMA public CASCADE")
         .execute(&pool)
         .await

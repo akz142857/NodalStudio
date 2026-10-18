@@ -9,7 +9,7 @@ use std::{
 
 use ai_context::{
     AiProvider, ContextPolicy, Explanation, OfflineSchemaProvider, SchemaContext, change_context,
-    domain_context, table_context,
+    domain_context,
 };
 use chrono::Utc;
 use extension_model::{
@@ -57,7 +57,9 @@ use sqlx::{
 use tauri::{Manager, State};
 
 mod diagram_export;
+mod discovery;
 mod export_file;
+mod knowledge;
 mod schema_report;
 mod table_understanding;
 
@@ -595,10 +597,12 @@ struct IgnoreRelationshipInferenceInput {
 struct ExplainSchemaInput {
     snapshot_id: Uuid,
     target_type: String,
+    #[allow(dead_code)]
     object_key: Option<schema_model::ObjectKey>,
     domain_group: Option<DomainGroup>,
     change_set: Option<SchemaChangeSet>,
     question: Option<String>,
+    #[allow(dead_code)]
     relationship_depth: u8,
     ai_enabled: bool,
 }
@@ -742,6 +746,7 @@ struct CloudAuditEntry {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SemanticBundle {
+    knowledge: Vec<semantic_model::knowledge::KnowledgeState>,
     annotations: Vec<ObjectAnnotation>,
     orphaned_annotations: Vec<ObjectAnnotation>,
     domain_groups: Vec<DomainGroup>,
@@ -751,13 +756,7 @@ struct SemanticBundle {
     ignored_relationship_inferences: Vec<IgnoredRelationshipInference>,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CaptureSnapshotResult {
-    snapshot: DatabaseSnapshot,
-    stored: bool,
-    change_set: Option<SchemaChangeSet>,
-}
+type CaptureSnapshotResult = snapshot_store::StoredSnapshotCapture;
 
 #[tauri::command]
 fn get_runtime_info() -> RuntimeInfo {
@@ -972,6 +971,7 @@ async fn verify_and_refresh_data_source(
     let source_id = input
         .id
         .ok_or_else(|| "Verify and refresh requires an existing data source.".to_owned())?;
+    let _operation = acquire_cloud_operation(&state, source_id).await?;
     let previous_profile = state
         .store
         .get_data_source(source_id)
@@ -990,40 +990,19 @@ async fn verify_and_refresh_data_source(
         Utc::now(),
     );
 
-    entry.set_password(&resolved.password).map_err(|_| {
-        "Unable to save the database password in the operating system keychain.".to_owned()
-    })?;
-    if let Err(error) = state.store.save_data_source(&profile).await {
-        restore_database_secret(source_id, previous_password.as_deref())?;
-        return Err(safe_store_error(error));
-    }
-
-    let capture = match capture_snapshot(
+    let capture = capture_snapshot_using(
         CaptureSnapshotInput {
             source_id,
             trigger: None,
         },
         &state,
+        Some((
+            &profile,
+            resolved.password.as_str(),
+            previous_password.as_deref(),
+        )),
     )
-    .await
-    {
-        Ok(capture) => capture,
-        Err(error) => {
-            let profile_restored = state
-                .store
-                .save_data_source(&previous_profile)
-                .await
-                .is_ok();
-            let secret_restored =
-                restore_database_secret(source_id, previous_password.as_deref()).is_ok();
-            if !profile_restored || !secret_restored {
-                return Err(format!(
-                    "{error} The previous connection profile could not be fully restored."
-                ));
-            }
-            return Err(error);
-        }
-    };
+    .await?;
 
     Ok(VerifyAndRefreshResult {
         profile,
@@ -1053,6 +1032,15 @@ async fn capture_postgres_snapshot(
 async fn capture_snapshot(
     input: CaptureSnapshotInput,
     state: &AppState,
+) -> Result<CaptureSnapshotResult, String> {
+    capture_snapshot_using(input, state, None).await
+}
+
+#[allow(clippy::too_many_lines)]
+async fn capture_snapshot_using(
+    input: CaptureSnapshotInput,
+    state: &AppState,
+    verified: Option<(&DataSourceProfile, &str, Option<&str>)>,
 ) -> Result<CaptureSnapshotResult, String> {
     let capture_gate = {
         let mut captures = state.snapshot_captures.lock().await;
@@ -1085,15 +1073,20 @@ async fn capture_snapshot(
             change_set: None,
         });
     }
-    let profile = state
-        .store
-        .get_data_source(input.source_id)
-        .await
-        .map_err(safe_store_error)?
-        .ok_or_else(|| "The selected data source no longer exists.".to_owned())?;
-    let password = credential_entry(profile.id)?
-        .get_password()
-        .map_err(|_| "Unable to read the database password from the keychain.".to_owned())?;
+    let (profile, password) = if let Some((profile, password, _)) = verified {
+        (profile.clone(), password.to_owned())
+    } else {
+        let profile = state
+            .store
+            .get_data_source(input.source_id)
+            .await
+            .map_err(safe_store_error)?
+            .ok_or("The selected data source no longer exists.")?;
+        let password = credential_entry(profile.id)?
+            .get_password()
+            .map_err(|_| "Unable to read the database password from the keychain.".to_owned())?;
+        (profile, password)
+    };
     let snapshot = match profile.database_type {
         DatabaseType::PostgreSql => {
             let options = connection_options_from_profile(&profile, &password)
@@ -1128,45 +1121,25 @@ async fn capture_snapshot(
             .map_err(safe_mysql_error)?
         }
     };
-    let previous = state
-        .store
-        .latest_snapshot(profile.id)
-        .await
-        .map_err(safe_store_error)?;
-    let stored = state
-        .store
-        .save_snapshot(&snapshot)
-        .await
-        .map_err(safe_store_error)?;
-    let change_set = if stored {
-        previous.map(|previous| diff_snapshots(&previous, &snapshot))
-    } else {
-        None
-    };
-    if let Some(change_set) = &change_set {
-        state
-            .store
-            .save_change_set(change_set)
-            .await
-            .map_err(safe_store_error)?;
+    if let Some((_, _, previous_password)) = verified {
+        credential_entry(profile.id)?
+            .set_password(&password)
+            .map_err(|_| {
+                "Unable to save the database password in the operating system keychain.".to_owned()
+            })?;
+        match state.store.save_verified_source(&profile, &snapshot).await {
+            Ok(capture) => return Ok(capture),
+            Err(error) => {
+                restore_database_secret(profile.id, previous_password)?;
+                return Err(safe_store_error(error));
+            }
+        }
     }
-    if stored {
-        enqueue_sync_event(
-            &state.store,
-            profile.id,
-            "snapshot.capture",
-            &snapshot.fingerprint,
-            serde_json::json!({ "snapshot": snapshot, "changeSet": change_set }),
-        )
-        .await?;
-        apply_snapshot_retention(&state.store, profile.id).await?;
-    }
-
-    Ok(CaptureSnapshotResult {
-        snapshot,
-        stored,
-        change_set,
-    })
+    state
+        .store
+        .save_captured_snapshot(&snapshot)
+        .await
+        .map_err(safe_store_error)
 }
 
 #[tauri::command]
@@ -1319,41 +1292,6 @@ fn query_command_error(query_id: Uuid, error: QueryError) -> QueryCommandError {
         kind: error.kind().into(),
         message: error.public_message(),
     }
-}
-
-async fn apply_snapshot_retention(
-    store: &LocalSnapshotStore,
-    source_id: Uuid,
-) -> Result<(), String> {
-    let settings = store
-        .get_data_source_settings(source_id)
-        .await
-        .map_err(safe_store_error)?;
-    let (retain_count, cutoff) = match settings.storage.retention {
-        settings_model::RetentionPolicy::Forever => (None, None),
-        settings_model::RetentionPolicy::Count => {
-            (Some(usize::from(settings.storage.retention_value)), None)
-        }
-        settings_model::RetentionPolicy::Days => (
-            None,
-            Some(
-                (Utc::now() - chrono::Duration::days(i64::from(settings.storage.retention_value)))
-                    .to_rfc3339(),
-            ),
-        ),
-    };
-    if retain_count.is_some() || cutoff.is_some() {
-        store
-            .prune_snapshots(
-                source_id,
-                retain_count,
-                cutoff.as_deref(),
-                settings.storage.preserve_high_risk,
-            )
-            .await
-            .map_err(safe_store_error)?;
-    }
-    Ok(())
 }
 
 #[tauri::command]
@@ -1792,9 +1730,13 @@ async fn get_semantics(
     input: SourceInput,
     state: State<'_, AppState>,
 ) -> Result<SemanticBundle, String> {
-    let annotations = state
+    // Derived relationship status can invalidate knowledge. Refresh it before reading
+    // description/confirmation pairs, which must come from one storage transaction.
+    let logical_relationships =
+        validated_logical_relationships(&state.store, input.source_id).await?;
+    let (annotations, knowledge) = state
         .store
-        .list_annotations(input.source_id)
+        .annotation_knowledge(input.source_id)
         .await
         .map_err(safe_store_error)?;
     let groups = state
@@ -1828,13 +1770,13 @@ async fn get_semantics(
         (Vec::new(), annotations, groups)
     };
     Ok(SemanticBundle {
+        knowledge,
         annotations,
         orphaned_annotations,
         domain_groups,
         saved_views,
         layout,
-        logical_relationships: validated_logical_relationships(&state.store, input.source_id)
-            .await?,
+        logical_relationships,
         ignored_relationship_inferences: state
             .store
             .list_ignored_relationship_inferences(input.source_id)
@@ -3993,6 +3935,39 @@ async fn enqueue_sync_event(
         .map_err(safe_store_error)
 }
 
+// These legacy entries have no evidence-bound note preview. Never reuse team text here.
+fn legacy_explanation_context(
+    snapshot: &DatabaseSnapshot,
+    input: &ExplainSchemaInput,
+    include_comments: bool,
+) -> Result<SchemaContext, String> {
+    let mut context = match input.target_type.as_str() {
+        "domain" => domain_context(
+            snapshot,
+            input
+                .domain_group
+                .as_ref()
+                .ok_or("A domain explanation requires a domain group.")?,
+            &[],
+        ),
+        "changeSet" => change_context(
+            snapshot,
+            input
+                .change_set
+                .as_ref()
+                .ok_or("A change explanation requires a change set.")?,
+            &[],
+        ),
+        _ => return Err("Use a prepared, scoped explanation for this target.".into()),
+    };
+    if !include_comments {
+        for table in &mut context.tables {
+            table.comment = None;
+        }
+    }
+    Ok(context)
+}
+
 #[tauri::command]
 async fn explain_schema(
     input: ExplainSchemaInput,
@@ -4027,54 +4002,7 @@ async fn explain_schema(
     if effective.app.privacy.offline_mode && ai.provider != AiProviderKind::Offline {
         return Err("Remote AI is blocked by completely offline mode.".into());
     }
-    let annotations = if ai.include_confirmed_semantics {
-        state
-            .store
-            .list_annotations(snapshot.source_id)
-            .await
-            .map_err(safe_store_error)?
-    } else {
-        Vec::new()
-    };
-    let configured_depth = match ai.context_scope {
-        settings_model::AiContextScope::CurrentTable => 0,
-        settings_model::AiContextScope::OneHop => 1,
-        settings_model::AiContextScope::Domain => input.relationship_depth.min(2),
-    };
-    let mut context = match input.target_type.as_str() {
-        "table" => table_context(
-            &snapshot,
-            input
-                .object_key
-                .as_ref()
-                .ok_or_else(|| "A table explanation requires an object key.".to_owned())?,
-            configured_depth,
-            &annotations,
-        )
-        .ok_or_else(|| "The selected table no longer exists in this snapshot.".to_owned())?,
-        "domain" => domain_context(
-            &snapshot,
-            input
-                .domain_group
-                .as_ref()
-                .ok_or_else(|| "A domain explanation requires a domain group.".to_owned())?,
-            &annotations,
-        ),
-        "changeSet" => change_context(
-            &snapshot,
-            input
-                .change_set
-                .as_ref()
-                .ok_or_else(|| "A change explanation requires a change set.".to_owned())?,
-            &annotations,
-        ),
-        _ => return Err("Unsupported AI explanation target.".into()),
-    };
-    if !ai.include_comments {
-        for table in &mut context.tables {
-            table.comment = None;
-        }
-    }
+    let context = legacy_explanation_context(&snapshot, &input, ai.include_comments)?;
     if ai.provider == AiProviderKind::Offline {
         return Ok(OfflineSchemaProvider.explain(&context, input.question.as_deref()));
     }
@@ -4763,6 +4691,8 @@ fn safe_git_workspace_error(error: &git_workspace::GitWorkspaceError) -> String 
 pub fn run() {
     tauri::Builder::default()
         .manage(table_understanding::TableAiState::default())
+        .manage(discovery::DiscoveryAiState::default())
+        .manage(knowledge::KnowledgeDrafts::default())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;
@@ -4863,6 +4793,9 @@ pub fn run() {
             import_portable_backup,
             check_for_updates,
             get_semantics,
+            knowledge::prepare_knowledge_draft,
+            knowledge::confirm_knowledge_draft,
+            knowledge::cancel_knowledge_draft,
             list_logical_relationships,
             validate_logical_relationship,
             create_logical_relationship,
@@ -4878,6 +4811,9 @@ pub fn run() {
             table_understanding::prepare_table_explanation,
             table_understanding::run_table_explanation,
             table_understanding::cancel_table_explanation,
+            discovery::prepare_discovery,
+            discovery::run_discovery,
+            discovery::cancel_discovery,
             test_ai_provider,
             sync_project
         ])
@@ -5099,3 +5035,12 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod knowledge_tests;
+
+#[cfg(test)]
+mod live_acceptance_tests;
+
+#[cfg(test)]
+mod live_model_acceptance;

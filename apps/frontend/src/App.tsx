@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { InspectorPanel } from "./components/InspectorPanel";
+import { BusinessExplorer } from "./components/BusinessExplorer";
 import { Segmented } from "./components/Segmented";
 import { SchemaPreflightPanel } from "./components/SchemaPreflightPanel";
 import { OperationFeedback } from "./components/OperationFeedback";
@@ -35,7 +36,6 @@ import type {
   SemanticBundle,
   SaveAnnotationInput,
   SaveLogicalRelationshipInput,
-  LogicalRelationship,
   TableDefinition,
   ObjectKey,
 } from "./platform";
@@ -83,6 +83,8 @@ export function App() {
   const [changesView, setChangesView] = useState<"list" | "diagram">("list");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [discoverySnapshot, setDiscoverySnapshot] = useState<DatabaseSnapshot>();
+  const [explainRequest, setExplainRequest] = useState(0);
   const [activeSearchResult, setActiveSearchResult] = useState(0);
   const [selectedTable, setSelectedTable] = useState<TableDefinition>();
   const [semanticsSettledSnapshot, setSemanticsSettledSnapshot] = useState<DatabaseSnapshot>();
@@ -92,6 +94,20 @@ export function App() {
   const finishLocate = useCallback((request: CanvasLocateRequest) => setLocateRequest((current) => current === request ? undefined : current), []);
   const [semantics, setSemantics] = useState<SemanticBundle>(emptySemantics);
   const [semanticsSnapshot, setSemanticsSnapshot] = useState<DatabaseSnapshot>();
+  // Every entry point shares one source/snapshot session and response sequence.
+  // A -> B -> A is a new session even when the same snapshot object is reused.
+  const semanticSession = useMemo(() => ({ snapshot }), [snapshot]);
+  const activeSemanticSession = useRef<typeof semanticSession | undefined>(semanticSession);
+  const semanticRequest = useRef(0);
+  useLayoutEffect(() => {
+    activeSemanticSession.current = semanticSession;
+    return () => { activeSemanticSession.current = undefined; };
+  }, [semanticSession]);
+  const changeSemantics = useCallback((bundle: SemanticBundle) => {
+    if (activeSemanticSession.current === semanticSession) {
+      setSemantics((current) => ({ ...current, domainGroups: bundle.domainGroups, savedViews: bundle.savedViews }));
+    }
+  }, [semanticSession]);
   const [savedView, setSavedView] = useState<SavedView>();
   const refreshOperation = useOperation(snapshot?.sourceId ?? "no-source");
   const runRefresh = refreshOperation.run;
@@ -113,6 +129,11 @@ export function App() {
   const runtime = useQuery({
     queryKey: ["runtime-info"],
     queryFn: () => platform.getRuntimeInfo(),
+  });
+  const discoveryLatest = useQuery({
+    queryKey: ["discovery-latest-snapshot", snapshot?.sourceId, snapshot?.id],
+    queryFn: () => platform.listSnapshots(snapshot!.sourceId),
+    enabled: runtime.data?.kind === "desktop" && !!snapshot,
   });
   const queryCapability = resolveCapability("read-only-query", runtime.data?.kind, snapshot?.database.databaseType);
   const querySupported = Boolean(snapshot) && queryCapability.status === "supported";
@@ -166,6 +187,7 @@ export function App() {
   const locateTable = useCallback((table: TableDefinition) => {
     if (!snapshot) return;
     setMode("explore");
+    setDiscoverySnapshot(undefined);
     setPreflightOpen(false);
     setQuery("");
     setSearchOpen(false);
@@ -192,6 +214,42 @@ export function App() {
   useEffect(() => {
     publishNoticeRef.current = publishNotice;
   }, [publishNotice]);
+  const loadSemantics = useCallback(() => {
+    if (!snapshot || activeSemanticSession.current !== semanticSession) return Promise.resolve();
+    const request = ++semanticRequest.current;
+    const current = () => activeSemanticSession.current === semanticSession && request === semanticRequest.current;
+    return platform.getSemantics(snapshot.sourceId).then((bundle) => {
+      if (!current()) return;
+      setSemantics(bundle);
+      setSemanticsSnapshot(snapshot);
+      setSemanticsSettledSnapshot(snapshot);
+    }).catch((reason: unknown) => {
+      if (!current()) return;
+      setSemantics(emptySemantics);
+      setSemanticsSnapshot(undefined);
+      setSemanticsSettledSnapshot(snapshot);
+      publishNoticeRef.current({
+        id: `semantics-load-failed-${snapshot.sourceId}`,
+        title: "Semantic model could not be loaded",
+        message: `Annotations, domain groups and saved views are unavailable for this snapshot — they have not been deleted. ${noticeReason(reason)}`,
+        createdAt: new Date().toISOString(),
+      });
+      throw reason;
+    });
+  }, [snapshot, semanticSession]);
+  const currentSemanticLoader = useRef<{ sourceId: string; load: () => Promise<void> } | undefined>(undefined);
+  useLayoutEffect(() => {
+    currentSemanticLoader.current = snapshot ? { sourceId: snapshot.sourceId, load: loadSemantics } : undefined;
+    return () => { currentSemanticLoader.current = undefined; };
+  }, [snapshot, loadSemantics]);
+  const refreshSemantics = useCallback(async () => {
+    // A committed write belongs to its source, even if its editor/session has gone.
+    // Load through the current session; never apply an old session's read result.
+    const current = currentSemanticLoader.current;
+    if (!snapshot || current?.sourceId !== snapshot.sourceId) return;
+    setSemantics((value) => ({ ...value, knowledge: [] }));
+    await current.load();
+  }, [snapshot]);
   const healthCheckFailing = useRef(false);
 
   const handleCapture = useCallback((result: CaptureSnapshotResult) => {
@@ -548,35 +606,8 @@ export function App() {
 
   useEffect(() => {
     if (!snapshot) return;
-    let active = true;
-    void platform
-      .getSemantics(snapshot.sourceId)
-      .then((bundle) => {
-        if (active) {
-          setSemantics(bundle);
-          setSemanticsSnapshot(snapshot);
-          setSemanticsSettledSnapshot(snapshot);
-        }
-      })
-      .catch((reason: unknown) => {
-        // An empty semantic model and one that failed to load look identical in
-        // the Knowledge panel, so the annotations, domain groups and saved views
-        // would appear to have been lost rather than to be unavailable.
-        if (!active) return;
-        setSemantics(emptySemantics);
-        setSemanticsSnapshot(undefined);
-        setSemanticsSettledSnapshot(snapshot);
-        publishNoticeRef.current({
-          id: `semantics-load-failed-${snapshot.sourceId}`,
-          title: "Semantic model could not be loaded",
-          message: `Annotations, domain groups and saved views are unavailable for this snapshot — they have not been deleted. ${noticeReason(reason)}`,
-          createdAt: new Date().toISOString(),
-        });
-      });
-    return () => {
-      active = false;
-    };
-  }, [snapshot]);
+    void loadSemantics().catch(() => undefined);
+  }, [snapshot, loadSemantics]);
 
   useEffect(() => {
     if (runtime.data?.kind !== "web" || snapshot) return;
@@ -604,53 +635,26 @@ export function App() {
   }, [runtime.data?.kind, snapshot]);
 
   async function saveAnnotation(input: SaveAnnotationInput) {
-    const annotation = await platform.saveAnnotation(input);
-    setSemantics((current) => ({
-      ...current,
-      annotations: [
-        annotation,
-        ...current.annotations.filter(
-          (item) =>
-            item.objectKey.kind !== annotation.objectKey.kind ||
-            item.objectKey.schema !== annotation.objectKey.schema ||
-            item.objectKey.name !== annotation.objectKey.name,
-        ),
-      ],
-    }));
+    await platform.saveAnnotation(input);
+    await refreshSemantics();
   }
-
-  const upsertLogicalRelationship = useCallback((relationship: LogicalRelationship) => {
-    setSemantics((current) => ({
-      ...current,
-      logicalRelationships: [
-        relationship,
-        ...current.logicalRelationships.filter((item) => item.id !== relationship.id),
-      ],
-    }));
-  }, []);
 
   const createLogicalRelationship = useCallback(async (input: SaveLogicalRelationshipInput) => {
     const relationship = await platform.createLogicalRelationship(input);
-    upsertLogicalRelationship(relationship);
+    await refreshSemantics();
     return relationship;
-  }, [upsertLogicalRelationship]);
+  }, [refreshSemantics]);
 
   const updateLogicalRelationship = useCallback(async (input: SaveLogicalRelationshipInput) => {
     const relationship = await platform.updateLogicalRelationship(input);
-    upsertLogicalRelationship(relationship);
+    await refreshSemantics();
     return relationship;
-  }, [upsertLogicalRelationship]);
+  }, [refreshSemantics]);
 
   const deleteLogicalRelationship = useCallback(async (relationshipId: string) => {
     if (!snapshot) return;
-    const deleted = await platform.deleteLogicalRelationship(snapshot.sourceId, relationshipId);
-    if (deleted) {
-      setSemantics((current) => ({
-        ...current,
-        logicalRelationships: current.logicalRelationships.filter((item) => item.id !== relationshipId),
-      }));
-    }
-  }, [snapshot]);
+    if (await platform.deleteLogicalRelationship(snapshot.sourceId, relationshipId)) await refreshSemantics();
+  }, [snapshot, refreshSemantics]);
 
   const ignoreRelationshipInference = useCallback(async (relationshipKey: string) => {
     if (!snapshot) return;
@@ -779,6 +783,7 @@ export function App() {
           </div> : null}
         </label>
         <div className="runtime-actions" role="group" aria-label="Application tools">
+          {snapshot && runtime.data?.kind === "desktop" && discoveryLatest.data?.[0]?.id === snapshot.id && mode === "explore" && !preflightOpen && semanticsSettledSnapshot === snapshot ? <button type="button" onClick={() => { setSearchOpen(false); setDiscoverySnapshot(snapshot); }}>Business question</button> : null}
           <IconButton icon="import" label="Import DDL" onClick={() => setDdlPreviewOpen(true)} description="Open a temporary PostgreSQL/MySQL file or clipboard model; never execute SQL" />
           {refreshOperation.state ? <div className="refresh-operation-result"><OperationFeedback label="Snapshot refresh" state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel="Retry snapshot refresh" onDismiss={refreshOperation.dismiss} /></div> : null}
           {snapshot ? <IconButton icon="preflight" label="Structure preflight" aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} description="Check the entire loaded snapshot with dialect-aware metadata rules" /> : null}
@@ -916,6 +921,7 @@ export function App() {
             />
           ) : snapshot ? (
             <WorkspaceCanvas
+              interactionPaused={discoverySnapshot === snapshot && mode === "explore" && !preflightOpen}
               platform={platform}
               runtimeKind={runtime.data?.kind}
               snapshot={snapshot}
@@ -957,6 +963,15 @@ export function App() {
               </div>
             </>
           )}
+          {snapshot && discoverySnapshot === snapshot && mode === "explore" && !preflightOpen && runtime.data?.kind === "desktop" ? <BusinessExplorer
+            snapshot={snapshot} semantics={semantics} settings={settings} platform={platform} desktop
+            initialTable={historicalSelection ? undefined : selectedTable}
+            sourceLabel={dataSources.find((source) => source.id === snapshot.sourceId)?.displayName}
+            onClose={() => setDiscoverySnapshot(undefined)}
+            onLocate={(table) => { setDiscoverySnapshot(undefined); locateTable(table); }}
+            onExplain={(table) => { setDiscoverySnapshot(undefined); locateTable(table); setRightPanel((panel) => ({ ...panel, expanded: true })); setExplainRequest((value) => value + 1); }}
+            onOpenSettings={() => openSettings("ai")}
+          /> : null}
         </section>
 
         <SidebarRail
@@ -976,17 +991,19 @@ export function App() {
               a rendering mode, while the History segment owns time whatever the
               main area happens to be showing. */}
           <InspectorPanel
+            explainRequest={explainRequest}
             snapshot={snapshot}
             selectedTable={selectedTable}
             historicalSelection={historicalSelection}
             changeSet={changeSet}
-            semantics={semantics}
+            semantics={semanticsSnapshot === snapshot ? semantics : emptySemantics}
             settings={settings}
             runtime={runtime.data}
             platform={platform}
             historyRevision={snapshot?.id ?? ""}
             onSaveAnnotation={saveAnnotation}
-            onSemanticsChange={setSemantics}
+            onSemanticsChange={changeSemantics}
+            onRefreshSemantics={refreshSemantics}
             onApplyView={setSavedView}
             onOpenQuery={querySupported && !historicalSelection ? openTableInQuery : undefined}
             onOpenSettings={openSettings}
@@ -1020,7 +1037,16 @@ export function App() {
             if (!snapshot) return;
             setSettings(await platform.resetDataSourceSettings(snapshot.sourceId));
           }}
-          onReload={async () => setSettings(await platform.getSettings(snapshot?.sourceId))}
+          onReload={async () => {
+            // Settings failure must not leave imported or deleted knowledge eligible.
+            await Promise.all([
+              platform.getSettings(snapshot?.sourceId).then((next) => {
+                if (activeSemanticSession.current === semanticSession) setSettings(next);
+              }),
+              refreshSemantics(),
+              snapshot ? discoveryLatest.refetch() : Promise.resolve(),
+            ]);
+          }}
           onDataSourcesChanged={async () => setDataSources(await platform.listDataSources())}
           onFactoryReset={() => {
             setSnapshot(undefined);

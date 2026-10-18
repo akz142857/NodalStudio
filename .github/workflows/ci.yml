@@ -8,6 +8,13 @@ permissions:
   contents: read
 
 jobs:
+  acceptance-runner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test model acceptance runner without external services
+        run: python3 -B -m unittest discover -s Scripts/tests -v
+
   frontend:
     runs-on: ubuntu-latest
     steps:

@@ -1,3 +1,4 @@
+import { KnowledgeReview } from "./KnowledgeReview";
 import { useCallback, useEffect, useState } from "react";
 import type {
   DatabaseSnapshot,
@@ -30,6 +31,7 @@ const SEGMENTS = [
 ] as const satisfies readonly { value: InspectorSegment; label: string }[];
 
 interface InspectorPanelProps {
+  explainRequest?: number;
   snapshot?: DatabaseSnapshot;
   selectedTable?: TableDefinition;
   historicalSelection?: boolean;
@@ -40,6 +42,7 @@ interface InspectorPanelProps {
   platform: NodalStudioPlatform;
   historyRevision: string;
   onSaveAnnotation: (input: SaveAnnotationInput) => Promise<void>;
+  onRefreshSemantics: () => Promise<void>;
   onSemanticsChange: (semantics: SemanticBundle) => void;
   onApplyView: (view: SavedView | undefined) => void;
   onOpenQuery?: (table: TableDefinition) => void;
@@ -70,6 +73,7 @@ function findAnnotation(
  * so the segments never disappear and their positions stay learnable.
  */
 export function InspectorPanel({
+  explainRequest,
   snapshot,
   selectedTable,
   historicalSelection = false,
@@ -81,6 +85,7 @@ export function InspectorPanel({
   historyRevision,
   onSaveAnnotation,
   onSemanticsChange,
+  onRefreshSemantics,
   onApplyView,
   onOpenQuery,
   onOpenSettings,
@@ -89,13 +94,18 @@ export function InspectorPanel({
   onReviewChanges,
 }: InspectorPanelProps) {
   const [segment, setSegment] = useState<InspectorSegment>("structure");
+  const [handledExplainRequest, setHandledExplainRequest] = useState(explainRequest);
+  if (explainRequest !== handledExplainRequest) {
+    setHandledExplainRequest(explainRequest);
+    if (explainRequest) setSegment("ai");
+  }
   const [evidenceSelection, setEvidenceSelection] = useState<{ scope: string; requestId: string; evidence: TableAiEvidence }>();
   const [evidenceRequestId, setEvidenceRequestId] = useState<string>();
   const handleAiTaskChange = useCallback((requestId: string | undefined) => {
     setEvidenceRequestId(requestId);
     setEvidenceSelection(undefined);
   }, []);
-  const evidenceScope = JSON.stringify([snapshot?.sourceId, snapshot?.id, snapshot?.fingerprint, selectedTable?.key, historicalSelection, settings.source?.sourceId, settings.source?.ai, settings.app.privacy.offlineMode, semantics.domainGroups, semantics.logicalRelationships]);
+  const evidenceScope = JSON.stringify([snapshot?.sourceId, snapshot?.id, snapshot?.fingerprint, selectedTable?.key, historicalSelection, settings.source?.sourceId, settings.source?.ai, settings.app.privacy.offlineMode, semantics.domainGroups, semantics.logicalRelationships, semantics.knowledge]);
   const focusedEvidence = evidenceSelection?.scope === evidenceScope && evidenceSelection.requestId === evidenceRequestId ? evidenceSelection.evidence : undefined;
   const evidenceTable = focusedEvidence && snapshot?.schemas.flatMap((schema) => schema.tables).find((table) => table.key.schema === focusedEvidence.tableKey.schema && table.key.name === focusedEvidence.tableKey.name);
 
@@ -179,6 +189,7 @@ export function InspectorPanel({
               onSaveAnnotation={onSaveAnnotation}
             />
           ) : null}
+          <KnowledgeReview platform={platform} snapshot={snapshot} semantics={semantics} table={selectedTable} desktop={runtime?.kind === "desktop"} onRefresh={onRefreshSemantics} />
           <KnowledgePanel
             sourceId={snapshot.sourceId}
             selectedTable={selectedTable}
@@ -226,6 +237,7 @@ export function InspectorPanel({
         <TableAiAssistant
           key={evidenceScope}
           platform={platform} snapshot={snapshot} table={selectedTable} settings={settings}
+          onKnowledgeSaved={onRefreshSemantics}
           domains={semantics.domainGroups} desktop={runtime?.kind === "desktop"}
           onOpenSettings={() => onOpenSettings("ai")}
           onTaskChange={handleAiTaskChange}

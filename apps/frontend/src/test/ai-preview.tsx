@@ -45,7 +45,7 @@ export function Preview() {
     </section>
     <aside className="inspector-panel" style={{ width: 360, minWidth: 0, height: "calc(100vh - 80px)", overflow: "auto", padding: 20, border: "1px solid #546172", borderRadius: 12 }}>
       <InspectorPanel snapshot={reportSnapshot} selectedTable={aiTable} historicalSelection={historical} semantics={reportSemantics} settings={previewSettings} platform={platform} runtime={{ kind: "desktop" } as RuntimeInfo}
-        historyRevision="fixture" onSaveAnnotation={() => Promise.resolve()} onSemanticsChange={noop} onApplyView={noop} onOpenSettings={() => setMessage("预览使用固定测试设置。请在正式桌面应用的 Settings → AI 修改提供方和范围。")}
+        historyRevision="fixture" onSaveAnnotation={() => Promise.resolve()} onRefreshSemantics={async () => {}} onSemanticsChange={noop} onApplyView={noop} onOpenSettings={() => setMessage("预览使用固定测试设置。请在正式桌面应用的 Settings → AI 修改提供方和范围。")}
         onSelectSnapshot={noop} onCompareSnapshots={noop}/>
     </aside>
   </main>;

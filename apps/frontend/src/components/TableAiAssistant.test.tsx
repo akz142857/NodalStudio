@@ -168,7 +168,7 @@ describe("single-table understanding", () => {
 
 describe("inspector evidence and task identity", () => {
   function panelProps() {
-    return { snapshot: reportSnapshot, selectedTable: aiTable, semantics: reportSemantics, settings: tableAiSettings(), ...platformMock(), runtime: { kind: "desktop" } as Parameters<typeof InspectorPanel>[0]["runtime"], historyRevision: "current", onSaveAnnotation: vi.fn(), onSemanticsChange: vi.fn(), onApplyView: vi.fn(), onOpenSettings: vi.fn(), onSelectSnapshot: vi.fn(), onCompareSnapshots: vi.fn() };
+    return { snapshot: reportSnapshot, selectedTable: aiTable, semantics: reportSemantics, settings: tableAiSettings(), ...platformMock(), runtime: { kind: "desktop" } as Parameters<typeof InspectorPanel>[0]["runtime"], historyRevision: "current", onSaveAnnotation: vi.fn(), onRefreshSemantics: vi.fn().mockResolvedValue(undefined), onSemanticsChange: vi.fn(), onApplyView: vi.fn(), onOpenSettings: vi.fn(), onSelectSnapshot: vi.fn(), onCompareSnapshots: vi.fn() };
   }
   it("opens the actual field and preserves the answer when returning", async () => {
     const p = panelProps(); const { container } = render(<InspectorPanel {...p} />);
