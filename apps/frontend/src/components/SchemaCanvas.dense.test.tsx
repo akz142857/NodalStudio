@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { TableNode } from "../graph/schema-graph";
 import { defaultAppSettings, type NodalStudioPlatform } from "../platform";
 import { diagramColumn, diagramForeignKey, diagramTable, diagramAfter } from "../test/diagram-comparison-fixture";
+import { animationFrames, diagramExportFrameBudget } from "../test/animation-frames";
 import { SchemaCanvas } from "./SchemaCanvas";
 import { useExportTableDetail } from "./CanvasInteractionContext";
 import * as exporter from "../graph/diagram-export";
@@ -26,37 +27,6 @@ vi.mock("../graph/elk-layout", async (load) => ({ ...await load<typeof import(".
   layoutSchemaGraph: vi.fn((nodes: TableNode[]) => Promise.resolve(nodes.map((node, i) => ({ ...node, position: { x: i * 320, y: i % 2 * 250 } })))),
 }));
 afterEach(() => { document.querySelectorAll("style[data-canvas-regression]").forEach((style) => style.remove()); vi.restoreAllMocks(); vi.unstubAllGlobals(); probe.store = undefined; });
-
-// Drive real React/React Flow commits one frame at a time. Recovery deliberately
-// leaves a frame between batches, so completion has no one-second wall-clock SLA.
-function animationFrames(interval: number) {
-  let sequence = 0, time = 0;
-  const pending = new Map<number, FrameRequestCallback>();
-  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { pending.set(++sequence, callback); return sequence; });
-  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => { pending.delete(id); });
-  const advance = async () => {
-    time += interval;
-    await act(async () => {
-      for (const [id, callback] of [...pending]) {
-        if (pending.delete(id)) callback(time);
-      }
-      await Promise.resolve(); // Let frame-driven export continuations commit too.
-    });
-  };
-  return {
-    advance,
-    now: () => time,
-    async until(assertion: () => void) {
-      // A finite frame budget catches a stalled sequence without depending on CI
-      // CPU speed. Includes the bounded export's table and relationship batches.
-      for (let frame = 0; frame < 160; frame++) {
-        await advance();
-        try { assertion(); return; } catch { /* Retry after the next committed frame. */ }
-      }
-      assertion();
-    },
-  };
-}
 
 it.each([16, 250])("retains the dense model, selects, exports and rebuilds all edges with %i ms frames", async (interval) => {
   const frames = animationFrames(interval);
@@ -141,6 +111,7 @@ it.each([16, 250])("retains the dense model, selects, exports and rebuilds all e
   expect(exportButton).toBeEnabled();
   expect(store.getState().edges.find((edge) => edge.id === stableEdge.id)).toBe(stableEdge);
   expect(container.querySelector("[data-shared-edge-layer]")).toBe(paintRoot);
+  const exportFrameBudget = diagramExportFrameBudget({ edgeCount: allEdgeIds.size, tableCount: tables.length });
   const captured = new Set<string>();
   const append = vi.fn((batch: HTMLElement[]) => {
     expect(batch.length).toBeGreaterThan(0); expect(batch.length).toBeLessThanOrEqual(16);
@@ -165,7 +136,7 @@ it.each([16, 250])("retains the dense model, selects, exports and rebuilds all e
   });
   fireEvent.click(screen.getByRole("button", { name: "Export SVG" }));
   await frames.until(() => expect(capture).toHaveBeenCalledOnce());
-  await frames.until(() => expect(saveDiagramExport).toHaveBeenCalledOnce());
+  await frames.until(() => expect(saveDiagramExport).toHaveBeenCalledOnce(), exportFrameBudget);
   expect(append.mock.calls.reduce((sum, [batch]) => sum + batch.length, 0)).toBe(500);
   await frames.until(() => expect(exportButton).toBeEnabled());
   const flow = container.querySelector<HTMLElement>(".schema-canvas-flow")!;
@@ -173,7 +144,7 @@ it.each([16, 250])("retains the dense model, selects, exports and rebuilds all e
   const transform = store.getState().transform;
   append.mockImplementationOnce(() => { throw new Error("batch failed"); });
   fireEvent.click(screen.getByRole("button", { name: "Export SVG" }));
-  await frames.until(() => expect(screen.getByText(/Unable to export SVG diagram/)).toBeVisible());
+  await frames.until(() => expect(screen.getByText(/Unable to export SVG diagram/)).toBeVisible(), exportFrameBudget);
   expect(flow.inert).toBeFalsy(); expect(flow).not.toHaveAttribute("aria-hidden");
   expect(store.getState().transform).toEqual(transform);
   expect(store.getState().nodes).toHaveLength(500);

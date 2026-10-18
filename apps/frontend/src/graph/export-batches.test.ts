@@ -1,7 +1,40 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { captureExportBatches } from "./export-batches";
+import { animationFrames, diagramExportFrameBudget } from "../test/animation-frames";
 
 afterEach(() => { vi.restoreAllMocks(); });
+
+it("completes single-item export batches and label waits beyond the UI frame budget without losing identities", async () => {
+  const frames = animationFrames(250);
+  let workTime = 0, labelFrame = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => workTime);
+  const edges = Array.from({ length: 1000 }, (_, i) => `edge-${i}`);
+  const tables = Array.from({ length: 500 }, (_, i) => `table-${i}`);
+  const capturedEdges: string[] = [], capturedTables: string[] = [];
+  const edgeSizes: number[] = [], tableSizes: number[] = [];
+  let batch: string[] = [];
+  const capture = async () => {
+    await captureExportBatches({ items: edges, maxBatchSize: 64, kind: "edge", assertCurrent: vi.fn(),
+      render: (next) => { batch = next; edgeSizes.push(next.length); workTime += next.length * 10; labelFrame = frames.now(); },
+      ready: () => frames.now() > labelFrame,
+      read: () => { capturedEdges.push(...batch); workTime += batch.length; } });
+    await captureExportBatches({ items: tables, maxBatchSize: 16, kind: "table", assertCurrent: vi.fn(),
+      render: (next) => { batch = next; tableSizes.push(next.length); workTime += next.length * 10; },
+      read: () => { capturedTables.push(...batch); workTime += batch.length; } });
+  };
+  const completed = vi.fn(), failed = vi.fn();
+  const task = capture().then(completed, failed);
+  const budget = diagramExportFrameBudget({ edgeCount: edges.length, tableCount: tables.length });
+  await frames.until(() => { expect(failed).not.toHaveBeenCalled(); expect(completed).toHaveBeenCalledOnce(); }, budget);
+  await task;
+  expect(frames.now() / 250).toBeGreaterThan(160);
+  expect(edgeSizes[0]).toBe(64); expect(tableSizes[0]).toBe(16);
+  expect(edgeSizes.slice(1).every((size) => size === 1)).toBe(true);
+  expect(tableSizes.slice(1).every((size) => size === 1)).toBe(true);
+  expect(capturedEdges).toEqual(edges); expect(capturedTables).toEqual(tables);
+  expect(new Set(capturedEdges).size).toBe(edges.length);
+  expect(new Set(capturedTables).size).toBe(tables.length);
+});
 
 it("adapts expensive batches to the work budget, preserves every identity in order and yields", async () => {
   let now = 0;
