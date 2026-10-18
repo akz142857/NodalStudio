@@ -27,7 +27,8 @@ services:
     volumes:
       - ../fixtures/mysql/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pacceptance-root-only"]
+      # Do not mark the socket-only initialization server healthy.
+      test: ["CMD", "mysql", "--protocol=TCP", "--connect-timeout=2", "-h", "127.0.0.1", "-unodalstudio", "-pacceptance-fixture-only", "-D", "nodalstudio_test", "-e", "SELECT id FROM orders LIMIT 0"]
       interval: 2s
       timeout: 5s
       retries: 40

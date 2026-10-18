@@ -9,7 +9,9 @@ services:
     ports:
       - "53306:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot-only-for-fixture"]
+      # Initialization uses a socket-only temporary server. Require authenticated
+      # TCP access to the fixture before allowing the adapter test to start.
+      test: ["CMD", "mysql", "--protocol=TCP", "--connect-timeout=2", "-h", "127.0.0.1", "-unodalstudio", "-pnodalstudio", "-D", "nodalstudio_test", "-e", "SELECT id FROM orders LIMIT 0"]
       interval: 2s
       timeout: 5s
       retries: 40

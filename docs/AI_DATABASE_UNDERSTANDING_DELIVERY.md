@@ -43,9 +43,17 @@ Rust 首次测试因沙箱禁止绑定回环端口而失败；允许本机端口
 
 ## Git 与 CI 核对规则
 
-提交限定为 72 个文件：前端 36 个、后端及依赖 23 个、验收工具与 CI 6 个、文档 7 个。包括上述产品代码、永久测试、合成预览、通用验收工具和文档。真实结构快照、批准清单、模型原始输入/输出、凭据、运行日志、数据库与构建产物保留在本地忽略目录，不提交；未扩大共享协议字段。
+主实现提交 `3c9c6d2` 限定为 72 个文件：前端 36 个、后端及依赖 23 个、验收工具与 CI 6 个、文档 7 个。包括上述产品代码、永久测试、合成预览、通用验收工具和文档。真实结构快照、批准清单、模型原始输入/输出、凭据、运行日志、数据库与构建产物保留在本地忽略目录，不提交；未扩大共享协议字段。推送后发现的 CI 配置修复另见下一节。
 
 推送后核对 `main` 远程 SHA 与本地提交一致，并检查该 SHA 对应的 [CI workflow](https://github.com/akz142857/NodalStudio/actions/workflows/ci.yml)。必须确认 `acceptance-runner`、`frontend`、`rust`、`postgres-integration`、`mysql-integration`、`cloud-integration`、`desktop-build` 全部成功，不能把排队或运行中记作通过。具体提交 SHA 和运行链接以本次交付回复及 GitHub 对应提交记录为准。
+
+## 推送后 MySQL CI 启动竞争修复
+
+`3c9c6d2` 的 [首次 CI](https://github.com/akz142857/NodalStudio/actions/runs/39146566609) 中，MySQL introspection 在建立 TCP 连接时收到 EOF，尚未执行结构断言。原健康检查使用 `mysqladmin ping -h localhost`，会命中初始化期间的 socket 临时服务；官方镜像此时使用 `--skip-networking`，fixture 初始化后还会关闭该临时服务并启动正式 TCP 服务，因此 `healthy` 不代表测试连接已经可用。
+
+仅修正 `infrastructure/docker-compose.mysql.yml` 和 `infrastructure/docker-compose.ai-acceptance.yml` 的 MySQL 健康检查：强制 TCP、使用 fixture 账号和数据库，并要求 `SELECT id FROM orders LIMIT 0` 成功。不增加固定等待、不重试掩盖测试失败，不修改 introspection 的主键、外键方向/行为、唯一索引和视图断言。
+
+使用独立容器和 15 秒延迟初始化 fixture 验证：旧检查在初始化期间成功，新检查失败且容器仍为 starting；初始化完成后新检查与原 introspection 测试均通过。完整重跑的 6 项服务验收也全部通过。日志独立保留于 `target/ai-delivery/2026-10-19/mysql-readiness/` 和 `services-after-readiness/`，临时容器和卷已按唯一项目名清理。首次 CI 其余 6 个 job 均成功；该后续提交仅含两个 Compose 文件及本文，不改变首期功能或真实环境验收状态。
 
 ## 仍待完成的验收
 
