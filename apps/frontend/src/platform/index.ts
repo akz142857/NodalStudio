@@ -63,4 +63,5 @@ export type {
   VerifyAndRefreshDataSourceResult,
 } from "./types";
 export type * from "./settings-types";
+export type * from "./table-ai-types";
 export { defaultAppSettings, defaultDataSourceSettings, defaultEffectiveSettings, defaultProjectSettings } from "./settings-defaults";

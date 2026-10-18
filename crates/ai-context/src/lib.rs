@@ -1,5 +1,7 @@
 //! Privacy-bounded schema context selection and provider-independent explanations.
 
+pub mod understanding;
+
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use schema_diff::SchemaChangeSet;

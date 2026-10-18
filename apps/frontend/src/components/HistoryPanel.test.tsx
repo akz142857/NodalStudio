@@ -49,6 +49,9 @@ const changeSet: SchemaChangeSet = {
 
 function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"]): NodalStudioPlatform {
   return {
+    prepareTableExplanation: vi.fn(),
+    runTableExplanation: vi.fn(),
+    cancelTableExplanation: vi.fn(),
     saveDiagramExport: vi.fn().mockResolvedValue({ path: null }),
     saveSchemaReport: vi.fn().mockResolvedValue({ path: null }),
     getRuntimeInfo: vi.fn(),

@@ -1,9 +1,10 @@
-import { type FormEvent, useState } from "react";
-import type { ObjectAnnotation, SaveAnnotationInput, TableDefinition } from "../platform";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import type { ObjectAnnotation, SaveAnnotationInput, TableAiEvidence, TableDefinition } from "../platform";
 
 interface TableStructureProps {
   table: TableDefinition;
   onOpenQuery?: (table: TableDefinition) => void;
+  focusedEvidence?: TableAiEvidence;
 }
 
 interface TableKnowledgeFormProps {
@@ -19,13 +20,24 @@ interface TableKnowledgeFormProps {
  * Split from the knowledge form because the inspector shows one or the other —
  * structure is read-only and comes from the snapshot, the form is authored.
  */
-export function TableStructure({ table, onOpenQuery }: TableStructureProps) {
+export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStructureProps) {
+  const structure = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const target = structure.current?.querySelector<HTMLElement>('[data-evidence-target="true"]')
+      ?? structure.current?.querySelector<HTMLElement>('[data-evidence-focus="true"]');
+    target?.scrollIntoView?.({ block: "nearest" });
+    target?.focus({ preventScroll: true });
+  }, [focusedEvidence]);
+  const focused = (kind: string, name: string) => focusedEvidence?.objectKey.kind === kind && focusedEvidence.objectKey.name === name;
+  // A logical relationship uses a table key, but its source mapping is the
+  // navigation target. Preserve mapping order when there are multiple fields.
+  const logicalField = focusedEvidence?.kind === "logicalRelationship" ? focusedEvidence.columns[0] : undefined;
   const primaryColumns = new Set(table.primaryKey?.columns ?? []);
   const foreignColumns = new Set(table.foreignKeys.flatMap((key) => key.columns));
 
   return (
-    <>
-      <p className="inspector-comment">{table.comment ?? `${table.key.schema}.${table.key.name}`}</p>
+    <div ref={structure}>
+      <p className="inspector-comment" tabIndex={-1} data-evidence-target={focusedEvidence?.kind !== "logicalRelationship" && focused("table", table.key.name) ? "true" : undefined}>{table.comment ?? `${table.key.schema}.${table.key.name}`}</p>
       {onOpenQuery ? <button type="button" className="inspector-query-button" onClick={() => onOpenQuery(table)}>Preview rows in Query</button> : null}
       <dl className="snapshot-summary">
         <div>
@@ -46,7 +58,7 @@ export function TableStructure({ table, onOpenQuery }: TableStructureProps) {
         <h3>Columns</h3>
         <div className="inspector-columns">
           {table.columns.map((column) => (
-            <div key={column.name}>
+            <div key={column.name} tabIndex={-1} data-evidence-target={focused("column", column.name) || logicalField === column.name ? "true" : undefined} data-evidence-focus={focused("column", column.name) || focusedEvidence?.columns.includes(column.name) ? "true" : undefined}>
               <span>
                 {primaryColumns.has(column.name) ? <b>PK</b> : null}
                 {foreignColumns.has(column.name) ? <b>FK</b> : null}
@@ -67,7 +79,7 @@ export function TableStructure({ table, onOpenQuery }: TableStructureProps) {
           <h3>Relationships</h3>
           <ul className="inspector-list">
             {table.foreignKeys.map((key) => (
-              <li key={key.name}>
+              <li key={key.name} tabIndex={-1} data-evidence-target={focused("foreignKey", key.name) ? "true" : undefined} data-evidence-focus={focused("foreignKey", key.name) ? "true" : undefined}>
                 <strong>{key.name}</strong>
                 <span>
                   {key.columns.join(", ")} → {key.referencedSchema}.{key.referencedTable}(
@@ -84,7 +96,7 @@ export function TableStructure({ table, onOpenQuery }: TableStructureProps) {
           <h3>Indexes</h3>
           <ul className="inspector-list">
             {table.indexes.map((index) => (
-              <li key={index.name}>
+              <li key={index.name} tabIndex={-1} data-evidence-target={focused("index", index.name) ? "true" : undefined} data-evidence-focus={focused("index", index.name) ? "true" : undefined}>
                 <strong>{index.name}</strong>
                 <span>
                   {index.method} · {index.columns.join(", ")}
@@ -101,7 +113,7 @@ export function TableStructure({ table, onOpenQuery }: TableStructureProps) {
           <h3>Constraints</h3>
           <ul className="inspector-list">
             {table.constraints.map((constraint) => (
-              <li key={constraint.name}>
+              <li key={constraint.name} tabIndex={-1} data-evidence-target={focused("constraint", constraint.name) ? "true" : undefined} data-evidence-focus={focused("constraint", constraint.name) ? "true" : undefined}>
                 <strong>{constraint.name}</strong>
                 <span>{constraint.definition}</span>
               </li>
@@ -109,7 +121,7 @@ export function TableStructure({ table, onOpenQuery }: TableStructureProps) {
           </ul>
         </section>
       ) : null}
-    </>
+    </div>
   );
 }
 

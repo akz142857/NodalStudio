@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   DatabaseSnapshot,
   EffectiveSettings,
@@ -10,8 +10,10 @@ import type {
   SemanticBundle,
   NodalStudioPlatform,
   TableDefinition,
+  TableAiEvidence,
 } from "../platform";
 import { AiAssistant } from "./AiAssistant";
+import { TableAiAssistant } from "./TableAiAssistant";
 import { HistoryPanel } from "./HistoryPanel";
 import { KnowledgePanel } from "./KnowledgePanel";
 import { ProvenancePanel } from "./ProvenancePanel";
@@ -87,6 +89,15 @@ export function InspectorPanel({
   onReviewChanges,
 }: InspectorPanelProps) {
   const [segment, setSegment] = useState<InspectorSegment>("structure");
+  const [evidenceSelection, setEvidenceSelection] = useState<{ scope: string; requestId: string; evidence: TableAiEvidence }>();
+  const [evidenceRequestId, setEvidenceRequestId] = useState<string>();
+  const handleAiTaskChange = useCallback((requestId: string | undefined) => {
+    setEvidenceRequestId(requestId);
+    setEvidenceSelection(undefined);
+  }, []);
+  const evidenceScope = JSON.stringify([snapshot?.sourceId, snapshot?.id, snapshot?.fingerprint, selectedTable?.key, historicalSelection, settings.source?.sourceId, settings.source?.ai, settings.app.privacy.offlineMode, semantics.domainGroups, semantics.logicalRelationships]);
+  const focusedEvidence = evidenceSelection?.scope === evidenceScope && evidenceSelection.requestId === evidenceRequestId ? evidenceSelection.evidence : undefined;
+  const evidenceTable = focusedEvidence && snapshot?.schemas.flatMap((schema) => schema.tables).find((table) => table.key.schema === focusedEvidence.tableKey.schema && table.key.name === focusedEvidence.tableKey.name);
 
   // The sidebar's "Compare…" reaches the History segment the same way the
   // command palette reaches the canvas, so a collapsed panel is not a dead end.
@@ -96,7 +107,7 @@ export function InspectorPanel({
     return () => window.removeEventListener("nodalstudio:inspect-history", openHistory);
   }, []);
   const annotation = findAnnotation(semantics, selectedTable);
-  const aiEnabled = Boolean(settings.source?.ai.enabled) && !settings.app.privacy.offlineMode;
+  const aiEnabled = Boolean(settings.source?.ai.enabled) && !(settings.app.privacy.offlineMode && settings.source?.ai.provider !== "offline");
   const aiProviderLabel =
     settings.source?.ai.provider === "openAiCompatible" ? "Remote" : "Offline";
 
@@ -111,7 +122,7 @@ export function InspectorPanel({
 
   return (
     <>
-      <h2>{selectedTable ? selectedTable.key.name : snapshot.database.name}</h2>
+      <h2>{segment === "structure" && evidenceTable ? `${evidenceTable.key.schema}.${evidenceTable.key.name}` : selectedTable ? selectedTable.key.name : snapshot.database.name}</h2>
       {historicalSelection ? <p className="historical-selection-note">Deleted table · Before snapshot</p> : null}
       <div className="inspector-segments">
         <Segmented
@@ -124,7 +135,15 @@ export function InspectorPanel({
 
       {segment === "structure" ? (
         selectedTable ? (
-          <TableStructure table={selectedTable} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
+          <>
+            {focusedEvidence && evidenceTable ? <section className="ai-evidence-source" aria-label="Located evidence">
+              <strong>{focusedEvidence.id} · {focusedEvidence.label}</strong>
+              <p>{focusedEvidence.kind} · Snapshot {snapshot.fingerprint.slice(0, 12)}</p>
+              <pre>{focusedEvidence.detail}</pre>
+              <button type="button" onClick={() => setSegment("ai")}>Back to AI explanation</button>
+            </section> : null}
+            <TableStructure table={evidenceTable || selectedTable} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
+          </>
         ) : (
           <dl className="snapshot-summary">
             <div>
@@ -203,30 +222,21 @@ export function InspectorPanel({
         </>
       ) : null}
 
-      {segment === "ai" ? (
-        historicalSelection ? <p>Review this deleted table’s Before properties in the change list.</p> : selectedTable ? (
-          <AiAssistant
-            platform={platform}
-            enabled={aiEnabled}
-            providerLabel={aiProviderLabel}
-            onOpenSettings={() => onOpenSettings("ai")}
-            input={{
-              snapshotId: snapshot.id,
-              targetType: "table",
-              objectKey: selectedTable.key,
-            }}
-            onConfirmCandidate={(candidate) =>
-              onSaveAnnotation({
-                sourceId: snapshot.sourceId,
-                objectKey: selectedTable.key,
-                description: candidate,
-                tags: annotation?.tags ?? [],
-                owner: annotation?.owner ?? null,
-                isCore: annotation?.isCore ?? false,
-              })
-            }
-          />
-        ) : changeSet ? (
+      {selectedTable && !historicalSelection ? <div hidden={segment !== "ai"}>
+        <TableAiAssistant
+          key={evidenceScope}
+          platform={platform} snapshot={snapshot} table={selectedTable} settings={settings}
+          domains={semantics.domainGroups} desktop={runtime?.kind === "desktop"}
+          onOpenSettings={() => onOpenSettings("ai")}
+          onTaskChange={handleAiTaskChange}
+          onLocateEvidence={(evidence, requestId) => {
+            if (requestId !== evidenceRequestId) return;
+            setEvidenceSelection({ scope: evidenceScope, requestId, evidence }); setSegment("structure");
+          }}
+        />
+      </div> : null}
+      {segment === "ai" && (!selectedTable || historicalSelection) ? (
+        historicalSelection ? <p>Review this deleted table’s Before properties in the change list.</p> : changeSet ? (
           <AiAssistant
             platform={platform}
             input={{ snapshotId: snapshot.id, targetType: "changeSet", changeSet }}

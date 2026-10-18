@@ -519,6 +519,9 @@ export interface QueryHistoryEntry {
 }
 
 export interface NodalStudioPlatform {
+  prepareTableExplanation(input: import("./table-ai-types").TableAiInput): Promise<import("./table-ai-types").TableAiPreview>;
+  runTableExplanation(requestId: string): Promise<import("./table-ai-types").TableAiResult>;
+  cancelTableExplanation(requestId: string): Promise<void>;
   saveDiagramExport(input: DiagramExportInput): Promise<DiagramExportReceipt>;
   saveSchemaReport(input: SchemaReportExportInput): Promise<FileExportReceipt>;
   getRuntimeInfo(): Promise<RuntimeInfo>;

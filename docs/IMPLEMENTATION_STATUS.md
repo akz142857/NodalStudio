@@ -4,6 +4,8 @@ This file tracks implementation evidence against [DEVELOPMENT_PLAN.md](../DEVELO
 
 ## Latest verification evidence
 
+- AI database understanding, stage one (2026-10-18): desktop single-table/field explanations now use a backend-prepared request preview, controlled CurrentTable/OneHop/Domain metadata scope, evidence navigation, and cancellation/expiry isolation. The first implementation review's 1 P1 and 4 P2 findings and the second review's 2 P2 findings are resolved; the third multi-role review found no new reproducible regressions in the reviewed scope. Final implementation validation passed 524 frontend tests across 96 files, type checking, lint, and the desktop debug bundle; the subsequent review passed 58 focused tests and 24 temporary independent checks. These are local/synthetic results, not real database/model acceptance. The [stage-one delivery record](AI_DATABASE_UNDERSTANDING_STAGE_ONE.md) separates the implementation, review, and commit-time evidence. AI business search/path explanations and annotation confirmation remain unimplemented stages two/three.
+
 - Schema tree: independent case-insensitive table/view-name search (including qualified names), automatic expansion of matches, clear/Escape and source-aware reset. Search preserves normal disclosure choices and remains accessible when the object list scrolls. Right-click/Shift+F10 opens app actions with keyboard navigation, zoom-aware viewport bounds, name-copy feedback/retry and optional read-only query entry. View definitions are read-only previews; views are not fabricated as table nodes. Table clicks use scoped, repeatable Diagram navigation requests that clear Diagram filters, leave isolated views, wait for layout and measurement, and then center/select the actual node without editing table positions. Tests cover delayed layout and measurement, semantics/layout load settlement (including storage failure), repeated clicks, cross-source cancellation, search, menu and clipboard behavior. Verification: 407 frontend tests across 70 files, TypeScript, ESLint and desktop bundle build; packaged UI checked with 125 tables for name filtering, app context menu, repeatable centering/selection and a real view definition preview.
 
 - The application header uses a single flat surface: navigation segments, search, sidebar controls and action icons share 32px visible geometry and 8px corners; icon hit regions remain 44px. The standalone capsule, gradient, shadow and passive runtime icon have been removed; runtime context remains in the product-title tooltip and accessible text. Hover/focus hints, press/selected/disabled states, 400ms hover delay, notification counts, operation receipts/retries and narrow-width layout are retained. Header styling supports explicit light/dark and system appearance. These are WebView controls, not a native NSToolbar or SF Symbols implementation. References: [Apple HIG Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars), [Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons). Verification: 395 frontend tests across 67 files, TypeScript, ESLint, desktop bundle build, and packaged-window inspection of the complete header with a 125-table model.
@@ -76,10 +78,13 @@ This file tracks implementation evidence against [DEVELOPMENT_PLAN.md](../DEVELO
 ## Phase 5 — AI explanation
 
 - [x] Provider abstraction with a deterministic offline provider.
-- [x] Table, domain, and change-set explanations.
-- [x] Graph-neighborhood context selection.
-- [x] User confirmation for AI-generated annotations.
+- [x] Desktop single-table/field understanding with backend-prepared exact request previews, bounded output and evidence IDs. The old table explanation entry is rejected; change-set explanations retain the legacy flow.
+- [x] CurrentTable, direct-neighbor OneHop and explicitly selected Domain sending scopes; Domain intersects the target's direct neighborhood with one saved domain. This is not business-language search or multi-hop path explanation.
+- [x] Evidence navigation with exact object/field focus, per-task identity, cancellation, expiry and stale-response isolation.
+- [ ] The new understanding flow's edited annotation drafts, per-item confirmation and cross-machine re-review are deferred to stage three. The former whole-answer table annotation action has been removed; manual team annotations remain available and are excluded from these AI requests.
 - [x] Fully offline and AI-disabled modes.
+
+The AI understanding stages one/two/three are defined in the [feature design](AI_DATABASE_UNDERSTANDING_DESIGN.md); they are separate from this document's product-wide Phase 0–8 numbering. See the [stage-one delivery and review record](AI_DATABASE_UNDERSTANDING_STAGE_ONE.md).
 
 ## Phase 6 — Cloud sync and Web viewer
 

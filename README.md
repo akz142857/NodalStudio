@@ -15,6 +15,11 @@ The product and engineering scope is defined in
 [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md). Current implementation evidence is
 tracked in [docs/IMPLEMENTATION_STATUS.md](./docs/IMPLEMENTATION_STATUS.md).
 
+The desktop AI single-table understanding flow now includes an exact request
+preview, controlled metadata scope, evidence navigation, and cancellation/expiry
+handling. See the [stage-one delivery and review record](./docs/AI_DATABASE_UNDERSTANDING_STAGE_ONE.md)
+for implementation boundaries, validation, and a synthetic UI preview.
+
 ## Prerequisites
 
 - Rust 1.95 (pinned by `rust-toolchain.toml`)

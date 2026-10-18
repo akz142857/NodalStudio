@@ -113,6 +113,18 @@ function downloadFile(blob: Blob, fileName: string): Promise<FileExportReceipt> 
 }
 
 export class WebPlatform implements NodalStudioPlatform {
+  prepareTableExplanation(): Promise<never> {
+    return Promise.reject(new Error("Table understanding requires the desktop app."));
+  }
+
+  runTableExplanation(): Promise<never> {
+    return Promise.reject(new Error("Table understanding requires the desktop app."));
+  }
+
+  cancelTableExplanation(): Promise<void> {
+    return Promise.resolve();
+  }
+
   saveSchemaReport(input: SchemaReportExportInput): Promise<FileExportReceipt> {
     return downloadFile(new Blob([input.html], { type: "text/html;charset=utf-8" }), input.fileName);
   }

@@ -59,6 +59,7 @@ use tauri::{Manager, State};
 mod diagram_export;
 mod export_file;
 mod schema_report;
+mod table_understanding;
 
 #[tauri::command]
 async fn save_schema_report(
@@ -3997,6 +3998,12 @@ async fn explain_schema(
     input: ExplainSchemaInput,
     state: State<'_, AppState>,
 ) -> Result<Explanation, String> {
+    if input.target_type == "table" {
+        return Err(
+            "Use the prepared table explanation flow to preview and enforce the AI sending scope."
+                .into(),
+        );
+    }
     if !input.ai_enabled {
         return Err(
             "AI explanations are disabled. Enable offline AI explicitly to continue.".into(),
@@ -4755,6 +4762,7 @@ fn safe_git_workspace_error(error: &git_workspace::GitWorkspaceError) -> String 
 /// Panics when Tauri cannot initialize the configured desktop runtime or local store.
 pub fn run() {
     tauri::Builder::default()
+        .manage(table_understanding::TableAiState::default())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;
@@ -4867,6 +4875,9 @@ pub fn run() {
             save_view,
             save_layout,
             explain_schema,
+            table_understanding::prepare_table_explanation,
+            table_understanding::run_table_explanation,
+            table_understanding::cancel_table_explanation,
             test_ai_provider,
             sync_project
         ])

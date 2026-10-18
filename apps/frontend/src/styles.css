@@ -3294,6 +3294,28 @@ fieldset.settings-card {
   font-size: 8px;
 }
 
+.table-understanding { min-width: 0; gap: 12px; font-size: 11px; }
+.table-understanding h4 { margin: 8px 0; font-size: 12px; }
+.table-understanding .ai-policy, .table-understanding small, .table-understanding .ai-result ul { font-size: 10px; line-height: 1.5; }
+.table-understanding textarea, .table-understanding select { font-size: 11px; }
+.table-understanding button, .ai-evidence-source button { padding: 6px 8px; border: 1px solid #546172; border-radius: 5px; background: transparent; color: inherit; cursor: pointer; text-align: left; font: inherit; overflow-wrap: anywhere; }
+.table-understanding button:hover:not(:disabled), .ai-evidence-source button:hover { border-color: #77e08a; }
+.table-understanding button:focus-visible, .ai-evidence-source button:focus-visible { outline: 2px solid #77e08a; outline-offset: 2px; }
+.table-understanding button:disabled { opacity: .5; cursor: default; }
+.ai-question-presets { display: grid; gap: 6px; }
+.ai-control { display: grid; gap: 6px; }
+.ai-actions, .ai-evidence-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-scope { display: grid; gap: 5px; }
+.ai-preview, .ai-evidence-source { padding: 10px; border: 1px solid #546172; border-radius: 6px; overflow-wrap: anywhere; }
+.table-understanding pre, .ai-evidence-source pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; padding: 8px; font-size: 10px; line-height: 1.5; background: rgb(128 128 128 / 10%); }
+.table-understanding details { margin-block: 8px; }
+.table-understanding summary { cursor: pointer; }
+.ai-evidence-list { display: grid; gap: 10px; padding-left: 18px; }
+.ai-evidence-list li { min-width: 0; }
+.ai-evidence-kind { display: block; font-size: 10px; opacity: .75; margin-bottom: 4px; }
+.ai-claim { border-bottom: 1px solid #546172; padding-block: 8px; }
+[data-evidence-focus="true"] { outline: 2px solid #77e08a; outline-offset: -2px; background: rgb(119 224 138 / 8%); }
+
 .candidate-annotation {
   padding-top: 8px;
   border-top: 1px solid #30415c;

@@ -25,6 +25,7 @@ dependencies = [
  "schema-model",
  "semantic-model",
  "serde",
+ "serde_json",
  "uuid",
 ]
 

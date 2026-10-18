@@ -57,6 +57,18 @@ import type {
 } from "./settings-types";
 
 export class TauriPlatform implements NodalStudioPlatform {
+  prepareTableExplanation(input: import("./table-ai-types").TableAiInput): Promise<import("./table-ai-types").TableAiPreview> {
+    return invoke("prepare_table_explanation", { input });
+  }
+
+  runTableExplanation(requestId: string): Promise<import("./table-ai-types").TableAiResult> {
+    return invoke("run_table_explanation", { requestId });
+  }
+
+  cancelTableExplanation(requestId: string): Promise<void> {
+    return invoke("cancel_table_explanation", { requestId });
+  }
+
   saveSchemaReport(input: SchemaReportExportInput): Promise<FileExportReceipt> {
     return invoke("save_schema_report", { input });
   }

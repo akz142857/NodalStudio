@@ -10,6 +10,7 @@ schema-diff = { path = "../schema-diff" }
 schema-model = { path = "../schema-model" }
 semantic-model = { path = "../semantic-model" }
 serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 uuid.workspace = true
