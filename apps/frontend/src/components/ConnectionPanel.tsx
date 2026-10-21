@@ -419,7 +419,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                       <span>
                         {requiresLiveVerification
                           ? "Connection details changed. Verify before saving and replace the saved schema snapshot."
-                          : "Connect now using the saved system credential store password and replace the saved schema snapshot."}
+                          : "Connect now using the saved database password and replace the saved schema snapshot."}
                       </span>
                     </div>
                     <button

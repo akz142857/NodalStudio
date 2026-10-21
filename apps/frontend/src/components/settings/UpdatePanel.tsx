@@ -122,7 +122,7 @@ function InstallConfirmation({ version, onCancel, onInstall }: { version: string
   return createPortal(<dialog ref={dialog} className="ds-surface update-confirmation" aria-labelledby="update-install-title" aria-describedby="update-install-description" aria-busy={busy} onKeyDown={(e) => e.stopPropagation()} onCancel={(e) => { e.preventDefault(); if (!pending.current) onCancel(); }}>
     <h2 id="update-install-title">Install Nodal Studio {version}?</h2>
     <p id="update-install-description">The app will back up its local database, install the verified update and restart. Finish your work and save any edits before continuing.</p>
-    <p>Your saved connections, snapshots, model relationships and SQL draft stay on this Mac.</p>
+    <p>Your saved connections, snapshots, model relationships and SQL draft stay on this device.</p>
     {error ? <p className="update-error" role="alert">{error}</p> : null}
     <footer><button ref={cancel} type="button" disabled={busy} onClick={onCancel}>Not now</button><button type="button" className="update-primary" disabled={busy} onClick={() => void install()}>{busy ? "Installing and restarting…" : "Install and Restart"}</button></footer>
   </dialog>, document.body);
