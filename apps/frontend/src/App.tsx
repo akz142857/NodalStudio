@@ -653,7 +653,8 @@ export function App() {
 
   const deleteLogicalRelationship = useCallback(async (relationshipId: string) => {
     if (!snapshot) return;
-    if (await platform.deleteLogicalRelationship(snapshot.sourceId, relationshipId)) await refreshSemantics();
+    await platform.deleteLogicalRelationship(snapshot.sourceId, relationshipId);
+    await refreshSemantics();
   }, [snapshot, refreshSemantics]);
 
   const ignoreRelationshipInference = useCallback(async (relationshipKey: string) => {

@@ -1,6 +1,6 @@
 # UI design system
 
-Settings and the inspector share an opt-in design system. The implementation follows macOS conventions for compact controls, restrained color, grouped preferences, readable hierarchy, keyboard focus, and adaptive layouts. It remains a React/WebView interface, not a native AppKit settings window.
+Settings, the inspector and relationship detail/edit/delete surfaces share an opt-in design system. The implementation follows macOS conventions for compact controls, restrained color, grouped preferences, readable hierarchy, keyboard focus, and adaptive layouts. It remains a React/WebView interface, not a native AppKit settings window.
 
 References: [Apple Settings](https://developer.apple.com/design/human-interface-guidelines/settings), [Typography](https://developer.apple.com/design/human-interface-guidelines/typography), [Color](https://developer.apple.com/design/human-interface-guidelines/color), and [Layout](https://developer.apple.com/design/human-interface-guidelines/layout).
 
@@ -48,3 +48,8 @@ Run `pnpm dev:desktop` or the frontend development server, then visit `/settings
 Fixture query parameters: `theme=light|dark|system`, `font=18`, `density=compact`, `source=none`, `runtime=web`, `managed=1`, and `bootstrap=1` (shows account creation fields). Use the page controls for normal navigation and theme/font interactions. `/inspector-preview.html` remains available to check the other consumer of the shared tokens.
 
 Check all categories in light and dark themes, narrow and desktop windows, larger fonts, managed/disabled states, and both populated and empty source contexts. Confirm form labels, visible focus, keyboard navigation, local save feedback and explicit draft saving. Run the frontend tests, lint and production build after implementation changes.
+
+
+### Model relationships
+
+`components/relationships/relationships.css` uses the same semantic tokens for relationship details, editing and deletion confirmation. `--ds-logical` identifies model-only dashed links. Endpoints show table identity separately from columns; cardinality and status use readable labels. The deletion confirmation is an HTML modal dialog, independent of `window.confirm` support in the desktop WebView. It defaults focus to Cancel, blocks duplicate submissions, retains errors for retry, and leaves database foreign keys unchanged. Details, manager and keyboard entry points share this confirmation. `/relationship-preview.html` exercises the real canvas with an in-memory model and a simulated failure option.

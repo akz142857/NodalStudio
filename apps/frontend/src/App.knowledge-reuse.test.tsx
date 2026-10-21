@@ -14,7 +14,7 @@ vi.mock('./components/SchemaCanvas',()=>({SchemaCanvas:(props:SchemaCanvasProps)
 <button onClick={()=>void props.onCreateLogicalRelationship?.(relation)}>Create relationship</button>
 <button onClick={()=>void props.onUpdateLogicalRelationship?.(relation)}>Update relationship</button>
 <button onClick={()=>void props.onDeleteLogicalRelationship?.('relation')}>Delete relationship</button></>}));
-it.each(['manual', 'domain-race', 'create', 'update', 'delete', 'git', 'git-settings-error', 'cloud', 'portable', 'history', 'semantics'] as const)('stops confirmed-note recall after %s mutation', async(kind)=>{
+it.each(['manual', 'domain-race', 'create', 'update', 'delete', 'delete-missing', 'git', 'git-settings-error', 'cloud', 'portable', 'history', 'semantics'] as const)('stops confirmed-note recall after %s mutation', async(kind)=>{
   localStorage.clear(); window.history.replaceState(null, '', '/'); const platform=getPlatform(); const key=target.key;
   let bundle: SemanticBundle={...reportSemantics,annotations:[{sourceId:reportSnapshot.sourceId,objectKey:key,description:'quasarzephyr',tags:[],owner:null,isCore:false,updatedAt:'old'}],knowledge:[{sourceId:reportSnapshot.sourceId,objectKey:key,status:'confirmed',reason:'Confirmed locally',confirmation:{id:'proof',sourceId:reportSnapshot.sourceId,objectKey:key,finalText:'quasarzephyr',descriptionDigest:'old-digest',snapshotId:reportSnapshot.id,fingerprint:reportSnapshot.fingerprint,confirmedAt:'old',basis:{tables:[[key,'table-hash']],relationships:[],notes:[]},origin:{kind:'manualReview',requestId:null,provider:null,model:null,generatedAt:null,evidence:{}}}}]};
   vi.spyOn(platform,'getRuntimeInfo').mockResolvedValue({kind:'desktop',label:'Reuse review',version:'test'});
@@ -35,7 +35,7 @@ it.each(['manual', 'domain-race', 'create', 'update', 'delete', 'git', 'git-sett
   vi.spyOn(platform,'syncProject').mockImplementation(()=>{invalidate();return Promise.resolve({} as never);});
   vi.spyOn(platform,'listSyncDiagnostics').mockResolvedValue([]);
   for(const method of ['createLogicalRelationship','updateLogicalRelationship'] as const) vi.spyOn(platform,method).mockImplementation(()=>{invalidate();return Promise.resolve({...relation,status:'active',origin:'manual',evidence:[],note:null,createdAt:'old',updatedAt:'new'} as LogicalRelationship);});
-  vi.spyOn(platform,'deleteLogicalRelationship').mockImplementation(()=>{invalidate();return Promise.resolve(true);});
+  vi.spyOn(platform,'deleteLogicalRelationship').mockImplementation(()=>{invalidate();return Promise.resolve(kind!=='delete-missing');});
   vi.spyOn(platform,'listSnapshots').mockResolvedValue([{id:reportSnapshot.id} as SnapshotSummary]);
   let finishGroup!: (group: DomainGroup) => void;
   vi.spyOn(platform,'saveDomainGroup').mockImplementation(()=>new Promise(resolve=>{finishGroup=resolve;}));
@@ -56,8 +56,8 @@ it.each(['manual', 'domain-race', 'create', 'update', 'delete', 'git', 'git-sett
   if(kind==='manual'||kind==='domain-race') {
     fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Changed unreviewed description'}});fireEvent.click(screen.getByRole('button',{name:'Save knowledge'}));
     await waitFor(()=>expect(save).toHaveBeenCalledOnce());await screen.findByDisplayValue('Changed unreviewed description');
-  } else if(['create','update','delete'].includes(kind)) {
-    fireEvent.click(screen.getByRole('button',{name: `${kind[0].toUpperCase()}${kind.slice(1)} relationship`}));
+  } else if(['create','update','delete','delete-missing'].includes(kind)) {
+    fireEvent.click(screen.getByRole('button',{name: `${kind==='delete-missing'?'Delete':kind[0].toUpperCase()+kind.slice(1)} relationship`}));
   } else {
     fireEvent.click(screen.getByRole('button',{name:'Open Settings'}));
     const category=kind.startsWith('git')?'Git':kind==='cloud'?'Cloud Sync':kind==='portable'?'History & Storage':'Data Sources';

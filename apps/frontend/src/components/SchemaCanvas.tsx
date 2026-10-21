@@ -70,6 +70,7 @@ import { CanvasInteractionProvider } from "./CanvasInteractionContext";
 import { CanvasSettingsProvider } from "./CanvasSettingsContext";
 import { RelationshipCreatePopover, type RelationshipDraft } from "./relationships/RelationshipCreatePopover";
 import { RelationshipInspector } from "./relationships/RelationshipInspector";
+import { RelationshipDeleteDialog } from "./relationships/RelationshipDeleteDialog";
 import { RelationshipManager } from "./relationships/RelationshipManager";
 import { RelationshipTargetPicker } from "./relationships/RelationshipTargetPicker";
 import { ComparisonEdge } from "./relationships/ComparisonEdge";
@@ -199,6 +200,8 @@ function SchemaCanvasInner({
   const [relationshipPickExisting, setRelationshipPickExisting] = useState<LogicalRelationship>();
   const [relationshipRebindSourceSelection, setRelationshipRebindSourceSelection] = useState<LogicalRelationship>();
   const [relationshipManagerOpen, setRelationshipManagerOpen] = useState(false);
+  const [relationshipToDelete, setRelationshipToDelete] = useState<{ relationship: LogicalRelationship; sourceId: string; snapshotId: string }>();
+  if (relationshipToDelete && (relationshipToDelete.sourceId !== snapshot.sourceId || relationshipToDelete.snapshotId !== snapshot.id)) setRelationshipToDelete(undefined);
   const [relationshipActionError, setRelationshipActionError] = useState("");
   const [connectionDragSource, setConnectionDragSource] = useState<RelationshipEndpoint>();
   const [selectedEdgeAnchor, setSelectedEdgeAnchor] = useState<{ edgeId: string; x: number; y: number }>();
@@ -561,13 +564,15 @@ function SchemaCanvasInner({
     setRelationshipActionError(reason instanceof Error ? reason.message : String(reason));
   }, []);
 
+  const requestRelationshipDeletion = useCallback((relationship: LogicalRelationship) => {
+    if (!relationshipsEditable || !onDeleteLogicalRelationship || relationship.sourceId !== snapshot.sourceId) return;
+    setRelationshipActionError("");
+    setRelationshipToDelete({ relationship, sourceId: snapshot.sourceId, snapshotId: snapshot.id });
+  }, [onDeleteLogicalRelationship, relationshipsEditable, snapshot.sourceId, snapshot.id]);
+
   const deleteSelectedLogicalRelationship = useCallback(() => {
-    if (!selectedLogicalRelationship || !onDeleteLogicalRelationship) return;
-    if (!window.confirm(`Delete logical relationship “${selectedLogicalRelationship.name}”?\n\nThe database will not be changed.`)) return;
-    void onDeleteLogicalRelationship(selectedLogicalRelationship.id)
-      .then(() => setSelectedEdgeId(undefined))
-      .catch(reportRelationshipError);
-  }, [onDeleteLogicalRelationship, reportRelationshipError, selectedLogicalRelationship]);
+    if (selectedLogicalRelationship) requestRelationshipDeletion(selectedLogicalRelationship);
+  }, [requestRelationshipDeletion, selectedLogicalRelationship]);
 
   const chooseRelationshipTarget = useCallback((target: RelationshipEndpoint) => {
     if (!relationshipPickSource) return;
@@ -601,6 +606,7 @@ function SchemaCanvasInner({
   useEffect(() => {
     if (interactionPaused) return;
     const deleteSelectedRelationship = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || relationshipToDelete || relationshipDraft || relationshipManagerOpen) return;
       if (event.key !== "Delete" && event.key !== "Backspace") return;
       const target = event.target;
       if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
@@ -610,7 +616,7 @@ function SchemaCanvasInner({
     };
     window.addEventListener("keydown", deleteSelectedRelationship);
     return () => window.removeEventListener("keydown", deleteSelectedRelationship);
-  }, [deleteSelectedLogicalRelationship, relationshipsEditable, selectedLogicalRelationship, interactionPaused]);
+  }, [deleteSelectedLogicalRelationship, relationshipsEditable, selectedLogicalRelationship, interactionPaused, relationshipToDelete, relationshipDraft, relationshipManagerOpen]);
 
   useEffect(() => {
     let active = true;
@@ -1031,6 +1037,7 @@ function SchemaCanvasInner({
       {selectedEdge && selectedEdgeAnchor?.edgeId === selectedEdge.id ? (
         <RelationshipInspector
           edge={selectedEdge}
+          logicalRelationship={selectedLogicalRelationship}
           readOnly={!relationshipsEditable}
           anchor={selectedEdgeAnchor}
           onClose={() => setSelectedEdgeId(undefined)}
@@ -1097,10 +1104,7 @@ function SchemaCanvasInner({
             setRelationshipRebindSourceSelection(relationship);
           }
         }}
-        onDelete={(relationship) => {
-          if (!onDeleteLogicalRelationship || !window.confirm(`Delete logical relationship “${relationship.name}”?\n\nThe database will not be changed.`)) return;
-          void onDeleteLogicalRelationship(relationship.id).catch(reportRelationshipError);
-        }}
+        onDelete={requestRelationshipDeletion}
         onToggle={(relationship) => {
           if (!onUpdateLogicalRelationship) return;
           void onUpdateLogicalRelationship({
@@ -1116,6 +1120,16 @@ function SchemaCanvasInner({
             disabled: relationship.status !== "disabled",
             allowTypeMismatch: relationship.status === "conflicted",
           }).catch(reportRelationshipError);
+        }}
+      /> : null}
+      {relationshipToDelete && relationshipsEditable && onDeleteLogicalRelationship ? <RelationshipDeleteDialog
+        key={`${relationshipToDelete.sourceId}:${relationshipToDelete.relationship.id}`}
+        relationship={relationshipToDelete.relationship}
+        onCancel={() => setRelationshipToDelete(undefined)}
+        onDelete={() => onDeleteLogicalRelationship(relationshipToDelete.relationship.id)}
+        onDeleted={() => {
+          setSelectedEdgeId(undefined);
+          setRelationshipToDelete(undefined);
         }}
       /> : null}
       {relationshipActionError ? <div className="relationship-action-error" role="alert">{relationshipActionError}<button type="button" onClick={() => setRelationshipActionError("")}>Dismiss</button></div> : null}

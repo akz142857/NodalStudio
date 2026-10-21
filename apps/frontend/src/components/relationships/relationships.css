@@ -1,0 +1,50 @@
+/* Model relationship surfaces use the same semantic tokens as Settings/Inspector. */
+.ds-surface.relationship-inspector { position: fixed; z-index: 70; display: grid; gap: var(--ds-space-3); width: 360px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow: auto; padding: var(--ds-space-4); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: 0 12px 38px #0003; font-size: var(--ds-text-control); overflow-wrap: anywhere; }
+.relationship-inspector > header { display: flex; align-items: start; justify-content: space-between; gap: var(--ds-space-3); }
+.relationship-inspector > header > div { min-width: 0; display: grid; gap: var(--ds-space-1); }
+.relationship-inspector h2, .relationship-delete-dialog h2 { margin: 0; font-size: var(--ds-text-heading); font-weight: var(--ds-weight-emphasis); }
+.relationship-inspector > header > button { display: grid; place-items: center; flex: 0 0 28px; width: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--ds-secondary); font-size: 20px; line-height: 1; }
+.relationship-kind { display: flex; align-items: center; gap: var(--ds-space-2); color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.relationship-kind::before { content: ""; width: 20px; border-top: 2px solid currentColor; }
+.relationship-kind[data-kind="logical"]::before { border-top-style: dashed; color: var(--ds-logical); }
+.relationship-kind[data-kind="inferred"]::before { border-top-style: dotted; color: var(--ds-warning); }
+.relationship-inspector p, .relationship-delete-dialog p { margin: 0; }
+.ds-surface .relationship-name { overflow-wrap: anywhere; color: var(--ds-secondary); font-family: var(--ds-font-mono); font-size: var(--ds-text-caption); }
+.ds-surface .relationship-fact-note { margin: 0; color: var(--ds-secondary); font-size: var(--ds-text-control); line-height: var(--ds-leading); }
+.ds-surface .relationship-endpoints { display: grid; gap: 0; margin: 0; padding: 0; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-control); background: var(--ds-window); }
+.ds-surface .relationship-endpoints > div { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: start; gap: var(--ds-space-2); padding: var(--ds-space-3); }
+.ds-surface .relationship-endpoints > div + div { border-top: 1px solid var(--ds-separator); }
+.ds-surface .relationship-endpoints dt { color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.ds-surface .relationship-endpoints dd { display: grid; gap: 2px; min-width: 0; margin: 0; font: inherit; overflow-wrap: anywhere; }
+.ds-surface .relationship-endpoints dd > span { font-weight: var(--ds-weight-medium); }
+.ds-surface .relationship-endpoints code { font: var(--ds-text-caption)/1.5 var(--ds-font-mono); color: var(--ds-secondary); }
+.relationship-inspector > dl:not(.relationship-endpoints) { display: grid; gap: var(--ds-space-2); margin: 0; }
+.relationship-inspector > dl:not(.relationship-endpoints) > div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: var(--ds-space-3); }
+.relationship-inspector dt { color: var(--ds-secondary); }
+.relationship-inspector dd { margin: 0; }
+.relationship-inspector > ul { margin: 0; padding-left: var(--ds-space-4); color: var(--ds-secondary); }
+.relationship-inspector .relationship-actions { display: flex; flex-wrap: wrap; gap: var(--ds-space-2); padding-top: var(--ds-space-3); border-top: 1px solid var(--ds-separator); }
+.relationship-inspector .relationship-actions button { padding: 4px 10px; border-color: var(--ds-border); color: var(--ds-text); background: var(--ds-control); }
+.relationship-inspector .relationship-actions .ds-primary { border-color: var(--ds-accent-fill); color: var(--ds-on-accent); background: var(--ds-accent-fill); }
+.relationship-inspector .relationship-actions .danger { margin-left: auto; color: var(--ds-danger); }
+.ds-surface.relationship-delete-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 32px); margin: auto; padding: var(--ds-space-5); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: 0 20px 60px #0005; overflow: auto; overflow-wrap: anywhere; }
+.relationship-delete-dialog[open] { display: grid; gap: var(--ds-space-4); }
+.relationship-delete-dialog::backdrop { background: #0006; }
+.relationship-delete-dialog > p { font-size: var(--ds-text-control); color: var(--ds-secondary); }
+.relationship-delete-dialog footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ds-space-2); }
+.relationship-delete-dialog .relationship-delete-action { color: var(--ds-danger); }
+.ds-surface .relationship-error { margin: 0; color: var(--ds-danger); font-size: var(--ds-text-control); }
+.ds-surface.relationship-dialog { max-height: calc(100vh - 32px); overflow: auto; width: min(480px, calc(100vw - 32px)); padding: var(--ds-space-5); gap: var(--ds-space-4); color: var(--ds-text); background: var(--ds-surface); border-color: var(--ds-border); border-radius: var(--ds-radius-group); font-size: var(--ds-text-control); }
+.ds-surface.relationship-dialog h2 { font-size: var(--ds-text-heading); font-weight: var(--ds-weight-emphasis); }
+.ds-surface.relationship-dialog header { align-items: start; }
+.ds-surface.relationship-dialog header p { color: var(--ds-secondary); font-size: var(--ds-text-caption); letter-spacing: normal; }
+.ds-surface.relationship-dialog header > button { color: var(--ds-secondary); }
+.ds-surface.relationship-dialog label { color: var(--ds-text); font-size: var(--ds-text-control); }
+.ds-surface.relationship-dialog :is(input:not([type="checkbox"]), select, textarea) { padding: 5px 8px; border-color: var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); background: var(--ds-field); font-size: var(--ds-text-control); }
+.ds-surface.relationship-dialog input[type="checkbox"] { min-height: 16px; width: 16px; flex: 0 0 auto; }
+.ds-surface.relationship-dialog .relationship-mismatch { align-items: start; color: var(--ds-warning); }
+.ds-surface.relationship-dialog .relationship-validation { color: var(--ds-warning); background: var(--ds-window); font-size: var(--ds-text-control); }
+.ds-surface.relationship-dialog .relationship-validation[data-valid="true"] { color: var(--ds-positive); }
+.ds-surface.relationship-dialog footer { display: flex; flex-wrap: wrap; gap: var(--ds-space-2); }
+.ds-surface.relationship-dialog footer button { color: var(--ds-text); background: var(--ds-control); border-color: var(--ds-border); padding: 4px 10px; }
+.ds-surface.relationship-dialog footer .ds-primary { color: var(--ds-on-accent); background: var(--ds-accent-fill); border-color: var(--ds-accent-fill); }

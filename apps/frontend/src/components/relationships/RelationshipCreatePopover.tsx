@@ -1,3 +1,5 @@
+import { RelationshipEndpoints } from "./RelationshipPresentation";
+import "./relationships.css";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type {
   LogicalRelationship,
@@ -26,10 +28,6 @@ interface RelationshipCreatePopoverProps {
   }) => Promise<RelationshipValidation>;
   onSave: (input: SaveLogicalRelationshipInput) => Promise<void>;
   onCancel: () => void;
-}
-
-function endpointLabel(endpoint: RelationshipEndpoint) {
-  return `${endpoint.schema}.${endpoint.table}.${endpoint.columns.join(", ")}`;
 }
 
 function defaultName(source: RelationshipEndpoint, target: RelationshipEndpoint) {
@@ -120,7 +118,7 @@ export function RelationshipCreatePopover({
     <div className="relationship-dialog-backdrop nodrag nopan" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onCancel();
     }}>
-      <form className="relationship-dialog" aria-label={existing ? "Edit logical relationship" : "Create logical relationship"} onSubmit={(event) => void submit(event)}>
+      <form className="ds-surface relationship-dialog" aria-label={existing ? "Edit logical relationship" : "Create logical relationship"} onSubmit={(event) => void submit(event)}>
         <header>
           <div>
             <p>MODEL ONLY · NO DATABASE CONSTRAINT</p>
@@ -128,10 +126,8 @@ export function RelationshipCreatePopover({
           </div>
           <button type="button" aria-label="Close" onClick={onCancel}>×</button>
         </header>
-        <dl>
-          <div><dt>From</dt><dd>{endpointLabel(draft.source)}</dd></div>
-          <div><dt>To</dt><dd>{endpointLabel(draft.target)}</dd></div>
-        </dl>
+        <p className="relationship-fact-note">A user-defined link in this model. Creating or editing it does not add or change database foreign keys.</p>
+        <RelationshipEndpoints source={draft.source} target={draft.target} />
         <label>Name<input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} autoFocus /></label>
         <label>Cardinality<select value={cardinality} onChange={(event) => setCardinality(event.target.value as RelationshipCardinality)}>{cardinalityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         <label>Note<textarea rows={3} value={note} maxLength={2_000} onChange={(event) => setNote(event.target.value)} placeholder="Why does this relationship exist?" /></label>
@@ -140,7 +136,7 @@ export function RelationshipCreatePopover({
         {error ? <p className="relationship-error" role="alert">{error}</p> : null}
         <footer>
           <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="submit" disabled={!canSave}>{status === "saving" ? "Saving…" : existing ? "Save changes" : "Create"}</button>
+          <button type="submit" className="ds-primary" disabled={!canSave}>{status === "saving" ? "Saving…" : existing ? "Save changes" : "Create"}</button>
         </footer>
       </form>
     </div>
