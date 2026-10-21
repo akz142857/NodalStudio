@@ -429,10 +429,28 @@ export function App() {
         lastViewMode: mode,
       },
     };
+    let active = true;
     const timer = window.setTimeout(() => {
-      void platform.updateAppSettings(next).then((effective) => setSettings(effective));
+      void platform.updateAppSettings(next)
+        .then((effective) => {
+          if (!active) return;
+          // This command returns only app settings, without source/project policy.
+          setSettings((current) => ({ ...current, app: effective.app }));
+        })
+        .catch((reason: unknown) => {
+          if (!active) return;
+          publishNoticeRef.current({
+            id: "workspace-settings-save-failed",
+            title: "Recent workspace could not be saved",
+            message: noticeReason(reason),
+            createdAt: new Date().toISOString(),
+          });
+        });
     }, 300);
-    return () => window.clearTimeout(timer);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
   }, [mode, runtime.data?.kind, settings.app, settingsLoaded, snapshot]);
 
   useEffect(() => {
