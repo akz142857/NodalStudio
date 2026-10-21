@@ -277,6 +277,28 @@ DMG_PATH="$(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -type f -name '*.dmg' -print -qu
 
 info "Verifying code signature"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+codesign --verify --verbose=2 "$DMG_PATH"
+
+# Tauri notarizes and staples the app, but only signs the outer DMG.
+info "Notarizing the distribution DMG"
+NOTARIZATION_PATH="$DMG_PATH.notarization.json"
+xcrun notarytool submit "$DMG_PATH" \
+  --key "$APPLE_API_KEY_PATH" \
+  --key-id "$APPLE_API_KEY" \
+  --issuer "$APPLE_API_ISSUER" \
+  --wait \
+  --timeout 30m \
+  --output-format json >"$NOTARIZATION_PATH"
+node -e '
+  const fs = require("node:fs");
+  const result = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  if (result.status !== "Accepted") {
+    console.error(`DMG notarization was not accepted: ${result.status} (${result.id})`);
+    process.exit(1);
+  }
+  console.log(`DMG notarization accepted: ${result.id}`);
+' "$NOTARIZATION_PATH"
+xcrun stapler staple "$DMG_PATH"
 
 info "Verifying Apple notarization ticket"
 xcrun stapler validate "$APP_PATH"
@@ -284,6 +306,7 @@ xcrun stapler validate "$DMG_PATH"
 
 info "Running Gatekeeper assessment"
 spctl --assess --type execute --verbose=4 "$APP_PATH"
+spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"
 
 CHECKSUM_PATH="$DMG_PATH.sha256"
 shasum -a 256 "$DMG_PATH" >"$CHECKSUM_PATH"
@@ -292,3 +315,4 @@ info "Release completed"
 echo "App:      $APP_PATH"
 echo "DMG:      $DMG_PATH"
 echo "SHA-256:  $CHECKSUM_PATH"
+echo "Notary:   $NOTARIZATION_PATH"
