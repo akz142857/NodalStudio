@@ -6,6 +6,7 @@ import type { NodalStudioPlatform, RuntimeInfo, TableAiContext } from "../platfo
 import { aiTable, tableAiPreview, tableAiResult, tableAiSettings } from "./table-ai-fixture";
 import { reportSemantics, reportSnapshot } from "./schema-report-fixture";
 import "../styles.css";
+import "../components/inspector.css";
 
 const archived = reportSnapshot.schemas[1].tables[0];
 const logical = reportSemantics.logicalRelationships[0];

@@ -63,9 +63,10 @@ export function KnowledgeReview({ platform, snapshot, semantics, table, desktop,
   const selected = states.find((s) => table && objectId(s.objectKey) === objectId(table.key) && s.objectKey.kind === "table");
   const pending = states.filter((s) => s.status !== "confirmed" && s !== selected);
   const editor = (target: import("../platform").ObjectKey) => <KnowledgeEditor key={JSON.stringify([target, semantics.annotations, states])} platform={platform} input={{ snapshotId: snapshot.id, target, requestId: null, interpretationIndex: null }} sourceId={snapshot.sourceId} onSaved={onRefresh} />;
-  return <section className="knowledge-review" aria-label="Local knowledge validity"><h3>Knowledge review on this device</h3>
+  return <section className="knowledge-review" aria-label="Local knowledge validity"><h3>Local review</h3>
     {table ? <><p><strong>{selected?.status === "confirmed" ? "Confirmed team statement" : selected?.status === "unavailable" ? "Object unavailable" : "Needs review"}</strong> · {selected?.reason ?? "No local confirmation has been recorded."}</p>{editor(table.key)}{selected?.confirmation ? <details><summary>Previous confirmation and original evidence</summary><pre>{JSON.stringify(selected.confirmation, null, 2)}</pre></details> : null}</> : null}
-    <p>{pending.length} other descriptions need review. Git, cloud and portable backups share text without proof of current validity.</p>
+    <p>{pending.length} other descriptions need review.</p>
+    <details><summary>About local confirmation</summary><p>Git, cloud and portable backups share text without proof of current validity. Confirm descriptions on this device against the current snapshot.</p></details>
     {pending.slice(0, limit).map((state) => <details key={JSON.stringify(state.objectKey)}><summary>{objectLabel(state.objectKey)} · {state.status}</summary><p>{state.reason}</p><p>{[...semantics.annotations, ...semantics.orphanedAnnotations].find((a) => JSON.stringify(a.objectKey) === JSON.stringify(state.objectKey))?.description}</p>{state.confirmation ? <pre>{JSON.stringify(state.confirmation, null, 2)}</pre> : null}{state.status !== "unavailable" ? editor(state.objectKey) : null}</details>)}
     {pending.length > limit ? <button onClick={() => setLimit((value) => value + 10)}>Show more pending descriptions</button> : null}
   </section>;

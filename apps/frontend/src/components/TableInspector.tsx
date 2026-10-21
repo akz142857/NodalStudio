@@ -36,9 +36,8 @@ export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStr
   const foreignColumns = new Set(table.foreignKeys.flatMap((key) => key.columns));
 
   return (
-    <div ref={structure}>
+    <div ref={structure} className="table-structure">
       <p className="inspector-comment" tabIndex={-1} data-evidence-target={focusedEvidence?.kind !== "logicalRelationship" && focused("table", table.key.name) ? "true" : undefined}>{table.comment ?? `${table.key.schema}.${table.key.name}`}</p>
-      {onOpenQuery ? <button type="button" className="inspector-query-button" onClick={() => onOpenQuery(table)}>Preview rows in Query</button> : null}
       <dl className="snapshot-summary">
         <div>
           <dt>Kind</dt>
@@ -53,6 +52,7 @@ export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStr
           <dd>{table.foreignKeys.length}</dd>
         </div>
       </dl>
+      {onOpenQuery ? <div className="inspector-actions"><button type="button" className="inspector-query-button" onClick={() => onOpenQuery(table)}>Preview rows in Query</button></div> : null}
 
       <section className="inspector-section">
         <h3>Columns</h3>
@@ -208,9 +208,9 @@ export function TableKnowledgeForm({
         />
         Mark as a core table
       </label>
-      <button type="submit" disabled={status === "saving"}>
+      <div className="inspector-actions"><button className="inspector-primary" type="submit" disabled={status === "saving"}>
         Save knowledge
-      </button>
+      </button></div>
     </form>
   );
 }

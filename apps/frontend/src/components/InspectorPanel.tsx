@@ -123,25 +123,29 @@ export function InspectorPanel({
 
   if (!snapshot) {
     return (
-      <>
+      <div className="inspector-view inspector-empty">
         <h2>Inspector</h2>
         <p>Connect a data source to inspect its model.</p>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
-      <h2>{segment === "structure" && evidenceTable ? `${evidenceTable.key.schema}.${evidenceTable.key.name}` : selectedTable ? selectedTable.key.name : snapshot.database.name}</h2>
-      {historicalSelection ? <p className="historical-selection-note">Deleted table · Before snapshot</p> : null}
-      <div className="inspector-segments">
-        <Segmented
-          label="Inspector section"
-          value={segment}
-          options={SEGMENTS}
-          onChange={setSegment}
-        />
-      </div>
+    <div className="inspector-view">
+      <header className="inspector-header">
+        <span className="inspector-context">{selectedTable ? `${(segment === "structure" && evidenceTable ? evidenceTable : selectedTable).key.schema} · Table` : "Database"}</span>
+        <h2 className="inspector-title">{segment === "structure" && evidenceTable ? `${evidenceTable.key.schema}.${evidenceTable.key.name}` : selectedTable ? selectedTable.key.name : snapshot.database.name}</h2>
+        {historicalSelection ? <p className="historical-selection-note">Deleted table · Before snapshot</p> : null}
+        <div className="inspector-segments">
+          <Segmented
+            label="Inspector section"
+            value={segment}
+            options={SEGMENTS}
+            onChange={setSegment}
+          />
+        </div>
+      </header>
+      <div className="inspector-body">
 
       {segment === "structure" ? (
         selectedTable ? (
@@ -210,17 +214,17 @@ export function InspectorPanel({
                 {(["high", "medium", "low", "informational"] as const).map((risk) => (
                   <div key={risk} data-risk={risk}>
                     <strong>{changeSet.riskSummary[risk]}</strong>
-                    <span>{risk}</span>
+                    <span title={risk === "informational" ? "Informational" : undefined}>{risk === "informational" ? "Info" : risk}</span>
                   </div>
                 ))}
               </div>
-              <p className="muted-copy">Before → After · Review each change and its snapshot properties in the change list.</p>
+              <p className="muted-copy">Compare Before and After in the change list.</p>
               {onReviewChanges ? <button className="review-changes-button" type="button" onClick={onReviewChanges}>Review all changes</button> : null}
             </section>
           ) : null}
           {changeSet && runtime?.kind === "desktop"
             && settings.app.advanced.extensions.migrationProvenance ? (
-              <ProvenancePanel changeSetId={changeSet.id} platform={platform} />
+              <details className="inspector-disclosure"><summary>Git & migration evidence</summary><ProvenancePanel changeSetId={changeSet.id} platform={platform} /></details>
             ) : null}
           <HistoryPanel
             key={snapshot.sourceId}
@@ -260,6 +264,7 @@ export function InspectorPanel({
           <p>Select a table to explain, or compare two snapshots to explain a change set.</p>
         )
       ) : null}
-    </>
+      </div>
+    </div>
   );
 }

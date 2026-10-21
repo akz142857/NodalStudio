@@ -93,7 +93,7 @@ export function KnowledgePanel({
   return (
     <section className="knowledge-panel" aria-label="Semantic model">
       <div className="section-heading">
-        <h2>Knowledge</h2>
+        <h2>Groups & views</h2>
         <button type="button" onClick={() => onApplyView(undefined)}>
           Clear view
         </button>
@@ -132,20 +132,24 @@ export function KnowledgePanel({
             ? `Use ${selectedTable.key.name} as the selected root.`
             : "Select a table to create a group or relationship view."}
         </p>
-        <div>
+        <div className="semantic-create-row">
+          <label className="semantic-name">Business group
           <input
+            aria-label="Business group"
             value={groupName}
             onChange={(event) => setGroupName(event.target.value)}
             placeholder="Business group"
             disabled={!selectedTable || pending}
-          />
+          /></label>
+          <label>Color
           <input
+            aria-label="Group color"
             className="color-input"
             type="color"
             value={groupColor}
             onChange={(event) => setGroupColor(event.target.value)}
             disabled={!selectedTable || pending}
-          />
+          /></label>
           <button
             type="button"
             disabled={!selectedTable || !groupName.trim() || pending}
@@ -154,14 +158,18 @@ export function KnowledgePanel({
             Add group
           </button>
         </div>
-        <div>
+        <div className="semantic-create-row">
+          <label className="semantic-name">Relationship view
           <input
+            aria-label="Saved relationship view"
             value={viewName}
             onChange={(event) => setViewName(event.target.value)}
             placeholder="Saved relationship view"
             disabled={!selectedTable || pending}
-          />
+          /></label>
+          <label>Depth
           <select
+            aria-label="Relationship depth"
             value={depth}
             onChange={(event) => setDepth(Number(event.target.value))}
             disabled={!selectedTable || pending}
@@ -170,7 +178,7 @@ export function KnowledgePanel({
             <option value={1}>1 hop</option>
             <option value={2}>2 hops</option>
             <option value={3}>3 hops</option>
-          </select>
+          </select></label>
           <button
             type="button"
             disabled={!selectedTable || !viewName.trim() || pending}
