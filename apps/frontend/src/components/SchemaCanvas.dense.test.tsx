@@ -156,4 +156,6 @@ it.each([16, 250])("retains the dense model, selects, exports and rebuilds all e
   fireEvent.click(screen.getByRole("button", { name: /1000 physical/ }));
   await frames.until(expectCompletePaint);
   expect(container.querySelectorAll("[data-shared-edge-layer]")).toHaveLength(1);
-}, 25000);
+// This checks 500 nodes / 1,000 edges in jsdom, not a wall-clock performance SLA.
+// Windows hosted runners need more time; frame and batch bounds above still apply.
+}, 120000);

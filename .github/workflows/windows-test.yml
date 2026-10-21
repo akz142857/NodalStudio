@@ -14,6 +14,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  frontend:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Windows frontend validation
+        run: |
+          pnpm typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm test
+          exit $LASTEXITCODE
+
   windows:
     runs-on: windows-2022
     timeout-minutes: 60
@@ -36,15 +58,9 @@ jobs:
           components: clippy,rustfmt
           targets: x86_64-pc-windows-msvc
       - uses: swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - run: pnpm install --frozen-lockfile
-      - name: Windows frontend validation
-        run: |
-          pnpm typecheck
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm lint
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm test
-          exit $LASTEXITCODE
       - name: Windows Rust validation (including real Credential Manager)
         run: |
           cargo fmt --all --check
