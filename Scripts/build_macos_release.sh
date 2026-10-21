@@ -100,7 +100,7 @@ cleanup() {
 }
 
 setup_temporary_keychain() {
-  [[ -n "${APPLE_CERTIFICATE_PATH:-}" ]] || return
+  [[ -n "${APPLE_CERTIFICATE_PATH:-}" ]] || return 0
   [[ -f "$APPLE_CERTIFICATE_PATH" ]] || fail "Certificate file not found: $APPLE_CERTIFICATE_PATH"
   [[ "$APPLE_CERTIFICATE_PATH" == *.p12 ]] || fail "APPLE_CERTIFICATE_PATH must point to a .p12 containing the certificate and private key"
   require_value APPLE_CERTIFICATE_PASSWORD
@@ -261,11 +261,12 @@ elif [[ "$BUILD_TARGET" != "host" ]]; then
 fi
 
 info "Building, signing, notarizing, and stapling Nodal Studio"
-BUILD_ARGS=(--bundles "$BUNDLE_FORMAT")
+# Keep the app bundle for signature, ticket, and Gatekeeper verification below.
+BUILD_ARGS=(--bundles "app,$BUNDLE_FORMAT")
 if [[ "$BUILD_TARGET" != "host" ]]; then
   BUILD_ARGS+=(--target "$BUILD_TARGET")
 fi
-pnpm --filter @nodalstudio/desktop tauri build "${BUILD_ARGS[@]}"
+pnpm --filter @nodalstudio/desktop tauri build "${BUILD_ARGS[@]}" -- --locked
 
 BUNDLE_ROOT="$(bundle_root)"
 APP_PATH="$BUNDLE_ROOT/macos/Nodal Studio.app"
