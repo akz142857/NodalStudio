@@ -153,6 +153,14 @@ pub struct LocalSnapshotStore {
 }
 
 impl LocalSnapshotStore {
+    /// Closes all pooled connections and waits for their file handles to be released.
+    ///
+    /// Call before moving or deleting a file-backed database on Windows. This also
+    /// closes the shared pool held by any clones of this store.
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
+
     /// Creates a consistent `SQLite` backup, including committed WAL contents.
     ///
     /// # Errors
@@ -239,7 +247,10 @@ impl LocalSnapshotStore {
             .connect_with(options)
             .await?;
         let store = Self { pool };
-        store.initialize().await?;
+        if let Err(error) = store.initialize().await {
+            store.close().await;
+            return Err(error);
+        }
         Ok(store)
     }
 

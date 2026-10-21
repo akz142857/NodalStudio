@@ -793,7 +793,7 @@ async fn version_four_migration_preserves_history_proof_and_foreign_keys() {
         .await
         .unwrap();
     db.close().await;
-    drop(store);
+    store.close().await;
     let migrated = LocalSnapshotStore::open_path(&path).await.unwrap();
     assert!(path.with_extension("pre-v4.bak").exists());
     assert_eq!(
@@ -830,13 +830,13 @@ async fn version_four_migration_preserves_history_proof_and_foreign_keys() {
         migrated.latest_snapshot(returned.source_id).await.unwrap(),
         Some(returned.clone())
     );
-    drop(migrated);
+    migrated.close().await;
     let reopened = LocalSnapshotStore::open_path(&path).await.unwrap();
     assert_eq!(
         reopened.latest_snapshot(returned.source_id).await.unwrap(),
         Some(returned)
     );
-    drop(reopened);
+    reopened.close().await;
     std::fs::remove_file(&path).unwrap();
     std::fs::remove_file(path.with_extension("pre-v4.bak")).unwrap();
 }
@@ -868,7 +868,7 @@ async fn failed_history_migration_rolls_back_without_dropping_existing_records()
         .execute(&db)
         .await
         .unwrap();
-    drop(store);
+    store.close().await;
     assert!(LocalSnapshotStore::open_path(&path).await.is_err());
     assert_eq!(
         sqlx::query_scalar::<_, i64>("PRAGMA user_version")
@@ -962,7 +962,7 @@ async fn failed_verified_storage_transaction_preserves_profile_snapshot_and_conf
             KnowledgeStatus::Confirmed
         );
         db.close().await;
-        drop(store);
+        store.close().await;
         std::fs::remove_file(path).unwrap();
     }
 }
