@@ -25,6 +25,10 @@ dist/releases/windows-0.1.0-test/
 ```
 
 The manifest records the source commit, dirty-state flag and binary hashes.
+`applicationSha256` is the original Cargo executable. Tauri changes its bundle-type
+marker when packaging NSIS and restores the Cargo file afterward. Installation
+verification normalizes only that exact marker and requires the complete remaining
+binary to match; the receipt also records the installed file's unmodified hash.
 The installer runs for the current user, supports English and Simplified Chinese,
 and downloads WebView2 Evergreen if it is absent; first installation therefore
 requires network access on machines without WebView2. The package is not an

@@ -29,6 +29,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Windows frontend validation
         run: |
+          node --test Scripts/tests/windows_bundle_hash.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm typecheck
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm lint
@@ -69,8 +71,21 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --workspace --locked
           exit $LASTEXITCODE
+      - name: Restore release compilation cache
+        id: release-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: target/x86_64-pc-windows-msvc/release
+          key: windows-release-v1-${{ hashFiles('Cargo.lock', 'pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: windows-release-v1-${{ hashFiles('Cargo.lock', 'pnpm-lock.yaml') }}-
       - name: Build unsigned installer and checksum
         run: ./Scripts/build_windows_test.ps1
+      - name: Save release compilation cache before lifecycle checks
+        if: steps.release-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: target/x86_64-pc-windows-msvc/release
+          key: ${{ steps.release-cache.outputs.cache-primary-key }}
       - name: Install, launch WebView2, verify persistence and uninstall
         run: ./Scripts/test_windows_package.ps1
       - name: Upload test package and evidence

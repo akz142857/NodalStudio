@@ -29,7 +29,8 @@ try {
     if ($installed.ExitCode -ne 0) { throw "Installer failed: $($installed.ExitCode)" }
     $binary = Join-Path $installDirectory 'nodalstudio-desktop.exe'
     if (-not (Test-Path $binary)) { throw 'Installed application not found.' }
-    if ((Get-FileHash $binary -Algorithm SHA256).Hash.ToLowerInvariant() -ne $manifest.applicationSha256) { throw 'Installed binary differs from build.' }
+    $binaryReceipt = & node "$PSScriptRoot/windows_bundle_hash.mjs" $binary $manifest.applicationSha256 | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { throw 'Installed binary differs from the expected NSIS payload.' }
     if ((Get-AuthenticodeSignature $binary).Status -ne 'NotSigned') { throw 'Unexpected signature status.' }
     $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $installDirectory 'smoke-webview-data'
     foreach ($phase in @('seed', 'verify')) {
@@ -38,7 +39,7 @@ try {
         $port = $listener.LocalEndpoint.Port
         $listener.Stop()
         $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$port --remote-debugging-address=127.0.0.1"
-        $application = Start-Process -FilePath $binary -PassThru
+        $application = Start-Process -FilePath $binary -PassThru -RedirectStandardOutput (Join-Path $evidence "app-$phase.stdout.log") -RedirectStandardError (Join-Path $evidence "app-$phase.stderr.log")
         & node "$PSScriptRoot/windows_webview_smoke.mjs" $port $phase $evidence
         if ($LASTEXITCODE -ne 0) { throw "Installed application acceptance failed: $phase" }
         if ($application.HasExited) { throw 'Application exited unexpectedly.' }
@@ -54,6 +55,8 @@ try {
     if (Test-Path $binary) { throw 'Application executable remains after uninstall.' }
     [ordered]@{
         status = 'passed'; installerSha256 = $manifest.sha256
+        installedApplicationSha256 = $binaryReceipt.installedSha256
+        applicationBuildSha256 = $binaryReceipt.buildSha256
         os = [Environment]::OSVersion.VersionString; architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
         checks = @('silent current-user installation', 'Unicode and spaces in install path', 'installed binary hash', 'unsigned signature status', 'WebView2 and IPC', 'SQLite and credential persistence after restart', 'silent uninstall')
         notTested = @('physical Windows 10/11 desktop', 'SmartScreen UX', 'missing WebView2 installation', 'live PostgreSQL/MySQL connection', 'signed update')
