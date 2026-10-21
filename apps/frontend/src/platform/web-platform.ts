@@ -452,6 +452,11 @@ export class WebPlatform implements NodalStudioPlatform {
     return Promise.reject(new Error("Portable backup import requires the desktop app."));
   }
 
+  getUpdateStatus(): Promise<import("./settings-types").UpdateStatus> { return Promise.reject(new Error("Updates require the desktop app.")); }
+  downloadUpdate(): Promise<void> { return Promise.reject(new Error("Updates require the desktop app.")); }
+  cancelUpdateDownload(): Promise<void> { return Promise.reject(new Error("Updates require the desktop app.")); }
+  installUpdate(): Promise<void> { return Promise.reject(new Error("Updates require the desktop app.")); }
+
   checkForUpdates(): Promise<UpdateCheckResult> {
     return Promise.reject(new Error("Desktop application updates are unavailable in Web Viewer."));
   }

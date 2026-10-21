@@ -1,0 +1,97 @@
+Nodal Studio — application updates, phase 1
+
+Scope
+Manual check, signed full download, cancellation/retry, explicit install/restart,
+local data backup and shared Settings design-system UI. macOS first.
+Automated publishing, scheduled checks, staged rollout and migration recovery UI
+remain later phases. The existing opt-in startup check is retained.
+
+Trust and state
+Rust owns the selected Update and its exact verified bytes. No install path, key,
+version or bytes are accepted from the WebView. The official Tauri updater verifies
+its signature. The signed archive must also contain the matching bundle identifier
+and version, and its declared executable must be present, nonempty and executable.
+Traversal, duplicate paths, multiple app roots, links, corrupt gzip trailers and
+oversized expanded archives are rejected. Both download and expanded archive sizes
+are limited to 512 MB. Transfers have a 30-minute total deadline and a 30-second
+connection/read timeout; the short feed-check deadline does not truncate downloads.
+HTTPS is required for both feed and downloads, including redirects.
+The first version permits no symlinks in an update archive (current bundles have none).
+Offline mode blocks check/download. Organization policy blocks all update operations.
+No credentials or database contents are sent to the update feed.
+A cancelled or interrupted download starts again on retry; resumable downloads are
+not implemented. Verified bytes live only in process memory and must be downloaded
+again after an ordinary quit.
+
+Install safety
+The shared frontend IPC bridge waits for running application operations and blocks
+new ones during installation. Native checks additionally cover active queries,
+captures, metadata synchronization and AI requests. Unsaved table knowledge,
+AI/Cloud drafts, model relationship editing and temporary DDL previews block restart.
+Query SQL drafts are persisted in local browser storage; query results are never
+persisted there. If a draft cannot be saved locally, installation is blocked even
+after leaving the query page. Factory reset clears the saved drafts. The install
+confirmation asks the user to finish all other edits first.
+Installation from /Volumes or an unwritable application parent is rejected. Free
+space is checked for the application, temporary directory and data directory.
+SQLite VACUUM INTO creates a consistent backup that includes committed WAL data;
+PRAGMA quick_check validates it before application replacement. The previous app
+is copied with ditto. Backups are retained in the app data directory under
+update-backups/<old-version>-<unique-id>/ and are not automatically deleted in phase 1.
+A replacement error attempts to restore the previous app and displays a retry or
+manual recovery message. This does not implement automatic rollback after a new
+version launches or after a database schema migration. Do not point an older app at
+a database with a newer schema. The tested first-phase versions share schema v5.
+On macOS, a helper waits for the old process to exit and opens the installed bundle
+through LaunchServices, so the new application gets a normal visible window.
+
+Local acceptance build (no real user data)
+Run Scripts/build_update_smoke.sh with Rust 1.95+, Node 24 and pnpm on the PATH.
+An optional first argument selects a NEW output directory. Existing output is never
+overwritten. The script creates a temporary test key and builds versions 0.1.1 and
+0.1.2 with bundle ID com.claycosmos.nodalstudio.updater-smoke.
+It creates target/updater-smoke/installed/Nodal Studio Update Test.app (0.1.1)
+and target/updater-smoke/serve/ containing the signed 0.1.2 upgrade.
+Start the loopback server using the command printed by the script, launch the
+installed test app, open Settings > Updates & About, and check/download/install.
+Confirm the restarted app reports 0.1.2 and retains synthetic local data.
+To test rejection first, replace serve/latest.json with serve/bad-signature.json;
+restore it from serve/valid.json, recheck and retry.
+Only the explicitly enabled updater-smoke-test feature AND a bundle ID ending in
+.updater-smoke permit a loopback HTTP URL. A normal build never accepts HTTP.
+Never distribute these acceptance apps or the test signing key.
+
+Acceptance recorded on Apple Silicon, 2026-10-21
+Two Release builds upgraded 0.1.1 -> 0.1.2 through the real Settings UI.
+Invalid signature rejected; valid signature accepted; Not now preserved the ready
+state; install backed up the old app/database and reopened the new window.
+The restarted app reported 0.1.2 and a subsequent check reported up to date.
+All rows in the synthetic connections, snapshots, annotations and logical
+relationships tables matched both the live database and the verified backup.
+Original user data was not used: the acceptance bundle has its own data directory.
+Frontend: 620 tests passed. Full Rust workspace: 141 tests passed, 4 opt-in tests
+ignored (desktop/store subset: 74 passed). External database integration requires
+its separately configured test services; those services were not part of this run.
+Workspace Clippy with all targets/features, type checking, lint and Release builds passed.
+When system proxies are enabled, native tests need explicit loopback exceptions:
+NO_PROXY=localhost,127.0.0.1,::1 cargo test -p nodalstudio-desktop -p snapshot-store
+
+Enable a real distribution later
+1. Generate and securely back up a dedicated Tauri updater signing key. Keep the
+   private key out of source control; only the public key is embedded in the app.
+2. Copy config/updater.conf.example.json to a private build config and supply the
+   public key and real HTTPS endpoint. {channel} is replaced with stable or beta.
+3. Set TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD in the
+   build environment. Build with the config override and createUpdaterArtifacts.
+   Never enable updater-smoke-test for distribution. Configure Developer ID signing
+   and Apple notarization separately; updater signatures do not replace them.
+4. Publish the app.tar.gz and its .sig. The feed uses the standard Tauri static JSON
+   shape: version, notes, platforms.darwin-aarch64.url and
+   platforms.darwin-aarch64.signature (file CONTENT, not a .sig URL).
+5. Upload immutable artifacts before publishing the feed. Keep bundle ID and the
+   application version consistent. Runtime version is read from Tauri package info.
+6. Users of the old 0.1.0 app must install the first updater-enabled build manually.
+
+References
+https://v2.tauri.app/plugin/updater/
+https://v2.tauri.app/distribute/sign/macos/

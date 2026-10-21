@@ -21,6 +21,7 @@ import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
 import type { OpenQueryRequest } from "./components/query/QueryPage";
 import { tablePreviewSql } from "./components/query/query-format";
+import { clearQuerySessions } from "./components/query/query-state";
 import { searchSchema, type SchemaSearchResult } from "./graph/schema-search";
 import { domainMembershipAddition } from "./graph/table-selection";
 import { getPlatform } from "./platform";
@@ -493,7 +494,6 @@ export function App() {
     if (
       !automaticUpdateChecked.current &&
       settings.app.updates.automaticChecks &&
-      settings.app.updates.customFeedUrl &&
       !settings.app.privacy.offlineMode
     ) {
       automaticUpdateChecked.current = true;
@@ -1050,6 +1050,9 @@ export function App() {
           }}
           onDataSourcesChanged={async () => setDataSources(await platform.listDataSources())}
           onFactoryReset={() => {
+            clearQuerySessions();
+            setMode("explore");
+            setOpenQueryRequest(undefined);
             setSnapshot(undefined);
             setChangeSet(undefined);
             setSelectedTable(undefined);

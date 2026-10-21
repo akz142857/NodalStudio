@@ -153,6 +153,40 @@ pub struct LocalSnapshotStore {
 }
 
 impl LocalSnapshotStore {
+    /// Creates a consistent `SQLite` backup, including committed WAL contents.
+    ///
+    /// # Errors
+    /// Returns an error if the destination exists, cannot be written, or fails integrity checks.
+    pub async fn backup_for_update(&self, destination: &Path) -> Result<(), SnapshotStoreError> {
+        if destination.exists() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "Backup already exists",
+            )
+            .into());
+        }
+        sqlx::query("VACUUM INTO ?")
+            .bind(destination.to_string_lossy().as_ref())
+            .execute(&self.pool)
+            .await?;
+        let backup = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(destination)
+                    .read_only(true),
+            )
+            .await?;
+        let check = sqlx::query_scalar::<_, String>("PRAGMA quick_check")
+            .fetch_one(&backup)
+            .await?;
+        backup.close().await;
+        if check != "ok" {
+            return Err(std::io::Error::other("Update backup integrity check failed").into());
+        }
+        Ok(())
+    }
+
     /// Opens a `SQLite` database and creates the `Nodal Studio` tables when needed.
     ///
     /// # Errors
@@ -2322,6 +2356,41 @@ mod tests {
         assert!(store.import_portable_model(&bundle).await.is_err());
         assert_eq!(store.get_data_source(source_id).await.unwrap(), None);
         assert!(store.list_snapshots(source_id).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_backup_includes_committed_wal_and_does_not_overwrite() {
+        let root = std::env::temp_dir().join(format!("nodal-update-backup-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let store = LocalSnapshotStore::open_path(root.join("source.sqlite3"))
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA journal_mode=WAL")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE upgrade_marker (value TEXT)")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO upgrade_marker VALUES ('keep me')")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        let destination = root.join("backup.sqlite3");
+        store.backup_for_update(&destination).await.unwrap();
+        assert!(store.backup_for_update(&destination).await.is_err());
+        let backup = LocalSnapshotStore::open_path(&destination).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT value FROM upgrade_marker")
+                .fetch_one(&backup.pool)
+                .await
+                .unwrap(),
+            "keep me"
+        );
+        backup.pool.close().await;
+        store.pool.close().await;
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[tokio::test]

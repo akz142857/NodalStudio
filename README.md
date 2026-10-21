@@ -156,6 +156,12 @@ The Sandbox grants outgoing network access and read/write access to files and
 folders explicitly selected by the user. Persistent access after relaunch must
 be tested separately because macOS may require security-scoped bookmarks.
 
+## Application updates
+
+For macOS application updates, the local acceptance builds and later HTTPS feed
+configuration are documented in [docs/UPDATES.txt](./docs/UPDATES.txt). The default
+build leaves the production update endpoint and signing public key unconfigured.
+
 ## Cloud API and read-only Web viewer
 
 The optional cloud stack stores schema metadata only. Start PostgreSQL, the

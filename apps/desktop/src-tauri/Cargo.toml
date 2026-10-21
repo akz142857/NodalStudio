@@ -36,6 +36,14 @@ tauri.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
+tauri-plugin-updater = "2"
+flate2 = "1.1.9"
+tar = "0.4.46"
+plist = "1.10.0"
 
 [lints]
 workspace = true
+
+[features]
+# Only for isolated loopback upgrade acceptance builds. Never enable for distribution.
+updater-smoke-test = []

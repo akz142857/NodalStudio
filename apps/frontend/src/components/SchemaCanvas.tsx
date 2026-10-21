@@ -3,6 +3,7 @@ import {
   Controls,
   ReactFlow,
   ReactFlowProvider,
+  PanOnScrollMode,
   SelectionMode,
   applyNodeChanges,
   useEdgesState,
@@ -62,6 +63,7 @@ import {
   inferredRelationshipRuleKey,
 } from "../graph/schema-graph";
 import { TableNode } from "./TableNode";
+import { useFieldRowConnection } from "./use-field-row-connection";
 import { DiagramMiniMap } from "./DiagramMiniMap";
 import { relationshipEndpointFromHandle, sameRelationshipEndpoint } from "../graph/relationship-interaction";
 import { presentEdgesDuringDrag, prioritiseMovingEdges } from "../graph/drag-edge-presentation";
@@ -81,6 +83,7 @@ const nodeTypes = { table: TableNode } satisfies NodeTypes;
 const edgeTypes = { comparison: ComparisonEdge };
 const sharedEdgeTypes = { comparison: SharedEdge, default: SharedEdge, smoothstep: SharedEdge };
 const multiSelectionKeys = ["Shift", "Meta", "Control"];
+const zoomActivationKeys = ["Meta", "Control"];
 const emptyDomainGroups: DomainGroup[] = [];
 
 export interface CanvasLocateRequest {
@@ -207,6 +210,12 @@ function SchemaCanvasInner({
   const [selectedEdgeAnchor, setSelectedEdgeAnchor] = useState<{ edgeId: string; x: number; y: number }>();
   const [columnContextMenu, setColumnContextMenu] = useState<{ x: number; y: number; source: RelationshipEndpoint }>();
   const relationshipsEditable = !readOnlyPreview && !changeSet && Boolean(onValidateLogicalRelationship && onCreateLogicalRelationship);
+  const fieldConnection = useFieldRowConnection({
+    enabled: relationshipsEditable && !spacePanMode && !boxSelectMode && !exportRendering && !interactionPaused && !relationshipDraft && !relationshipPickSource && !relationshipRebindSourceSelection,
+    scope: `${layoutFingerprint}:${query}:${savedView?.id ?? ""}:${focusNodeId ?? ""}`,
+    onStart: setConnectionDragSource,
+    onComplete: (source, target) => setRelationshipDraft({ source, target, origin: "manual" }),
+  });
   const showInferredRelationships =
     !readOnlyPreview && (inferredRelationshipOverride ?? canvasSettings.showInferredRelationships);
   const showPhysicalRelationships =
@@ -286,7 +295,7 @@ function SchemaCanvasInner({
   const temporaryReason = temporaryViewLabel || (readOnlyPreview ? "Read-only DDL preview; no source workspace or database connection." : changeSet ? "Comparison diagram." : runtimeKind === "web" ? "Shared Web diagram."
     : savedView ? "Business domain / saved view." : query ? "Search results." : focusNodeId ? "Focused diagram." : undefined);
   const inPlaceExport = exportRendering && nodes.length < 100;
-  const canvasInteraction = useMemo(() => ({ spacePanMode, overviewEnabled: nodes.length >= 100, exportRendering: inPlaceExport, layoutEditingDisabled: inPlaceExport || !layoutReady || (!temporaryReason && !layoutLoaded) }), [spacePanMode, layoutReady, temporaryReason, layoutLoaded, nodes.length, inPlaceExport]);
+  const canvasInteraction = useMemo(() => ({ spacePanMode, rowConnectionActive: fieldConnection.active, overviewEnabled: nodes.length >= 100, exportRendering: inPlaceExport, layoutEditingDisabled: inPlaceExport || !layoutReady || (!temporaryReason && !layoutLoaded) }), [spacePanMode, fieldConnection.active, layoutReady, temporaryReason, layoutLoaded, nodes.length, inPlaceExport]);
   const layoutScope = JSON.stringify([selectionScope, query, focusNodeId, savedView?.id, runtimeKind, layoutLoaded, readOnlyPreview]);
   const historyScope = useMemo(() => JSON.stringify([layoutScope, graph.nodes.map((node) => node.id).sort()]), [layoutScope, graph.nodes]);
   const layoutHistory = useRef(new DiagramLayoutHistory());
@@ -830,8 +839,8 @@ function SchemaCanvasInner({
         onClear={() => setNodes((current) => current.map((node) => node.selected ? { ...node, selected: false } : node))} /> : null}
       <div className="schema-canvas-surface" data-exporting={exportRendering || undefined}
         onPointerDownCapture={(event) => { guardExportInput(event, exportRendering); }}
-        onMouseDownCapture={(event) => { guardExportInput(event, exportRendering); }}
-        onClickCapture={(event) => { guardExportInput(event, exportRendering); }}
+        onMouseDownCapture={(event) => { if (!exportRendering) fieldConnection.onMouseDown(event); guardExportInput(event, exportRendering); }}
+        onClickCapture={(event) => { fieldConnection.onClick(event); guardExportInput(event, exportRendering); }}
         onDoubleClickCapture={(event) => { guardExportInput(event, exportRendering); }}
         onKeyDownCapture={(event) => { guardExportInput(event, exportRendering); }}
         onWheelCapture={(event) => { guardExportInput(event, exportRendering); }}
@@ -875,7 +884,8 @@ function SchemaCanvasInner({
         }}
         onConnectEnd={() => setConnectionDragSource(undefined)}
         isValidConnection={isValidRelationshipConnection}
-        connectionLineStyle={{ stroke: "#7c3aed", strokeWidth: 2, strokeDasharray: "8 5" }}
+        connectionLineStyle={{ stroke: "var(--ds-logical)", strokeWidth: 2, strokeDasharray: "8 5" }}
+        connectionDragThreshold={6}
         autoPanOnConnect
         onConnect={(connection) => {
           const source = connectionEndpoint(connection, "source");
@@ -895,6 +905,12 @@ function SchemaCanvasInner({
         paneClickDistance={6}
         panOnDrag={boxSelectMode ? [1, 2] : true}
         panActivationKeyCode="Space"
+        panOnScroll
+        panOnScrollMode={PanOnScrollMode.Free}
+        panOnScrollSpeed={1}
+        zoomOnScroll={false}
+        zoomOnPinch
+        zoomActivationKeyCode={zoomActivationKeys}
         zoomOnDoubleClick={false}
         edgesFocusable
         edgesReconnectable={false}

@@ -369,3 +369,14 @@ export interface AiProviderTestResult {
   testedAt: string;
   networkUsed: boolean;
 }
+
+export interface UpdateStatus extends UpdateCheckResult {
+  phase: "idle" | "checking" | "available" | "upToDate" | "downloading" | "verifying" | "ready" | "installing" | "error";
+  downloadedBytes: number;
+  totalBytes: number | null;
+  checkedAt: string | null;
+  error: string | null;
+  configured: boolean;
+  canDownload: boolean;
+  canInstall: boolean;
+}

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./desktop-invoke";
 import type {
   FileExportReceipt,
   SchemaReportExportInput,
@@ -385,6 +385,11 @@ export class TauriPlatform implements NodalStudioPlatform {
   importPortableBackup(path: string): Promise<BackupReceipt> {
     return invoke<BackupReceipt>("import_portable_backup", { input: { sourceId: null, path } });
   }
+
+  getUpdateStatus(): Promise<import("./settings-types").UpdateStatus> { return invoke("get_update_status"); }
+  downloadUpdate(): Promise<void> { return invoke("download_update"); }
+  cancelUpdateDownload(): Promise<void> { return invoke("cancel_update_download"); }
+  installUpdate(): Promise<void> { return invoke("install_update"); }
 
   checkForUpdates(): Promise<UpdateCheckResult> {
     return invoke<UpdateCheckResult>("check_for_updates");

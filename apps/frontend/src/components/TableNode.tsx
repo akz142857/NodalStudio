@@ -15,7 +15,7 @@ import { useCanvasSettings } from "./CanvasSettingsContext";
 
 function TableNodeComponent({ id, data, selected, width, height, exportIndexesExpanded }: NodeProps<TableNodeType> & { exportIndexesExpanded?: boolean }) {
   const settings = useCanvasSettings();
-  const { spacePanMode, layoutEditingDisabled, overviewEnabled, exportRendering, exportReplica } = useCanvasInteraction();
+  const { spacePanMode, rowConnectionActive, layoutEditingDisabled, overviewEnabled, exportRendering, exportReplica } = useCanvasInteraction();
   const exportDetail = useExportTableDetail(id);
   const measurementPaused = exportRendering || exportDetail !== undefined;
   const updateNodeInternals = useBatchedNodeInternals();
@@ -46,13 +46,13 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
 
   // Set on every node while a relationship connection is in flight, so a drop can
   // land on a column that has no relationship yet.
-  const revealAllHandles = data.relationshipConnectTargets !== undefined;
+  const revealAllHandles = data.relationshipConnectTargets !== undefined && !rowConnectionActive;
 
   // A boolean selector only notifies nodes when crossing the detail threshold.
   const overviewZoom = useStore((state) => state.transform[2] < 0.35);
   const measurementKey = JSON.stringify([visibleColumns.map((column) => column.name), settings.showTableComments && data.table.comment, width, height]);
   const compact = exportDetail !== undefined ? !exportDetail : Boolean(overviewEnabled && overviewZoom && !exportRendering && !selected
-    && !data.inspectorFocused && !data.relationshipHighlighted && !revealAllHandles
+    && !data.inspectorFocused && !data.relationshipHighlighted && !revealAllHandles && !rowConnectionActive
     && (measuredLayout === measurementKey || data.initialColumnCenters !== undefined));
   // Overview keeps measurable ports for React Flow's own ResizeObserver, but
   // needs no connection-state subscriptions. Selection / connecting restores
@@ -175,8 +175,9 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
               else columnRefs.current.delete(column.name);
             }}
             data-column-name={column.name}
+            data-row-connectable={data.relationshipsEditable && !spacePanMode && !exportRendering || undefined}
             data-change={changeStatus}
-            title={data.columnNotes?.[column.name]}
+            title={data.columnNotes?.[column.name] ?? (data.relationshipsEditable ? "Drag this field to another field to create a model relationship" : undefined)}
             data-relationship-column={data.relationshipColumn === column.name || undefined}
             data-connect-target={data.relationshipConnectTargets?.[column.name]}
             onMouseEnter={() => showColumnHandles(column.name)}
@@ -252,7 +253,7 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
           && (referencedColumns.has(column.name) || data.relationshipsEditable);
         const sourceEnabled = (settings.fieldLevelEdges || data.relationshipsEditable)
           && (foreignColumns.has(column.name) || inferredColumns.has(column.name) || logicalColumns.has(column.name) || data.relationshipsEditable);
-        return <div className="field-handle-row" key={column.name} style={{ top }}>
+        return <div className="field-handle-row" data-column-name={column.name} key={column.name} style={{ top }}>
           {targetEnabled ? <>
             <Port passive={passivePorts} nodeId={id} id={`target:${column.name}:left`} className="field-handle field-handle-left field-handle-target" type="target" position={Position.Left} isConnectable={data.relationshipsEditable} />
             <Port passive={passivePorts} nodeId={id} id={`target:${column.name}:right`} className="field-handle field-handle-right field-handle-target" type="target" position={Position.Right} isConnectable={data.relationshipsEditable} />

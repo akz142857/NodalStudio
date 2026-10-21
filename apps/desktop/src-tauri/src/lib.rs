@@ -62,6 +62,7 @@ mod export_file;
 mod knowledge;
 mod schema_report;
 mod table_understanding;
+mod updates;
 
 #[tauri::command]
 async fn save_schema_report(
@@ -146,13 +147,13 @@ async fn acquire_cloud_operation(
 struct RuntimeInfo {
     kind: &'static str,
     label: &'static str,
-    version: &'static str,
+    version: String,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DiagnosticInfo {
-    app_version: &'static str,
+    app_version: String,
     rust_version: &'static str,
     target: &'static str,
     data_directory: String,
@@ -431,23 +432,6 @@ struct DeleteSourceSelection {
 #[derive(Deserialize)]
 struct FactoryResetInput {
     confirmation: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct UpdateManifest {
-    version: String,
-    download_url: String,
-    notes: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct UpdateCheckResult {
-    current_version: String,
-    available_version: Option<String>,
-    download_url: Option<String>,
-    notes: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -759,11 +743,12 @@ struct SemanticBundle {
 type CaptureSnapshotResult = snapshot_store::StoredSnapshotCapture;
 
 #[tauri::command]
-fn get_runtime_info() -> RuntimeInfo {
+#[allow(clippy::needless_pass_by_value)]
+fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
     RuntimeInfo {
         kind: "desktop",
         label: "Tauri desktop runtime",
-        version: env!("CARGO_PKG_VERSION"),
+        version: app.package_info().version.to_string(),
     }
 }
 
@@ -779,7 +764,7 @@ fn get_diagnostic_info(app: tauri::AppHandle) -> Result<DiagnosticInfo, String> 
         .app_log_dir()
         .map_err(|_| "Unable to locate the application log directory.".to_owned())?;
     Ok(DiagnosticInfo {
-        app_version: env!("CARGO_PKG_VERSION"),
+        app_version: app.package_info().version.to_string(),
         rust_version: env!("CARGO_PKG_RUST_VERSION"),
         target: std::env::consts::OS,
         data_directory: data_directory.to_string_lossy().into_owned(),
@@ -3276,55 +3261,6 @@ fn validate_portable_backup(bundle: &PortableBackup) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn check_for_updates(state: State<'_, AppState>) -> Result<UpdateCheckResult, String> {
-    let effective = effective_settings(&state.store, None).await?;
-    if effective.app.privacy.offline_mode {
-        return Err("Update checks are blocked by completely offline mode.".into());
-    }
-    let feed = effective
-        .app
-        .updates
-        .custom_feed_url
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "Configure an update feed URL before checking for updates.".to_owned())?;
-    let url = reqwest::Url::parse(feed)
-        .map_err(|_| "The update feed must be a valid HTTPS URL.".to_owned())?;
-    if url.scheme() != "https" {
-        return Err("The update feed must use HTTPS.".into());
-    }
-    state
-        .store
-        .record_external_access("updates", "attempted")
-        .await
-        .map_err(safe_store_error)?;
-    let manifest = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|_| "Unable to initialize the update client.".to_owned())?
-        .get(url)
-        .send()
-        .await
-        .map_err(|_| "The update feed is unreachable.".to_owned())?
-        .error_for_status()
-        .map_err(|_| "The update feed rejected the request.".to_owned())?
-        .json::<UpdateManifest>()
-        .await
-        .map_err(|_| "The update feed returned an invalid manifest.".to_owned())?;
-    let current = semver::Version::parse(env!("CARGO_PKG_VERSION"))
-        .map_err(|_| "The current application version is invalid.".to_owned())?;
-    let available = semver::Version::parse(&manifest.version)
-        .map_err(|_| "The update manifest version is invalid.".to_owned())?;
-    let is_newer = available > current;
-    Ok(UpdateCheckResult {
-        current_version: current.to_string(),
-        available_version: is_newer.then_some(manifest.version),
-        download_url: is_newer.then_some(manifest.download_url),
-        notes: is_newer.then_some(manifest.notes),
-    })
-}
-
-#[tauri::command]
 async fn save_annotation(
     input: SaveAnnotationInput,
     state: State<'_, AppState>,
@@ -4690,6 +4626,8 @@ fn safe_git_workspace_error(error: &git_workspace::GitWorkspaceError) -> String 
 /// Panics when Tauri cannot initialize the configured desktop runtime or local store.
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::UpdateState::default())
         .manage(table_understanding::TableAiState::default())
         .manage(discovery::DiscoveryAiState::default())
         .manage(knowledge::KnowledgeDrafts::default())
@@ -4697,7 +4635,8 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;
             let database_path = data_dir.join("nodalstudio.sqlite3");
-            if !database_path.exists()
+            if app.config().identifier == "com.claycosmos.nodalstudio"
+                && !database_path.exists()
                 && let Some(application_support) = data_dir.parent()
             {
                 let legacy_database = application_support
@@ -4724,99 +4663,112 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            save_diagram_export,
-            save_diagram_export_binary,
-            save_schema_report,
-            get_runtime_info,
-            get_diagnostic_info,
-            reveal_app_directory,
-            list_data_sources,
-            save_data_source,
-            test_postgres_connection,
-            verify_and_refresh_data_source,
-            capture_postgres_snapshot,
-            execute_readonly_query,
-            cancel_query,
-            list_query_history,
-            delete_query_history,
-            clear_query_history,
-            list_snapshots,
-            get_snapshot,
-            compare_snapshots,
-            compare_environment_snapshots,
-            save_change_provenance,
-            save_code_lineage,
-            export_git_workspace,
-            preview_git_export,
-            preview_git_import,
-            import_git_workspace,
-            get_settings,
-            update_app_settings,
-            update_data_source_settings,
-            reset_app_settings,
-            reset_data_source_settings,
-            update_organization_policy,
-            refresh_organization_policy,
-            list_cloud_audit,
-            bootstrap_cloud_account,
-            refresh_cloud_session,
-            create_cloud_project,
-            list_cloud_shares,
-            create_cloud_share,
-            revoke_cloud_share,
-            rotate_cloud_share,
-            update_project_settings,
-            get_storage_usage,
-            clear_layouts,
-            clear_regenerable_cache,
-            rename_data_source,
-            duplicate_data_source,
-            preview_source_data_deletion,
-            generate_event_trigger_script,
-            delete_source_data,
-            factory_reset,
-            save_ai_credential,
-            save_cloud_credential,
-            clear_credentials,
-            get_security_status,
-            list_sync_diagnostics,
-            list_external_access,
-            check_merge_driver,
-            read_git_conflict_report,
-            delete_git_conflict_report,
-            export_settings_file,
-            preview_settings_file,
-            import_settings_file,
-            export_portable_backup,
-            preview_portable_backup,
-            import_portable_backup,
-            check_for_updates,
-            get_semantics,
-            knowledge::prepare_knowledge_draft,
-            knowledge::confirm_knowledge_draft,
-            knowledge::cancel_knowledge_draft,
-            list_logical_relationships,
-            validate_logical_relationship,
-            create_logical_relationship,
-            update_logical_relationship,
-            delete_logical_relationship,
-            ignore_relationship_inference,
-            list_ignored_relationship_inferences,
-            save_annotation,
-            save_domain_group,
-            save_view,
-            save_layout,
-            explain_schema,
-            table_understanding::prepare_table_explanation,
-            table_understanding::run_table_explanation,
-            table_understanding::cancel_table_explanation,
-            discovery::prepare_discovery,
-            discovery::run_discovery,
-            discovery::cancel_discovery,
-            test_ai_provider,
-            sync_project
-        ])
+        .invoke_handler(|invoke| {
+            if updates::reject_during_install(&invoke) {
+                invoke
+                    .resolver
+                    .reject("An update is being installed. Please wait for the app to restart.");
+                return true;
+            }
+            let handler: fn(tauri::ipc::Invoke) -> bool = tauri::generate_handler![
+                save_diagram_export,
+                save_diagram_export_binary,
+                save_schema_report,
+                get_runtime_info,
+                get_diagnostic_info,
+                reveal_app_directory,
+                list_data_sources,
+                save_data_source,
+                test_postgres_connection,
+                verify_and_refresh_data_source,
+                capture_postgres_snapshot,
+                execute_readonly_query,
+                cancel_query,
+                list_query_history,
+                delete_query_history,
+                clear_query_history,
+                list_snapshots,
+                get_snapshot,
+                compare_snapshots,
+                compare_environment_snapshots,
+                save_change_provenance,
+                save_code_lineage,
+                export_git_workspace,
+                preview_git_export,
+                preview_git_import,
+                import_git_workspace,
+                get_settings,
+                update_app_settings,
+                update_data_source_settings,
+                reset_app_settings,
+                reset_data_source_settings,
+                update_organization_policy,
+                refresh_organization_policy,
+                list_cloud_audit,
+                bootstrap_cloud_account,
+                refresh_cloud_session,
+                create_cloud_project,
+                list_cloud_shares,
+                create_cloud_share,
+                revoke_cloud_share,
+                rotate_cloud_share,
+                update_project_settings,
+                get_storage_usage,
+                clear_layouts,
+                clear_regenerable_cache,
+                rename_data_source,
+                duplicate_data_source,
+                preview_source_data_deletion,
+                generate_event_trigger_script,
+                delete_source_data,
+                factory_reset,
+                save_ai_credential,
+                save_cloud_credential,
+                clear_credentials,
+                get_security_status,
+                list_sync_diagnostics,
+                list_external_access,
+                check_merge_driver,
+                read_git_conflict_report,
+                delete_git_conflict_report,
+                export_settings_file,
+                preview_settings_file,
+                import_settings_file,
+                export_portable_backup,
+                preview_portable_backup,
+                import_portable_backup,
+                updates::check_for_updates,
+                updates::get_update_status,
+                updates::download_update,
+                updates::cancel_update_download,
+                updates::install_update,
+                get_semantics,
+                knowledge::prepare_knowledge_draft,
+                knowledge::confirm_knowledge_draft,
+                knowledge::cancel_knowledge_draft,
+                list_logical_relationships,
+                validate_logical_relationship,
+                create_logical_relationship,
+                update_logical_relationship,
+                delete_logical_relationship,
+                ignore_relationship_inference,
+                list_ignored_relationship_inferences,
+                save_annotation,
+                save_domain_group,
+                save_view,
+                save_layout,
+                explain_schema,
+                table_understanding::prepare_table_explanation,
+                table_understanding::run_table_explanation,
+                table_understanding::cancel_table_explanation,
+                discovery::prepare_discovery,
+                discovery::run_discovery,
+                discovery::cancel_discovery,
+                test_ai_provider,
+                sync_project
+            ];
+            handler(invoke)
+        })
         .run(tauri::generate_context!())
         .expect("failed to run Nodal Studio desktop application");
 }
@@ -4824,12 +4776,6 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn reports_desktop_runtime() {
-        let info = get_runtime_info();
-        assert_eq!(info.kind, "desktop");
-    }
 
     #[test]
     fn rejects_incomplete_connection_input() {

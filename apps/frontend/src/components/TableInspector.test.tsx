@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { SaveAnnotationInput, TableDefinition } from "../platform";
+import type { ObjectAnnotation, SaveAnnotationInput, TableDefinition } from "../platform";
 import { TableKnowledgeForm } from "./TableInspector";
+import { assertUpdateCanRestart } from "../platform/update-guard";
 
 const table: TableDefinition = {
   key: { kind: "table", schema: "public", name: "users" },
@@ -28,6 +30,24 @@ const table: TableDefinition = {
 };
 
 describe("TableInspector", () => {
+  it("releases the update blocker after tags are saved with normalized spacing", async () => {
+    function KnowledgeEditor() {
+      const [annotation, setAnnotation] = useState<ObjectAnnotation>();
+      return <TableKnowledgeForm table={table} sourceId="source" annotation={annotation} onSaveAnnotation={(input) => {
+        setAnnotation({ ...input, updatedAt: new Date().toISOString() });
+        return Promise.resolve();
+      }} />;
+    }
+    render(<KnowledgeEditor />);
+    fireEvent.change(screen.getByLabelText("Tags"), { target: { value: "identity,core,  " } });
+    expect(assertUpdateCanRestart).toThrow("table knowledge edits");
+    fireEvent.click(screen.getByRole("button", { name: "Save knowledge" }));
+    await waitFor(() => expect(screen.getByText("Saved")).toBeVisible());
+    expect(assertUpdateCanRestart).not.toThrow();
+    fireEvent.change(screen.getByLabelText("Tags"), { target: { value: "identity,core,security" } });
+    expect(assertUpdateCanRestart).toThrow("table knowledge edits");
+  });
+
   it("saves normalized team knowledge for a table", async () => {
     const save = vi.fn<(input: SaveAnnotationInput) => Promise<void>>().mockResolvedValue();
     render(

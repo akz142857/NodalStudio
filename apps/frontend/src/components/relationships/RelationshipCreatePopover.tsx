@@ -1,3 +1,4 @@
+import { useUpdateBlocker } from "../../platform/update-guard";
 import { RelationshipEndpoints } from "./RelationshipPresentation";
 import "./relationships.css";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -49,6 +50,7 @@ export function RelationshipCreatePopover({
   onSave,
   onCancel,
 }: RelationshipCreatePopoverProps) {
+  useUpdateBlocker("save or close the model relationship editor", true);
   const existing = draft.relationship;
   const [name, setName] = useState(existing?.name ?? defaultName(draft.source, draft.target));
   const [cardinality, setCardinality] = useState<RelationshipCardinality>(existing?.cardinality ?? "unspecified");

@@ -1,3 +1,5 @@
+import { UpdatePanel } from "./settings/UpdatePanel";
+import { useUpdateBlocker } from "../platform/update-guard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
 import { SettingsSection, SettingsGroup, ToggleRow, SelectRow, RangeRow, NumberRow, TextRow, SecretRow } from "./settings/SettingsControls";
@@ -16,7 +18,6 @@ import {
   type StorageUsage,
   type SecurityStatus,
   type MergeDriverStatus,
-  type UpdateCheckResult,
   type SyncDiagnostic,
   type AiProviderTestResult,
   type DiagnosticInfo,
@@ -105,7 +106,6 @@ export function SettingsPage({
   const [settingsFilePath, setSettingsFilePath] = useState("");
   const [operationMessage, setOperationMessage] = useState("");
   const [backupPath, setBackupPath] = useState("");
-  const [updateResult, setUpdateResult] = useState<UpdateCheckResult>();
   const [syncDiagnostics, setSyncDiagnostics] = useState<SyncDiagnostic[]>([]);
   const [cloudAudit, setCloudAudit] = useState<CloudAuditEntry[]>([]);
   const [externalAccess, setExternalAccess] = useState<ExternalAccessRecord[]>([]);
@@ -134,6 +134,9 @@ export function SettingsPage({
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
   }, [visibleCategory]);
+  useUpdateBlocker("save or discard AI settings edits", JSON.stringify(aiDraft) !== JSON.stringify(settings.source?.ai) || Boolean(aiSecret));
+  useUpdateBlocker("save or discard Cloud settings edits", JSON.stringify(cloudDraft) !== JSON.stringify(settings.source?.cloud) || Boolean(cloudSecret));
+  useUpdateBlocker("wait for settings to finish saving", saveState === "saving");
   const shortcutConflicts = useMemo(() => {
     const byBinding = new Map<string, string[]>();
     for (const [command, binding] of Object.entries(settings.app.shortcuts.bindings)) {
@@ -553,13 +556,8 @@ export function SettingsPage({
           {visibleCategory === "updates" ? (
             <SettingsSection title="Updates & About" description="Application version, update channel, licenses, and diagnostic paths.">
               <StatusCard status={`v${runtime?.version ?? "0.1.0"}`} label={`${runtime?.label ?? "Nodal Studio"} · Tauri/Rust desktop and independent Web Viewer`} />
-              <SettingsGroup title="Updates">
-              <ToggleRow label="Automatically check for updates" checked={app.updates.automaticChecks} managed={isManaged("updates.automaticChecks")} onChange={(automaticChecks) => void saveApp({ ...app, updates: { ...app.updates, automaticChecks } })} />
-              <StatusCard status={app.updates.channel === "beta" ? "Beta channel" : "Stable channel"} label="Beta updates are an advanced opt-in." />
-              <TextRow label="Update feed" value={app.updates.customFeedUrl ?? ""} placeholder="https://updates.example/manifest.json" onChange={(customFeedUrl) => void saveApp({ ...app, updates: { ...app.updates, customFeedUrl: customFeedUrl || null } })} />
-              <div className="setting-action-row"><button type="button" disabled={runtime?.kind === "web" || app.privacy.offlineMode} onClick={() => void runOperation(async () => setUpdateResult(await platform.checkForUpdates()))}>Check for updates</button><button type="button" onClick={() => setAboutDocument("releaseNotes")}>Release notes</button><button type="button" onClick={() => setAboutDocument("license")}>License</button><button type="button" onClick={() => setAboutDocument("notices")}>Third-party notices</button></div>
-              {updateResult ? <div className="settings-status-card"><strong>{updateResult.availableVersion ? `Version ${updateResult.availableVersion} available` : "Nodal Studio is up to date"}</strong><span>{updateResult.notes ?? `Current version ${updateResult.currentVersion}`}</span></div> : null}
-              </SettingsGroup>
+              <UpdatePanel platform={platform} runtime={runtime} app={app} managed={isManaged("updates.automaticChecks")} onSave={saveApp} />
+              <div className="setting-action-row"><button type="button" onClick={() => setAboutDocument("releaseNotes")}>Release notes</button><button type="button" onClick={() => setAboutDocument("license")}>License</button><button type="button" onClick={() => setAboutDocument("notices")}>Third-party notices</button></div>
               <SettingsGroup title="Diagnostics & files">
               <div className="setting-action-row"><button type="button" onClick={() => void runOperation(async () => setDiagnosticInfo(await platform.getDiagnosticInfo()))}>Show runtime & paths</button><button type="button" disabled={runtime?.kind === "web"} onClick={() => void runOperation(() => platform.revealAppDirectory("logs"))}>Open logs directory</button><button type="button" disabled={runtime?.kind === "web"} onClick={() => void runOperation(() => platform.revealAppDirectory("data"))}>Open data directory</button><button type="button" onClick={() => void runOperation(async () => { const info = diagnosticInfo ?? await platform.getDiagnosticInfo(); setDiagnosticInfo(info); await navigator.clipboard.writeText(redactedDiagnosticSummary(info, app)); setOperationMessage("Redacted diagnostic summary copied."); })}>Copy diagnostic summary</button></div>
               {diagnosticInfo ? <div className="external-capabilities"><h3>Runtime</h3><div><span>Application</span><b>{diagnosticInfo.appVersion}</b></div><div><span>Rust requirement</span><b>{diagnosticInfo.rustVersion}</b></div><div><span>Target</span><b>{diagnosticInfo.target}</b></div><div><span>Data directory</span><b>{diagnosticInfo.dataDirectory}</b></div><div><span>Log directory</span><b>{diagnosticInfo.logDirectory}</b></div></div> : null}

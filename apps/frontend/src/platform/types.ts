@@ -619,6 +619,10 @@ export interface NodalStudioPlatform {
   previewPortableBackup(path: string): Promise<import("./settings-types").BackupPreview>;
   importPortableBackup(path: string): Promise<import("./settings-types").BackupReceipt>;
   checkForUpdates(): Promise<import("./settings-types").UpdateCheckResult>;
+  getUpdateStatus(): Promise<import("./settings-types").UpdateStatus>;
+  downloadUpdate(): Promise<void>;
+  cancelUpdateDownload(): Promise<void>;
+  installUpdate(): Promise<void>;
   deleteSourceData(sourceId: string, options: import("./settings-types").DeleteSourceDataOptions): Promise<number>;
   previewSourceDataDeletion(sourceId: string): Promise<import("./settings-types").SourceDataImpact>;
   generateEventTriggerScript(sourceId: string): Promise<string>;

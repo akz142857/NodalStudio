@@ -125,6 +125,7 @@ function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"])
     exportPortableBackup: vi.fn(),
     previewPortableBackup: vi.fn(),
     importPortableBackup: vi.fn(),
+    getUpdateStatus: vi.fn(), downloadUpdate: vi.fn(), cancelUpdateDownload: vi.fn(), installUpdate: vi.fn(),
     checkForUpdates: vi.fn(),
     deleteSourceData: vi.fn(),
     previewSourceDataDeletion: vi.fn(),

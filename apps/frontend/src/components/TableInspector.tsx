@@ -1,3 +1,4 @@
+import { useUpdateBlocker } from "../platform/update-guard";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { ObjectAnnotation, SaveAnnotationInput, TableAiEvidence, TableDefinition } from "../platform";
 
@@ -139,6 +140,9 @@ export function TableKnowledgeForm({
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string>();
 
+  const normalizedTags = tags.split(",").map((tag) => tag.trim()).filter(Boolean);
+  useUpdateBlocker("save or discard table knowledge edits", status === "saving" || description !== (annotation?.description ?? "") || JSON.stringify(normalizedTags) !== JSON.stringify(annotation?.tags ?? []) || owner !== (annotation?.owner ?? "") || isCore !== (annotation?.isCore ?? false));
+
   async function saveAnnotation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatus("saving");
@@ -147,10 +151,7 @@ export function TableKnowledgeForm({
         sourceId,
         objectKey: table.key,
         description: description || null,
-        tags: tags
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean),
+        tags: normalizedTags,
         owner: owner || null,
         isCore,
       });

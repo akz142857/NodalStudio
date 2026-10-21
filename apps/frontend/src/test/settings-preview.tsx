@@ -28,7 +28,8 @@ const platform = {
   listCloudShares: () => Promise.resolve([]),
   getDiagnosticInfo: () => Promise.resolve({ appVersion: "0.1.0", rustVersion: "1.95", target: "aarch64-apple-darwin", dataDirectory: "/Preview/Application Support/NodalStudio", logDirectory: "/Preview/Logs/NodalStudio" }),
   testAiProvider: () => Promise.resolve({ provider: "Preview", model: "preview-model", testedAt: "2026-10-21T00:00:00Z", networkUsed: false }),
-  checkForUpdates: () => Promise.resolve({ currentVersion: "0.1.0", availableVersion: null, notes: "Synthetic preview; no request was sent." }),
+  checkForUpdates: () => Promise.resolve({ phase: "upToDate", currentVersion: "0.1.0", availableVersion: null, notes: "Synthetic preview; no request was sent.", downloadedBytes: 0, totalBytes: null, checkedAt: null, error: null, configured: true, canDownload: false, canInstall: false }),
+  getUpdateStatus: () => Promise.resolve({ phase: "idle", currentVersion: "0.1.0", availableVersion: null, downloadedBytes: 0, totalBytes: null, checkedAt: null, error: null, configured: true, canDownload: false, canInstall: false }),
 } as unknown as NodalStudioPlatform;
 
 export function Preview() {

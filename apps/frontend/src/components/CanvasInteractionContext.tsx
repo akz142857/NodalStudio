@@ -3,6 +3,7 @@ import type { ExportDetailStore } from "./export-detail-store";
 
 interface CanvasInteractionState {
   spacePanMode: boolean;
+  rowConnectionActive?: boolean;
   layoutEditingDisabled?: boolean;
   overviewEnabled?: boolean;
   exportRendering?: boolean;

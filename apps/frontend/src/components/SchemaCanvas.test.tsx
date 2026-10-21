@@ -35,6 +35,34 @@ describe("SchemaCanvas table selection", () => {
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+  it("pans the viewport on horizontal and vertical wheel input without moving tables or changing zoom", async () => {
+    const save = vi.fn();
+    const { container } = render(<CanvasHarness semantics={positionedSemantics} onSaveLayout={save} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
+    const pane = container.querySelector(".react-flow__pane")!;
+    const viewport = container.querySelector<HTMLElement>(".react-flow__viewport")!;
+    const transform = () => {
+      const values = viewport.style.transform.match(/translate\(([-\d.]+)px,([-\d.]+)px\) scale\(([-\d.]+)\)/)!;
+      return values.slice(1).map(Number);
+    };
+    const positions = Array.from(container.querySelectorAll<HTMLElement>(".react-flow__node"), (node) => node.style.transform);
+    const before = transform();
+    fireEvent.wheel(pane, { deltaX: 90, deltaY: 0, deltaMode: 0 });
+    await waitFor(() => expect(transform()[0]).toBeCloseTo(before[0] - 90));
+    expect(transform()[1]).toBeCloseTo(before[1]); expect(transform()[2]).toBe(before[2]);
+    fireEvent.wheel(pane, { deltaX: -30, deltaY: 45, deltaMode: 0 });
+    await waitFor(() => expect(transform()[0]).toBeCloseTo(before[0] - 60));
+    expect(transform()[1]).toBeCloseTo(before[1] - 45); expect(transform()[2]).toBe(before[2]);
+    // Line-mode wheel deltas from mice are normalized by the canvas library.
+    fireEvent.wheel(pane, { deltaX: 2, deltaY: 0, deltaMode: 1 });
+    await waitFor(() => expect(transform()[0]).toBeCloseTo(before[0] - 100));
+    expect(Array.from(container.querySelectorAll<HTMLElement>(".react-flow__node"), (node) => node.style.transform)).toEqual(positions);
+    expect(save).not.toHaveBeenCalled();
+    // WebKit/Chromium represent trackpad pinch as a control-modified wheel event.
+    fireEvent.wheel(pane, { deltaY: -30, deltaMode: 0, ctrlKey: true, clientX: 200, clientY: 200 });
+    await waitFor(() => expect(transform()[2]).toBeGreaterThan(before[2]));
+  });
+
   it("places working selection tools above the canvas, removes the floating panel and allows dismissing layout results", async () => {
     const { container } = render(<CanvasHarness runtimeKind="web" />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
@@ -653,4 +681,103 @@ describe("SchemaCanvas table selection", () => {
     expect(save).toHaveBeenCalledTimes(writes);
   });
 
+});
+
+// Real row events exercise the same canvas path as the desktop WebView. Only
+// hit-testing geometry is supplied because jsdom has no rendered layout.
+describe("field-row relationship gestures", () => {
+  let hit: Element | null = null;
+  beforeEach(() => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    vi.stubGlobal("DOMMatrixReadOnly", class { m22 = 1; });
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1200);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(700);
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => hit });
+    hit = null;
+    localStorage.clear();
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(document, "elementFromPoint");
+    vi.restoreAllMocks(); vi.unstubAllGlobals();
+  });
+  async function setup(props: Partial<SchemaCanvasProps> = {}) {
+    const create = vi.fn().mockResolvedValue({});
+    const validate = vi.fn().mockResolvedValue({ valid: true, compatible: true, duplicate: false, physicalExists: false, suggestedCardinality: "manyToOne", status: "active", messages: [] });
+    const view = render(<CanvasHarness onCreateLogicalRelationship={create} onValidateLogicalRelationship={validate} {...props} />);
+    await waitFor(() => expect(view.container.querySelector('.react-flow__node[data-id="public.orders"] .table-column')).not.toBeNull());
+    const source = view.container.querySelector<HTMLElement>('.react-flow__node[data-id="public.orders"] .table-column[data-column-name="id"]')!;
+    const target = view.container.querySelector<HTMLElement>('.react-flow__node[data-id="public.customers"] .table-column[data-column-name="id"]')!;
+    return { ...view, source, target, create, validate };
+  }
+  function mouse(target: Element | Document, type: string, x: number, modifiers = {}) {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: type === "mouseup" ? 0 : 1, clientX: x, clientY: 300, ...modifiers });
+    // Vitest's Window proxy is rejected by jsdom's constructor, while D3 needs
+    // event.view for its native drag suppression/cleanup.
+    Object.defineProperty(event, "view", { value: window });
+    fireEvent(target, event);
+  }
+  function start(source: HTMLElement, modifiers = {}) { mouse(source.querySelector(".column-type")!, "mousedown", 800, modifiers); }
+  function move(x = 200) { mouse(document, "mousemove", x); }
+  function release(x = 200) { mouse(document, "mouseup", x); }
+
+  it("drags a row's type area onto another entire row and requires confirmation before saving", async () => {
+    const { source, target, create, validate } = await setup();
+    hit = target.querySelector(".column-type"); start(source); move(); release();
+    expect(await screen.findByRole("heading", { name: "Create logical relationship" })).toBeVisible();
+    expect(screen.getByLabelText("Name")).toHaveValue("orders_id_customers_id");
+    expect(create).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create" })).toBeEnabled());
+    expect(validate).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ source: { schema: "public", table: "orders", columns: ["id"] }, target: { schema: "public", table: "customers", columns: ["id"] }, origin: "manual" })));
+  });
+  it("transfers keyboard focus to the table when pressing a field", async () => {
+    const { source } = await setup();
+    const previous = screen.getByRole("button", { name: "Auto layout" });
+    previous.focus();
+    start(source); release(800);
+    expect(source.closest(".react-flow__node")).toHaveFocus();
+  });
+  it("cancels a connection when the pointer returns after releasing outside the window", async () => {
+    const { source, target, validate } = await setup();
+    hit = target; start(source); move();
+    expect(source).toHaveAttribute("data-row-source", "true");
+    mouse(document, "mousemove", 200, { buttons: 0 });
+    expect(source).not.toHaveAttribute("data-row-source");
+    expect(target).not.toHaveAttribute("data-row-drop");
+    release();
+    expect(screen.queryByRole("heading", { name: "Create logical relationship" })).toBeNull();
+    expect(validate).not.toHaveBeenCalled();
+  });
+  it("only completes the connection when the initiating mouse button is released", async () => {
+    const { source, target, validate } = await setup();
+    hit = target; start(source); move();
+    mouse(document, "mouseup", 200, { button: 2, buttons: 1 });
+    expect(source).toHaveAttribute("data-row-source", "true");
+    expect(validate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("heading", { name: "Create logical relationship" })).toBeNull();
+    release();
+    expect(await screen.findByRole("heading", { name: "Create logical relationship" })).toBeVisible();
+  });
+  it.each(["click", "blank", "same", "escape", "blur"])("does not create a relationship for %s", async (kind) => {
+    const { source, target, create, validate } = await setup();
+    hit = kind === "blank" ? null : kind === "same" ? source : target;
+    start(source); move(kind === "click" ? 803 : 200);
+    if (kind === "escape") fireEvent.keyDown(document, { key: "Escape" });
+    if (kind === "blur") fireEvent(window, new Event("blur"));
+    release(kind === "click" ? 803 : 200);
+    expect(screen.queryByRole("heading", { name: "Create logical relationship" })).toBeNull();
+    expect(source).not.toHaveAttribute("data-row-source");
+    expect(target).not.toHaveAttribute("data-row-drop");
+    expect(create).not.toHaveBeenCalled(); expect(validate).not.toHaveBeenCalled();
+  });
+  it("leaves modifier selection and read-only previews outside the connection gesture", async () => {
+    const view = await setup(); hit = view.target;
+    start(view.source, { shiftKey: true }); move(); release();
+    expect(screen.queryByRole("heading", { name: "Create logical relationship" })).toBeNull();
+    view.unmount();
+    const readOnly = await setup({ readOnlyPreview: true }); hit = readOnly.target;
+    start(readOnly.source); move(); release();
+    expect(readOnly.create).not.toHaveBeenCalled(); expect(readOnly.validate).not.toHaveBeenCalled();
+  });
 });

@@ -1,0 +1,9 @@
+{
+  "bundle": { "createUpdaterArtifacts": true },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_THE_CONTENTS_OF_YOUR_UPDATE_PUBLIC_KEY_FILE",
+      "endpoints": ["https://updates.example.invalid/{channel}.json"]
+    }
+  }
+}

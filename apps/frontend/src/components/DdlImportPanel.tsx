@@ -1,3 +1,4 @@
+import { useUpdateBlocker } from "../platform/update-guard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppSettings, RuntimeInfo, TableDefinition } from "../platform";
 import { ddlLimits, type DdlDialect, type DdlPreview } from "../ddl/ddl-types";
@@ -31,6 +32,7 @@ export function DdlImportPanel({ canvasSettings, runtimeKind, onClose }: { canva
     if (file.size > ddlLimits.bytes) throw new Error("File exceeds the 1 MiB preview limit.");
     const bytes = await file.arrayBuffer(); try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { throw new Error("File is not valid UTF-8. Convert it to UTF-8 before previewing."); }
   });
+  useUpdateBlocker("finish and close the temporary DDL preview", Boolean(text.trim()) || busy);
   const run = () => {
     if (busy || !text.trim()) return;
     controller.current?.abort(); const abort = new AbortController(); controller.current = abort; setNotice(undefined);

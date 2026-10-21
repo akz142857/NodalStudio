@@ -1,0 +1,18 @@
+.update-summary { display:flex; align-items:center; gap:var(--ds-space-3); padding:var(--ds-space-4); }
+.update-summary h3 { margin:0; font-size:var(--ds-text-heading); font-weight:var(--ds-weight-emphasis); }
+.update-summary p { margin:var(--ds-space-1) 0 0; color:var(--ds-secondary); }
+.update-symbol { display:grid; place-items:center; width:40px; height:40px; flex:none; border-radius:var(--ds-radius-group); background:var(--ds-selection); color:var(--ds-accent); font-size:24px; }
+.update-verified { margin-left:auto; font-size:var(--ds-text-caption); color:var(--ds-positive); }
+.update-help { margin:0; padding:var(--ds-space-2) var(--ds-space-4); color:var(--ds-secondary); font-size:var(--ds-text-caption); }
+.update-notes { white-space:pre-wrap; overflow-wrap:anywhere; max-height:240px; overflow:auto; }
+.update-progress { display:grid; gap:var(--ds-space-2); padding:var(--ds-space-4); font-size:var(--ds-text-caption); color:var(--ds-secondary); }
+.update-progress progress { width:100%; height:6px; accent-color:var(--ds-accent-fill); }
+.update-error { color:var(--ds-danger); padding:var(--ds-space-3) var(--ds-space-4); overflow-wrap:anywhere; }
+.ds-surface .update-primary { background:var(--ds-accent-fill); color:var(--ds-on-accent); border-color:transparent; }
+.ds-surface .update-primary:hover:not(:disabled) { background:var(--ds-accent-hover); }
+.update-confirmation { width:min(420px, calc(100vw - 48px)); max-height:calc(100vh - 48px); overflow:auto; padding:var(--ds-space-6); border:1px solid var(--ds-border); border-radius:var(--ds-radius-group); background:var(--ds-surface); color:var(--ds-text); box-shadow:0 12px 40px #0004; }
+.update-confirmation::backdrop { background:#0005; }
+.update-confirmation h2 { margin:0 0 var(--ds-space-3); font-size:var(--ds-text-heading); }
+.update-confirmation p { color:var(--ds-secondary); font-size:var(--ds-text-body); line-height:var(--ds-leading); }
+.update-confirmation .update-error { color:var(--ds-danger); padding:0; }
+.update-confirmation footer { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:var(--ds-space-2); margin-top:var(--ds-space-5); }

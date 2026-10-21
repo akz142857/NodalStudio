@@ -235,6 +235,7 @@ export function buildSchemaGraph(
   const nodes: TableNode[] = tables.map(({ schema, table, inspectionTable, changeStatus, columnChanges, columnNotes }, index) => ({
     id: tableNodeId(schema, table.key.name),
     type: "table",
+    dragHandle: ".table-node > header",
     selected: options.selectedNodeId === tableNodeId(schema, table.key.name),
     position: {
       x: (index % 4) * 320,

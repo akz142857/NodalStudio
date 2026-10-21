@@ -2129,9 +2129,9 @@ select {
   height: 9px;
   min-width: 9px;
   min-height: 9px;
-  border: 2px solid #fff;
-  background: #7c3aed;
-  box-shadow: 0 0 0 1px #7c3aed;
+  border: 2px solid var(--ds-surface);
+  background: var(--ds-logical);
+  box-shadow: 0 0 0 1px var(--ds-logical);
   z-index: 12;
   opacity: 1;
   pointer-events: auto;
@@ -2151,29 +2151,29 @@ select {
 }
 
 .relationship-picking-mode .table-column[data-connect-target="valid"] {
-  background: #ecfdf3;
-  box-shadow: inset 3px 0 #22a447;
+  background: color-mix(in srgb, var(--ds-positive) 10%, transparent);
+  box-shadow: inset 3px 0 var(--ds-positive);
 }
 
 .relationship-picking-mode .table-column[data-connect-target="warning"] {
-  background: #fffbeb;
-  box-shadow: inset 3px 0 #d99a21;
+  background: color-mix(in srgb, var(--ds-warning) 12%, transparent);
+  box-shadow: inset 3px 0 var(--ds-warning);
 }
 
 .relationship-picking-mode .table-column[data-connect-target="invalid"] {
-  color: #9ca3af;
-  background: #f3f4f6;
+  color: var(--ds-tertiary);
+  background: color-mix(in srgb, var(--ds-tertiary) 8%, transparent);
   cursor: not-allowed;
 }
 
 .relationship-picking-mode .table-column[data-connect-target="valid"] .field-handle-target {
-  background: #22a447;
-  box-shadow: 0 0 0 1px #22a447;
+  background: var(--ds-positive);
+  box-shadow: 0 0 0 1px var(--ds-positive);
 }
 
 .relationship-picking-mode .table-column[data-connect-target="warning"] .field-handle-target {
-  background: #d99a21;
-  box-shadow: 0 0 0 1px #d99a21;
+  background: var(--ds-warning);
+  box-shadow: 0 0 0 1px var(--ds-warning);
 }
 
 .field-handle-row .field-handle-left {
@@ -3285,3 +3285,13 @@ select {
 .schema-canvas-flow .react-flow__edges > svg:has(> g.diagram-edge-proxy:empty) {
   display: none;
 }
+
+/* Field-row gestures share the relationship design-system colors. */
+.table-node > header { cursor: grab; }
+.table-node[data-pinned] > header { cursor: default; }
+.table-column[data-row-connectable] { user-select: none; cursor: crosshair; }
+.table-column[data-row-connectable]:hover { background: color-mix(in srgb, var(--ds-logical) 8%, transparent); }
+.table-column[data-row-source] { background: color-mix(in srgb, var(--ds-logical) 16%, transparent); box-shadow: inset 3px 0 var(--ds-logical); }
+.table-column[data-row-drop="valid"] { background: color-mix(in srgb, var(--ds-positive) 20%, transparent); outline: 1px solid var(--ds-positive); outline-offset: -1px; }
+.table-column[data-row-drop="valid"][data-connect-target="warning"] { background: color-mix(in srgb, var(--ds-warning) 20%, transparent); outline-color: var(--ds-warning); }
+.table-column[data-row-drop="invalid"] { cursor: not-allowed; outline: 1px solid var(--ds-danger); outline-offset: -1px; }
