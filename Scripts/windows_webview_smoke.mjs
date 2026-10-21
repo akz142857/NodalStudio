@@ -66,8 +66,11 @@ try {
   const receiptFile = join(output, 'smoke-source.json');
   if (phase === 'seed') {
     assert.deepEqual(await invoke('list_data_sources'), [], 'Smoke test requires an empty profile');
-    settings.app.appearance.theme = 'dark';
+    assert.equal(typeof settings.app.general.theme, 'string', 'Theme setting contract changed');
+    settings.app.general.theme = 'dark';
     await invoke('update_app_settings', { settings: settings.app });
+    const saved = await invoke('get_settings', { input: { sourceId: null } });
+    assert.equal(saved.app.general.theme, 'dark', 'Theme did not persist before restart');
     // Dummy endpoint: save only; never test/connect to this address.
     const profile = await invoke('save_data_source', { input: {
       id: null, displayName: 'Windows 持久化测试', host: '127.0.0.1', port: 1,
@@ -80,7 +83,7 @@ try {
     checks.push('SQLite settings and Unicode source saved', 'Credential Manager write visible');
   } else {
     const { sourceId } = JSON.parse(await readFile(receiptFile, 'utf8'));
-    assert.equal(settings.app.appearance.theme, 'dark');
+    assert.equal(settings.app.general.theme, 'dark');
     const profiles = await invoke('list_data_sources');
     assert(profiles.some(profile => profile.id === sourceId && profile.displayName === 'Windows 持久化测试'));
     const security = await invoke('get_security_status', { input: { sourceId } });
