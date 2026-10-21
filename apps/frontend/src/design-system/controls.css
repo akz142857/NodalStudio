@@ -1,0 +1,71 @@
+/* Opt-in control primitives. Native semantics and keyboard behavior are kept. */
+.ds-surface {
+  color-scheme: var(--ds-color-scheme);
+  color: var(--ds-text);
+  font-family: var(--ds-font-ui);
+  font-size: var(--ds-text-body);
+  line-height: var(--ds-leading);
+  accent-color: var(--ds-accent-fill);
+}
+.ds-surface :where(button, input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--ds-control-height);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-control);
+  color: var(--ds-text);
+  font: inherit;
+  font-size: var(--ds-text-control);
+  line-height: var(--ds-leading);
+}
+.ds-surface :where(input, select, textarea) { padding: 5px 8px; background: var(--ds-field); }
+.ds-surface :where(input, textarea)::placeholder { color: var(--ds-tertiary); opacity: 1; }
+.ds-surface :where(button) {
+  padding: 4px 10px;
+  color: var(--ds-text);
+  background: var(--ds-control);
+  font-weight: var(--ds-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--ds-motion-fast), border-color var(--ds-motion-fast);
+}
+.ds-surface :where(button):hover:not(:disabled) { background: var(--ds-hover); }
+.ds-surface :where(button):active:not(:disabled) { background: var(--ds-selected-control); }
+.ds-surface :where(button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
+}
+.ds-surface :where(button, input, select, textarea):disabled { opacity: .5; cursor: default; }
+.ds-surface .ds-primary { border-color: var(--ds-accent-fill); color: var(--ds-on-accent); background: var(--ds-accent-fill); }
+.ds-surface .ds-primary:hover:not(:disabled) { border-color: var(--ds-accent-hover); background: var(--ds-accent-hover); }
+.ds-surface .ds-switch {
+  appearance: none;
+  position: relative;
+  width: 32px;
+  height: 20px;
+  min-height: 20px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--ds-border);
+  border-radius: 12px;
+  background: var(--ds-control);
+  cursor: pointer;
+  transition: background-color var(--ds-motion-fast);
+}
+.ds-surface .ds-switch::before {
+  content: "";
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ds-tertiary);
+  box-shadow: var(--ds-shadow);
+  transition: transform var(--ds-motion-fast);
+}
+.ds-surface .ds-switch:checked { border-color: var(--ds-accent-fill); background: var(--ds-accent-fill); }
+.ds-surface .ds-switch:checked::before { transform: translateX(12px); background: var(--ds-on-accent); }
+.ds-surface input[type="range"] { padding: 0; border: 0; background: transparent; cursor: pointer; }
+.ds-surface input[aria-invalid="true"] { border-color: var(--ds-danger); }
+@media (forced-colors: active) {
+  .ds-surface .ds-switch { appearance: auto; }
+  .ds-surface .ds-switch::before { display: none; }
+}

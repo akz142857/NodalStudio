@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defaultEffectiveSettings, type AppSettings, type NodalStudioPlatform } from "../platform";
+import { defaultEffectiveSettings, type AppSettings, type DataSourceSettings, type NodalStudioPlatform } from "../platform";
 import { SettingsPage } from "./SettingsPage";
 
 afterEach(cleanup);
@@ -21,6 +21,46 @@ const baseProps = {
 };
 
 describe("SettingsPage", () => {
+  it("shows an empty state instead of stale preferences when search has no results", () => {
+    render(<SettingsPage {...baseProps} settings={defaultEffectiveSettings()} />);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), { target: { value: "no-such-preference" } });
+    expect(screen.getByRole("heading", { name: "No settings found" })).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "Theme" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(screen.getByRole("combobox", { name: "Theme" })).toBeVisible();
+  });
+
+  it("supports keyboard navigation and resets content scroll when changing categories", () => {
+    render(<SettingsPage {...baseProps} settings={defaultEffectiveSettings("source")} />);
+    const general = screen.getByRole("button", { name: "General" });
+    general.focus();
+    fireEvent.keyDown(general, { key: "ArrowDown" });
+    const appearance = screen.getByRole("button", { name: "Appearance" });
+    expect(appearance).toHaveFocus();
+    const content = screen.getByRole("main");
+    content.scrollTop = 200;
+    fireEvent.click(appearance);
+    expect(appearance).toHaveAttribute("aria-current", "page");
+    expect(general).not.toHaveAttribute("aria-current");
+    expect(content.scrollTop).toBe(0);
+    fireEvent.keyDown(appearance, { key: "End" });
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveFocus();
+  });
+
+  it("keeps AI drafts local until explicitly saved", async () => {
+    const onUpdateSource = vi.fn<(settings: DataSourceSettings) => Promise<void>>(() => Promise.resolve());
+    render(<SettingsPage {...baseProps} settings={defaultEffectiveSettings("source")} initialCategory="ai" onUpdateSource={onUpdateSource} />);
+    // Let the existing source synchronization effect settle before editing.
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 10)));
+    fireEvent.change(screen.getByRole("combobox", { name: "Provider" }), { target: { value: "openAiCompatible" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Model" }), { target: { value: "review-model" } });
+    expect(onUpdateSource).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save AI configuration" }));
+    await waitFor(() => expect(onUpdateSource).toHaveBeenCalledOnce());
+    expect(onUpdateSource.mock.calls[0][0].ai.model).toBe("review-model");
+    expect(onUpdateSource.mock.calls[0][0].ai.enabled).toBe(false);
+  });
+
   it("finds the capability matrix in Settings search and renders scope without platform requests", () => {
     render(<SettingsPage {...baseProps} settings={defaultEffectiveSettings()} />);
     fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), { target: { value: "capabilities" } });

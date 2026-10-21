@@ -123,7 +123,7 @@ export function InspectorPanel({
 
   if (!snapshot) {
     return (
-      <div className="inspector-view inspector-empty">
+      <div className="ds-surface inspector-view inspector-empty">
         <h2>Inspector</h2>
         <p>Connect a data source to inspect its model.</p>
       </div>
@@ -131,7 +131,7 @@ export function InspectorPanel({
   }
 
   return (
-    <div className="inspector-view">
+    <div className="ds-surface inspector-view">
       <header className="inspector-header">
         <span className="inspector-context">{selectedTable ? `${(segment === "structure" && evidenceTable ? evidenceTable : selectedTable).key.schema} · Table` : "Database"}</span>
         <h2 className="inspector-title">{segment === "structure" && evidenceTable ? `${evidenceTable.key.schema}.${evidenceTable.key.name}` : selectedTable ? selectedTable.key.name : snapshot.database.name}</h2>

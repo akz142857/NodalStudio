@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActionIcon, type ActionIconName } from "./ActionIcon";
+import { SettingsSection, SettingsGroup, ToggleRow, SelectRow, RangeRow, NumberRow, TextRow, SecretRow } from "./settings/SettingsControls";
+import "./settings/settings.css";
 import { CapabilitiesMatrix } from "./CapabilitiesMatrix";
 import {
   defaultAppSettings,
@@ -41,6 +44,17 @@ const categories = [
 
 export type SettingsCategory = (typeof categories)[number][0];
 
+const categoryIcons: Record<SettingsCategory, ActionIconName> = {
+  general: "settings", appearance: "appearance", canvas: "canvas", "data-sources": "database",
+  history: "history", git: "git", ai: "ai", cloud: "cloud", privacy: "shield",
+  notifications: "bell", shortcuts: "command", updates: "info", capabilities: "grid", advanced: "sliders",
+};
+const navigationGroups = [
+  { title: "Workspace", items: categories.slice(0, 5) },
+  { title: "Services", items: categories.slice(5, 8) },
+  { title: "Application", items: categories.slice(8) },
+];
+
 type SettingsPageProps = {
   settings: EffectiveSettings;
   runtime?: RuntimeInfo;
@@ -76,6 +90,7 @@ export function SettingsPage({
   onDataSourcesChanged,
   onFactoryReset,
 }: SettingsPageProps) {
+  const contentRef = useRef<HTMLElement>(null);
   const [category, setCategory] = useState<SettingsCategory>(initialCategory);
   const [query, setQuery] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -115,7 +130,10 @@ export function SettingsPage({
   }, [query]);
   const visibleCategory = filteredCategories.some(([id]) => id === category)
     ? category
-    : (filteredCategories[0]?.[0] ?? category);
+    : filteredCategories[0]?.[0];
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [visibleCategory]);
   const shortcutConflicts = useMemo(() => {
     const byBinding = new Map<string, string[]>();
     for (const [command, binding] of Object.entries(settings.app.shortcuts.bindings)) {
@@ -227,15 +245,13 @@ export function SettingsPage({
   }
 
   return (
-    <section className="settings-page" aria-label="Settings">
+    <section className="ds-surface settings-page" aria-label="Settings">
       <header className="settings-header">
         <button type="button" className="settings-back" onClick={onClose}>← Back</button>
-        <div>
-          <p className="eyebrow">CONTROL CENTER</p>
-          <h1>Settings</h1>
-        </div>
+        <h1>Settings</h1>
         <label className="settings-search">
-          <span>Search settings</span>
+          <span className="settings-visually-hidden">Search settings</span>
+          <ActionIcon name="search" />
           <input
             autoFocus
             type="search"
@@ -244,66 +260,94 @@ export function SettingsPage({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <div className="settings-save-state" data-state={saveState}>
+        <div className="settings-save-state" data-state={saveState} role={saveState === "error" ? "alert" : "status"} aria-live="polite">
           {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved locally" : saveState === "error" ? (saveError ?? "Save failed") : runtime?.label}
         </div>
       </header>
 
       <div className="settings-layout">
         <nav className="settings-navigation" aria-label="Settings categories">
-          {filteredCategories.map(([id, label]) => (
-            <button
-              type="button"
-              key={id}
-              className={visibleCategory === id ? "active" : ""}
-              onClick={() => chooseCategory(id)}
-            >
-              {label}
-            </button>
-          ))}
-          {filteredCategories.length === 0 ? <p>No settings found.</p> : null}
+          <label className="settings-category-picker">Category
+            <select value={visibleCategory ?? ""} onChange={(event) => chooseCategory(event.target.value as SettingsCategory)} disabled={!filteredCategories.length}>
+              {!filteredCategories.length ? <option value="">No results</option> : null}
+              {filteredCategories.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            </select>
+          </label>
+          <div className="settings-navigation-list" onKeyDown={(event) => {
+            if (!(event.target instanceof HTMLButtonElement)) return;
+            const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button")];
+            const index = buttons.indexOf(event.target);
+            const next = event.key === "ArrowDown" ? (index + 1) % buttons.length : event.key === "ArrowUp" ? (index - 1 + buttons.length) % buttons.length : event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : -1;
+            if (next < 0) return;
+            event.preventDefault();
+            buttons[next]?.focus();
+          }}>
+            {navigationGroups.map((group) => {
+              const items = group.items.filter(([id]) => filteredCategories.some(([visible]) => id === visible));
+              return items.length ? <div className="settings-navigation-group" key={group.title}>
+                <p>{group.title}</p>
+                {items.map(([id, label]) => <button type="button" key={id} aria-current={visibleCategory === id ? "page" : undefined} onClick={() => chooseCategory(id)}>
+                  <ActionIcon name={categoryIcons[id]} /><span>{label}</span>
+                </button>)}
+              </div> : null;
+            })}
+          </div>
           <footer>
             <span>{runtime?.kind === "web" ? "Web Viewer" : "Desktop"}</span>
             <small>v{runtime?.version ?? "0.1.0"}</small>
           </footer>
         </nav>
 
-        <main className="settings-content" tabIndex={-1}>
-          {operationError ? <p className="settings-operation-error">{operationError}</p> : null}
-          {operationMessage ? <p className="settings-operation-message">{operationMessage}</p> : null}
+        <main className="settings-content" ref={contentRef} tabIndex={-1}>
+          {!filteredCategories.length ? <div className="settings-no-results"><ActionIcon name="search" /><h2>No settings found</h2><p>Try another search term.</p><button type="button" onClick={() => setQuery("")}>Clear search</button></div> : null}
+          {operationError ? <p className="settings-operation-error" role="alert">{operationError}</p> : null}
+          {operationMessage ? <p className="settings-operation-message" role="status">{operationMessage}</p> : null}
           {visibleCategory === "general" ? (
             <SettingsSection title="General" description="Language, theme, startup, and date preferences.">
+              <SettingsGroup title="Display">
               <SelectRow label="Language" value={app.general.language} onChange={(language) => void saveApp({ ...app, general: { ...app.general, language: language as AppSettings["general"]["language"] } })} options={[['system','Follow system'],['zhCn','简体中文'],['en','English']]} />
               <SelectRow label="Theme" value={app.general.theme} onChange={(theme) => void saveApp({ ...app, general: { ...app.general, theme: theme as AppSettings["general"]["theme"] } })} options={[['system','Follow system'],['dark','Dark'],['light','Light']]} />
               <RangeRow label="UI scale" value={app.general.uiScalePercent} min={90} max={125} unit="%" onChange={(uiScalePercent) => void saveApp({ ...app, general: { ...app.general, uiScalePercent } })} />
+              </SettingsGroup>
+              <SettingsGroup title="Startup">
               <SelectRow label="Start page" value={app.general.startPage} onChange={(startPage) => void saveApp({ ...app, general: { ...app.general, startPage: startPage as AppSettings["general"]["startPage"] } })} options={[['lastDataSource','Last data source'],['connection','Connection page'],['blank','Blank workspace']]} />
               <ToggleRow label="Reopen last workspace" description="Restore the last source and view mode on launch." checked={app.general.reopenLastWorkspace} onChange={(reopenLastWorkspace) => void saveApp({ ...app, general: { ...app.general, reopenLastWorkspace } })} />
               <ToggleRow label="Confirm before quit" description="Prevent quitting while an import, sync, or write task is active." checked={app.general.confirmBeforeQuit} onChange={(confirmBeforeQuit) => void saveApp({ ...app, general: { ...app.general, confirmBeforeQuit } })} />
+              </SettingsGroup>
+              <SettingsGroup title="Date & time">
               <SelectRow label="Date and time format" value={app.general.dateTimeFormat} onChange={(dateTimeFormat) => void saveApp({ ...app, general: { ...app.general, dateTimeFormat: dateTimeFormat as AppSettings["general"]["dateTimeFormat"] } })} options={[['local','Local format'],['iso8601','ISO 8601']]} />
+              </SettingsGroup>
               <CategoryReset onReset={() => void saveApp({ ...app, general: defaultAppSettings().general })} />
             </SettingsSection>
           ) : null}
 
           {visibleCategory === "appearance" ? (
             <SettingsSection title="Appearance" description="Workspace density, accessibility, and panel defaults.">
+              <SettingsGroup title="Text & density">
               <SelectRow label="Information density" value={app.appearance.density} onChange={(density) => void saveApp({ ...app, appearance: { ...app.appearance, density: density as AppSettings["appearance"]["density"] } })} options={[['comfortable','Comfortable'],['compact','Compact']]} />
               <RangeRow label="UI font size" value={app.appearance.uiFontSize} min={11} max={18} unit=" px" onChange={(uiFontSize) => void saveApp({ ...app, appearance: { ...app.appearance, uiFontSize } })} />
               <RangeRow label="Table node font size" value={app.appearance.nodeFontSize} min={9} max={18} unit=" px" onChange={(nodeFontSize) => void saveApp({ ...app, appearance: { ...app.appearance, nodeFontSize } })} />
               <RangeRow label="Monospace font size" value={app.appearance.monospaceFontSize} min={9} max={18} unit=" px" onChange={(monospaceFontSize) => void saveApp({ ...app, appearance: { ...app.appearance, monospaceFontSize } })} />
+              </SettingsGroup>
+              <SettingsGroup title="Accessibility">
               <ToggleRow label="Reduce motion" checked={app.appearance.reduceMotion} onChange={(reduceMotion) => void saveApp({ ...app, appearance: { ...app.appearance, reduceMotion } })} />
               <ToggleRow label="High contrast relations" checked={app.appearance.highContrastRelations} onChange={(highContrastRelations) => void saveApp({ ...app, appearance: { ...app.appearance, highContrastRelations } })} />
               <ToggleRow label="Color-blind friendly risk palette" checked={app.appearance.colorBlindPalette} onChange={(colorBlindPalette) => void saveApp({ ...app, appearance: { ...app.appearance, colorBlindPalette } })} />
+              </SettingsGroup>
+              <SettingsGroup title="Workspace panels">
               <RangeRow label="Left sidebar default width" value={app.appearance.leftSidebarWidth} min={220} max={480} unit=" px" onChange={(leftSidebarWidth) => void saveApp({ ...app, appearance: { ...app.appearance, leftSidebarWidth } })} />
               <ToggleRow label="Left sidebar expanded by default" checked={app.appearance.leftSidebarExpanded} onChange={(leftSidebarExpanded) => void saveApp({ ...app, appearance: { ...app.appearance, leftSidebarExpanded } })} />
               <RangeRow label="Right inspector default width" value={app.appearance.rightSidebarWidth} min={240} max={520} unit=" px" onChange={(rightSidebarWidth) => void saveApp({ ...app, appearance: { ...app.appearance, rightSidebarWidth } })} />
               <ToggleRow label="Right inspector expanded by default" checked={app.appearance.rightSidebarExpanded} onChange={(rightSidebarExpanded) => void saveApp({ ...app, appearance: { ...app.appearance, rightSidebarExpanded } })} />
               <ToggleRow label="Restore sidebar state" checked={app.appearance.restoreSidebarState} onChange={(restoreSidebarState) => void saveApp({ ...app, appearance: { ...app.appearance, restoreSidebarState } })} />
+              </SettingsGroup>
               <button type="button" className="secondary-setting-action" onClick={() => void saveApp({ ...app, appearance: defaultAppSettings().appearance })}>Reset workspace panels</button>
             </SettingsSection>
           ) : null}
 
           {visibleCategory === "canvas" ? (
             <SettingsSection title="Canvas & ER" description="Choose what the model shows and how relationships are laid out." managed={isManaged("canvas")}>
+              <SettingsGroup title="Table contents">
               <ToggleRow label="Show schema in table headers" checked={app.canvas.showSchema} onChange={(showSchema) => void saveApp({ ...app, canvas: { ...app.canvas, showSchema } })} />
               <ToggleRow label="Show table and field comments" checked={app.canvas.showColumnComments} onChange={(showColumnComments) => void saveApp({ ...app, canvas: { ...app.canvas, showColumnComments, showTableComments: showColumnComments } })} />
               <ToggleRow label="Show column types" checked={app.canvas.showColumnTypes} onChange={(showColumnTypes) => void saveApp({ ...app, canvas: { ...app.canvas, showColumnTypes } })} />
@@ -312,6 +356,8 @@ export function SettingsPage({
               <ToggleRow label="Show key badges" checked={app.canvas.showKeyBadges} onChange={(showKeyBadges) => void saveApp({ ...app, canvas: { ...app.canvas, showKeyBadges } })} />
               <SelectRow label="Indexes" value={app.canvas.indexes} onChange={(indexes) => void saveApp({ ...app, canvas: { ...app.canvas, indexes: indexes as AppSettings["canvas"]["indexes"] } })} options={[['expanded','Always visible'],['collapsed','Collapsed'],['hidden','Hidden']]} />
               <RangeRow label="Columns initially visible" value={app.canvas.maxInitialColumns} min={10} max={200} unit=" fields" onChange={(maxInitialColumns) => void saveApp({ ...app, canvas: { ...app.canvas, maxInitialColumns } })} />
+              </SettingsGroup>
+              <SettingsGroup title="Relationships">
               <ToggleRow label="Physical foreign keys" checked={app.canvas.showDeclaredRelationships} onChange={(showDeclaredRelationships) => void saveApp({ ...app, canvas: { ...app.canvas, showDeclaredRelationships } })} />
               <ToggleRow label="Inferred relationships" description="Suggestions remain visually distinct from database constraints." checked={app.canvas.showInferredRelationships} onChange={(showInferredRelationships) => void saveApp({ ...app, canvas: { ...app.canvas, showInferredRelationships } })} />
               <ToggleRow label="Field-to-field edges" checked={app.canvas.fieldLevelEdges} onChange={(fieldLevelEdges) => void saveApp({ ...app, canvas: { ...app.canvas, fieldLevelEdges } })} />
@@ -320,28 +366,39 @@ export function SettingsPage({
               <ToggleRow label="Referential actions" checked={app.canvas.showReferentialActions} onChange={(showReferentialActions) => void saveApp({ ...app, canvas: { ...app.canvas, showReferentialActions } })} />
               <RangeRow label="Relationship highlight depth" value={app.canvas.relationshipHighlightDepth} min={0} max={2} unit=" hops" onChange={(relationshipHighlightDepth) => void saveApp({ ...app, canvas: { ...app.canvas, relationshipHighlightDepth } })} />
               <SelectRow label="Edge style" value={app.canvas.edgeStyle} onChange={(edgeStyle) => void saveApp({ ...app, canvas: { ...app.canvas, edgeStyle: edgeStyle as AppSettings["canvas"]["edgeStyle"] } })} options={[['orthogonal','Orthogonal'],['curved','Curved']]} />
+              </SettingsGroup>
+              <SettingsGroup title="Layout">
               <SelectRow label="Layout direction" value={app.canvas.layoutDirection} onChange={(layoutDirection) => void saveApp({ ...app, canvas: { ...app.canvas, layoutDirection: layoutDirection as AppSettings["canvas"]["layoutDirection"] } })} options={[['leftToRight','Left to right'],['topToBottom','Top to bottom']]} />
               <RangeRow label="Node spacing" value={app.canvas.nodeSpacing} min={30} max={180} unit=" px" onChange={(nodeSpacing) => void saveApp({ ...app, canvas: { ...app.canvas, nodeSpacing } })} />
               <RangeRow label="Layer spacing" value={app.canvas.layerSpacing} min={40} max={300} unit=" px" onChange={(layerSpacing) => void saveApp({ ...app, canvas: { ...app.canvas, layerSpacing } })} />
               <RangeRow label="Edge spacing" value={app.canvas.edgeSpacing} min={8} max={100} unit=" px" onChange={(edgeSpacing) => void saveApp({ ...app, canvas: { ...app.canvas, edgeSpacing } })} />
               <RangeRow label="Large-model threshold" value={app.canvas.largeModelThreshold} min={100} max={2000} unit=" tables" onChange={(largeModelThreshold) => void saveApp({ ...app, canvas: { ...app.canvas, largeModelThreshold } })} />
+              </SettingsGroup>
             </SettingsSection>
           ) : null}
 
           {visibleCategory === "data-sources" ? (
             <SettingsSection title="Data Sources" description="Connection behavior and schema refresh policy.">
               <StatusCard status={activeSourceId ? "Configured" : "No active source"} label={`${dataSources.length} saved data source${dataSources.length === 1 ? "" : "s"}`} />
+              <SettingsGroup title="Connection defaults">
               <SelectRow label="Default database engine" value={app.connectionDefaults.databaseEngine} onChange={(databaseEngine) => void saveApp({ ...app, connectionDefaults: { ...app.connectionDefaults, databaseEngine: databaseEngine as AppSettings["connectionDefaults"]["databaseEngine"] } })} options={[['postgreSql','PostgreSQL'],['mySql','MySQL']]} />
               <SelectRow label="Default SSL mode" value={app.connectionDefaults.sslMode} onChange={(sslMode) => void saveApp({ ...app, connectionDefaults: { ...app.connectionDefaults, sslMode: sslMode as AppSettings["connectionDefaults"]["sslMode"] } })} options={[['disable','Disable'],['prefer','Prefer'],['require','Require'],['verifyCa','Verify CA'],['verifyFull','Verify full']]} />
-              <div className="data-source-settings-list">{dataSources.map((profile) => <article key={profile.id}><div><strong>{profile.displayName}</strong><span>{profile.databaseType === "mySql" ? "MySQL" : "PostgreSQL"} · {profile.host}:{profile.port}/{profile.database} · SSL {profile.sslMode}</span></div><div><button type="button" onClick={() => void runOperation(async () => { const displayName = window.prompt("Rename data source", profile.displayName)?.trim(); if (!displayName || displayName === profile.displayName) return; await platform.renameDataSource(profile.id, displayName); await onDataSourcesChanged(); setOperationMessage("Data source renamed."); })}>Rename…</button><button type="button" onClick={() => void runOperation(async () => { const copy = await platform.duplicateDataSource(profile.id); await onDataSourcesChanged(); setOperationMessage(`Created ${copy.displayName} without credentials. Select it in the connection panel to add a password.`); })}>Duplicate parameters</button><button type="button" onClick={() => void runOperation(async () => { if (!window.confirm(`Forget the saved database password for ${profile.displayName}? Snapshots and semantics are unchanged.`)) return; await platform.clearCredentials(profile.id, { database: true, ai: false, cloud: false }); setOperationMessage("Database credential removed from Keychain."); })}>Forget password</button><button type="button" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "history")) return; const count = await platform.deleteSourceData(profile.id, { deleteConnection: false, deleteHistory: true, deleteSemantics: false, removeDatabaseCredential: false }); await onReload(); setOperationMessage(`Deleted ${count} history records.`); })}>Delete history…</button><button type="button" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "semantics")) return; const count = await platform.deleteSourceData(profile.id, { deleteConnection: false, deleteHistory: false, deleteSemantics: true, removeDatabaseCredential: false }); await onReload(); setOperationMessage(`Deleted ${count} semantic records.`); })}>Delete semantics…</button><button type="button" className="danger-setting-action" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "connection")) return; await platform.deleteSourceData(profile.id, { deleteConnection: true, deleteHistory: false, deleteSemantics: false, removeDatabaseCredential: true }); await onDataSourcesChanged(); await onReload(); setOperationMessage("Data source connection removed."); })}>Remove connection…</button></div></article>)}</div>
+              </SettingsGroup>
+              <SettingsGroup title="Saved connections">
+              <div className="data-source-settings-list">{dataSources.length === 0 ? <p className="settings-empty-inline">No saved connections. Add a data source from the workspace to get started.</p> : null}{dataSources.map((profile) => <article key={profile.id}><div><strong>{profile.displayName}</strong><span>{profile.databaseType === "mySql" ? "MySQL" : "PostgreSQL"} · {profile.host}:{profile.port}/{profile.database} · SSL {profile.sslMode}</span></div><div><button type="button" onClick={() => void runOperation(async () => { const displayName = window.prompt("Rename data source", profile.displayName)?.trim(); if (!displayName || displayName === profile.displayName) return; await platform.renameDataSource(profile.id, displayName); await onDataSourcesChanged(); setOperationMessage("Data source renamed."); })}>Rename…</button><button type="button" onClick={() => void runOperation(async () => { const copy = await platform.duplicateDataSource(profile.id); await onDataSourcesChanged(); setOperationMessage(`Created ${copy.displayName} without credentials. Select it in the connection panel to add a password.`); })}>Duplicate parameters</button><button type="button" onClick={() => void runOperation(async () => { if (!window.confirm(`Forget the saved database password for ${profile.displayName}? Snapshots and semantics are unchanged.`)) return; await platform.clearCredentials(profile.id, { database: true, ai: false, cloud: false }); setOperationMessage("Database credential removed from Keychain."); })}>Forget password</button><button type="button" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "history")) return; const count = await platform.deleteSourceData(profile.id, { deleteConnection: false, deleteHistory: true, deleteSemantics: false, removeDatabaseCredential: false }); await onReload(); setOperationMessage(`Deleted ${count} history records.`); })}>Delete history…</button><button type="button" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "semantics")) return; const count = await platform.deleteSourceData(profile.id, { deleteConnection: false, deleteHistory: false, deleteSemantics: true, removeDatabaseCredential: false }); await onReload(); setOperationMessage(`Deleted ${count} semantic records.`); })}>Delete semantics…</button><button type="button" className="danger-setting-action" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "connection")) return; await platform.deleteSourceData(profile.id, { deleteConnection: true, deleteHistory: false, deleteSemantics: false, removeDatabaseCredential: true }); await onDataSourcesChanged(); await onReload(); setOperationMessage("Data source connection removed."); })}>Remove connection…</button></div></article>)}</div>
+              </SettingsGroup>
               {source ? <>
+              <SettingsGroup title="Refresh & notifications">
                 <SelectRow label="Automatic refresh" value={String(source.refresh.intervalSeconds)} onChange={(value) => void saveSource({ ...source, refresh: { ...source.refresh, intervalSeconds: Number(value) } })} options={[["0","Off"],["30","30 seconds"],["60","1 minute"],["300","5 minutes"],["900","15 minutes"]]} />
                 <NumberRow label="Custom refresh interval" value={source.refresh.intervalSeconds} min={0} max={86400} unit="seconds (0 disables)" onChange={(intervalSeconds) => void saveSource({ ...source, refresh: { ...source.refresh, intervalSeconds } })} />
                 <ToggleRow label="Pause refresh in background" checked={source.refresh.pauseInBackground} onChange={(pauseInBackground) => void saveSource({ ...source, refresh: { ...source.refresh, pauseInBackground } })} />
                 <SelectRow label="Schema change notifications for this source" value={source.refresh.changeNotifications} onChange={(changeNotifications) => void saveSource({ ...source, refresh: { ...source.refresh, changeNotifications: changeNotifications as DataSourceSettings["refresh"]["changeNotifications"] } })} options={[['all','All changes'],['highRisk','High-risk only'],['off','Off']]} />
+              </SettingsGroup>
+              <SettingsGroup title="Connection behavior">
                 <NumberRow label="Connection timeout" value={source.refresh.connectionTimeoutSeconds} min={1} max={120} unit="seconds" onChange={(connectionTimeoutSeconds) => void saveSource({ ...source, refresh: { ...source.refresh, connectionTimeoutSeconds } })} />
                 <NumberRow label="Introspection timeout" value={source.refresh.introspectionTimeoutSeconds} min={1} max={600} unit="seconds" onChange={(introspectionTimeoutSeconds) => void saveSource({ ...source, refresh: { ...source.refresh, introspectionTimeoutSeconds } })} />
                 <ToggleRow label="Auto-connect on launch" checked={source.refresh.autoConnect} onChange={(autoConnect) => void saveSource({ ...source, refresh: { ...source.refresh, autoConnect } })} />
+              </SettingsGroup>
                 <div className="data-boundary"><h3>PostgreSQL Event Trigger enhancement</h3><p>Status: not installed or inspected. Nodal Studio only generates a reviewable administrator script and never installs it automatically.</p><button type="button" disabled={!activeSourceId || dataSources.find((profile) => profile.id === activeSourceId)?.databaseType !== "postgreSql"} onClick={() => void runOperation(async () => { if (!activeSourceId) return; setEventTriggerScript(await platform.generateEventTriggerScript(activeSourceId)); })}>Generate review script</button>{eventTriggerScript ? <><pre>{eventTriggerScript}</pre><button type="button" onClick={() => void navigator.clipboard.writeText(eventTriggerScript)}>Copy script</button></> : null}</div>
               </> : <Unavailable runtime={runtime} />}
             </SettingsSection>
@@ -349,25 +406,31 @@ export function SettingsPage({
 
           {visibleCategory === "history" ? (
             <SettingsSection title="History & Storage" description="Snapshot capture, retention, and local disk limits.">
+              <SettingsGroup title="Capture & retention">
               <SelectRow label="Capture snapshots" value={historySettings.capturePolicy} onChange={(capturePolicy) => saveHistory({ capturePolicy: capturePolicy as AppSettings["history"]["capturePolicy"] })} options={[['onChange','On structural change'],['interval','Fixed interval'],['manual','Manual only']]} />
               <SelectRow label="Retention" value={historySettings.retention} onChange={(retention) => saveHistory({ retention: retention as AppSettings["history"]["retention"] })} options={[['forever','Keep forever'],['count','Keep latest count'],['days','Keep recent days']]} />
               {historySettings.retention !== "forever" ? <NumberRow label={historySettings.retention === "days" ? "Days to keep" : "Snapshots to keep"} value={historySettings.retentionValue} min={1} max={3650} onChange={(retentionValue) => saveHistory({ retentionValue })} /> : null}
               <ToggleRow label="Preserve high-risk changes" checked={historySettings.preserveHighRisk} onChange={(preserveHighRisk) => saveHistory({ preserveHighRisk })} />
+              </SettingsGroup>
+              <SettingsGroup title="Storage & backup">
               <NumberRow label="Storage warning" value={app.history.storageWarningMegabytes} min={128} max={102400} unit="MB" onChange={(storageWarningMegabytes) => void saveApp({ ...app, history: { ...app.history, storageWarningMegabytes } })} />
               <TextRow label="Portable backup path" value={backupPath} placeholder="/absolute/path/model.nodalmodel" onChange={setBackupPath} />
               <div className="setting-action-row"><button type="button" onClick={() => void runOperation(async () => setStorageUsage(await platform.getStorageUsage()))}>View storage usage</button><button type="button" disabled={!activeSourceId || !backupPath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const receipt = await platform.exportPortableBackup(activeSourceId, backupPath); setOperationMessage(`Backed up ${receipt.snapshots} snapshots and ${receipt.annotations} annotations.`); })}>Export backup</button><button type="button" disabled={!backupPath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { const preview = await platform.previewPortableBackup(backupPath); const identity = [preview.sourceLabel, preview.databaseName, preview.databaseType].filter(Boolean).join(" · "); const accepted = window.confirm(`Import backup ${identity || preview.sourceId}?\n\nFormat v${preview.formatVersion}, exported ${new Date(preview.exportedAt).toLocaleString()}\n${preview.snapshots} snapshots, ${preview.annotations} annotations, ${preview.savedViews} views.\n${preview.willUpdateExistingSource ? "An existing local source will be updated." : "A new local source will be created."}\n\n${preview.conflictStrategy}`); if (!accepted) return; const receipt = await platform.importPortableBackup(backupPath); await onReload(); setOperationMessage(`Restored ${receipt.snapshots} snapshots and ${receipt.annotations} annotations.`); })}>Preview & import…</button><button type="button" onClick={() => void runOperation(async () => { const cleared = await platform.clearRegenerableCache(); setOperationMessage(cleared ? `Cleared ${cleared} cache records.` : "No regenerable cache is currently stored."); })}>Clear cache</button><button type="button" onClick={() => void runOperation(async () => { if (!window.confirm("Clear saved canvas layouts? Snapshots and semantics will be preserved.")) return; await platform.clearLayouts(activeSourceId); setStorageUsage(await platform.getStorageUsage()); })}>Clear layouts…</button><button type="button" onClick={() => void runOperation(async () => { const info = await platform.getDiagnosticInfo(); setDiagnosticInfo(info); setOperationMessage(`Local database directory: ${info.dataDirectory}`); })}>Show local database location</button></div>
               {storageUsage ? <StorageUsageCard usage={storageUsage} /> : null}
+              </SettingsGroup>
             </SettingsSection>
           ) : null}
 
           {visibleCategory === "git" ? (
             <SettingsSection title="Git Collaboration" description="Reviewable semantics without monolithic model conflicts.">
-              <p className="data-boundary">Shared descriptions contain text only, without per-object confirmation proof. New or changed text requires review on the receiving Desktop; existing valid local confirmation is preserved only when text and evidence still match.</p>
+              <details className="settings-disclosure"><summary>How shared descriptions are reviewed</summary><p>Shared descriptions contain text only, without per-object confirmation proof. New or changed text requires review on the receiving Desktop; existing valid local confirmation is preserved only when text and evidence still match.</p></details>
               <StatusCard status={source?.git.repositoryPath ? "Configured" : "Off"} label="Manual export and import; Nodal Studio never commits or pushes automatically." />
               {source ? <>
+              <SettingsGroup title="Repository">
                 <TextRow label="Repository path" value={source.git.repositoryPath} placeholder="/path/to/repository" onChange={(repositoryPath) => void saveSource({ ...source, git: { ...source.git, repositoryPath } })} />
                 <ToggleRow label="Commit reminder" checked={source.git.commitReminders} onChange={(commitReminders) => void saveSource({ ...source, git: { ...source.git, commitReminders } })} />
                 <div className="setting-action-row"><button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; setMergeStatus(await platform.checkMergeDriver(activeSourceId, source.git.repositoryPath)); })}>Check repository & merge driver</button><button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const preview = await platform.previewGitExport(activeSourceId, source.git.repositoryPath); if (!window.confirm(`Export Git workspace?\n\n${preview.addedFiles} added, ${preview.modifiedFiles} modified, ${preview.removedFiles} removed, ${preview.unchangedFiles} unchanged managed files.\nFingerprint: ${preview.schemaFingerprint}\n\nNodal Studio will not commit or push.`)) return; const receipt = await platform.exportGitWorkspace(activeSourceId, source.git.repositoryPath); setOperationMessage(`Exported ${receipt.writtenFiles} managed files; removed ${receipt.removedStaleFiles} stale files.`); })}>Preview & export…</button><button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const preview = await platform.previewGitImport(activeSourceId, source.git.repositoryPath); if (!window.confirm(`Import reviewed semantics?\n\n${preview.annotations} annotations, ${preview.domainGroups} domains, ${preview.savedViews} views, ${preview.provenance} provenance records, ${preview.lineageLinks} lineage links, ${preview.logicalRelationships} logical relationships.\nRelationship conflicts requiring overwrite confirmation: ${preview.relationshipConflicts.length}${preview.relationshipConflicts.length ? `\n${preview.relationshipConflicts.join("\n")}` : ""}\nFingerprint: ${preview.fingerprintMatches ? "matches" : "WARNING: differs from local snapshot"} (${preview.workspaceFingerprint}).`)) return; const receipt = await platform.importGitWorkspace(activeSourceId, source.git.repositoryPath); await onReload(); setOperationMessage(`Imported ${receipt.importedAnnotations} annotations, ${receipt.importedSavedViews} views, and ${receipt.importedLogicalRelationships} logical relationships.`); })}>Preview & import…</button></div>
+              </SettingsGroup>
                 {mergeStatus ? <><MergeStatusCard status={mergeStatus} /><div className="setting-action-row"><button type="button" disabled={!mergeStatus.installCommand} onClick={() => void runOperation(async () => { await navigator.clipboard.writeText(mergeStatus.installCommand); setOperationMessage("Merge driver installation command copied. Review and run it in this repository."); })}>Copy install command</button></div>{mergeStatus.conflictReports.map((report) => <div className="settings-status-card" key={report}><strong>{report}</strong><span>Semantic merge conflicts require explicit review.</span><div className="setting-action-row"><button type="button" onClick={() => void runOperation(async () => setConflictReport({ path: report, contents: await platform.readGitConflictReport(source.git.repositoryPath, report) }))}>Review report</button><button type="button" className="danger-setting-action" onClick={() => void runOperation(async () => { if (!window.confirm(`Delete ${report} only after resolving every listed semantic field?`)) return; await platform.deleteGitConflictReport(source.git.repositoryPath, report); setConflictReport(undefined); if (activeSourceId) setMergeStatus(await platform.checkMergeDriver(activeSourceId, source.git.repositoryPath)); })}>Confirm resolved & delete…</button></div></div>)}{conflictReport ? <div className="data-boundary"><h3>{conflictReport.path}</h3><pre>{conflictReport.contents}</pre></div> : null}</> : null}
                 <DataBoundary />
               </> : <Unavailable runtime={runtime} />}
@@ -378,17 +441,23 @@ export function SettingsPage({
             <SettingsSection title="AI" description="Explanations are optional and always require confirmation before becoming semantics.">
               <StatusCard status={app.privacy.offlineMode ? "Offline" : source?.ai.enabled ? "Configured" : "Off"} label="No database credentials or row data are sent." />
               {source && ai ? <>
+              <SettingsGroup title="Provider">
                 <ToggleRow label="Enable AI explanations" checked={source.ai.enabled} managed={isManaged("ai.enabled")} onChange={(enabled) => void saveSource({ ...source, ai: { ...source.ai, enabled } })} />
                 <SelectRow label="Provider" value={ai.provider} onChange={(provider) => setAiDraft({ ...ai, provider: provider as DataSourceSettings["ai"]["provider"] })} options={[['offline','Offline provider'],['openAiCompatible','OpenAI-compatible']]} />
                 {ai.provider === "openAiCompatible" ? <><TextRow label="Endpoint" value={ai.endpoint} placeholder="https://…" onChange={(endpoint) => setAiDraft({ ...ai, endpoint })} /><TextRow label="Model" value={ai.model} onChange={(model) => setAiDraft({ ...ai, model })} /><SecretRow label="API key" value={aiSecret} configured={source.ai.credentialConfigured} onChange={setAiSecret} onSave={() => void runOperation(async () => { if (!activeSourceId) return; await platform.saveAiCredential(activeSourceId, aiSecret); setAiSecret(""); await onReload(); })} /></> : null}
+              </SettingsGroup>
+              <SettingsGroup title="Context">
                 <SelectRow label="Context scope" value={ai.contextScope} onChange={(contextScope) => setAiDraft({ ...ai, contextScope: contextScope as DataSourceSettings["ai"]["contextScope"] })} options={[['currentTable','Current table'],['oneHop','One relationship hop'],['domain','Current business domain']]} />
                 <ToggleRow label="Include comments" checked={ai.includeComments} onChange={(includeComments) => setAiDraft({ ...ai, includeComments })} />
                 <ToggleRow label="Include confirmed semantics" checked={ai.includeConfirmedSemantics} onChange={(includeConfirmedSemantics) => setAiDraft({ ...ai, includeConfirmedSemantics })} />
+              </SettingsGroup>
+              <SettingsGroup title="Request limits">
                 <NumberRow label="Request timeout" value={ai.timeoutSeconds} min={1} max={300} unit="seconds" onChange={(timeoutSeconds) => setAiDraft({ ...ai, timeoutSeconds })} />
                 <NumberRow label="Maximum retries" value={ai.maxRetries} min={0} max={5} onChange={(maxRetries) => setAiDraft({ ...ai, maxRetries })} />
                 <NumberRow label="Maximum concurrency" value={ai.maxConcurrency} min={1} max={8} onChange={(maxConcurrency) => setAiDraft({ ...ai, maxConcurrency })} />
+              </SettingsGroup>
                 <AiRequestBoundary ai={ai} />
-                <div className="setting-action-row"><button type="button" onClick={() => void saveSource({ ...source, ai: { ...ai, enabled: source.ai.enabled, credentialConfigured: source.ai.credentialConfigured } })}>Save AI configuration</button><button type="button" onClick={() => setAiDraft(source.ai)}>Cancel draft</button></div>
+                <div className="setting-action-row"><button type="button" className="ds-primary" onClick={() => void saveSource({ ...source, ai: { ...ai, enabled: source.ai.enabled, credentialConfigured: source.ai.credentialConfigured } })}>Save AI configuration</button><button type="button" onClick={() => setAiDraft(source.ai)}>Cancel draft</button></div>
                 <div className="setting-action-row"><button type="button" disabled={!activeSourceId || !source.ai.enabled || (app.privacy.offlineMode && source.ai.provider !== "offline")} onClick={() => void runOperation(async () => { if (!activeSourceId) return; setAiTestResult(await platform.testAiProvider(activeSourceId)); })}>Test provider</button></div>
                 {aiTestResult ? <p className="setting-inline-note">Connected to {aiTestResult.provider}{aiTestResult.model ? ` · ${aiTestResult.model}` : ""} at {formatSettingsDate(aiTestResult.testedAt, app.general.dateTimeFormat)}{aiTestResult.networkUsed ? "" : " · no network used"}.</p> : null}
               </> : <Unavailable runtime={runtime} />}
@@ -397,18 +466,23 @@ export function SettingsPage({
 
           {visibleCategory === "cloud" ? (
             <SettingsSection title="Cloud Sync" description="Optional metadata collaboration with an explicit sync allowlist.">
-              <p className="data-boundary">Shared descriptions contain text only, without per-object confirmation proof. New or changed text requires review on the receiving Desktop; existing valid local confirmation is preserved only when text and evidence still match.</p>
+              <details className="settings-disclosure"><summary>How shared descriptions are reviewed</summary><p>Shared descriptions contain text only, without per-object confirmation proof. New or changed text requires review on the receiving Desktop; existing valid local confirmation is preserved only when text and evidence still match.</p></details>
               <StatusCard status={app.privacy.offlineMode ? "Offline" : source?.cloud.enabled ? "Configured" : "Off"} label="Cloud sync is disabled by default." />
               {source && cloud ? <>
+              <SettingsGroup title="Connection">
                 <ToggleRow label="Enable Cloud Sync" checked={source.cloud.enabled} managed={isManaged("cloud.enabled")} onChange={(enabled) => void saveSource({ ...source, cloud: { ...source.cloud, enabled } })} />
                 <TextRow label="Cloud endpoint" value={cloud.endpoint} placeholder="https://…" onChange={(endpoint) => setCloudDraft({ ...cloud, endpoint })} />
                 <TextRow label="Web Viewer URL" value={cloud.viewerUrl} placeholder="https://viewer.example/" onChange={(viewerUrl) => setCloudDraft({ ...cloud, viewerUrl })} />
+              </SettingsGroup>
                 {!source.cloud.credentialConfigured ? <div className="project-policy"><h3>Create Cloud account and Team</h3><p>Production bootstrap is disabled unless the server operator supplies a one-time installation secret. Access and refresh tokens are stored only in system Keychain.</p><TextRow label="Email" value={cloudEmail} onChange={setCloudEmail} /><TextRow label="Display name" value={cloudDisplayName} onChange={setCloudDisplayName} /><TextRow label="New Team name" value={cloudTeamName} onChange={setCloudTeamName} /><SecretRow label="Bootstrap secret" value={cloudBootstrapSecret} configured={false} onChange={setCloudBootstrapSecret} onSave={() => undefined} showSave={false} /><button type="button" disabled={!activeSourceId || !source.cloud.endpoint || cloud.endpoint !== source.cloud.endpoint || !cloudEmail || !cloudDisplayName || !cloudTeamName || cloudBootstrapSecret.length < 24 || app.privacy.offlineMode} onClick={() => void runOperation(async () => { if (!activeSourceId || !window.confirm("Create this Cloud account and Team on the configured endpoint?")) return; const account = await platform.bootstrapCloudAccount(activeSourceId, cloudEmail, cloudDisplayName, cloudTeamName, cloudBootstrapSecret); setCloudBootstrapSecret(""); await onReload(); setOperationMessage(`Cloud account ${account.accountLabel} connected; access expires ${formatSettingsDate(account.accessExpiresAt, app.general.dateTimeFormat)}.`); })}>Create account & Team…</button></div> : null}
+              <SettingsGroup title="Account & project">
                 <TextRow label="Account" value={cloud.accountLabel} onChange={(accountLabel) => setCloudDraft({ ...cloud, accountLabel })} />
                 <TextRow label="Team ID" value={cloud.teamId} onChange={(teamId) => setCloudDraft({ ...cloud, teamId })} />
                 <TextRow label="Project ID" value={cloud.projectId} onChange={(projectId) => setCloudDraft({ ...cloud, projectId })} />
-                {source.cloud.credentialConfigured ? <div className="setting-action-row"><button type="button" disabled={!activeSourceId || app.privacy.offlineMode} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const account = await platform.refreshCloudSession(activeSourceId); await onReload(); setOperationMessage(`Cloud session refreshed until ${formatSettingsDate(account.accessExpiresAt, app.general.dateTimeFormat)}.`); })}>Refresh session</button><TextRow label="New project name" value={cloudProjectName} onChange={setCloudProjectName} /><button type="button" disabled={!activeSourceId || !source.cloud.teamId || !cloudProjectName || app.privacy.offlineMode} onClick={() => void runOperation(async () => { if (!activeSourceId || !window.confirm(`Create Cloud project “${cloudProjectName}” for this Team?`)) return; const project = await platform.createCloudProject(activeSourceId, cloudProjectName); setCloudProjectName(""); await onReload(); setOperationMessage(`Created project ${project}.`); })}>Create project…</button></div> : null}
+                {source.cloud.credentialConfigured ? <><div className="setting-action-row"><button type="button" disabled={!activeSourceId || app.privacy.offlineMode} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const account = await platform.refreshCloudSession(activeSourceId); await onReload(); setOperationMessage(`Cloud session refreshed until ${formatSettingsDate(account.accessExpiresAt, app.general.dateTimeFormat)}.`); })}>Refresh session</button></div><TextRow label="New project name" value={cloudProjectName} onChange={setCloudProjectName} /><div className="setting-action-row"><button type="button" disabled={!activeSourceId || !source.cloud.teamId || !cloudProjectName || app.privacy.offlineMode} onClick={() => void runOperation(async () => { if (!activeSourceId || !window.confirm(`Create Cloud project “${cloudProjectName}” for this Team?`)) return; const project = await platform.createCloudProject(activeSourceId, cloudProjectName); setCloudProjectName(""); await onReload(); setOperationMessage(`Created project ${project}.`); })}>Create project…</button></div></> : null}
                 <SecretRow label="Cloud access token" value={cloudSecret} configured={source.cloud.credentialConfigured} onChange={setCloudSecret} onSave={() => void runOperation(async () => { if (!activeSourceId) return; await platform.saveCloudCredential(activeSourceId, cloudSecret); setCloudSecret(""); await onReload(); })} />
+              </SettingsGroup>
+              <SettingsGroup title="Sync content & conflicts">
                 <ToggleRow label="Sync semantics" checked={cloud.syncSemantics} onChange={(syncSemantics) => setCloudDraft({ ...cloud, syncSemantics })} />
                 <ToggleRow label="Sync business domains" checked={cloud.syncDomains} onChange={(syncDomains) => setCloudDraft({ ...cloud, syncDomains })} />
                 <ToggleRow label="Sync saved views" checked={cloud.syncSavedViews} onChange={(syncSavedViews) => setCloudDraft({ ...cloud, syncSavedViews })} />
@@ -417,7 +491,8 @@ export function SettingsPage({
                 <ToggleRow label="Sync shared layouts" checked={cloud.syncSharedLayouts} onChange={(syncSharedLayouts) => setCloudDraft({ ...cloud, syncSharedLayouts })} />
                 <ToggleRow label="Sync personal layouts" description="Personal coordinates are excluded unless explicitly enabled." checked={cloud.syncPersonalLayouts} onChange={(syncPersonalLayouts) => setCloudDraft({ ...cloud, syncPersonalLayouts })} />
                 <SelectRow label="Conflict strategy" value={cloud.conflictStrategy} onChange={(conflictStrategy) => setCloudDraft({ ...cloud, conflictStrategy: conflictStrategy as DataSourceSettings["cloud"]["conflictStrategy"] })} options={[['ask','Always ask'],['keepLocal','Keep local'],['keepRemote','Keep remote']]} />
-                <div className="setting-action-row"><button type="button" onClick={() => void saveSource({ ...source, cloud: { ...cloud, enabled: source.cloud.enabled, credentialConfigured: source.cloud.credentialConfigured, baseVersion: source.cloud.baseVersion, lastSuccessAt: source.cloud.lastSuccessAt } })}>Save Cloud configuration</button><button type="button" onClick={() => setCloudDraft(source.cloud)}>Cancel draft</button></div>
+              </SettingsGroup>
+                <div className="setting-action-row"><button type="button" className="ds-primary" onClick={() => void saveSource({ ...source, cloud: { ...cloud, enabled: source.cloud.enabled, credentialConfigured: source.cloud.credentialConfigured, baseVersion: source.cloud.baseVersion, lastSuccessAt: source.cloud.lastSuccessAt } })}>Save Cloud configuration</button><button type="button" onClick={() => setCloudDraft(source.cloud)}>Cancel draft</button></div>
                 <div className="setting-action-row"><button type="button" onClick={() => void runOperation(async () => { if (!activeSourceId) return; setSyncDiagnostics(await platform.listSyncDiagnostics(activeSourceId)); })}>Inspect offline queue</button><button type="button" disabled={!activeSourceId || !source.cloud.enabled || app.privacy.offlineMode} onClick={() => void runOperation(async () => { if (!activeSourceId) return; await platform.syncProject({ sourceId: activeSourceId, projectId: source.cloud.projectId, apiUrl: source.cloud.endpoint, accessToken: "", baseVersion: source.cloud.baseVersion }); await onReload(); setSyncDiagnostics(await platform.listSyncDiagnostics(activeSourceId)); setOperationMessage("Metadata published."); })}>Publish now</button><button type="button" disabled={syncDiagnostics.length === 0} onClick={() => void runOperation(async () => { await navigator.clipboard.writeText(JSON.stringify(syncDiagnostics, null, 2)); setOperationMessage("Redacted queue diagnostics copied."); })}>Copy diagnostics</button><button type="button" disabled={!activeSourceId || !source.cloud.projectId || app.privacy.offlineMode} onClick={() => void runOperation(async () => { if (!activeSourceId) return; setCloudAudit(await platform.listCloudAudit(activeSourceId)); })}>View audit</button></div>
                 {source.cloud.lastSuccessAt ? <p className="setting-inline-note">Last successful sync: {formatSettingsDate(source.cloud.lastSuccessAt, app.general.dateTimeFormat)}</p> : null}
                 {syncDiagnostics.length ? <div className="sync-diagnostics">{syncDiagnostics.map((item) => <div key={item.id}><span>{item.eventKind}</span><b>{item.state} · {item.attempts} attempts</b></div>)}</div> : null}
@@ -432,11 +507,13 @@ export function SettingsPage({
 
           {visibleCategory === "privacy" ? (
             <SettingsSection title="Privacy & Security" description="A single view of every external capability and stored credential class.">
+              <SettingsGroup title="Network & diagnostics">
               <ToggleRow label="Completely offline" description="Blocks AI, Cloud, update checks, and diagnostics. Database connections remain available." checked={app.privacy.offlineMode} managed={isManaged("privacy.offlineMode")} onChange={(offlineMode) => void saveApp({ ...app, privacy: { ...app.privacy, offlineMode } })} />
               <ToggleRow label="Anonymous diagnostics" description="Version, runtime, duration bucket, outcome class, and redacted error code only." checked={app.privacy.diagnosticsEnabled} managed={isManaged("privacy.diagnosticsEnabled")} onChange={(diagnosticsEnabled) => void updateDiagnostics(diagnosticsEnabled)} />
               <ToggleRow label="Crash reports" checked={app.privacy.crashReportsEnabled} onChange={(crashReportsEnabled) => void saveApp({ ...app, privacy: { ...app.privacy, crashReportsEnabled } })} />
               <SelectRow label="Log level" value={app.privacy.logLevel} onChange={(logLevel) => void saveApp({ ...app, privacy: { ...app.privacy, logLevel: logLevel as AppSettings["privacy"]["logLevel"] } })} options={[['error','Error'],['warn','Warning'],['info','Info'],['debug','Debug']]} />
               <NumberRow label="Log retention" value={app.privacy.logRetentionDays} min={1} max={365} unit="days" onChange={(logRetentionDays) => void saveApp({ ...app, privacy: { ...app.privacy, logRetentionDays } })} />
+              </SettingsGroup>
               <ExternalCapabilities app={app} source={source} access={externalAccess} dateTimeFormat={app.general.dateTimeFormat} />
               <div className="setting-action-row"><button type="button" onClick={() => void runOperation(async () => { setSecurityStatus(await platform.getSecurityStatus(activeSourceId)); setExternalAccess(await platform.listExternalAccess()); })}>Run local security audit</button></div>
               {securityStatus ? <SecurityStatusCard status={securityStatus} /> : null}
@@ -446,21 +523,27 @@ export function SettingsPage({
 
           {visibleCategory === "notifications" ? (
             <SettingsSection title="Notifications" description="Choose which model and collaboration events need attention.">
+              <SettingsGroup title="Events">
               <SelectRow label="Schema changes" value={app.notifications.schemaChanges} onChange={(schemaChanges) => void saveApp({ ...app, notifications: { ...app.notifications, schemaChanges: schemaChanges as AppSettings["notifications"]["schemaChanges"] } })} options={[['all','All changes'],['highRisk','High-risk only'],['off','Off']]} />
               <ToggleRow label="Git fingerprint and conflicts" checked={app.notifications.gitConflicts} onChange={(gitConflicts) => void saveApp({ ...app, notifications: { ...app.notifications, gitConflicts } })} />
               <ToggleRow label="Cloud sync failures" checked={app.notifications.cloudFailures} onChange={(cloudFailures) => void saveApp({ ...app, notifications: { ...app.notifications, cloudFailures } })} />
               <ToggleRow label="Storage warnings" checked={app.notifications.storageWarnings} onChange={(storageWarnings) => void saveApp({ ...app, notifications: { ...app.notifications, storageWarnings } })} />
               <ToggleRow label="Update available" checked={app.notifications.updateAvailable} onChange={(updateAvailable) => void saveApp({ ...app, notifications: { ...app.notifications, updateAvailable } })} />
+              </SettingsGroup>
+              <SettingsGroup title="Delivery">
               <ToggleRow label="System notifications" checked={app.notifications.systemNotifications} onChange={(systemNotifications) => void updateSystemNotifications(systemNotifications)} />
               <ToggleRow label="Quiet hours" checked={app.notifications.quietHoursEnabled} onChange={(quietHoursEnabled) => void saveApp({ ...app, notifications: { ...app.notifications, quietHoursEnabled } })} />
               {app.notifications.quietHoursEnabled ? <><TextRow label="Quiet hours start" value={app.notifications.quietHoursStart} placeholder="22:00" onChange={(quietHoursStart) => void saveApp({ ...app, notifications: { ...app.notifications, quietHoursStart } })} /><TextRow label="Quiet hours end" value={app.notifications.quietHoursEnd} placeholder="08:00" onChange={(quietHoursEnd) => void saveApp({ ...app, notifications: { ...app.notifications, quietHoursEnd } })} /></> : null}
+              </SettingsGroup>
             </SettingsSection>
           ) : null}
 
           {visibleCategory === "shortcuts" ? (
             <SettingsSection title="Keyboard Shortcuts" description="Searchable commands with conflict-safe bindings.">
+              <SettingsGroup title="Command bindings">
               <TextRow label="Filter commands" value={shortcutQuery} placeholder="Search commands…" onChange={setShortcutQuery} />
               <div className="shortcut-list">{Object.entries(app.shortcuts.bindings).filter(([command]) => humanize(command).toLowerCase().includes(shortcutQuery.trim().toLowerCase())).map(([command, binding]) => { const conflict = shortcutConflicts.get(binding.trim().toLowerCase()); return <label key={command}><span>{humanize(command)}{conflict ? <small>Conflicts with {conflict.filter((item) => item !== command).map(humanize).join(", ")}</small> : null}</span><input aria-invalid={Boolean(conflict)} value={binding} onChange={(event) => updateShortcut(command, event.target.value)} /></label>; })}</div>
+              </SettingsGroup>
               <button type="button" className="secondary-setting-action" onClick={() => void saveApp({ ...app, shortcuts: defaultAppSettings().shortcuts })}>Reset shortcuts</button>
             </SettingsSection>
           ) : null}
@@ -470,31 +553,41 @@ export function SettingsPage({
           {visibleCategory === "updates" ? (
             <SettingsSection title="Updates & About" description="Application version, update channel, licenses, and diagnostic paths.">
               <StatusCard status={`v${runtime?.version ?? "0.1.0"}`} label={`${runtime?.label ?? "Nodal Studio"} · Tauri/Rust desktop and independent Web Viewer`} />
+              <SettingsGroup title="Updates">
               <ToggleRow label="Automatically check for updates" checked={app.updates.automaticChecks} managed={isManaged("updates.automaticChecks")} onChange={(automaticChecks) => void saveApp({ ...app, updates: { ...app.updates, automaticChecks } })} />
               <StatusCard status={app.updates.channel === "beta" ? "Beta channel" : "Stable channel"} label="Beta updates are an advanced opt-in." />
               <TextRow label="Update feed" value={app.updates.customFeedUrl ?? ""} placeholder="https://updates.example/manifest.json" onChange={(customFeedUrl) => void saveApp({ ...app, updates: { ...app.updates, customFeedUrl: customFeedUrl || null } })} />
               <div className="setting-action-row"><button type="button" disabled={runtime?.kind === "web" || app.privacy.offlineMode} onClick={() => void runOperation(async () => setUpdateResult(await platform.checkForUpdates()))}>Check for updates</button><button type="button" onClick={() => setAboutDocument("releaseNotes")}>Release notes</button><button type="button" onClick={() => setAboutDocument("license")}>License</button><button type="button" onClick={() => setAboutDocument("notices")}>Third-party notices</button></div>
               {updateResult ? <div className="settings-status-card"><strong>{updateResult.availableVersion ? `Version ${updateResult.availableVersion} available` : "Nodal Studio is up to date"}</strong><span>{updateResult.notes ?? `Current version ${updateResult.currentVersion}`}</span></div> : null}
+              </SettingsGroup>
+              <SettingsGroup title="Diagnostics & files">
               <div className="setting-action-row"><button type="button" onClick={() => void runOperation(async () => setDiagnosticInfo(await platform.getDiagnosticInfo()))}>Show runtime & paths</button><button type="button" disabled={runtime?.kind === "web"} onClick={() => void runOperation(() => platform.revealAppDirectory("logs"))}>Open logs directory</button><button type="button" disabled={runtime?.kind === "web"} onClick={() => void runOperation(() => platform.revealAppDirectory("data"))}>Open data directory</button><button type="button" onClick={() => void runOperation(async () => { const info = diagnosticInfo ?? await platform.getDiagnosticInfo(); setDiagnosticInfo(info); await navigator.clipboard.writeText(redactedDiagnosticSummary(info, app)); setOperationMessage("Redacted diagnostic summary copied."); })}>Copy diagnostic summary</button></div>
               {diagnosticInfo ? <div className="external-capabilities"><h3>Runtime</h3><div><span>Application</span><b>{diagnosticInfo.appVersion}</b></div><div><span>Rust requirement</span><b>{diagnosticInfo.rustVersion}</b></div><div><span>Target</span><b>{diagnosticInfo.target}</b></div><div><span>Data directory</span><b>{diagnosticInfo.dataDirectory}</b></div><div><span>Log directory</span><b>{diagnosticInfo.logDirectory}</b></div></div> : null}
+              </SettingsGroup>
               {aboutDocument ? <AboutDocument kind={aboutDocument} onClose={() => setAboutDocument(undefined)} /> : null}
             </SettingsSection>
           ) : null}
 
           {visibleCategory === "advanced" ? (
             <SettingsSection title="Advanced" description="Performance thresholds, experiments, and recovery actions.">
+              <SettingsGroup title="Performance">
               <ToggleRow label="Performance metrics" checked={app.advanced.performanceMetrics} onChange={(performanceMetrics) => void saveApp({ ...app, advanced: { ...app.advanced, performanceMetrics } })} />
               <div className="setting-action-row"><button type="button" disabled={!app.advanced.performanceMetrics} onClick={() => setPerformanceSnapshot(capturePerformanceSnapshot())}>Capture performance snapshot</button></div>
               {performanceSnapshot ? <div className="external-capabilities"><h3>Session performance</h3><div><span>Uptime</span><b>{(performanceSnapshot.uptimeMs / 1000).toFixed(1)} s</b></div><div><span>DOM nodes</span><b>{performanceSnapshot.domNodes}</b></div><div><span>Resource entries</span><b>{performanceSnapshot.resourceEntries}</b></div><div><span>JavaScript heap</span><b>{performanceSnapshot.heapBytes === null ? "Unavailable" : formatBytes(performanceSnapshot.heapBytes)}</b></div></div> : null}
               <NumberRow label="Layout worker timeout" value={app.advanced.layoutWorkerTimeoutMs} min={1000} max={120000} unit="ms" onChange={(layoutWorkerTimeoutMs) => void saveApp({ ...app, advanced: { ...app.advanced, layoutWorkerTimeoutMs } })} />
               <NumberRow label="Render degradation threshold" value={app.advanced.renderDegradeThreshold} min={100} max={5000} unit="tables" onChange={(renderDegradeThreshold) => void saveApp({ ...app, advanced: { ...app.advanced, renderDegradeThreshold } })} />
+              </SettingsGroup>
+              <SettingsGroup title="Experiments">
               <ToggleRow label="Beta features" checked={app.advanced.betaFeatures} onChange={(betaFeatures) => void saveApp({ ...app, advanced: { ...app.advanced, betaFeatures } })} />
               <SelectRow label="Application update channel" value={app.updates.channel} onChange={(channel) => void saveApp({ ...app, updates: { ...app.updates, channel: channel as AppSettings["updates"]["channel"] } })} options={[['stable','Stable'],['beta','Beta (pre-release)']]} />
               {app.advanced.betaFeatures ? <div className="project-policy"><h3>Experimental features</h3>{Object.entries(app.advanced.experimentalFeatures).map(([feature, enabled]) => <ToggleRow key={feature} label={humanize(feature)} description="Experimental; behavior and stored representation may change." checked={enabled} onChange={(value) => void saveApp({ ...app, advanced: { ...app.advanced, experimentalFeatures: { ...app.advanced.experimentalFeatures, [feature]: value } } })} />)}</div> : null}
+              </SettingsGroup>
               <div className="project-policy"><h3>Built-in extensions</h3><p>Only signed, bundled capabilities are listed. Nodal Studio does not execute arbitrary third-party scripts.</p>{Object.entries(app.advanced.extensions).map(([extension, enabled]) => <ToggleRow key={extension} label={humanize(extension)} checked={enabled} onChange={(value) => void saveApp({ ...app, advanced: { ...app.advanced, extensions: { ...app.advanced.extensions, [extension]: value } } })} />)}</div>
               {settings.managed.length > 0 ? <div className="external-capabilities"><h3>Managed by project or organization</h3>{settings.managed.map((item) => <div key={`${item.source}:${item.path}`}><span>{item.path}</span><b title={item.reason}>{item.source}</b></div>)}</div> : null}
+              <SettingsGroup title="Settings transfer">
               <TextRow label="Settings JSON path" value={settingsFilePath} placeholder="/absolute/path/settings.json" onChange={setSettingsFilePath} />
               <div className="setting-action-row"><button type="button" disabled={!settingsFilePath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { const receipt = await platform.exportSettingsFile(settingsFilePath); setOperationMessage(`Exported non-sensitive settings for ${receipt.sourceSettings} sources.`); })}>Export settings</button><button type="button" disabled={!settingsFilePath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { const preview = await platform.previewSettingsFile(settingsFilePath); if (!window.confirm(`Import Settings format v${preview.formatVersion}, exported ${new Date(preview.exportedAt).toLocaleString()}?\n\nThe app settings document and ${preview.sourceSettings} source settings documents will be inserted or replaced. Credentials, snapshots, semantics, and layouts are not included or changed.`)) return; const receipt = await platform.importSettingsFile(settingsFilePath); await onReload(); setOperationMessage(`Imported settings for ${receipt.sourceSettings} sources.`); })}>Preview & import…</button></div>
+              </SettingsGroup>
               <div className="settings-danger-zone"><h3>Danger zone</h3><p>Resetting settings does not delete snapshots, semantics, or credentials.</p><button type="button" onClick={() => void onResetApp()}>Reset all settings</button>{source ? <button type="button" onClick={() => void onResetSource()}>Reset active source settings</button> : null}<button type="button" className="danger-setting-action" disabled={runtime?.kind === "web"} onClick={() => void runOperation(async () => { const confirmation = window.prompt("Factory reset deletes all local connections, snapshots, semantics, settings, and Keychain credentials. Type DELETE LOCAL DATA to continue."); if (confirmation !== "DELETE LOCAL DATA") return; await platform.factoryReset(confirmation); await onFactoryReset(); })}>Factory reset…</button></div>
             </SettingsSection>
           ) : null}
@@ -503,32 +596,6 @@ export function SettingsPage({
     </section>
   );
 }
-
-function SettingsSection({ title, description, children, managed }: { title: string; description: string; children: ReactNode; managed?: { source: string; reason: string } }) {
-  return <section className="settings-section"><header><h2>{title}</h2><p>{description}</p>{managed ? <em className="managed-section" title={managed.reason}>Managed · {managed.source}</em> : null}</header><fieldset className="settings-card" disabled={Boolean(managed)}>{children}</fieldset></section>;
-}
-
-function ToggleRow({ label, description, checked, managed, onChange }: { label: string; description?: string; checked: boolean; managed?: { source: string; reason: string }; onChange: (value: boolean) => void }) {
-  return <label className="setting-row setting-toggle"><span><strong>{label}</strong>{description ? <small>{description}</small> : null}{managed ? <em title={managed.reason}>Managed · {managed.source}</em> : null}</span><input type="checkbox" checked={checked} disabled={Boolean(managed)} onChange={(event) => onChange(event.target.checked)} /></label>;
-}
-
-function SelectRow({ label, value, options, onChange }: { label: string; value: string; options: readonly (readonly [string, string])[]; onChange: (value: string) => void }) {
-  return <label className="setting-row"><span><strong>{label}</strong></span><select value={value} onChange={(event) => onChange(event.target.value)}>{options.map(([optionValue, text]) => <option key={optionValue} value={optionValue}>{text}</option>)}</select></label>;
-}
-
-function RangeRow({ label, value, min, max, unit, onChange }: { label: string; value: number; min: number; max: number; unit: string; onChange: (value: number) => void }) {
-  return <label className="setting-row setting-range"><span><strong>{label}</strong><small>{value}{unit}</small></span><input type="range" value={value} min={min} max={max} onChange={(event) => onChange(Number(event.target.value))} /></label>;
-}
-
-function NumberRow({ label, value, min, max, unit, onChange }: { label: string; value: number; min: number; max: number; unit?: string; onChange: (value: number) => void }) {
-  return <label className="setting-row"><span><strong>{label}</strong>{unit ? <small>{unit}</small> : null}</span><input type="number" value={value} min={min} max={max} onChange={(event) => onChange(Number(event.target.value))} /></label>;
-}
-
-function TextRow({ label, value, placeholder, onChange }: { label: string; value: string; placeholder?: string; onChange: (value: string) => void }) {
-  return <label className="setting-row"><span><strong>{label}</strong></span><input type="text" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} /></label>;
-}
-
-function SecretRow({ label, value, configured, onChange, onSave, showSave = true }: { label: string; value: string; configured: boolean; onChange: (value: string) => void; onSave: () => void; showSave?: boolean }) { return <div className="setting-row"><span><strong>{label}</strong><small>{configured ? "Stored in system Keychain" : "Not configured"}</small></span><div className="secret-setting"><input aria-label={label} type="password" value={value} placeholder="••••••••" onChange={(event) => onChange(event.target.value)} />{showSave ? <button type="button" disabled={!value.trim()} onClick={onSave}>Save</button> : null}</div></div>; }
 
 function StatusCard({ status, label }: { status: string; label: string }) { return <div className="settings-status-card"><strong>{status}</strong><span>{label}</span></div>; }
 function CategoryReset({ onReset }: { onReset: () => void }) { return <button type="button" className="secondary-setting-action" onClick={onReset}>Restore category defaults</button>; }
@@ -551,7 +618,7 @@ function CloudShareManager({ platform, sourceId, viewerUrl, offline, dateTimeFor
 }
 function MergeStatusCard({ status }: { status: MergeDriverStatus }) { const versionMatches = status.driverVersion === status.expectedVersion; return <div className="external-capabilities"><h3>Git readiness</h3><div><span>Git repository</span><b>{status.repositoryIsGit ? "Ready" : "Not detected"}</b></div><div><span>Workspace manifest</span><b>{status.manifestPresent ? "Present" : "Missing"}</b></div><div><span>Merge driver</span><b>{!status.driverVersion ? "Not installed" : !versionMatches ? `Version mismatch (${status.driverVersion} / ${status.expectedVersion})` : status.driverConfigured && status.attributesConfigured ? "Installed & configured" : "Installed; setup required"}</b></div><div><span>.gitattributes</span><b>{status.attributesConfigured ? "Configured" : "Missing"}</b></div><div><span>Schema fingerprint</span><b>{status.fingerprintMatches === null ? "Unknown" : status.fingerprintMatches ? "Matches" : "Different"}</b></div></div>; }
 function ProjectPolicyCard({ project, projectId, onSave }: { project: EffectiveSettings["project"]; projectId: string; onSave: (project: NonNullable<EffectiveSettings["project"]>) => void }) { const value = project ?? defaultProjectSettings(projectId); return <div className="project-policy"><h3>Team project policy</h3><p>Shared rules override personal and source preferences. Organization policy remains highest priority.</p><ToggleRow label="Allow Snapshot sync" checked={value.allowSnapshotSync} onChange={(allowSnapshotSync) => onSave({ ...value, allowSnapshotSync, updatedAt: new Date().toISOString() })} /><ToggleRow label="Allow shared layouts" checked={value.allowSharedLayouts} onChange={(allowSharedLayouts) => onSave({ ...value, allowSharedLayouts, updatedAt: new Date().toISOString() })} /><ToggleRow label="Allow remote AI" checked={value.allowRemoteAi} onChange={(allowRemoteAi) => onSave({ ...value, allowRemoteAi, updatedAt: new Date().toISOString() })} /><button type="button" className="secondary-setting-action" onClick={() => onSave({ ...value, sharedCanvas: value.sharedCanvas ? null : defaultAppSettings().canvas, updatedAt: new Date().toISOString() })}>{value.sharedCanvas ? "Stop sharing ER display rules" : "Share default ER display rules"}</button></div>; }
-function AboutDocument({ kind, onClose }: { kind: "releaseNotes" | "license" | "notices"; onClose: () => void }) { const content = kind === "releaseNotes" ? { title: "Release notes · 0.1.0", body: "Initial local-first release: PostgreSQL and MySQL schema introspection, field-level ER relationships, Snapshot history, split-file Git semantics, offline and OpenAI-compatible explanations, opt-in metadata Cloud sync, and the unified Settings control center." } : kind === "license" ? { title: "License", body: "Nodal Studio source code is distributed under the MIT license. Copyright (c) 2026 ClayCosmos. The license permits use, copying, modification, distribution, sublicensing, and sale subject to preserving the copyright and permission notice; the software is provided without warranty." } : { title: "Third-party notices", body: "This application uses Rust, Tauri, React, TypeScript, Vite, TanStack Query, React Flow, ELK.js, SQLx, Axum, Tokio, Reqwest, Serde and their transitive dependencies. Distribution builds must include the license texts generated from Cargo.lock and pnpm-lock.yaml." }; return <div className="data-boundary" role="dialog" aria-modal="true" aria-label={content.title}><h3>{content.title}</h3><p>{content.body}</p><button type="button" onClick={onClose}>Close</button></div>; }
+function AboutDocument({ kind, onClose }: { kind: "releaseNotes" | "license" | "notices"; onClose: () => void }) { const content = kind === "releaseNotes" ? { title: "Release notes · 0.1.0", body: "Initial local-first release: PostgreSQL and MySQL schema introspection, field-level ER relationships, Snapshot history, split-file Git semantics, offline and OpenAI-compatible explanations, opt-in metadata Cloud sync, and the unified Settings control center." } : kind === "license" ? { title: "License", body: "Nodal Studio source code is distributed under the MIT license. Copyright (c) 2026 ClayCosmos. The license permits use, copying, modification, distribution, sublicensing, and sale subject to preserving the copyright and permission notice; the software is provided without warranty." } : { title: "Third-party notices", body: "This application uses Rust, Tauri, React, TypeScript, Vite, TanStack Query, React Flow, ELK.js, SQLx, Axum, Tokio, Reqwest, Serde and their transitive dependencies. Distribution builds must include the license texts generated from Cargo.lock and pnpm-lock.yaml." }; return <div className="data-boundary" role="region" aria-label={content.title}><h3>{content.title}</h3><p>{content.body}</p><button type="button" onClick={onClose}>Close</button></div>; }
 function redactedDiagnosticSummary(info: DiagnosticInfo, app: AppSettings) { return JSON.stringify({ application: "Nodal Studio", version: info.appVersion, rustVersion: info.rustVersion, target: info.target, offlineMode: app.privacy.offlineMode, diagnosticsEnabled: app.privacy.diagnosticsEnabled, updateChannel: app.updates.channel, logLevel: app.privacy.logLevel }, null, 2); }
 function capturePerformanceSnapshot() { const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory; return { uptimeMs: performance.now(), domNodes: document.querySelectorAll("*").length, resourceEntries: performance.getEntriesByType("resource").length, heapBytes: memory?.usedJSHeapSize ?? null }; }
 function formatSettingsDate(value: string, format: AppSettings["general"]["dateTimeFormat"]) { const date = new Date(value); return format === "iso8601" ? date.toISOString() : date.toLocaleString(); }
