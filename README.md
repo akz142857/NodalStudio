@@ -72,7 +72,7 @@ pnpm --filter @nodalstudio/desktop tauri build --bundles app
 ## Signed macOS release
 
 The [v0.1.0 release notes](docs/releases/v0.1.0.md) and
-[preparation record](docs/releases/v0.1.0-readiness.md) track the current release candidate.
+[verification record](docs/releases/v0.1.0-readiness.md) document the signed release.
 
 The release script builds a Universal app for Apple Silicon and Intel, signs it
 with a Developer ID Application certificate, submits it to Apple for
