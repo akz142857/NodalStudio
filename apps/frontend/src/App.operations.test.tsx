@@ -36,21 +36,20 @@ describe("App snapshot operation feedback", () => {
     expect(preflight).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("heading", { name: "Structure preflight" })).toBeVisible();
   });
-  it("reports refresh running/error/success, blocks duplicates and retries with the current source", async () => {
+  it("keeps normal refreshes quiet, reports errors, blocks duplicates and retries with the current source", async () => {
     const platform = await mount(); let reject!: (reason: Error) => void;
     const capture = vi.spyOn(platform, "capturePostgresSnapshot").mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; })).mockResolvedValue({ snapshot: reportSnapshot, stored: false, changeSet: null });
     const button = refresh(); fireEvent.click(button); fireEvent.click(button);
-    expect(within(screen.getByRole("group", { name: "Snapshot refresh" })).getByRole("status")).toHaveTextContent("Running · Refreshing Commerce");
+    expect(screen.queryByRole("group", { name: "Snapshot refresh" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Refreshing…" })[0]).toBeDisabled(); expect(capture).toHaveBeenCalledOnce();
     await act(() => Promise.resolve(reject(new Error("Connection interrupted"))));
     expect(screen.getByRole("alert")).toHaveTextContent("The loaded snapshot remains available");
     expect(screen.getByRole("alert")).toHaveTextContent("Connection interrupted");
     expect(screen.getByTestId("operation-canvas")).toHaveTextContent(reportSnapshot.id);
     fireEvent.click(screen.getByRole("button", { name: "Retry snapshot refresh" }));
-    await waitFor(() => expect(within(screen.getByRole("group", { name: "Snapshot refresh" })).getByRole("status")).toHaveTextContent("3 tables · 0 structural changes. No new snapshot stored."));
+    await waitFor(() => expect(refresh()).toBeEnabled());
     expect(capture).toHaveBeenCalledTimes(2); expect(capture).toHaveBeenLastCalledWith(reportSnapshot.sourceId, "manual");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    fireEvent.click(within(screen.getByRole("group", { name: "Snapshot refresh" })).getByRole("button", { name: "Dismiss result" }));
     expect(screen.queryByRole("group", { name: "Snapshot refresh" })).not.toBeInTheDocument();
   });
   it.each(["success", "failure"])("does not replace the current source or show a late refresh %s", async (outcome) => {

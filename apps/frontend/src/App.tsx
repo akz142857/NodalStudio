@@ -785,7 +785,7 @@ export function App() {
         <div className="runtime-actions" role="group" aria-label="Application tools">
           {snapshot && runtime.data?.kind === "desktop" && discoveryLatest.data?.[0]?.id === snapshot.id && mode === "explore" && !preflightOpen && semanticsSettledSnapshot === snapshot ? <button type="button" onClick={() => { setSearchOpen(false); setDiscoverySnapshot(snapshot); }}>Business question</button> : null}
           <IconButton icon="import" label="Import DDL" onClick={() => setDdlPreviewOpen(true)} description="Open a temporary PostgreSQL/MySQL file or clipboard model; never execute SQL" />
-          {refreshOperation.state ? <div className="refresh-operation-result"><OperationFeedback label="Snapshot refresh" state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel="Retry snapshot refresh" onDismiss={refreshOperation.dismiss} /></div> : null}
+          {refreshOperation.state?.phase === "error" ? <div className="refresh-operation-result"><OperationFeedback label="Snapshot refresh" state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel="Retry snapshot refresh" onDismiss={refreshOperation.dismiss} /></div> : null}
           {snapshot ? <IconButton icon="preflight" label="Structure preflight" aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} description="Check the entire loaded snapshot with dialect-aware metadata rules" /> : null}
           {snapshot ? <SchemaReportExportAction key={snapshot.id} snapshot={snapshot} semantics={semanticsSnapshot === snapshot ? semantics : undefined} platform={platform} /> : null}
           {snapshot && runtime.data?.kind === "desktop" ? (
