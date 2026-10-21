@@ -53,11 +53,15 @@ describe("SchemaCanvas requested navigation", () => {
     viewport.measured = true; rerender(<Diagram locate={locate} done={done} ready={false} />);
     expect(fits()).toHaveLength(0);
     rerender(<Diagram locate={locate} done={done} />);
-    await waitFor(() => expect(fits()).toHaveLength(1));
+    // fitView runs in the animation callback before React commits selection.
+    await waitFor(() => {
+      expect(fits()).toHaveLength(1);
+      expect(done).toHaveBeenCalledWith(locate);
+      expect(container.querySelector('.react-flow__node[data-id="archive.orders"]')).toHaveClass("selected");
+    });
     const options = fits()[0][0] as { nodes: TableNode[]; maxZoom: number };
     expect(options.nodes[0].position).toEqual({ x: 6000, y: 2000 });
-    expect(options.maxZoom).toBe(1); expect(done).toHaveBeenCalledWith(locate);
-    expect(container.querySelector('.react-flow__node[data-id="archive.orders"]')).toHaveClass("selected");
+    expect(options.maxZoom).toBe(1);
   });
 
   it("exits an isolated graph, restores a hidden table and supports locating it again", async () => {
