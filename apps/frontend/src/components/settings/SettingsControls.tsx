@@ -39,5 +39,5 @@ export function TextRow({ label, value, placeholder, onChange }: { label: string
 export function SecretRow({ label, value, configured, onChange, onSave, showSave = true }: { label: string; value: string; configured: boolean; onChange: (value: string) => void; onSave: () => void; showSave?: boolean }) {
   const id = useId();
   const descriptionId = useId();
-  return <div className="setting-row"><label htmlFor={id}><strong>{label}</strong><small id={descriptionId}>{configured ? "Stored in system Keychain" : "Not configured"}</small></label><div className="secret-setting"><input id={id} aria-describedby={descriptionId} type="password" value={value} placeholder="••••••••" onChange={(event) => onChange(event.target.value)} />{showSave ? <button type="button" disabled={!value.trim()} onClick={onSave}>Save</button> : null}</div></div>;
+  return <div className="setting-row"><label htmlFor={id}><strong>{label}</strong><small id={descriptionId}>{configured ? "Stored in the system credential store" : "Not configured"}</small></label><div className="secret-setting"><input id={id} aria-describedby={descriptionId} type="password" value={value} placeholder="••••••••" onChange={(event) => onChange(event.target.value)} />{showSave ? <button type="button" disabled={!value.trim()} onClick={onSave}>Save</button> : null}</div></div>;
 }

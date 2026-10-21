@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "createUpdaterArtifacts": false,
+    "windows": {
+      "certificateThumbprint": null,
+      "signCommand": null,
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English", "SimpChinese"],
+        "displayLanguageSelector": true,
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  }
+}

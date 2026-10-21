@@ -26,7 +26,7 @@ rust-version = "1.95"
 axum = "0.8.8"
 chrono = { version = "0.4.42", features = ["serde"] }
 hex = "0.4.3"
-keyring = { version = "3.6.3", features = ["apple-native"] }
+keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 semver = "1.0.27"
 serde = { version = "1.0.228", features = ["derive"] }

@@ -174,7 +174,7 @@ describe("ConnectionPanel", () => {
     expect(screen.getByRole("dialog", { name: "Edit Flow" })).toBeInTheDocument();
     expect(screen.getByLabelText("Database")).toHaveValue("flow");
     expect(screen.getByLabelText("Password")).toHaveAttribute("placeholder", "Optional — keep current password");
-    expect(screen.getByText("Keychain storage")).toBeInTheDocument();
+    expect(screen.getByText("System credential storage")).toBeInTheDocument();
     expect(screen.getByText("Use TLS when the database server supports it.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Verify & refresh" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Delete data source" })).toBeInTheDocument();
@@ -203,7 +203,7 @@ describe("ConnectionPanel", () => {
     expect(screen.getByText("Flow local")).toBeInTheDocument();
   });
 
-  it("requires verification for connection detail changes and reuses the Keychain password", async () => {
+  it("requires verification for connection detail changes and reuses the system credential store password", async () => {
     const verifyAndRefreshDataSource = vi.fn().mockResolvedValue({
       profile,
       connection: connectionResult,

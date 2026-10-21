@@ -69,6 +69,14 @@ Build the desktop application bundle:
 pnpm --filter @nodalstudio/desktop tauri build --bundles app
 ```
 
+## Windows x64 test package
+
+Build an unsigned Windows NSIS installer on Windows with `pnpm release:windows:test`.
+The [Windows test packaging guide](docs/releases/windows-test.md) covers prerequisites,
+checksums, automated installation/WebView2/credential checks and remaining desktop
+acceptance. The **Windows x64 test package** GitHub Actions workflow produces the
+installer and verification evidence as a downloadable artifact.
+
 ## Signed macOS release
 
 The [v0.1.0 release notes](docs/releases/v0.1.0.md) and

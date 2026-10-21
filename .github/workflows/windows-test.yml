@@ -1,0 +1,67 @@
+name: Windows x64 test package
+
+on:
+  push:
+    branches: [main, 'codex/windows-*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: 3
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: clippy,rustfmt
+          targets: x86_64-pc-windows-msvc
+      - uses: swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - name: Windows frontend validation
+        run: |
+          pnpm typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm test
+          exit $LASTEXITCODE
+      - name: Windows Rust validation (including real Credential Manager)
+        run: |
+          cargo fmt --all --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --workspace --locked
+          exit $LASTEXITCODE
+      - name: Build unsigned installer and checksum
+        run: ./Scripts/build_windows_test.ps1
+      - name: Install, launch WebView2, verify persistence and uninstall
+        run: ./Scripts/test_windows_package.ps1
+      - name: Upload test package and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nodal-Studio-windows-x64-unsigned-${{ github.sha }}
+          path: dist/releases/windows-*-test/
+          if-no-files-found: warn
+          retention-days: 30

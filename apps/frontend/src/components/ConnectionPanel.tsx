@@ -379,7 +379,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
               <section className="connection-form-section" aria-labelledby="connection-access-title">
                 <div className="connection-section-heading">
                   <strong id="connection-access-title">Access & security</strong>
-                  <span className="connection-keychain-status">Keychain storage</span>
+                  <span className="connection-keychain-status">System credential storage</span>
                 </div>
                 <div className="connection-form-grid connection-access-grid">
                   <label>
@@ -392,8 +392,8 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                   </label>
                   <p className="connection-credential-note">
                     {editingProfile
-                      ? "Leave blank to keep the password already stored in macOS Keychain."
-                      : "The password is saved to macOS Keychain after the connection succeeds."}
+                      ? "Leave blank to keep the password already stored in the system credential store."
+                      : "The password is saved to the system credential store after the connection succeeds."}
                   </p>
                 </div>
                 <div className="connection-security-setting">
@@ -419,7 +419,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                       <span>
                         {requiresLiveVerification
                           ? "Connection details changed. Verify before saving and replace the saved schema snapshot."
-                          : "Connect now using the saved Keychain password and replace the saved schema snapshot."}
+                          : "Connect now using the saved system credential store password and replace the saved schema snapshot."}
                       </span>
                     </div>
                     <button
