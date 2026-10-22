@@ -187,4 +187,5 @@ Production signing preparation (2026-10-22, v0.1.1)
   private SQLite backup, and before/after table digests. It does not establish
   that the original unsigned-for-updates v0.1.0 can update itself.
 - Artifact signing/notarization, GitHub publication and the upgrade round trip
-  are recorded separately after completion.
+  completed successfully. See docs/releases/v0.1.1-validation.md for exact scope
+  and retained evidence. The release source remains commit 85d0c70.
