@@ -641,6 +641,7 @@ export interface NodalStudioPlatform {
   importPortableBackup(path: string): Promise<import("./settings-types").BackupReceipt>;
   checkForUpdates(): Promise<import("./settings-types").UpdateCheckResult>;
   getUpdateStatus(): Promise<import("./settings-types").UpdateStatus>;
+  openUpdateReleases(): Promise<void>;
   downloadUpdate(): Promise<void>;
   cancelUpdateDownload(): Promise<void>;
   installUpdate(): Promise<void>;

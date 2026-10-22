@@ -45,11 +45,11 @@ impl ConnectionTests {
         })
     }
     pub fn cancel(&self, id: Uuid) -> bool {
-        if let Ok(tests) = self.0.lock() {
-            if let Some(token) = tests.get(&id) {
-                token.cancel();
-                return true;
-            }
+        if let Ok(tests) = self.0.lock()
+            && let Some(token) = tests.get(&id)
+        {
+            token.cancel();
+            return true;
         }
         false
     }
@@ -61,7 +61,7 @@ impl RunningTest {
     ) -> Result<T, ConnectionFailure> {
         tokio::select! {
             biased;
-            _ = self.token.cancelled() => Err(ConnectionFailure::new("cancelled", "Connection test cancelled. Nothing was saved.")),
+            () = self.token.cancelled() => Err(ConnectionFailure::new("cancelled", "Connection test cancelled. Nothing was saved.")),
             result = tokio::time::timeout(Duration::from_secs(40), work) => result.unwrap_or_else(|_| Err(ConnectionFailure::new("timeout", "Connection test timed out. Check the network and server, then try again."))),
         }
     }
@@ -90,18 +90,18 @@ mod tests {
     use super::*;
     #[tokio::test]
     async fn cancel_drops_inflight_work_and_registry_without_affecting_other_tests() {
-        let tests = ConnectionTests::default();
-        let id = Uuid::new_v4();
-        let operation = tests.start(id).unwrap();
-        let other_id = Uuid::new_v4();
-        let other = tests.start(other_id).unwrap();
-        let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
         struct Guard(Arc<std::sync::atomic::AtomicBool>);
         impl Drop for Guard {
             fn drop(&mut self) {
                 self.0.store(true, std::sync::atomic::Ordering::SeqCst);
             }
         }
+        let tests = ConnectionTests::default();
+        let id = Uuid::new_v4();
+        let operation = tests.start(id).unwrap();
+        let other_id = Uuid::new_v4();
+        let other = tests.start(other_id).unwrap();
+        let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let observed = dropped.clone();
         let work = async move {
             let _guard = Guard(observed);
@@ -112,13 +112,15 @@ mod tests {
             tokio::task::yield_now().await;
             assert!(tests.cancel(id));
         };
-        let (result, _) = tokio::join!(operation.run(work), cancellation);
+        let (result, ()) = tokio::join!(operation.run(work), cancellation);
         assert_eq!(result.unwrap_err().stage, "cancelled");
         assert!(dropped.load(std::sync::atomic::Ordering::SeqCst));
-        assert!(other
-            .run(async { Ok::<_, ConnectionFailure>(()) })
-            .await
-            .is_ok());
+        assert!(
+            other
+                .run(async { Ok::<_, ConnectionFailure>(()) })
+                .await
+                .is_ok()
+        );
         drop(operation);
         assert!(!tests.cancel(id));
         drop(other);
@@ -165,7 +167,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
         };
-        let (result, _) = tokio::join!(
+        let (result, ()) = tokio::join!(
             operation.run(crate::test_database_connection(&input)),
             server
         );

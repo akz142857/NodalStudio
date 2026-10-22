@@ -169,9 +169,15 @@ be tested separately because macOS may require security-scoped bookmarks.
 
 ## Application updates
 
-For macOS application updates, the local acceptance builds and later HTTPS feed
-configuration are documented in [docs/UPDATES.txt](./docs/UPDATES.txt). The default
-build leaves the production update endpoint and signing public key unconfigured.
+Settings > Updates & About checks [GitHub Releases](https://github.com/akz142857/NodalStudio/releases)
+and offers manual installation in builds without an updater signing key, including
+Windows. Signed macOS distributions use the release's `latest.json` and verified
+`.app.tar.gz` archive for in-app installation, backup and restart.
+
+The macOS release script can generate verified GitHub updater artifacts when
+`UPDATER_PUBLIC_KEY_PATH` and the signing environment are configured. Key setup,
+release publishing, local acceptance builds and the one-time manual upgrade from
+v0.1.0 are documented in [docs/UPDATES.txt](./docs/UPDATES.txt).
 
 ## Cloud API and read-only Web viewer
 

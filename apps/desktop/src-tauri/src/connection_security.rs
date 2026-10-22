@@ -8,7 +8,7 @@ use std::{
 };
 use tauri_plugin_dialog::DialogExt;
 
-fn local_file(value: &Option<String>, label: &str) -> Result<(), String> {
+fn local_file(value: Option<&str>, label: &str) -> Result<(), String> {
     if let Some(value) = value {
         let path = Path::new(value);
         if !path.is_absolute() || !path.is_file() || std::fs::File::open(path).is_err() {
@@ -24,9 +24,9 @@ pub fn validate(security: &ConnectionSecurity, mode: SslMode) -> Result<(), Stri
         if tls.client_certificate.is_some() != tls.client_key.is_some() {
             return Err("Client certificate and private key must be provided together.".into());
         }
-        local_file(&tls.ca_certificate, "the CA certificate")?;
-        local_file(&tls.client_certificate, "the client certificate")?;
-        local_file(&tls.client_key, "the TLS private key")?;
+        local_file(tls.ca_certificate.as_deref(), "the CA certificate")?;
+        local_file(tls.client_certificate.as_deref(), "the client certificate")?;
+        local_file(tls.client_key.as_deref(), "the TLS private key")?;
     }
     if let Some(ssh) = &security.ssh {
         if !valid_host(&ssh.host)
@@ -43,9 +43,9 @@ pub fn validate(security: &ConnectionSecurity, mode: SslMode) -> Result<(), Stri
             if ssh.private_key.is_none() {
                 return Err("Choose an SSH private key.".into());
             }
-            local_file(&ssh.private_key, "the SSH private key")?;
+            local_file(ssh.private_key.as_deref(), "the SSH private key")?;
         }
-        local_file(&ssh.known_hosts, "the SSH known hosts file")?;
+        local_file(ssh.known_hosts.as_deref(), "the SSH known hosts file")?;
     }
     Ok(())
 }
@@ -79,7 +79,7 @@ impl Drop for Askpass {
 }
 impl Askpass {
     #[cfg(unix)]
-    async fn start(directory: &Path, password: &str) -> Result<Self, String> {
+    fn start(directory: &Path, password: &str) -> Result<Self, String> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         if password.len() > 16_384 || password.contains(['\n', '\r', '\0']) {
             return Err("Unsupported SSH password length or characters.".into());
@@ -108,7 +108,10 @@ impl Askpass {
                         continue;
                     }
                     let _ = stream
-                        .write_all(&(password.len() as u32).to_be_bytes())
+                        .write_all(
+                            &(u32::try_from(password.len()).expect("password length was bounded"))
+                                .to_be_bytes(),
+                        )
                         .await;
                     let _ = stream.write_all(password.as_bytes()).await;
                     break;
@@ -123,7 +126,7 @@ impl Askpass {
         })
     }
     #[cfg(not(unix))]
-    async fn start(_: &Path, _: &str) -> Result<Self, String> {
+    fn start(_: &Path, _: &str) -> Result<Self, String> {
         Err("SSH requires macOS or Linux.".into())
     }
 }
@@ -173,12 +176,16 @@ pub fn run_askpass_helper() -> bool {
 
 pub struct Tunnel {
     // kill_on_drop also covers cancellation and early error returns.
-    _child: Option<tokio::process::Child>,
+    child: Option<tokio::process::Child>,
     _askpass: Option<Askpass>,
     directory: Option<tempfile::TempDir>,
     socket: Option<PathBuf>,
 }
 impl Tunnel {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Keep the scoped SSH process setup and cleanup together"
+    )]
     pub async fn open(
         security: &ConnectionSecurity,
         host: &str,
@@ -188,7 +195,7 @@ impl Tunnel {
     ) -> Result<Self, String> {
         let Some(ssh) = &security.ssh else {
             return Ok(Self {
-                _child: None,
+                child: None,
                 _askpass: None,
                 directory: None,
                 socket: None,
@@ -251,7 +258,7 @@ impl Tunnel {
             let password = password
                 .filter(|p| !p.is_empty())
                 .ok_or("Enter an SSH password.")?;
-            let askpass = Askpass::start(directory.path(), password).await?;
+            let askpass = Askpass::start(directory.path(), password)?;
             command.args([
                 "-o",
                 "BatchMode=no",
@@ -303,14 +310,14 @@ impl Tunnel {
             .spawn()
             .map_err(|_| "Unable to start OpenSSH. Install the system SSH client.")?;
         let mut tunnel = Self {
-            _child: Some(child),
+            child: Some(child),
             _askpass: askpass,
             directory: Some(directory),
             socket: Some(socket),
         };
         let started = std::time::Instant::now();
         loop {
-            let child = tunnel._child.as_mut().expect("SSH child");
+            let child = tunnel.child.as_mut().expect("SSH child");
             if child
                 .try_wait()
                 .map_err(|_| "Unable to check the SSH connection.")?
@@ -381,13 +388,17 @@ mod tests {
     fn rejects_incomplete_tls_identity_and_missing_files() {
         let mut security = ConnectionSecurity::default();
         security.tls.client_certificate = Some("/missing/client.pem".into());
-        assert!(validate(&security, SslMode::VerifyFull)
-            .unwrap_err()
-            .contains("together"));
+        assert!(
+            validate(&security, SslMode::VerifyFull)
+                .unwrap_err()
+                .contains("together")
+        );
         security.tls.client_key = Some("/missing/client.key".into());
-        assert!(validate(&security, SslMode::VerifyFull)
-            .unwrap_err()
-            .contains("readable"));
+        assert!(
+            validate(&security, SslMode::VerifyFull)
+                .unwrap_err()
+                .contains("readable")
+        );
         assert!(validate(&security, SslMode::Disable).is_ok());
     }
     #[test]
@@ -433,6 +444,10 @@ mod tests {
     /// Run only against the isolated local TLS/SSH fixture, never a saved data source.
     #[tokio::test]
     #[ignore = "requires the local nodal-security-acceptance fixture"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "One opt-in fixture exercises the complete TLS and SSH lifecycle"
+    )]
     async fn tls_and_ssh_acceptance() {
         use schema_model::{SshConfig, TlsConfig};
         let directory = std::env::var("NODAL_SECURITY_FIXTURE").expect("fixture path");

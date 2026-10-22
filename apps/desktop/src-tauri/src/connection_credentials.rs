@@ -157,7 +157,7 @@ mod tests {
                 .is_none()
         );
         let security = ConnectionSecurity {
-            tls: Default::default(),
+            tls: schema_model::TlsConfig::default(),
             ssh: Some(ssh()),
         };
         assert!(resolve_ssh(None, &security, None).is_err());
@@ -173,9 +173,6 @@ mod tests {
     #[ignore = "requires isolated SSH password fixture and unlocked OS keychain"]
     async fn password_keychain_and_tunnel_acceptance() {
         use schema_model::{DatabaseType, SslMode, TlsConfig};
-        let directory = std::env::var("NODAL_SECURITY_FIXTURE").expect("fixture path");
-        assert_eq!(directory, "/tmp/nodal-security-acceptance");
-        let id = Uuid::new_v4();
         struct Cleanup(Uuid);
         impl Drop for Cleanup {
             fn drop(&mut self) {
@@ -183,6 +180,9 @@ mod tests {
                 let _ = write(crate::KEYRING_SERVICE, self.0, None);
             }
         }
+        let directory = std::env::var("NODAL_SECURITY_FIXTURE").expect("fixture path");
+        assert_eq!(directory, "/tmp/nodal-security-acceptance");
+        let id = Uuid::new_v4();
         let _cleanup = Cleanup(id);
         let file = |name: &str| Some(format!("{directory}/{name}"));
         let mut input = crate::SaveDataSourceInput {

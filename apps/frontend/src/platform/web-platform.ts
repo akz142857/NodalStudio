@@ -455,6 +455,7 @@ export class WebPlatform implements NodalStudioPlatform {
   }
 
   getUpdateStatus(): Promise<import("./settings-types").UpdateStatus> { return Promise.reject(new Error("Updates require the desktop app.")); }
+  openUpdateReleases(): Promise<void> { return Promise.reject(new Error("Updates require the desktop app.")); }
   downloadUpdate(): Promise<void> { return Promise.reject(new Error("Updates require the desktop app.")); }
   cancelUpdateDownload(): Promise<void> { return Promise.reject(new Error("Updates require the desktop app.")); }
   installUpdate(): Promise<void> { return Promise.reject(new Error("Updates require the desktop app.")); }

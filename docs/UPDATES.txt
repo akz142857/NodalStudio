@@ -1,10 +1,37 @@
-Nodal Studio — application updates, phase 1
+Nodal Studio — application updates and GitHub Releases
 
 Scope
 Manual check, signed full download, cancellation/retry, explicit install/restart,
 local data backup and shared Settings design-system UI. macOS first.
-Automated publishing, scheduled checks, staged rollout and migration recovery UI
+Scheduled checks, staged rollout and migration recovery UI
 remain later phases. The existing opt-in startup check is retained.
+
+GitHub source (2026-10-22)
+The official public repository is https://github.com/akz142857/NodalStudio.
+Normal builds without an updater public key query its public Releases API and
+offer a browser entry to the official release page for manual installation.
+Windows uses this manual flow too; native installation remains macOS-only.
+Stable checks use /releases/latest and reject prereleases. Beta checks select
+the highest semantic version among the 100 most recent published releases,
+including stable releases. Drafts and non-version tags are excluded. No token is
+embedded or sent. Rate limits, unavailable releases and invalid responses are
+reported as errors, never as an up-to-date result. Offline mode and organization
+policy also block the release-page action.
+
+A macOS distribution with an embedded updater key uses:
+https://github.com/akz142857/NodalStudio/releases/latest/download/latest.json
+The manifest points to immutable /releases/download/vVERSION/... archive URLs.
+GitHub metadata alone never enables native download/install. Failed signed-feed
+checks or signatures do not fall back to installing an unsigned release.
+Custom feeds require a trusted key; clearing a custom feed restores the default.
+The official signed endpoint is stable-only. Beta signed updates require a
+dedicated custom feed (optionally containing {channel}); selecting Beta without
+one reports that configuration requirement instead of reusing the stable feed.
+
+At inspection time, GitHub v0.1.0 contained a macOS DMG, an unsigned Windows
+installer and SHA-256 sidecars. It had no latest.json, .app.tar.gz or Tauri .sig.
+Those existing attachments support manual installation, not in-app installation.
+A checksum or Apple code signature does not replace the updater signature.
 
 Trust and state
 Rust owns the selected Update and its exact verified bytes. No install path, key,
@@ -76,22 +103,88 @@ Workspace Clippy with all targets/features, type checking, lint and Release buil
 When system proxies are enabled, native tests need explicit loopback exceptions:
 NO_PROXY=localhost,127.0.0.1,::1 cargo test -p nodalstudio-desktop -p snapshot-store
 
-Enable a real distribution later
+Prepare a real GitHub distribution
 1. Generate and securely back up a dedicated Tauri updater signing key. Keep the
    private key out of source control; only the public key is embedded in the app.
-2. Copy config/updater.conf.example.json to a private build config and supply the
-   public key and real HTTPS endpoint. {channel} is replaced with stable or beta.
-3. Set TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD in the
-   build environment. Build with the config override and createUpdaterArtifacts.
-   Never enable updater-smoke-test for distribution. Configure Developer ID signing
-   and Apple notarization separately; updater signatures do not replace them.
-4. Publish the app.tar.gz and its .sig. The feed uses the standard Tauri static JSON
-   shape: version, notes, platforms.darwin-aarch64.url and
-   platforms.darwin-aarch64.signature (file CONTENT, not a .sig URL).
-5. Upload immutable artifacts before publishing the feed. Keep bundle ID and the
-   application version consistent. Runtime version is read from Tauri package info.
-6. Users of the old 0.1.0 app must install the first updater-enabled build manually.
+   Example: pnpm --filter @nodalstudio/desktop tauri signer generate -w /secure/path/nodalstudio.key
+   Do not reuse the updater-smoke key. Do not replace an established production key:
+   existing installations trust the public key embedded in their application.
+2. Install the maintained minisign verifier (on macOS: brew install minisign).
+   Set UPDATER_PUBLIC_KEY_PATH in config/macos-release.env to the .pub file.
+   Optionally set UPDATER_NOTES_PATH to a release-notes text file.
+   Set UPDATER_PRIVATE_KEY_PATH to an encrypted private key and
+   UPDATER_KEYCHAIN_SERVICE / UPDATER_KEYCHAIN_ACCOUNT to its password entry.
+   Alternatively export TAURI_SIGNING_PRIVATE_KEY (path or key content) and
+   TAURI_SIGNING_PRIVATE_KEY_PASSWORD in the build environment. Never commit secrets.
+3. Set the new stable version consistently in tauri.conf.json, the Cargo workspace
+   and package metadata. Run pnpm release:macos. --check validates prerequisites.
+   The script retains existing Apple signing/notarization/Gatekeeper checks, embeds
+   the public key and GitHub endpoint through a temporary config, and generates
+   updater artifacts. Never enable updater-smoke-test for distribution.
+4. The script verifies the archive with minisign, checks bundle identifier/version,
+   supported archive entries and actual Mach-O architectures, then prepares:
+   dist/releases/macos-VERSION-updater/
+     Nodal-Studio_VERSION_TARGET.dmg
+     Nodal-Studio_VERSION_TARGET.app.tar.gz
+     Nodal-Studio_VERSION_TARGET.app.tar.gz.sig
+     latest.json
+     SHA256SUMS
+   Universal builds produce darwin-aarch64 and darwin-x86_64 entries pointing to the
+   same signed archive. Single-architecture builds advertise only that architecture.
+   The signature in latest.json is the .sig CONTENT, not a URL. Existing release
+   output is never overwritten. No script uploads or publishes these files.
+5. After reviewing the generated files, create a NEW draft GitHub Release with tag
+   vVERSION and upload all five files. Keep generated filenames unchanged, verify
+   the complete draft, then publish it as the latest stable release. Do not modify
+   artifacts already installed by users. Every subsequent latest release must also
+   carry a complete latest.json and the matching signed packages, or the /latest
+   endpoint will stop working. Keep Windows test-only releases as prereleases.
+6. Users of the old 0.1.0 app must install the first updater-enabled DMG manually.
+   Test a signed old/new pair using the real GitHub feed before claiming production
+   automatic-upgrade acceptance. Keep the earlier local acceptance record separate
+   from validation against published production artifacts.
+
+For existing signed artifacts or another build runner:
+python3 Scripts/github_update.py configure --public-key /secure/path/nodalstudio.key.pub --output /tmp/updater.json
+python3 Scripts/github_update.py manifest --archive /path/Nodal-Studio_VERSION_universal.app.tar.gz --signature /path/Nodal-Studio_VERSION_universal.app.tar.gz.sig --public-key /secure/path/nodalstudio.key.pub --version VERSION --target universal --output /path/latest.json
+The configure subcommand without --output only validates the public key. Both
+subcommands refuse to overwrite existing output. They do not need GitHub tokens.
+
+GitHub implementation validation before production key setup (2026-10-22)
+- Frontend: 703 tests passed; type checking, ESLint and web build passed.
+- Desktop library: 66 tests passed, 6 external acceptance tests ignored. The
+  initial sandbox run could not bind loopback sockets; rerunning with the needed
+  local networking permission passed. Release scripts: 33 tests passed.
+- A separately identified, ad-hoc-signed debug bundle
+  com.claycosmos.nodalstudio.updater-review opened Settings > Updates & About,
+  showed GitHub Releases as its source, queried the real public API and correctly
+  reported 0.1.0 up to date. It used an empty isolated data directory.
+- Updater source formatting passed. Repository-wide rustfmt and strict desktop
+  Clippy remain blocked by existing connection/query code diagnostics on main;
+  the update source has no remaining Clippy diagnostics. The release-script tests
+  use synthetic artifacts and a stub minisign executable for orchestration; they
+  do not constitute a production signing/notarization or GitHub install test.
+- No production signing key, uploaded assets or GitHub release was changed.
 
 References
 https://v2.tauri.app/plugin/updater/
 https://v2.tauri.app/distribute/sign/macos/
+
+Production signing preparation (2026-10-22, v0.1.1)
+- The embedded updater public key is config/updater-public.key.pub, minisign key ID
+  14A46E6CB996B8AB. Keep this key stable across future releases.
+- The encrypted private key is held outside the repository; its password is in
+  macOS Keychain. An encrypted local backup exists; off-device recovery remains an
+  operator responsibility. Neither secret is uploaded to GitHub.
+- A real signing/verification probe passed with the production key and minisign.
+- Strict workspace Clippy and rustfmt now pass after resolving existing diagnostics.
+- Release candidate validation: 703 frontend tests, 35 script tests and 169 Rust
+  workspace tests passed; 6 opt-in native acceptance tests were ignored. External
+  database integration tests require their separately configured services.
+  Type checking, ESLint and the production web build passed.
+- The production app identifier is fixed. Real GitHub acceptance uses an older,
+  locally built test copy with this public key and the production identifier, a
+  private SQLite backup, and before/after table digests. It does not establish
+  that the original unsigned-for-updates v0.1.0 can update itself.
+- Artifact signing/notarization, GitHub publication and the upgrade round trip
+  are recorded separately after completion.

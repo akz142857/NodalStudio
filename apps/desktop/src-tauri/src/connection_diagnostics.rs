@@ -26,31 +26,49 @@ impl std::fmt::Display for ConnectionFailure {
         write!(f, "{}: {}", self.stage, self.message)
     }
 }
-pub fn database(error: sqlx::Error) -> ConnectionFailure {
+pub fn database(error: &sqlx::Error) -> ConnectionFailure {
     use sqlx::Error;
     let (stage, message) = match error {
-        Error::Tls(_) => ("tls", "TLS handshake or certificate verification failed. Check the CA certificate, database hostname, and client certificate/key."),
-        Error::Database(ref error) => match error.code().as_deref() {
-            Some("28P01" | "28000" | "1045" | "1698") => ("database", "Database authentication was rejected. Check the database username, password, and server access rules."),
+        Error::Tls(_) => (
+            "tls",
+            "TLS handshake or certificate verification failed. Check the CA certificate, database hostname, and client certificate/key.",
+        ),
+        Error::Database(error) => match error.code().as_deref() {
+            Some("28P01" | "28000" | "1045" | "1698") => (
+                "database",
+                "Database authentication was rejected. Check the database username, password, and server access rules.",
+            ),
             Some("3D000" | "1049") => ("database", "The database does not exist. Check its name."),
-            Some("42501" | "1044" | "1142") => ("database", "The account does not have permission to access this database or read its metadata."),
-            _ => ("database", "The database rejected the connection or metadata request. Check database access rules and permissions."),
+            Some("42501" | "1044" | "1142") => (
+                "database",
+                "The account does not have permission to access this database or read its metadata.",
+            ),
+            _ => (
+                "database",
+                "The database rejected the connection or metadata request. Check database access rules and permissions.",
+            ),
         },
-        Error::Io(_) | Error::PoolTimedOut => ("database", "Could not reach the database or complete its handshake. Check its host, port, network, and server availability. With SSH enabled, the database must be reachable from the jump host."),
-        _ => ("database", "Could not read database identity. Check server compatibility and metadata permissions."),
+        Error::Io(_) | Error::PoolTimedOut => (
+            "database",
+            "Could not reach the database or complete its handshake. Check its host, port, network, and server availability. With SSH enabled, the database must be reachable from the jump host.",
+        ),
+        _ => (
+            "database",
+            "Could not read database identity. Check server compatibility and metadata permissions.",
+        ),
     };
     ConnectionFailure::new(stage, message)
 }
 pub fn postgres(error: postgres_adapter::PostgresAdapterError) -> ConnectionFailure {
     match error {
-        postgres_adapter::PostgresAdapterError::Database(error) => database(error),
+        postgres_adapter::PostgresAdapterError::Database(error) => database(&error),
         _ => ConnectionFailure::new("database", "Could not read PostgreSQL metadata."),
     }
 }
 pub fn mysql(error: mysql_adapter::MySqlAdapterError) -> ConnectionFailure {
     match error {
         mysql_adapter::MySqlAdapterError::Database(error)
-        | mysql_adapter::MySqlAdapterError::Metadata { source: error, .. } => database(error),
+        | mysql_adapter::MySqlAdapterError::Metadata { source: error, .. } => database(&error),
         _ => ConnectionFailure::new("database", "Could not read MySQL metadata."),
     }
 }
@@ -59,7 +77,7 @@ mod tests {
     use super::*;
     #[test]
     fn identifies_tls_without_exposing_driver_secrets() {
-        let failure = database(sqlx::Error::Tls(
+        let failure = database(&sqlx::Error::Tls(
             std::io::Error::other("private-key-material").into(),
         ));
         assert_eq!(failure.stage, "tls");
@@ -68,7 +86,7 @@ mod tests {
     }
     #[test]
     fn database_timeout_does_not_claim_tls_or_ssh_failed() {
-        let failure = database(sqlx::Error::PoolTimedOut).after_ssh(true);
+        let failure = database(&sqlx::Error::PoolTimedOut).after_ssh(true);
         assert_eq!(failure.stage, "database");
         assert!(failure.ssh_connected);
         assert!(failure.message.contains("jump host"));

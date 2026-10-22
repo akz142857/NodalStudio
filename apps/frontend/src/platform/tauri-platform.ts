@@ -418,6 +418,7 @@ export class TauriPlatform implements NodalStudioPlatform {
   }
 
   getUpdateStatus(): Promise<import("./settings-types").UpdateStatus> { return invoke("get_update_status"); }
+  openUpdateReleases(): Promise<void> { return invoke("open_update_releases"); }
   downloadUpdate(): Promise<void> { return invoke("download_update"); }
   cancelUpdateDownload(): Promise<void> { return invoke("cancel_update_download"); }
   installUpdate(): Promise<void> { return invoke("install_update"); }

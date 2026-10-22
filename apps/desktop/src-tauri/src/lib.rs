@@ -65,6 +65,7 @@ pub use connection_security::run_askpass_helper;
 mod diagram_export;
 mod discovery;
 mod export_file;
+mod github_releases;
 mod knowledge;
 mod query_export;
 mod schema_report;
@@ -860,39 +861,66 @@ async fn test_postgres_connection(
     let operation = tests.start(test_id.unwrap_or_else(Uuid::new_v4))?;
     // The first event acknowledges registration; clients may now safely cancel.
     connection_tests::progress(Some(&on_progress), "configuration", false);
-    operation.run(async {
-        // Keychain APIs may block. Cancellation must remain responsive while they finish.
-        let input = tokio::task::spawn_blocking(move || prepare_connection_test(input)).await
-            .map_err(|_| ConnectionFailure::new("configuration", "Unable to prepare the connection test."))??;
-        test_database_connection_with_progress(&input, Some(&on_progress)).await
-    }).await
+    operation
+        .run(async {
+            // Keychain APIs may block. Cancellation must remain responsive while they finish.
+            let input = tokio::task::spawn_blocking(move || prepare_connection_test(input))
+                .await
+                .map_err(|_| {
+                    ConnectionFailure::new(
+                        "configuration",
+                        "Unable to prepare the connection test.",
+                    )
+                })??;
+            test_database_connection_with_progress(&input, Some(&on_progress)).await
+        })
+        .await
 }
 
 #[tauri::command]
-fn cancel_connection_test(test_id: Uuid, tests: State<'_, connection_tests::ConnectionTests>) -> bool {
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Tauri command state is passed by value"
+)]
+fn cancel_connection_test(
+    test_id: Uuid,
+    tests: State<'_, connection_tests::ConnectionTests>,
+) -> bool {
     tests.cancel(test_id)
 }
 
-fn prepare_connection_test(input: SaveDataSourceInput) -> Result<SaveDataSourceInput, ConnectionFailure> {
+fn prepare_connection_test(
+    input: SaveDataSourceInput,
+) -> Result<SaveDataSourceInput, ConnectionFailure> {
     let mut input = input;
     let mut tls = input.security.clone();
     tls.ssh = None;
     connection_security::validate(&tls, input.ssl_mode)
         .map_err(|message| ConnectionFailure::new("tls", message))?;
     let mut ssh = input.security.clone();
-    ssh.tls = Default::default();
+    ssh.tls = schema_model::TlsConfig::default();
     connection_security::validate(&ssh, SslMode::Disable)
         .map_err(|message| ConnectionFailure::new("ssh", message))?;
     validate_connection_profile_input(&input)
         .map_err(|message| ConnectionFailure::new("configuration", message))?;
     if input.password.is_empty() {
-        let id = input.id.ok_or_else(|| ConnectionFailure::new("database", "Enter the database password before testing."))?;
+        let id = input.id.ok_or_else(|| {
+            ConnectionFailure::new("database", "Enter the database password before testing.")
+        })?;
         input.password = credential_entry(id)
-            .and_then(|entry| entry.get_password().map_err(|_| "Unable to read the database password from the system keychain.".into()))
+            .and_then(|entry| {
+                entry.get_password().map_err(|_| {
+                    "Unable to read the database password from the system keychain.".into()
+                })
+            })
             .map_err(|message| ConnectionFailure::new("database", message))?;
     }
-    input.ssh_password = connection_credentials::resolve_ssh(input.id, &input.security, input.ssh_password.as_deref())
-        .map_err(|message| ConnectionFailure::new("ssh", message))?;
+    input.ssh_password = connection_credentials::resolve_ssh(
+        input.id,
+        &input.security,
+        input.ssh_password.as_deref(),
+    )
+    .map_err(|message| ConnectionFailure::new("ssh", message))?;
     Ok(input)
 }
 
@@ -907,17 +935,28 @@ async fn test_database_connection_with_progress(
     progress: Option<&tauri::ipc::Channel<connection_tests::ConnectionTestProgress>>,
 ) -> Result<ConnectionTestResult, ConnectionFailure> {
     connection_tests::progress(progress, "ssh", false);
-    let tunnel = connection_security::Tunnel::open(&input.security, &input.host, input.port, input.database_type, input.ssh_password.as_deref()).await.map_err(|message| ConnectionFailure::new("ssh", message))?;
+    let tunnel = connection_security::Tunnel::open(
+        &input.security,
+        &input.host,
+        input.port,
+        input.database_type,
+        input.ssh_password.as_deref(),
+    )
+    .await
+    .map_err(|message| ConnectionFailure::new("ssh", message))?;
     let ssh_connected = input.security.ssh.is_some();
     connection_tests::progress(progress, "handshake", ssh_connected);
     match input.database_type {
         DatabaseType::PostgreSql => {
-            let options = connection_options_from_input(input).with_socket(tunnel.postgres_socket());
-            let pool = connect(&options).await.map_err(|error| connection_diagnostics::postgres(error).after_ssh(ssh_connected))?;
+            let options =
+                connection_options_from_input(input).with_socket(tunnel.postgres_socket());
+            let pool = connect(&options).await.map_err(|error| {
+                connection_diagnostics::postgres(error).after_ssh(ssh_connected)
+            })?;
             connection_tests::progress(progress, "metadata", ssh_connected);
-            let database = test_connection(&pool)
-                .await
-                .map_err(|error| connection_diagnostics::postgres(error).after_ssh(ssh_connected))?;
+            let database = test_connection(&pool).await.map_err(|error| {
+                connection_diagnostics::postgres(error).after_ssh(ssh_connected)
+            })?;
             let server_read_only = sqlx::query_scalar::<_, String>("SHOW transaction_read_only")
                 .fetch_optional(&pool)
                 .await
@@ -940,8 +979,11 @@ async fn test_database_connection_with_progress(
             })
         }
         DatabaseType::MySql => {
-            let options = mysql_connection_options_from_input(input).with_socket(tunnel.mysql_socket());
-            let pool = connect_mysql(&options).await.map_err(|error| connection_diagnostics::mysql(error).after_ssh(ssh_connected))?;
+            let options =
+                mysql_connection_options_from_input(input).with_socket(tunnel.mysql_socket());
+            let pool = connect_mysql(&options)
+                .await
+                .map_err(|error| connection_diagnostics::mysql(error).after_ssh(ssh_connected))?;
             connection_tests::progress(progress, "metadata", ssh_connected);
             let database = test_mysql_connection(&pool)
                 .await
@@ -982,7 +1024,11 @@ fn connection_input_with_resolved_password(
             .get_password()
             .map_err(|_| "Unable to read the database password from the keychain.".to_owned())?;
     }
-    input.ssh_password = connection_credentials::resolve_ssh(input.id, &input.security, input.ssh_password.as_deref())?;
+    input.ssh_password = connection_credentials::resolve_ssh(
+        input.id,
+        &input.security,
+        input.ssh_password.as_deref(),
+    )?;
     Ok(input)
 }
 
@@ -1024,7 +1070,9 @@ async fn verify_and_refresh_data_source(
         .ok_or_else(|| "The selected data source no longer exists.".to_owned())?;
     let resolved = connection_input_with_resolved_password(input)?;
     validate_connection_input(&resolved)?;
-    let connection = test_database_connection(&resolved).await.map_err(|error| error.to_string())?;
+    let connection = test_database_connection(&resolved)
+        .await
+        .map_err(|error| error.to_string())?;
     let profile = data_source_profile_from_input(
         &resolved,
         source_id,
@@ -1117,8 +1165,19 @@ async fn capture_snapshot_using(
         (profile, password)
     };
     connection_security::validate(&profile.security, profile.ssl_mode)?;
-    let ssh_password = connection_credentials::resolve_ssh(Some(profile.id), &profile.security, verified.and_then(|(_, input)| input.ssh_password.as_deref()))?;
-    let tunnel = connection_security::Tunnel::open(&profile.security, &profile.host, profile.port, profile.database_type, ssh_password.as_deref()).await?;
+    let ssh_password = connection_credentials::resolve_ssh(
+        Some(profile.id),
+        &profile.security,
+        verified.and_then(|(_, input)| input.ssh_password.as_deref()),
+    )?;
+    let tunnel = connection_security::Tunnel::open(
+        &profile.security,
+        &profile.host,
+        profile.port,
+        profile.database_type,
+        ssh_password.as_deref(),
+    )
+    .await?;
     let snapshot = match profile.database_type {
         DatabaseType::PostgreSql => {
             let options = connection_options_from_profile(&profile, &password)
@@ -1173,6 +1232,10 @@ async fn capture_snapshot_using(
 }
 
 #[tauri::command]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep query cancellation and history cleanup in the same operation"
+)]
 async fn execute_readonly_query(
     input: ExecuteReadonlyQueryInput,
     state: State<'_, AppState>,
@@ -1215,15 +1278,23 @@ async fn execute_readonly_query(
         .map_err(|_| query_command_error(query_id, QueryError::Connection))?;
     connection_security::validate(&profile.security, profile.ssl_mode)
         .map_err(|error| query_command_error(query_id, QueryError::Validation(error)))?;
-    let ssh_password = connection_credentials::resolve_ssh(Some(profile.id), &profile.security, None)
-        .map_err(|error| query_command_error(query_id, QueryError::Validation(error)))?;
-    let tunnel = connection_security::Tunnel::open(&profile.security, &profile.host, profile.port, profile.database_type, ssh_password.as_deref()).await
-        .map_err(|error| query_command_error(query_id, QueryError::Validation(error)))?;
-    let options = connection_options_from_profile(&profile, &password).with_socket(tunnel.postgres_socket()).with_connect_timeout(
-        Duration::from_secs(u64::from(
+    let ssh_password =
+        connection_credentials::resolve_ssh(Some(profile.id), &profile.security, None)
+            .map_err(|error| query_command_error(query_id, QueryError::Validation(error)))?;
+    let tunnel = connection_security::Tunnel::open(
+        &profile.security,
+        &profile.host,
+        profile.port,
+        profile.database_type,
+        ssh_password.as_deref(),
+    )
+    .await
+    .map_err(|error| query_command_error(query_id, QueryError::Validation(error)))?;
+    let options = connection_options_from_profile(&profile, &password)
+        .with_socket(tunnel.postgres_socket())
+        .with_connect_timeout(Duration::from_secs(u64::from(
             source_settings.refresh.connection_timeout_seconds,
-        )),
-    );
+        )));
     let pool = connect(&options)
         .await
         .map_err(|_| query_command_error(query_id, QueryError::Connection))?;
@@ -4566,7 +4637,8 @@ fn connection_options_from_input(input: &SaveDataSourceInput) -> PostgresConnect
         input.username.trim(),
         &input.password,
         adapter_ssl_mode(input.ssl_mode),
-    ).with_tls(&input.security.tls)
+    )
+    .with_tls(&input.security.tls)
 }
 
 fn connection_options_from_profile(
@@ -4580,7 +4652,8 @@ fn connection_options_from_profile(
         &profile.username,
         password,
         adapter_ssl_mode(profile.ssl_mode),
-    ).with_tls(&profile.security.tls)
+    )
+    .with_tls(&profile.security.tls)
 }
 
 fn mysql_connection_options_from_input(input: &SaveDataSourceInput) -> MySqlConnectionOptions {
@@ -4591,7 +4664,8 @@ fn mysql_connection_options_from_input(input: &SaveDataSourceInput) -> MySqlConn
         input.username.trim(),
         &input.password,
         mysql_ssl_mode(input.ssl_mode),
-    ).with_tls(&input.security.tls)
+    )
+    .with_tls(&input.security.tls)
 }
 
 fn mysql_connection_options_from_profile(
@@ -4605,7 +4679,8 @@ fn mysql_connection_options_from_profile(
         &profile.username,
         password,
         mysql_ssl_mode(profile.ssl_mode),
-    ).with_tls(&profile.security.tls)
+    )
+    .with_tls(&profile.security.tls)
 }
 
 const fn adapter_ssl_mode(mode: SslMode) -> PostgresSslMode {
@@ -4806,6 +4881,7 @@ pub fn run() {
                 import_portable_backup,
                 updates::check_for_updates,
                 updates::get_update_status,
+                updates::open_update_releases,
                 updates::download_update,
                 updates::cancel_update_download,
                 updates::install_update,
@@ -4857,7 +4933,7 @@ mod tests {
             ssh_password: None,
             database_type: DatabaseType::PostgreSql,
             ssl_mode: SslMode::Prefer,
-            security: Default::default(),
+            security: schema_model::ConnectionSecurity::default(),
         };
         assert!(validate_connection_input(&input).is_err());
     }
@@ -4875,7 +4951,7 @@ mod tests {
             ssh_password: None,
             database_type: DatabaseType::PostgreSql,
             ssl_mode: SslMode::Prefer,
-            security: Default::default(),
+            security: schema_model::ConnectionSecurity::default(),
         };
         assert!(validate_connection_profile_input(&input).is_ok());
         assert!(validate_connection_input(&input).is_err());

@@ -19,6 +19,10 @@ const MAX_UPDATE_BYTES: u64 = 512 * 1024 * 1024;
 
 #[derive(Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "IPC preserves existing capability flags alongside release-discovery capabilities"
+)]
 pub struct UpdateStatus {
     phase: &'static str,
     current_version: String,
@@ -30,6 +34,10 @@ pub struct UpdateStatus {
     checked_at: Option<String>,
     error: Option<String>,
     configured: bool,
+    can_check: bool,
+    manual_only: bool,
+    source: Option<String>,
+    configuration_message: Option<String>,
     can_download: bool,
     can_install: bool,
 }
@@ -37,6 +45,7 @@ pub struct UpdateStatus {
 struct Feed {
     url: String,
     channel: String,
+    manual: bool,
 }
 #[derive(Default)]
 struct Session {
@@ -118,40 +127,62 @@ async fn feed(app: &tauri::AppHandle, state: &AppState, online: bool) -> Result<
     if !expired && !policy.allow_update_checks {
         return Err("Application updates are disabled by your organization.".into());
     }
-    let config = app.config();
-    let updater = config.plugins.0.get("updater");
-    if updater
-        .and_then(|v| v.get("pubkey"))
-        .and_then(serde_json::Value::as_str)
-        .is_none_or(|s| s.trim().is_empty())
-    {
-        return Err("This build has no update signing key. Install an update-enabled distribution from your administrator.".into());
-    }
     let channel = match effective.app.updates.channel {
         settings_model::UpdateChannel::Stable => "stable",
         settings_model::UpdateChannel::Beta => "beta",
     };
-    let url = effective
-        .app
-        .updates
-        .custom_feed_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
+    resolve_feed(
+        app.config().plugins.0.get("updater"),
+        effective.app.updates.custom_feed_url.as_deref(),
+        channel,
+        &app.config().identifier,
+        cfg!(target_os = "macos"),
+    )
+}
+
+fn resolve_feed(
+    updater: Option<&serde_json::Value>,
+    custom: Option<&str>,
+    channel: &str,
+    identifier: &str,
+    supports_install: bool,
+) -> Result<Feed, String> {
+    let custom = custom.map(str::trim).filter(|s| !s.is_empty());
+    let has_key = updater
+        .and_then(|v| v.get("pubkey"))
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|key| !key.trim().is_empty());
+    if !has_key || !supports_install {
+        if custom.is_some() {
+            return Err("Custom signed feeds require a macOS distribution with an embedded update signing key. Clear the custom feed to check GitHub Releases.".into());
+        }
+        return Ok(Feed {
+            url: crate::github_releases::endpoint(channel),
+            channel: channel.into(),
+            manual: true,
+        });
+    }
+    let endpoint = custom
         .or_else(|| {
             updater
                 .and_then(|v| v.get("endpoints"))
                 .and_then(|v| v.get(0))
                 .and_then(serde_json::Value::as_str)
+                .filter(|s| !s.trim().is_empty())
         })
-        .ok_or("No update feed is configured for this build.")?
-        .replace("{channel}", channel);
+        .unwrap_or(crate::github_releases::UPDATE_FEED);
+    if channel == "beta" && custom.is_none() && !endpoint.contains("{channel}") {
+        return Err("This distribution provides stable updates. Select Stable or configure a dedicated beta feed in Advanced update settings.".into());
+    }
+    let url = endpoint.replace("{channel}", channel);
     let parsed = reqwest::Url::parse(&url).map_err(|_| "The update feed URL is invalid.")?;
-    if !transport_allowed(&parsed, &config.identifier) {
+    if !transport_allowed(&parsed, identifier) {
         return Err("Update feeds must use HTTPS without embedded credentials.".into());
     }
     Ok(Feed {
         url,
         channel: channel.into(),
+        manual: false,
     })
 }
 #[tauri::command]
@@ -160,7 +191,7 @@ pub async fn get_update_status(
     state: State<'_, AppState>,
     updates: State<'_, UpdateState>,
 ) -> Result<UpdateStatus, String> {
-    let configured = feed(&app, &state, false).await.is_ok();
+    let selected = feed(&app, &state, false).await;
     let mut result = updates
         .session
         .lock()
@@ -171,8 +202,72 @@ pub async fn get_update_status(
         result.phase = "idle";
     }
     result.current_version = app.package_info().version.to_string();
-    result.configured = configured;
+    result.configured = selected.as_ref().is_ok_and(|feed| !feed.manual);
+    result.can_check = selected.is_ok();
+    result.manual_only = selected.as_ref().is_ok_and(|feed| feed.manual);
+    result.source = selected.as_ref().ok().map(|feed| {
+        if feed.manual
+            || feed
+                .url
+                .starts_with("https://github.com/akz142857/NodalStudio/")
+        {
+            "GitHub Releases".into()
+        } else {
+            "Custom update feed".into()
+        }
+    });
+    result.configuration_message = match &selected {
+        Err(error) => Some(error.clone()),
+        Ok(feed) if feed.manual => Some("New versions are checked on GitHub. Install releases manually; this build does not support signed in-app installation.".into()),
+        _ => None,
+    };
+    let session = updates
+        .session
+        .lock()
+        .map_err(|_| "Update state unavailable")?;
+    if session
+        .feed
+        .as_ref()
+        .is_some_and(|previous| selected.as_ref().ok() != Some(previous))
+    {
+        result.phase = "idle";
+        result.available_version = None;
+        result.notes = None;
+        result.download_url = None;
+        result.checked_at = None;
+        result.error = None;
+        result.can_download = false;
+        result.can_install = false;
+    }
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn open_update_releases(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // The WebView cannot supply an arbitrary URL, executable or shell argument.
+    feed(&app, &state, true).await?;
+    state
+        .store
+        .record_external_access("updates", "attempted")
+        .await
+        .map_err(crate::safe_store_error)?;
+    let mut command = if cfg!(target_os = "macos") {
+        std::process::Command::new("/usr/bin/open")
+    } else if cfg!(target_os = "windows") {
+        let mut command = std::process::Command::new("rundll32.exe");
+        command.arg("url.dll,FileProtocolHandler");
+        command
+    } else {
+        std::process::Command::new("xdg-open")
+    };
+    command
+        .arg(crate::github_releases::RELEASES_PAGE)
+        .spawn()
+        .map_err(|_| "Unable to open GitHub Releases in your browser.")?;
+    Ok(())
 }
 #[tauri::command]
 pub async fn check_for_updates(
@@ -187,6 +282,7 @@ pub async fn check_for_updates(
     updates.change(|s| {
         s.update = None;
         s.bytes = None;
+        s.feed = None;
         s.status = UpdateStatus {
             phase: "checking",
             current_version: app.package_info().version.to_string(),
@@ -195,6 +291,18 @@ pub async fn check_for_updates(
     });
     let result: Result<(), String> = async {
         let selected = feed(&app, &state, true).await?;
+        state.store.record_external_access("updates", "attempted").await.map_err(crate::safe_store_error)?;
+        if selected.manual {
+            let release = crate::github_releases::check(&selected.channel, &app.package_info().version).await?;
+            updates.change(|s| {
+                s.status.phase = if release.is_some() { "available" } else { "upToDate" };
+                s.status.available_version = release.as_ref().map(|r| r.version.clone());
+                s.status.notes = release.and_then(|r| r.notes);
+                s.status.checked_at = Some(chrono::Utc::now().to_rfc3339());
+                s.feed = Some(selected);
+            });
+            return Ok(());
+        }
         let stable = selected.channel == "stable";
         let secure_transport = !(cfg!(feature = "updater-smoke-test")
             && app.config().identifier.ends_with(".updater-smoke"));
@@ -220,14 +328,13 @@ pub async fn check_for_updates(
             })
             .build()
             .map_err(|_| "Unable to initialize the updater")?;
-        state
-            .store
-            .record_external_access("updates", "attempted")
-            .await
-            .map_err(crate::safe_store_error)?;
-        let update = client.check().await.map_err(
-            |_| "Unable to check updates. Check the network and update feed, then try again.",
-        )?;
+        let update = client.check().await.map_err(|error| match error {
+            tauri_plugin_updater::Error::TargetNotFound(_) | tauri_plugin_updater::Error::TargetsNotFound(_) =>
+                "This release has no signed update for this system architecture. Check GitHub Releases for a compatible installer.",
+            tauri_plugin_updater::Error::ReleaseNotFound | tauri_plugin_updater::Error::Serialization(_) =>
+                "The signed update manifest is missing or invalid. The release must include latest.json and a signed application archive.",
+            _ => "Unable to check updates. Check the network and update feed, then try again.",
+        })?;
         if let Some(value) = &update {
             let url = reqwest::Url::parse(value.download_url.as_str())
                 .map_err(|_| "Invalid download URL")?;
@@ -275,6 +382,7 @@ pub async fn download_update(
         .map_err(|_| "An update operation is already running.")?;
     let result: Result<(), String> = async {
         let selected = feed(&app, &state, true).await?;
+        if selected.manual { return Err("This build requires manual installation from GitHub Releases.".into()); }
         let (update, cancel) = {
             let mut session = updates.session.lock().map_err(|_| "Update state unavailable")?;
             if session.feed.as_ref() != Some(&selected) { return Err("Update settings changed. Check for updates again.".into()); }
@@ -497,6 +605,7 @@ pub async fn install_update(
     updates.installing.store(true, Ordering::Release);
     let result: Result<PathBuf, String> = async {
         let selected = feed(&app, &state, false).await?;
+        if selected.manual { return Err("This build requires manual installation from GitHub Releases.".into()); }
         if !state.active_queries.lock().await.is_empty()
             || state.snapshot_captures.lock().await.values().any(|s| s.available_permits() == 0)
             || state.cloud_operations.lock().await.values().any(|s| s.available_permits() == 0)
@@ -596,6 +705,66 @@ fn available_space(path: &Path) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn github_checks_do_not_authorize_unsigned_installation() {
+        let feed = resolve_feed(None, None, "stable", "com.claycosmos.nodalstudio", true).unwrap();
+        assert!(feed.manual);
+        assert_eq!(feed.url, crate::github_releases::endpoint("stable"));
+        assert!(
+            resolve_feed(
+                None,
+                Some("https://other.example/feed"),
+                "stable",
+                "com.claycosmos.nodalstudio",
+                true
+            )
+            .is_err()
+        );
+        let signed = serde_json::json!({"pubkey":"embedded-key", "endpoints":[crate::github_releases::UPDATE_FEED]});
+        assert!(
+            resolve_feed(
+                Some(&signed),
+                None,
+                "stable",
+                "com.claycosmos.nodalstudio",
+                false
+            )
+            .unwrap()
+            .manual
+        );
+        let feed = resolve_feed(
+            Some(&signed),
+            None,
+            "stable",
+            "com.claycosmos.nodalstudio",
+            true,
+        )
+        .unwrap();
+        assert!(!feed.manual);
+        assert_eq!(feed.url, crate::github_releases::UPDATE_FEED);
+    }
+
+    #[test]
+    fn beta_and_custom_feeds_are_explicit_and_still_require_secure_transport() {
+        let config = serde_json::json!({"pubkey":"embedded-key"});
+        assert!(resolve_feed(Some(&config), None, "beta", "app", true).is_err());
+        let feed = resolve_feed(
+            Some(&config),
+            Some("https://example.com/{channel}.json"),
+            "beta",
+            "app",
+            true,
+        )
+        .unwrap();
+        assert_eq!(feed.url, "https://example.com/beta.json");
+        assert!(!feed.manual);
+        for url in [
+            "http://example.com/feed",
+            "https://user:secret@example.com/feed",
+        ] {
+            assert!(resolve_feed(Some(&config), Some(url), "stable", "app", true).is_err());
+        }
+    }
     fn metadata(version: &str, identifier: &str) -> Vec<u8> {
         let mut values = plist::Dictionary::new();
         values.insert("CFBundleIdentifier".into(), identifier.into());

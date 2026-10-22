@@ -5,19 +5,42 @@ import { UpdatePanel } from "./UpdatePanel";
 import { defaultAppSettings, type NodalStudioPlatform, type UpdateStatus } from "../../platform";
 import { useUpdateBlocker } from "../../platform/update-guard";
 let status: UpdateStatus;
-const platform = { getUpdateStatus: vi.fn(() => Promise.resolve({ ...status })), checkForUpdates: vi.fn(), downloadUpdate: vi.fn(), cancelUpdateDownload: vi.fn(), installUpdate: vi.fn() };
+const platform = { getUpdateStatus: vi.fn(() => Promise.resolve({ ...status })), openUpdateReleases: vi.fn(), checkForUpdates: vi.fn(), downloadUpdate: vi.fn(), cancelUpdateDownload: vi.fn(), installUpdate: vi.fn() };
 function renderPanel(options: { offline?: boolean; web?: boolean; managed?: boolean } = {}) {
   const app = defaultAppSettings(); app.privacy.offlineMode = Boolean(options.offline);
   return render(<div className="ds-surface"><UpdatePanel platform={platform as unknown as NodalStudioPlatform} runtime={{ kind: options.web ? "web" : "desktop", version: "0.1.0", label: "Test" }} app={app} managed={options.managed ? { source: "Organization", reason: "Updates are blocked" } : undefined} onSave={vi.fn()} /></div>);
 }
 beforeEach(() => {
   vi.clearAllMocks();
-  status = { phase: "idle", currentVersion: "0.1.0", availableVersion: null, notes: null, downloadUrl: null, downloadedBytes: 0, totalBytes: null, checkedAt: null, error: null, configured: true, canDownload: false, canInstall: false };
+  status = { phase: "idle", currentVersion: "0.1.0", availableVersion: null, notes: null, downloadUrl: null, downloadedBytes: 0, totalBytes: null, checkedAt: null, error: null, configured: true, canCheck: true, manualOnly: false, source: "GitHub Releases", configurationMessage: null, canDownload: false, canInstall: false };
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
 });
 afterEach(cleanup);
 describe("software update flow", () => {
+  it("offers manual GitHub installation without enabling unsigned downloads", async () => {
+    status = { ...status, phase: "available", availableVersion: "0.2.0", configured: false, manualOnly: true, configurationMessage: "Install releases manually." };
+    renderPanel();
+    expect(await screen.findByText("Installed version 0.1.0 · Available 0.2.0")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Check for updates" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Download update" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Signature verified")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Get update on GitHub" }));
+    await waitFor(() => expect(platform.openUpdateReleases).toHaveBeenCalledOnce());
+    expect(platform.downloadUpdate).not.toHaveBeenCalled();
+    expect(platform.installUpdate).not.toHaveBeenCalled();
+  });
+  it("disables a broken custom feed and explains how to recover", async () => {
+    status = { ...status, configured: false, canCheck: false, source: null, configurationMessage: "Clear the custom feed to check GitHub Releases." };
+    renderPanel();
+    expect(await screen.findByText("Clear the custom feed to check GitHub Releases.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Check for updates" })).toBeDisabled();
+  });
+  it.each([{ offline: true }, { managed: true }])("blocks manual release navigation under restrictions %j", async (options) => {
+    status = { ...status, configured: false, manualOnly: true };
+    renderPanel(options);
+    expect(await screen.findByRole("button", { name: "View GitHub releases" })).toBeDisabled();
+  });
   it("ignores a delayed poll that predates a completed update check", async () => {
     const previous = { ...status };
     let finishPoll!: (value: UpdateStatus) => void;

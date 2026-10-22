@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import type { AppSettings, NodalStudioPlatform, RuntimeInfo, UpdateStatus } from "../../platform";
 import { assertUpdateCanRestart } from "../../platform/update-guard";
-import { SettingsGroup, ToggleRow, TextRow } from "./SettingsControls";
+import { SettingsGroup, ToggleRow, TextRow, SelectRow } from "./SettingsControls";
 import "./updates.css";
 
 const labels: Record<UpdateStatus["phase"], string> = {
@@ -26,7 +26,7 @@ export function UpdatePanel({ platform, runtime, app, managed, onSave }: {
   const lifecycle = useRef(0);
   const statusRequest = useRef(0);
   const desktop = runtime?.kind === "desktop";
-  const blocked = !desktop || app.privacy.offlineMode || Boolean(managed);
+  const blocked = !desktop || app.privacy.offlineMode || Boolean(managed) || status?.canCheck === false;
   const refreshStatus = useCallback(async (reportError = true) => {
     const generation = lifecycle.current;
     const request = ++statusRequest.current;
@@ -81,23 +81,24 @@ export function UpdatePanel({ platform, runtime, app, managed, onSave }: {
     <SettingsGroup title="Updates">
       <div className="update-summary" aria-live="polite" aria-atomic="true">
         <span className="update-symbol" aria-hidden="true">↻</span>
-        <div><h3>{labels[phase]}</h3><p>{status?.availableVersion ? `Nodal Studio ${status.availableVersion}` : `Installed version ${runtime?.version ?? "—"}`}</p></div>
+        <div><h3>{labels[phase]}</h3><p>Installed version {status?.currentVersion ?? runtime?.version ?? "—"}{status?.availableVersion ? ` · Available ${status.availableVersion}` : ""}</p></div>
         {status?.canInstall ? <span className="update-verified">Signature verified</span> : null}
       </div>
       {!desktop ? <p className="update-help">Application updates are available in the desktop app.</p> : null}
-      {app.privacy.offlineMode ? <p className="update-help">Offline mode blocks update checks and downloads.</p> : managed ? <p className="update-help">{managed.reason}</p> : status && !status.configured ? <p className="update-help">This build has no configured update service. Your administrator can provide an update-enabled build.</p> : null}
+      {status?.source ? <p className="update-help">Update source: {status.source}</p> : null}
+      {app.privacy.offlineMode ? <p className="update-help">Offline mode blocks update checks and downloads.</p> : managed ? <p className="update-help">{managed.reason}</p> : status?.configurationMessage ? <p className="update-help">{status.configurationMessage}</p> : null}
       {status?.notes ? <details className="settings-disclosure" open><summary>What’s new</summary><p className="update-notes">{status.notes}</p></details> : null}
       {phase === "downloading" || phase === "verifying" ? <div className="update-progress"><progress aria-label="Update download" max={100} value={phase === "verifying" ? undefined : progress} /><span>{phase === "verifying" ? "Checking the signature and application identity…" : `${megabytes(status?.downloadedBytes ?? 0)}${status?.totalBytes ? ` of ${megabytes(status.totalBytes)}` : " downloaded"}`}</span></div> : null}
       {error || status?.error ? <p className="update-error" role="alert">{error || status?.error}</p> : null}
       <div className="setting-action-row update-actions">
         {status?.canInstall ? <button type="button" className="update-primary" disabled={busy || !desktop || !status.configured} onClick={install}>Install and Restart…</button> : status?.canDownload ? <button type="button" className="update-primary" disabled={busy || blocked} onClick={() => void run(() => platform.downloadUpdate())}>Download update</button> : null}
         <button type="button" disabled={busy || blocked} onClick={() => void run(() => platform.checkForUpdates())}>Check for updates</button>
+        {desktop && status?.source === "GitHub Releases" ? <button type="button" disabled={busy || blocked} onClick={() => void run(() => platform.openUpdateReleases())}>{status.manualOnly && status.availableVersion ? "Get update on GitHub" : "View GitHub releases"}</button> : null}
         {phase === "downloading" ? <button type="button" onClick={() => void platform.cancelUpdateDownload().catch((e: unknown) => setError(reason(e)))}>Cancel download</button> : null}
       </div>
       {status?.checkedAt ? <p className="update-help">Last checked {new Date(status.checkedAt).toLocaleString()}</p> : null}
       <ToggleRow label="Automatically check for updates" description="Check when the app starts. Downloads and installation require your action." checked={app.updates.automaticChecks} managed={managed} onChange={(automaticChecks) => void onSave({ ...app, updates: { ...app.updates, automaticChecks } })} />
-      <p className="update-help">Channel: {app.updates.channel === "beta" ? "Beta" : "Stable"}</p>
-      <details className="settings-disclosure"><summary>Advanced update settings</summary><TextRow label="Update feed" value={app.updates.customFeedUrl ?? ""} placeholder="Use the distribution’s default feed" onChange={(customFeedUrl) => void onSave({ ...app, updates: { ...app.updates, customFeedUrl: customFeedUrl || null } })} /><p>Custom feeds must use the signing key trusted by this build.</p></details>
+      <details className="settings-disclosure"><summary>Advanced update settings</summary><fieldset disabled={busy || Boolean(managed)}><SelectRow label="Update channel" value={app.updates.channel} options={[["stable", "Stable"], ["beta", "Beta"]]} onChange={(channel) => void run(() => onSave({ ...app, updates: { ...app.updates, channel: channel as AppSettings["updates"]["channel"] } }))} /><TextRow label="Update feed" value={app.updates.customFeedUrl ?? ""} placeholder="Use GitHub Releases" onChange={(customFeedUrl) => void onSave({ ...app, updates: { ...app.updates, customFeedUrl: customFeedUrl || null } }).catch((e: unknown) => setError(reason(e)))} /><p>Custom feeds must use the signing key trusted by this build. Beta in-app updates require a dedicated feed.</p></fieldset></details>
     </SettingsGroup>
     {confirm ? <InstallConfirmation version={status?.availableVersion ?? ""} onCancel={() => setConfirm(false)} onInstall={async () => { assertUpdateCanRestart(); await platform.installUpdate(); }} /> : null}
   </>;

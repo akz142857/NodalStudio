@@ -377,6 +377,10 @@ export interface UpdateStatus extends UpdateCheckResult {
   checkedAt: string | null;
   error: string | null;
   configured: boolean;
+  canCheck: boolean;
+  manualOnly: boolean;
+  source: string | null;
+  configurationMessage: string | null;
   canDownload: boolean;
   canInstall: boolean;
 }

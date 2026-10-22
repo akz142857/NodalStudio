@@ -1,6 +1,7 @@
 use query_engine::{QueryCell, QueryExecutionResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::fmt::Write as _;
 use std::{
     fs,
     io::{Cursor, Write},
@@ -108,7 +109,7 @@ fn xml(value: &str) -> String {
             c if (c < ' ' && !matches!(c, '\n' | '\r' | '\t'))
                 || matches!(c, '\u{fffe}' | '\u{ffff}') =>
             {
-                out.push_str(&format!("_x{:04X}_", u32::from(c)))
+                write!(out, "_x{:04X}_", u32::from(c)).expect("writing to a String");
             }
             _ => out.push(c),
         }
@@ -118,7 +119,10 @@ fn xml(value: &str) -> String {
 fn column_name(mut index: usize) -> String {
     let mut name = String::new();
     loop {
-        name.insert(0, char::from(b'A' + (index % 26) as u8));
+        name.insert(
+            0,
+            char::from(b'A' + u8::try_from(index % 26).expect("column digit is below 26")),
+        );
         if index < 26 {
             break;
         }
@@ -149,18 +153,23 @@ fn xlsx(
     sheet.push_str("</row>");
     for (r, index) in rows.iter().enumerate() {
         let number = r + 2;
-        sheet.push_str(&format!("<row r=\"{number}\">"));
+        write!(sheet, "<row r=\"{number}\">").expect("writing to a String");
         for (c, cell) in result.rows[*index].iter().enumerate() {
             let reference = format!("{}{number}", column_name(c));
             match cell {
                 QueryCell::Null => {}
                 QueryCell::Number { value } => {
-                    sheet.push_str(&format!("<c r=\"{reference}\"><v>{value}</v></c>"))
+                    write!(sheet, "<c r=\"{reference}\"><v>{value}</v></c>")
+                        .expect("writing to a String");
                 }
-                QueryCell::Boolean { value } => sheet.push_str(&format!(
-                    "<c r=\"{reference}\" t=\"b\"><v>{}</v></c>",
-                    u8::from(*value)
-                )),
+                QueryCell::Boolean { value } => {
+                    write!(
+                        sheet,
+                        "<c r=\"{reference}\" t=\"b\"><v>{}</v></c>",
+                        u8::from(*value)
+                    )
+                    .expect("writing to a String");
+                }
                 _ => sheet.push_str(&string_cell(&reference, &cell_text(cell))?),
             }
         }
@@ -176,12 +185,14 @@ fn xlsx(
         .iter()
         .enumerate()
     {
-        info.push_str(&format!(
+        write!(
+            info,
             "<row r=\"{}\">{}{}</row>",
             r + 1,
             string_cell(&format!("A{}", r + 1), key)?,
             string_cell(&format!("B{}", r + 1), &value.to_string())?
-        ));
+        )
+        .expect("writing to a String");
     }
     info.push_str("</sheetData></worksheet>");
     let files = [

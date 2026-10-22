@@ -10,6 +10,7 @@ CHECK_ONLY=false
 TEMP_KEYCHAIN=""
 TEMP_KEYCHAIN_PASSWORD=""
 ORIGINAL_KEYCHAINS=()
+UPDATER_CONFIG_DIR=""
 
 usage() {
   cat <<'EOF'
@@ -60,7 +61,8 @@ load_config() {
     case "$key" in
       APPLE_SIGNING_IDENTITY | APPLE_API_ISSUER | APPLE_API_KEY | APPLE_API_KEY_PATH | \
         APPLE_CERTIFICATE_PATH | APPLE_CERTIFICATE_PASSWORD | BUILD_TARGET | BUNDLE_FORMAT | \
-        REQUIRE_CLEAN_GIT | INSTALL_DEPENDENCIES)
+        REQUIRE_CLEAN_GIT | INSTALL_DEPENDENCIES | UPDATER_PUBLIC_KEY_PATH | UPDATER_NOTES_PATH | \
+        UPDATER_PRIVATE_KEY_PATH | UPDATER_KEYCHAIN_SERVICE | UPDATER_KEYCHAIN_ACCOUNT)
         printf -v "$key" '%s' "$value"
         export "$key"
         ;;
@@ -91,6 +93,9 @@ validate_boolean() {
 }
 
 cleanup() {
+  if [[ -n "$UPDATER_CONFIG_DIR" ]]; then
+    rm -rf "$UPDATER_CONFIG_DIR"
+  fi
   if [[ -n "$TEMP_KEYCHAIN" ]]; then
     if [[ ${#ORIGINAL_KEYCHAINS[@]} -gt 0 ]]; then
       security list-keychains -d user -s "${ORIGINAL_KEYCHAINS[@]}" >/dev/null
@@ -231,6 +236,36 @@ for command in cargo codesign git node pnpm rustup security shasum spctl uuidgen
   require_command "$command"
 done
 
+if [[ -n "${UPDATER_PUBLIC_KEY_PATH:-}" ]]; then
+  require_command python3
+  require_command minisign
+  if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -n "${UPDATER_PRIVATE_KEY_PATH:-}" ]]; then
+    [[ -f "$UPDATER_PRIVATE_KEY_PATH" ]] || fail "Updater private key file is unavailable."
+    export TAURI_SIGNING_PRIVATE_KEY="$UPDATER_PRIVATE_KEY_PATH"
+  fi
+  if [[ -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD+x}" && -n "${UPDATER_KEYCHAIN_SERVICE:-}" ]]; then
+    TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password -s "$UPDATER_KEYCHAIN_SERVICE" -a "${UPDATER_KEYCHAIN_ACCOUNT:-production}" -w)" || fail "Unable to read the updater password from Keychain."
+    export TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+  fi
+  [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]] || fail "Export TAURI_SIGNING_PRIVATE_KEY for updater-enabled releases."
+  python3 "$SCRIPT_DIR/github_update.py" configure --public-key "$UPDATER_PUBLIC_KEY_PATH"
+  case "$BUILD_TARGET" in
+    universal-apple-darwin) UPDATER_TARGET=universal ;;
+    aarch64-apple-darwin) UPDATER_TARGET=aarch64 ;;
+    x86_64-apple-darwin) UPDATER_TARGET=x86_64 ;;
+    host)
+      case "$(uname -m)" in
+        arm64) UPDATER_TARGET=aarch64 ;;
+        x86_64) UPDATER_TARGET=x86_64 ;;
+        *) fail "Unsupported updater host architecture" ;;
+      esac ;;
+    *) fail "Unsupported macOS updater target: $BUILD_TARGET" ;;
+  esac
+  RELEASE_VERSION="$(node -p 'require("./apps/desktop/src-tauri/tauri.conf.json").version')"
+  UPDATER_OUTPUT="$REPOSITORY_ROOT/dist/releases/macos-$RELEASE_VERSION-updater"
+  [[ ! -e "$UPDATER_OUTPUT" ]] || fail "Updater output already exists: $UPDATER_OUTPUT. Preserve it and use a new release version."
+fi
+
 if [[ "$CHECK_ONLY" != "true" && "$REQUIRE_CLEAN_GIT" == "true" && -n "$(git status --porcelain)" ]]; then
   fail "Git working tree is not clean. Commit or stash changes, or set REQUIRE_CLEAN_GIT=false."
 fi
@@ -265,6 +300,11 @@ info "Building, signing, notarizing, and stapling Nodal Studio"
 BUILD_ARGS=(--bundles "app,$BUNDLE_FORMAT")
 if [[ "$BUILD_TARGET" != "host" ]]; then
   BUILD_ARGS+=(--target "$BUILD_TARGET")
+fi
+if [[ -n "${UPDATER_PUBLIC_KEY_PATH:-}" ]]; then
+  UPDATER_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nodal-updater-config.XXXXXX")"
+  python3 "$SCRIPT_DIR/github_update.py" configure --public-key "$UPDATER_PUBLIC_KEY_PATH" --output "$UPDATER_CONFIG_DIR/tauri.json"
+  BUILD_ARGS+=(--config "$UPDATER_CONFIG_DIR/tauri.json")
 fi
 pnpm --filter @nodalstudio/desktop tauri build "${BUILD_ARGS[@]}" -- --locked
 
@@ -310,6 +350,26 @@ spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG
 
 CHECKSUM_PATH="$DMG_PATH.sha256"
 shasum -a 256 "$DMG_PATH" >"$CHECKSUM_PATH"
+
+if [[ -n "${UPDATER_PUBLIC_KEY_PATH:-}" ]]; then
+  info "Preparing verified GitHub update artifacts"
+  [[ -f "$APP_PATH.tar.gz" && -f "$APP_PATH.tar.gz.sig" ]] || fail "Tauri did not generate the signed updater archive"
+  mkdir -p "$UPDATER_OUTPUT"
+  UPDATE_ARCHIVE="$UPDATER_OUTPUT/Nodal-Studio_${RELEASE_VERSION}_${UPDATER_TARGET}.app.tar.gz"
+  cp "$APP_PATH.tar.gz" "$UPDATE_ARCHIVE"
+  cp "$APP_PATH.tar.gz.sig" "$UPDATE_ARCHIVE.sig"
+  MANIFEST_ARGS=(manifest --archive "$UPDATE_ARCHIVE" --signature "$UPDATE_ARCHIVE.sig"
+    --public-key "$UPDATER_PUBLIC_KEY_PATH" --version "$RELEASE_VERSION"
+    --target "$UPDATER_TARGET" --output "$UPDATER_OUTPUT/latest.json")
+  if [[ -n "${UPDATER_NOTES_PATH:-}" ]]; then
+    MANIFEST_ARGS+=(--notes-file "$UPDATER_NOTES_PATH")
+  fi
+  python3 "$SCRIPT_DIR/github_update.py" "${MANIFEST_ARGS[@]}"
+  cp "$DMG_PATH" "$UPDATER_OUTPUT/Nodal-Studio_${RELEASE_VERSION}_${UPDATER_TARGET}.dmg"
+  (cd "$UPDATER_OUTPUT" && shasum -a 256 ./*.app.tar.gz ./*.dmg >SHA256SUMS)
+  echo "GitHub release artifacts: $UPDATER_OUTPUT"
+  echo "Review and upload all files to draft v$RELEASE_VERSION before publishing. No files have been uploaded."
+fi
 
 info "Release completed"
 echo "App:      $APP_PATH"
