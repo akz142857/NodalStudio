@@ -58,6 +58,28 @@ impl MySqlConnectionOptions {
         }
     }
 
+    /// Apply local PEM files without including their contents in the saved profile.
+    #[must_use]
+    pub fn with_tls(mut self, tls: &schema_model::TlsConfig) -> Self {
+        if let MySqlConnection::Fields(options) = self.connection {
+            let mut options = *options;
+            if let Some(path) = &tls.ca_certificate { options = options.ssl_ca(path); }
+            if let Some(path) = &tls.client_certificate { options = options.ssl_client_cert(path); }
+            if let Some(path) = &tls.client_key { options = options.ssl_client_key(path); }
+            self.connection = MySqlConnection::Fields(Box::new(options));
+        }
+        self
+    }
+
+    /// Keep the database hostname for TLS identity verification while routing via SSH.
+    #[must_use]
+    pub fn with_socket(mut self, path: Option<&std::path::Path>) -> Self {
+        if let (Some(path), MySqlConnection::Fields(options)) = (path, &mut self.connection) {
+            **options = (**options).clone().socket(path);
+        }
+        self
+    }
+
     #[must_use]
     pub fn with_connect_timeout(mut self, timeout: Duration) -> Self {
         self.connect_timeout = timeout;

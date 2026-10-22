@@ -30,7 +30,7 @@ describe("Query capability boundaries", () => {
     const { rerender } = render(<QueryPage platform={api as unknown as NodalStudioPlatform} runtimeKind="desktop" snapshot={reportSnapshot} />);
     rerender(<QueryPage platform={api as unknown as NodalStudioPlatform} runtimeKind="desktop" snapshot={{ ...reportSnapshot, sourceId: "mysql", database: { ...reportSnapshot.database, databaseType: "mySql" } }} />);
     await act(() => Promise.resolve(finish([{ id: "old", sourceId: reportSnapshot.sourceId, executedAt: reportSnapshot.capturedAt, sqlText: "SELECT 'old-source';", durationMs: 1, rowCount: 1, status: "succeeded", errorKind: null }])));
-    expect(screen.getByRole("button", { name: "History (0)" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "History 0" })).toBeVisible();
     expect(screen.queryByText("SELECT 'old-source';")).not.toBeInTheDocument(); expect(api.listQueryHistory).toHaveBeenCalledOnce();
   });
 });

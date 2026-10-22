@@ -66,9 +66,6 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     setContext({ object, trigger: event.currentTarget, scope: menuScope,
       x: pointer ? event.clientX : rect.left + 16, y: pointer ? event.clientY : rect.bottom });
   };
-  const contextKeys = (event: KeyboardEvent<HTMLButtonElement>, object: MenuObject) => {
-    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) showMenu(event, object);
-  };
   const chooseTable = (table: TableDefinition) => { setPreviewKey(undefined); onSelectTable(table); };
   const showView = (view: ViewDefinition) => setPreviewKey(view.key);
   const showEnum = (item: EnumDefinition) => setPreviewKey(item.key);
@@ -96,7 +93,7 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
   ] : [];
 
   return <section className="schema-tree" aria-label="Database structure" onContextMenu={(event) => {
-    if (!(event.target instanceof HTMLElement) || !event.target.closest("input, textarea")) event.preventDefault();
+    event.preventDefault();
   }}>
     <div className="section-heading"><h2>Structure</h2><span>{totals}</span></div>
     <div className="schema-object-search">
@@ -129,21 +126,21 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
             <button type="button" className="tree-row tree-row-type" aria-expanded={typeOpen} disabled={count === 0} onClick={() => toggle(key)}>
               <TreeDisclosureIcon open={typeOpen} /><span className="tree-label">{TYPE_LABEL[type]}</span><small>{count}</small>
             </button>
-            {typeOpen && type === "tables" ? schema.tables.map((table) => <button type="button" key={table.key.name} className="tree-row tree-row-object"
-              aria-current={`${schema.name}.${table.key.name}` === selectedId ? "true" : undefined} aria-haspopup="menu"
-              onClick={() => chooseTable(table)} onContextMenu={(event) => showMenu(event, table)} onKeyDown={(event) => contextKeys(event, table)} onDragStart={(event) => event.preventDefault()}>
+            {typeOpen && type === "tables" ? schema.tables.map((table) => <div className="tree-object-row" key={table.key.name}><button type="button" key={table.key.name} className="tree-row tree-row-object"
+              aria-current={`${schema.name}.${table.key.name}` === selectedId ? "true" : undefined}
+              onClick={() => chooseTable(table)} onDragStart={(event) => event.preventDefault()}>
               <span className="tree-label">{table.key.name}</span><small>{table.columns.length}</small>
-            </button>) : null}
-            {typeOpen && type === "views" ? schema.views.map((view) => <button type="button" key={view.key.name} className="tree-row tree-row-object"
-              aria-current={preview?.key.schema === view.key.schema && preview.key.name === view.key.name ? "true" : undefined} aria-haspopup="menu"
-              onClick={() => showView(view)} onContextMenu={(event) => showMenu(event, view)} onKeyDown={(event) => contextKeys(event, view)} onDragStart={(event) => event.preventDefault()}>
+            </button><button type="button" className="tree-object-actions" aria-label={`Actions for ${table.key.schema}.${table.key.name}`} aria-haspopup="menu" aria-expanded={activeMenu?.object === table} onClick={(event) => showMenu(event, table)}>…</button></div>) : null}
+            {typeOpen && type === "views" ? schema.views.map((view) => <div className="tree-object-row" key={view.key.name}><button type="button" key={view.key.name} className="tree-row tree-row-object"
+              aria-current={preview?.key.schema === view.key.schema && preview.key.name === view.key.name ? "true" : undefined}
+              onClick={() => showView(view)} onDragStart={(event) => event.preventDefault()}>
               <span className="tree-label">{view.key.name}</span>
-            </button>) : null}
-            {typeOpen && type === "enums" ? schema.enums.map((item) => <button type="button" className="tree-row tree-row-object" key={item.key.name}
-              aria-current={enumPreview?.key.schema === item.key.schema && enumPreview.key.name === item.key.name ? "true" : undefined} aria-haspopup="menu"
-              onClick={() => showEnum(item)} onContextMenu={(event) => showMenu(event, item)} onKeyDown={(event) => contextKeys(event, item)} onDragStart={(event) => event.preventDefault()}>
+            </button><button type="button" className="tree-object-actions" aria-label={`Actions for ${view.key.schema}.${view.key.name}`} aria-haspopup="menu" aria-expanded={activeMenu?.object === view} onClick={(event) => showMenu(event, view)}>…</button></div>) : null}
+            {typeOpen && type === "enums" ? schema.enums.map((item) => <div className="tree-object-row" key={item.key.name}><button type="button" className="tree-row tree-row-object" key={item.key.name}
+              aria-current={enumPreview?.key.schema === item.key.schema && enumPreview.key.name === item.key.name ? "true" : undefined}
+              onClick={() => showEnum(item)} onDragStart={(event) => event.preventDefault()}>
               <span className="tree-label">{item.key.name}</span>
-            </button>) : null}
+            </button><button type="button" className="tree-object-actions" aria-label={`Actions for ${item.key.schema}.${item.key.name}`} aria-haspopup="menu" aria-expanded={activeMenu?.object === item} onClick={(event) => showMenu(event, item)}>…</button></div>) : null}
           </div>;
         }) : null}
       </div>;

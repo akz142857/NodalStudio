@@ -21,3 +21,16 @@ export function postgresSqlSyntaxDiagnostics(state: EditorState): Diagnostic[] {
 export function validatePostgresSqlText(sqlText: string): Diagnostic[] {
   return postgresSqlSyntaxDiagnostics(EditorState.create({ doc: sqlText, extensions: [postgresSqlLanguage] }));
 }
+
+/** Use PostgreSQL lexical boundaries, so semicolons in literals/comments never split a statement. */
+export function currentPostgresStatement(document: string, position: number): string {
+  const statements: { from: number; to: number }[] = [];
+  const tree = PostgreSQL.language.parser.parse(document);
+  for (let node = tree.topNode.firstChild; node; node = node.nextSibling) {
+    if (node.name === "Statement" && document.slice(node.from, node.to).replaceAll(";", "").trim()) statements.push({ from: node.from, to: node.to });
+  }
+  const cursor = Math.max(0, Math.min(document.length, position));
+  const statement = statements.find((item) => cursor < item.to) ?? statements.at(-1);
+  if (!statement) return "";
+  return document.slice(statement.from, statement.to).trim();
+}

@@ -13,6 +13,13 @@ function props() {
 }
 function search(value: string) { fireEvent.change(screen.getByLabelText("Business question"), { target: { value } }); fireEvent.click(screen.getByRole("button", { name: "Search locally" })); }
 describe("business exploration flow", () => {
+  it("hands the business question and chosen table to Query without sending to AI", async () => {
+    const p = props(); const onDraftQuery = vi.fn(); render(<BusinessExplorer {...p} onDraftQuery={onDraftQuery} />);
+    search("orders"); await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    fireEvent.click(screen.getAllByRole("button", { name: "Draft query" })[0]);
+    expect(onDraftQuery).toHaveBeenCalledWith(expect.objectContaining({ question: "orders", sourceId: reportSnapshot.sourceId, snapshotId: reportSnapshot.id, domainId: null }));
+    expect(p.mocks.prepareDiscovery).not.toHaveBeenCalled(); expect(p.mocks.runDiscovery).not.toHaveBeenCalled();
+  });
   it("local search/graph never call AI, keep original state immutable, and hand off explicit table actions", async () => {
     const p = props(); const original = JSON.stringify([p.snapshot, p.semantics]); render(<BusinessExplorer {...p} />);
     search("订单"); await waitFor(() => expect(screen.getAllByRole("button", { name: "Explain this table" })[0]).toBeEnabled());

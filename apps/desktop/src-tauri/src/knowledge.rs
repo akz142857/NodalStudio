@@ -316,6 +316,7 @@ mod tests {
             username: "reader".into(),
             database_type: DatabaseType::PostgreSql,
             ssl_mode: SslMode::Disable,
+            security: Default::default(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };

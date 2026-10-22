@@ -151,9 +151,10 @@ it.each([16, 250])("retains the dense model, selects, exports and rebuilds all e
   expect(store.getState().edges).toHaveLength(1000);
   expect(saveDiagramExport).toHaveBeenCalledOnce();
   stylesheet.remove();
-  fireEvent.click(screen.getByRole("button", { name: /1000 physical/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Relationships" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Physical relationships" }));
   await frames.until(() => expect(container.querySelectorAll("[data-shared-edge-layer]")).toHaveLength(0));
-  fireEvent.click(screen.getByRole("button", { name: /1000 physical/ }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Physical relationships" }));
   await frames.until(expectCompletePaint);
   expect(container.querySelectorAll("[data-shared-edge-layer]")).toHaveLength(1);
 // This checks 500 nodes / 1,000 edges in jsdom, not a wall-clock performance SLA.

@@ -49,7 +49,7 @@ describe("buildSchemaGraph", () => {
     expect(graph.edges[0]).toMatchObject({
       id: "logical.logical-1.0",
       data: { relationshipKind: "logical", relationshipId: "logical-1", cardinality: "manyToOne" },
-      style: { stroke: "#7c3aed", strokeDasharray: "8 5" },
+      style: { stroke: "var(--ds-relation-logical)", strokeDasharray: "8 5" },
     });
     expect(graph.nodes.find((node) => node.id === "public.orders")?.data.logicalForeignKeyColumns).toEqual(["user_id"]);
 

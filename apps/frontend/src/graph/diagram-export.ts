@@ -1,3 +1,4 @@
+import { resolvedTheme } from "../design-system/theme";
 import { SvgTree } from "./svg-tree";
 import type { Viewport } from "@xyflow/react";
 import type { DatabaseSnapshot, SchemaChangeSet } from "../platform";
@@ -81,11 +82,12 @@ export function createDiagramSvgCapture(options: DiagramExportOptions) {
   if (!boxes.length && !streaming) throw new Error("The diagram is still being laid out. Try again when it is ready.");
   const partial = Boolean(changeSet && !beforeSnapshot);
   const headerHeight = changeSet ? partial ? 174 : 154 : 108;
-  const theme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  const theme = resolvedTheme();
   const pageStyle = getComputedStyle(document.documentElement);
   const background = !pageStyle.backgroundColor || ["rgba(0, 0, 0, 0)", "transparent"].includes(pageStyle.backgroundColor) ? theme === "light" ? "#eef0f5" : "#111318" : pageStyle.backgroundColor;
-  const foreground = theme === "light" ? "#20242c" : "#e7e9ef";
-  const muted = theme === "light" ? "#586274" : "#aab4c3";
+  const foreground = pageStyle.color || (theme === "light" ? "#20242c" : "#e7e9ef");
+  const palette = (name: string, fallback: string) => pageStyle.getPropertyValue(`--ds-${name}`).trim() || fallback;
+  const muted = palette("secondary", theme === "light" ? "#586274" : "#aab4c3");
   const svg = element("svg", { xmlns: SVG_NS, "data-theme": theme, "font-family": pageStyle.fontFamily || "system-ui, sans-serif" });
   const title = element("title"); title.textContent = `${snapshot.database.name} · Diagram`;
   const description = element("desc");
@@ -104,9 +106,9 @@ export function createDiagramSvgCapture(options: DiagramExportOptions) {
   text(heading, `${snapshot.database.name} · Diagram`, 20, 30, foreground, 18);
   text(heading, `${tableCount} tables · ${options.scope ?? "All tables"} · Snapshot ${snapshot.fingerprint.slice(0, 12)}`, 20, 52, muted);
   const relationships = [
-    { x: 20, label: "Physical FK", color: colorBlindPalette ? "#0072b2" : "#2563eb", dash: "" },
-    { x: 215, label: "Logical relationship", color: "#7c3aed", dash: "8 5" },
-    { x: 470, label: "Inferred candidate · not a constraint", color: colorBlindPalette ? "#d55e00" : "#b7791f", dash: "6 4" },
+    { x: 20, label: "Physical FK", color: colorBlindPalette ? palette("relation-accessible-blue", "#0072b2") : palette("relation-physical", "#2563eb"), dash: "" },
+    { x: 215, label: "Logical relationship", color: palette("relation-logical", "#7c3aed"), dash: "8 5" },
+    { x: 470, label: "Inferred candidate · not a constraint", color: colorBlindPalette ? palette("relation-accessible-orange", "#d55e00") : palette("relation-inferred", "#b7791f"), dash: "6 4" },
   ];
   for (const item of relationships) {
     heading.append(element("path", { d: `M${item.x},77 h28 m-5,-3 l5,3 -5,3`, fill: "none", stroke: item.color, "stroke-width": 2, "stroke-dasharray": item.dash }));
@@ -115,9 +117,9 @@ export function createDiagramSvgCapture(options: DiagramExportOptions) {
   text(heading, "Gray dashed: inactive/conflicted logical relationship", 20, 100, muted, 10);
   if (changeSet) {
     const statuses = [
-      { x: 20, width: 100, label: "+ Added", color: colorBlindPalette ? "#005a85" : "#166b33", background: colorBlindPalette ? "#e2f3fc" : "#e3f5e8" },
-      { x: 145, width: 110, label: "~ Modified", color: "#805300", background: "#fff1d4" },
-      { x: 280, width: 180, label: "− Deleted · Before", color: colorBlindPalette ? "#994000" : "#a52d36", background: colorBlindPalette ? "#fff0e4" : "#ffe8eb" },
+      { x: 20, width: 100, label: "+ Added", color: colorBlindPalette ? palette("relation-accessible-blue", "#005a85") : palette("positive", "#166b33"), background: colorBlindPalette ? palette("accent-soft", "#e2f3fc") : palette("positive-soft", "#e3f5e8") },
+      { x: 145, width: 110, label: "~ Modified", color: palette("warning", "#805300"), background: palette("warning-soft", "#fff1d4") },
+      { x: 280, width: 180, label: "− Deleted · Before", color: colorBlindPalette ? palette("relation-accessible-orange", "#994000") : palette("danger", "#a52d36"), background: colorBlindPalette ? palette("warning-soft", "#fff0e4") : palette("danger-soft", "#ffe8eb") },
     ];
     for (const status of statuses) {
       heading.append(element("rect", { x: status.x, y: 110, width: status.width, height: 19, rx: 3, fill: status.background }));
@@ -273,7 +275,9 @@ function cloneSvg(source: Element): SvgTree {
   if (source instanceof SVGElement) for (const name of Array.from(source.style)) clone.style.setProperty(name, source.style.getPropertyValue(name), source.style.getPropertyPriority(name));
   const style = getComputedStyle(source);
   for (const property of ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "opacity", "fill-opacity", "stroke-opacity", "font-family", "font-size", "font-weight", "font-style", "text-anchor", "dominant-baseline", "marker-start", "marker-end"]) {
-    const value = style.getPropertyValue(property).replace(/url\(["']?([^"')]+)["']?\)/g, (_match, url: string) => {
+    // React Flow marker IDs can contain CSS color variables (and parentheses).
+    const value = style.getPropertyValue(property).replace(/url\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/g, (_match, doubleQuoted: string, singleQuoted: string, unquoted: string) => {
+      const url = doubleQuoted ?? singleQuoted ?? unquoted;
       const fragment = url.indexOf("#");
       return fragment === -1 ? "none" : `url("${url.slice(fragment)}")`;
     });

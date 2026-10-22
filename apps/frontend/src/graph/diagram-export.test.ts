@@ -40,6 +40,7 @@ describe("diagram export", () => {
     Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
     Reflect.deleteProperty(Range.prototype, "getClientRects");
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("exports standalone vector shapes, clipped text, arrows and comparison legends with escaped object names", () => {
@@ -171,6 +172,27 @@ describe("diagram export", () => {
     expect(result.svg).toContain("#0072b2");
     expect(result.svg).toContain("#d55e00");
     expect(result.svg).toContain("Partial comparison: Before snapshot unavailable");
+  });
+
+  it("exports the resolved System theme after the OS appearance changes", () => {
+    document.documentElement.dataset.theme = "system";
+    const fixture = diagramFixture();
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    expect(captureDiagramSvg({ ...fixture, snapshot: diagramAfter }).svg).toContain('data-theme="light"');
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    expect(captureDiagramSvg({ ...fixture, snapshot: diagramAfter }).svg).toContain('data-theme="dark"');
+  });
+
+  it("preserves quoted marker references containing theme variable names", () => {
+    const fixture = diagramFixture();
+    const id = "color=var(--ds-relation-physical)&type=arrowclosed";
+    fixture.root.querySelector("marker")!.id = id;
+    const path = fixture.root.querySelector<SVGElement>(".react-flow__edge path")!;
+    path.style.setProperty("marker-end", `url("http://localhost/#${id}")`);
+    const result = captureDiagramSvg({ ...fixture, snapshot: diagramAfter });
+    const exported = new DOMParser().parseFromString(result.svg, "image/svg+xml");
+    expect(exported.getElementById(id)).not.toBeNull();
+    expect(exported.querySelector(".react-flow__edge path")?.getAttribute("style")).toContain(`url("#${id}")`);
   });
 
   it("rejects an empty diagram and invalid raster dimensions", () => {

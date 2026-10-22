@@ -1,8 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   CaptureSnapshotResult,
   ConnectionTestResult,
+  ConnectionTestOptions,
   DataSourceProfile,
   NodalStudioPlatform,
 } from "../platform";
@@ -76,6 +77,75 @@ function renderPanel(platform = platformMock()) {
 }
 
 describe("ConnectionPanel", () => {
+  it("cancels the actual test and ignores a late successful response", async () => {
+    let options: ConnectionTestOptions | undefined;
+    let finish!: (value: ConnectionTestResult) => void;
+    const testPostgresConnection = vi.fn((_input: unknown, next?: ConnectionTestOptions) => {
+      options = next;
+      return new Promise<ConnectionTestResult>((resolve) => { finish = resolve; });
+    });
+    renderPanel(platformMock({ testPostgresConnection }));
+    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    act(() => options?.onProgress?.({ phase: "handshake", sshConnected: false }));
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Connecting to the database and negotiating TLS…");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel connection test" }));
+    expect(options?.signal?.aborted).toBe(true);
+    expect(screen.getByRole("button", { name: "Cancel connection test" })).toBeDisabled();
+    await act(async () => { finish(connectionResult); await Promise.resolve(); });
+    expect(screen.getByText("Connection test cancelled")).toBeVisible();
+    expect(screen.queryByText("Connection successful")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Test connection" })).toBeEnabled();
+  });
+
+  it("tests without saving and invalidates the result after edits", async () => {
+    const saveDataSource = vi.fn(), capturePostgresSnapshot = vi.fn();
+    const platform = platformMock({ saveDataSource, capturePostgresSnapshot });
+    renderPanel(platform);
+    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(await screen.findByText("Connection successful")).toBeVisible();
+    expect(saveDataSource).not.toHaveBeenCalled();
+    expect(capturePostgresSnapshot).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Save and map" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "different.example" } });
+    expect(screen.queryByText("Connection successful")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
+  });
+
+  it("shows the failed stage and keeps saving disabled", async () => {
+    renderPanel(platformMock({ testPostgresConnection: vi.fn().mockRejectedValue({ stage: "tls", message: "Check the CA certificate.", sshConnected: true }) }));
+    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("TLS verification failed");
+    expect(screen.getByRole("alert")).toHaveTextContent("Check the CA certificate.");
+    expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
+  });
+
+  it("keeps edits across security tabs and clears passwords when closing", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+    expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
+    expect(screen.getByLabelText("Database")).not.toBeVisible();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Connect through SSH/ }));
+    fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "password" } });
+    fireEvent.change(screen.getByLabelText("SSH password"), { target: { value: "test-only" } });
+    fireEvent.click(screen.getByRole("tab", { name: "TLS" }));
+    expect(screen.getByLabelText("SSH password")).not.toBeVisible();
+    expect(screen.getByLabelText("SSL mode")).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: /SSH/ }));
+    expect(screen.getByLabelText("SSH password")).toHaveValue("test-only");
+    fireEvent.click(screen.getByRole("button", { name: "Close connection dialog" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
+    expect(screen.getByRole("checkbox", { name: /Connect through SSH/ })).not.toBeChecked();
+  });
+
   it("collapses the active source locally and restores the same search and group state without reopening its snapshot", async () => {
     const listSnapshots = vi.fn(), getSnapshot = vi.fn(), capturePostgresSnapshot = vi.fn();
     const platform = platformMock({ listSnapshots, getSnapshot, capturePostgresSnapshot }), onSnapshot = vi.fn();
@@ -175,7 +245,7 @@ describe("ConnectionPanel", () => {
     expect(screen.getByLabelText("Database")).toHaveValue("flow");
     expect(screen.getByLabelText("Password")).toHaveAttribute("placeholder", "Optional — keep current password");
     expect(screen.getByText("System credential storage")).toBeInTheDocument();
-    expect(screen.getByText("Use TLS when the database server supports it.")).toBeInTheDocument();
+    expect(screen.getByText("Use TLS when available; this mode can fall back to an unencrypted connection.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Verify & refresh" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Delete data source" })).toBeInTheDocument();
   });
@@ -216,7 +286,9 @@ describe("ConnectionPanel", () => {
     fireEvent.change(screen.getByLabelText("Host"), { target: { value: "db.internal" } });
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
     expect(screen.getByText(/Connection details changed/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Verify & refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(verifyAndRefreshDataSource).toHaveBeenCalledWith(expect.objectContaining({
       id: profile.id,
@@ -240,7 +312,9 @@ describe("ConnectionPanel", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit Flow" }));
     fireEvent.change(screen.getByLabelText("Database"), { target: { value: "other" } });
-    fireEvent.click(screen.getByRole("button", { name: "Verify & refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await screen.findByText("Metadata refresh failed")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Edit Flow" })).toBeInTheDocument();
@@ -277,6 +351,10 @@ describe("ConnectionPanel", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Create" }));
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "secret" } });
+    expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save and map" })).toBeEnabled());
+    expect(saveDataSource).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Save and map" }));
 
     await waitFor(() => expect(saveDataSource).toHaveBeenCalled());

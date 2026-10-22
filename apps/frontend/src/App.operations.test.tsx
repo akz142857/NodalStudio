@@ -19,13 +19,13 @@ async function mount() {
   await screen.findByText("Desktop test runtime"); fireEvent.click(screen.getByRole("button", { name: "Load operation fixture" }));
   return platform;
 }
-const refresh = () => screen.getAllByRole("button", { name: "Refresh" })[0];
+const refresh = () => screen.getAllByRole("button", { name: "Refresh schema" })[0];
 describe("App snapshot operation feedback", () => {
   beforeEach(() => localStorage.clear()); afterEach(() => vi.restoreAllMocks());
   it("presents header functions as named icons with contextual help and working actions", async () => {
     await mount();
     const tools = within(screen.getByRole("group", { name: "Application tools" }));
-    for (const name of ["Import DDL", "Structure preflight", "Export HTML report", "Export offline Viewer", "Refresh", "Open Settings", "Open command palette", "Open notifications"]) {
+    for (const name of ["Import DDL", "Structure preflight", "Export HTML report", "Export offline Viewer", "Refresh schema", "Open Settings", "Open command palette", "Open notifications"]) {
       const button = tools.getByRole("button", { name });
       expect(button.textContent).toBe("");
     }
@@ -35,6 +35,18 @@ describe("App snapshot operation feedback", () => {
     fireEvent.click(preflight);
     expect(preflight).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("heading", { name: "Structure preflight" })).toBeVisible();
+  });
+  it("keeps the source sidebar for navigation and opens History from the Database title", async () => {
+    await mount();
+    expect(screen.queryByRole("region",{name:"Active snapshot"})).toBeNull();
+    expect(document.querySelector(".sidebar")?.textContent).not.toContain("Snapshot");
+    expect(screen.getAllByRole("button",{name:"Refresh schema"})).toHaveLength(1);
+    const collapse = screen.queryByRole("button",{name:"Collapse right inspector"});
+    if (collapse) fireEvent.click(collapse);
+    fireEvent.click(screen.getByRole("button",{name:"Open schema history"}));
+    expect(document.querySelector(".inspector")).not.toHaveAttribute("hidden");
+    expect(await screen.findByRole("region",{name:"Schema history"})).toBeVisible();
+    expect(screen.getByRole("region",{name:"Viewing snapshot details"})).toHaveTextContent(reportSnapshot.fingerprint);
   });
   it("keeps normal refreshes quiet, reports errors, blocks duplicates and retries with the current source", async () => {
     const platform = await mount(); let reject!: (reason: Error) => void;

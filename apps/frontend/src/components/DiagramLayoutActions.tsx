@@ -36,6 +36,6 @@ export function DiagramLayoutActions({ selectedCount, movableCount = selectedCou
         {actions.map(([action, label]) => <button key={action} type="button" disabled={disabled || movableCount < (action.startsWith("distribute-") ? 3 : 2)} title={action.startsWith("distribute-") ? "Equal gaps between table edges; keep the outer tables fixed. Requires 3 movable tables." : "Align selected table bounds. Requires 2 movable tables."} onClick={() => onArrange(action)}>{label}</button>)}
       </DiagramToolbarMenu>
     </> : null}
-    <OperationFeedback label="Diagram layout operation" state={feedback} onRetry={onRetry} retryLabel={retryLabel ?? "Retry layout save"} retryDisabled={disabled} onDismiss={onDismissFeedback} dismissLabel="Dismiss layout result" />
+    <OperationFeedback autoDismissMs={5000} label="Diagram layout operation" state={feedback} onRetry={onRetry} retryLabel={retryLabel ?? "Retry layout save"} retryDisabled={disabled} onDismiss={onDismissFeedback} dismissLabel="Dismiss layout result" />
   </div>;
 }

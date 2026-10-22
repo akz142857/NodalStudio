@@ -11,6 +11,8 @@ export interface QuerySession {
   rowLimit: number;
   resultHeight: number;
   outputCollapsed: boolean;
+  outputResized?: boolean;
+  outcome?: "succeeded" | "failed";
 }
 
 const sessions = new Map<string, QuerySession>();

@@ -89,9 +89,44 @@ pub struct DataSourceProfile {
     #[serde(default)]
     pub database_type: DatabaseType,
     pub ssl_mode: SslMode,
+    #[serde(default)]
+    pub security: ConnectionSecurity,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+/// Local certificate and SSH paths only; key material is never serialized.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionSecurity {
+    #[serde(default)]
+    pub tls: TlsConfig,
+    #[serde(default)]
+    pub ssh: Option<SshConfig>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TlsConfig {
+    pub ca_certificate: Option<String>,
+    pub client_certificate: Option<String>,
+    pub client_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub authentication: SshAuthentication,
+    pub private_key: Option<String>,
+    pub known_hosts: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SshAuthentication { Agent, PrivateKey, Password }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -1,7 +1,7 @@
 import type { DatabaseInfo, ObjectKey } from "./types";
 import type { TableAiEvidence } from "./table-ai-types";
 
-export type DiscoveryOperation = "expand" | "rank" | "path";
+export type DiscoveryOperation = "expand" | "rank" | "path" | "draftSql";
 export interface DiscoveryTask {
   operation: DiscoveryOperation;
   question: string;
@@ -41,7 +41,9 @@ export interface DiscoveryPreview {
   requestBody: unknown;
   expiresAt: string;
 }
+export interface SqlDraft { sql: string | null; explanation: string; assumptions: string[]; clarification: string[] }
 export interface DiscoveryAnswer {
+  sqlDraft?: SqlDraft;
   terms: string[];
   meanings: { label: string; terms: string[] }[];
   rankings: { candidateId: string; reason: string; evidenceIds: string[] }[];

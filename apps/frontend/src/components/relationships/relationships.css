@@ -1,6 +1,10 @@
 /* Model relationship surfaces use the same semantic tokens as Settings/Inspector. */
 .ds-surface.relationship-inspector { position: fixed; z-index: 70; display: grid; gap: var(--ds-space-3); width: 360px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow: auto; padding: var(--ds-space-4); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: 0 12px 38px #0003; font-size: var(--ds-text-control); overflow-wrap: anywhere; }
 .relationship-inspector > header { display: flex; align-items: start; justify-content: space-between; gap: var(--ds-space-3); }
+.relationship-inspector-drag-handle { cursor: grab; touch-action: none; user-select: none; border-radius: var(--ds-radius-control); }
+.relationship-inspector-drag-handle[data-dragging="true"] { cursor: grabbing; }
+.relationship-inspector-drag-handle:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 4px; }
+.relationship-inspector-drag-handle > button { cursor: pointer; }
 .relationship-inspector > header > div { min-width: 0; display: grid; gap: var(--ds-space-1); }
 .relationship-inspector h2, .relationship-delete-dialog h2 { margin: 0; font-size: var(--ds-text-heading); font-weight: var(--ds-weight-emphasis); }
 .relationship-inspector > header > button { display: grid; place-items: center; flex: 0 0 28px; width: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--ds-secondary); font-size: 20px; line-height: 1; }

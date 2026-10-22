@@ -1,3 +1,4 @@
+import { Channel } from "@tauri-apps/api/core";
 import { invoke } from "./desktop-invoke";
 import type {
   FileExportReceipt,
@@ -11,6 +12,8 @@ import type {
   CaptureSnapshotResult,
   DataSourceProfile,
   ConnectionTestResult,
+  ConnectionTestOptions,
+  ConnectionTestProgress,
   DatabaseSnapshot,
   DomainGroup,
   DriftReport,
@@ -57,6 +60,7 @@ import type {
 } from "./settings-types";
 
 export class TauriPlatform implements NodalStudioPlatform {
+  exportQueryResult(input: import("./types").QueryExportInput): Promise<string | null> { return invoke("export_query_result", { input: { ...input, result: { ...input.result, rows: input.result.rows.map((row) => row.map((cell) => cell.kind === "json" && cell.raw !== undefined ? { ...cell, value: null } : cell)) } } }); }
   prepareKnowledgeDraft(input: import("./knowledge-types").KnowledgeDraftInput): Promise<import("./knowledge-types").KnowledgeDraft> { return invoke("prepare_knowledge_draft", { input }); }
   confirmKnowledgeDraft(id: string, text: string): Promise<ObjectAnnotation> { return invoke("confirm_knowledge_draft", { id, text }); }
   cancelKnowledgeDraft(id: string): Promise<void> { return invoke("cancel_knowledge_draft", { id }); }
@@ -102,6 +106,10 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke<void>("reveal_app_directory", { input: { kind } });
   }
 
+  pickConnectionFile(): Promise<string | null> {
+    return invoke<string | null>("pick_connection_file");
+  }
+
   listDataSources(): Promise<DataSourceProfile[]> {
     return invoke<DataSourceProfile[]>("list_data_sources");
   }
@@ -118,8 +126,31 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke<DataSourceProfile>("save_data_source", { input });
   }
 
-  testPostgresConnection(input: SaveDataSourceInput): Promise<ConnectionTestResult> {
-    return invoke<ConnectionTestResult>("test_postgres_connection", { input });
+  async testPostgresConnection(input: SaveDataSourceInput, options?: ConnectionTestOptions): Promise<ConnectionTestResult> {
+    if (options?.signal?.aborted) throw new DOMException("Connection test cancelled", "AbortError");
+    const testId = crypto.randomUUID();
+    const onProgress = new Channel<ConnectionTestProgress>();
+    let registered = false, cancelling = false, finished = false;
+    const cancel = () => {
+      // Acknowledge registration first so a fast click cannot race ahead of start.
+      if (!registered || cancelling || finished) return;
+      cancelling = true;
+      void invoke("cancel_connection_test", { testId }).catch(() => { cancelling = false; });
+    };
+    onProgress.onmessage = (progress) => {
+      if (finished) return;
+      registered = true;
+      if (options?.signal?.aborted) cancel();
+      else options?.onProgress?.(progress);
+    };
+    options?.signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      return await invoke<ConnectionTestResult>("test_postgres_connection", { input, testId, onProgress });
+    } finally {
+      finished = true;
+      options?.signal?.removeEventListener("abort", cancel);
+      onProgress.onmessage = () => {};
+    }
   }
 
   verifyAndRefreshDataSource(input: SaveDataSourceInput): Promise<VerifyAndRefreshDataSourceResult> {

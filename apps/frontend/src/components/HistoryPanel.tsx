@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { formatSnapshotTime } from "./snapshot-presentation";
 import type {
   DatabaseSnapshot,
   SchemaChangeSet,
@@ -9,6 +10,7 @@ import type {
 interface HistoryPanelProps {
   sourceId: string;
   revision: string;
+  activeSnapshot?: DatabaseSnapshot;
   platform: NodalStudioPlatform;
   onSelect: (snapshot: DatabaseSnapshot) => void;
   onCompare: (snapshot: DatabaseSnapshot, changeSet: SchemaChangeSet) => void;
@@ -28,6 +30,7 @@ function formatCapturedAt(value: string): string {
 export function HistoryPanel({
   sourceId,
   revision,
+  activeSnapshot,
   platform,
   onSelect,
   onCompare,
@@ -102,6 +105,13 @@ export function HistoryPanel({
         <h2>History</h2>
         <span>{snapshots.length}</span>
       </div>
+      {activeSnapshot ? <section className="history-current-snapshot" aria-label="Viewing snapshot details">
+        <div className="history-current-heading"><strong>Viewing snapshot</strong>{snapshots[0] ? <span className="snapshot-version-badge">{snapshots[0].id === activeSnapshot.id ? "Latest captured" : "Historical"}</span> : null}</div>
+        <dl><div><dt>Captured</dt><dd><time dateTime={activeSnapshot.capturedAt}>{formatSnapshotTime(activeSnapshot.capturedAt)}</time></dd></div>
+          <div><dt>Tables</dt><dd>{activeSnapshot.schemas.reduce((n,schema) => n + schema.tables.length,0)}</dd></div>
+          <div><dt>Fingerprint</dt><dd className="history-fingerprint">{activeSnapshot.fingerprint}</dd></div></dl>
+        <p>A saved schema, not a data backup. Use Refresh schema in the toolbar to check the database again.</p>
+      </section> : null}
       {snapshots.length === 0 ? (
         <p className="muted-copy">Capture a schema to establish its baseline.</p>
       ) : (
@@ -112,11 +122,14 @@ export function HistoryPanel({
                 type="button"
                 key={snapshot.id}
                 disabled={pending}
+                aria-current={snapshot.id === (activeSnapshot?.id ?? revision) ? "true" : undefined}
                 onClick={() => void selectSnapshot(snapshot.id)}
               >
                 <span className="timeline-dot" />
                 <span>
-                  <strong>{index === 0 ? "Current" : formatCapturedAt(snapshot.capturedAt)}</strong>
+                  <strong>{formatCapturedAt(snapshot.capturedAt)}</strong>
+                  {index === 0 ? <small>Latest captured</small> : null}
+                  {snapshot.id === (activeSnapshot?.id ?? revision) ? <small className="history-viewing-label">Viewing</small> : null}
                   <small>
                     {snapshot.tableCount} tables · {snapshot.fingerprint.slice(0, 8)}
                   </small>

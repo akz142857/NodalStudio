@@ -87,11 +87,12 @@ describe("SettingsPage", () => {
       target: { value: "foreign key" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Canvas & ER" }));
+    expect(screen.getByRole("checkbox", { name: /Inferred relationships/ })).toBeChecked();
     fireEvent.click(screen.getByRole("checkbox", { name: /Inferred relationships/ }));
 
     await waitFor(() => expect(onUpdateApp).toHaveBeenCalledOnce());
     const saved = onUpdateApp.mock.calls.at(0)?.at(0);
-    expect(saved?.canvas.showInferredRelationships).toBe(true);
+    expect(saved?.canvas.showInferredRelationships).toBe(false);
   });
 
   it("renders organization-managed settings as locked with their source", () => {

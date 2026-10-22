@@ -49,6 +49,8 @@ const changeSet: SchemaChangeSet = {
 
 function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"]): NodalStudioPlatform {
   return {
+    pickConnectionFile: vi.fn(),
+    exportQueryResult: vi.fn(),
     prepareKnowledgeDraft: vi.fn(),
     confirmKnowledgeDraft: vi.fn(),
     cancelKnowledgeDraft: vi.fn(),
@@ -161,13 +163,26 @@ describe("HistoryPanel", () => {
       />,
     );
 
-    expect(await screen.findByText("Current")).toBeVisible();
+    expect(await screen.findByText("Latest captured")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Compare versions" }));
 
     await waitFor(() => expect(onCompare).toHaveBeenCalledWith(snapshot, changeSet));
     expect(compareSnapshots).toHaveBeenCalledWith("before", "after");
   });
 
+  it("distinguishes the viewed historical version from the newest captured version", async () => {
+    const onSelect = vi.fn();
+    const old = { ...snapshot, id: "before", capturedAt: summaries[1].capturedAt, fingerprint: summaries[1].fingerprint };
+    render(<HistoryPanel sourceId="source" revision="before" activeSnapshot={old} platform={platformMock(vi.fn())} onSelect={onSelect} onCompare={vi.fn()}/>);
+    expect(await screen.findByText("Historical")).toBeVisible();
+    expect(screen.getByRole("region",{name:"Viewing snapshot details"})).toHaveTextContent(old.fingerprint);
+    const current = screen.getByRole("button",{name:/Viewing/});
+    expect(current).toHaveAttribute("aria-current","true");
+    const latest = screen.getByRole("button",{name:/Latest captured/});
+    expect(latest).not.toHaveAttribute("aria-current");
+    fireEvent.click(latest);
+    await waitFor(()=>expect(onSelect).toHaveBeenCalledWith(snapshot));
+  });
   it("compares in the chosen direction even when the target is older", async () => {
     const compareSnapshots = vi.fn().mockResolvedValue(changeSet);
     const platform = platformMock(compareSnapshots);

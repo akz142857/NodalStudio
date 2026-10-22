@@ -1,6 +1,18 @@
 import type { ReactNode } from "react";
 
 const paths = {
+  export: <><path d="M12 15V3m-4 4 4-4 4 4M5 11v9h14v-9" /></>,
+  chart: <><path d="M4 20V10m8 10V4m8 16v-7" /></>,
+  copy: <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V3H3v13h5" /></>,
+  play: <path d="m8 5 11 7-11 7Z" fill="currentColor" stroke="none" />,
+  stop: <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />,
+  expand: <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />,
+  split: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 12h18" /></>,
+  fit: <><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6" /><rect x="8" y="8" width="8" height="8" rx="1" /></>,
+  relationships: <><rect x="3" y="3" width="7" height="6" rx="1.5" /><rect x="14" y="15" width="7" height="6" rx="1.5" /><path d="M6.5 9v7a2 2 0 0 0 2 2H14" /></>,
+  chevronUp: <path d="m6 15 6-6 6 6" />,
+  chevronRight: <path d="m9 6 6 6-6 6" />,
+  question: <><path d="M21 11a8 8 0 0 1-8 8H8l-5 3V11a9 9 0 0 1 18 0Z" /><path d="M9.5 8a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5M12 15h.01" /></>,
   import: <><path d="M12 3v12m-4-4 4 4 4-4" /><path d="M5 14v6h14v-6" /></>,
   preflight: <><path d="M14 3H6v18h12V7l-4-4Z" /><path d="M14 3v4h4m-9 7 2 2 4-5" /></>,
   report: <><path d="M14 3H5v18h14V8l-5-5Z" /><path d="M14 3v5h5M8 12h8m-8 4h5" /></>,

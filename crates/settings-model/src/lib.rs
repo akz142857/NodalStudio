@@ -175,7 +175,7 @@ impl Default for CanvasSettings {
             indexes: IndexDisplay::Expanded,
             max_initial_columns: 60,
             show_declared_relationships: true,
-            show_inferred_relationships: false,
+            show_inferred_relationships: true,
             field_level_edges: true,
             show_relation_names: false,
             show_cardinality: false,

@@ -51,6 +51,7 @@ fn cell_from_text(database_type: &str, text: &str, max_cell_bytes: usize) -> Que
             |_| text_cell(text, max_cell_bytes),
             |value| QueryCell::Json {
                 value,
+                raw: Some(text.to_owned()),
                 truncated: false,
             },
         ),
@@ -104,6 +105,15 @@ mod tests {
                 truncated: false,
             }
         );
+    }
+
+    #[test]
+    fn preserves_raw_json_and_binary_wire_length() {
+        let raw = r#"{"id":9223372036854775807,"amount":0.123456789123456789}"#;
+        let cell = cell_from_text("jsonb", raw, 1024);
+        assert!(matches!(cell, QueryCell::Json { raw: Some(ref value), .. } if value == raw));
+        let binary = serde_json::to_value(cell_from_text("bytea", "\\x00ff", 1024)).unwrap();
+        assert_eq!(binary["byteLength"], 2);
     }
 
     #[test]

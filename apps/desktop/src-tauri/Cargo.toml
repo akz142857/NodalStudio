@@ -28,18 +28,21 @@ semver.workspace = true
 settings-model = { path = "../../../crates/settings-model" }
 semantic-model = { path = "../../../crates/semantic-model" }
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 snapshot-store = { path = "../../../crates/snapshot-store" }
 sqlx.workspace = true
 tauri.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["process"] }
+tempfile = "3.27.0"
 tokio-util.workspace = true
 uuid.workspace = true
 tauri-plugin-updater = "2"
 flate2 = "1.1.9"
 tar = "0.4.46"
 plist = "1.10.0"
+tauri-plugin-dialog = "2"
+zip = { version = "4.6.1", default-features = false }
 
 [lints]
 workspace = true

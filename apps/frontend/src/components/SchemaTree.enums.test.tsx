@@ -39,7 +39,7 @@ it("distinguishes enum/view objects with the same name and supports enum context
   expect(enumRow).toHaveAttribute("aria-current", "true");
   fireEvent.click(screen.getByRole("button", { name: "Close enum details" }));
   expect(enumRow).toHaveFocus();
-  fireEvent.keyDown(enumRow, { key: "F10", shiftKey: true });
+  fireEvent.click(screen.getByRole("button", { name: `Actions for ${enumSnapshot.schemas[0].name}.order_status` }));
   const menu = screen.getByRole("menu", { name: "Actions for public.order_status" });
   expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Show enum details", "Copy qualified name"]);
   fireEvent.click(within(menu).getByRole("menuitem", { name: "Show enum details" }));

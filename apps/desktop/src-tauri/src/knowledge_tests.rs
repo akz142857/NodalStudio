@@ -365,6 +365,7 @@ async fn failed_candidate_introspection_does_not_replace_profile_or_invalidate_c
         username: "reader".into(),
         database_type: DatabaseType::PostgreSql,
         ssl_mode: SslMode::Disable,
+            security: Default::default(),
         created_at: Utc::now(),
         updated_at: Utc::now(),
     };
@@ -390,6 +391,12 @@ async fn failed_candidate_introspection_does_not_replace_profile_or_invalidate_c
     let mut candidate = original.clone();
     candidate.host = "127.0.0.1".into();
     candidate.port = 0;
+    let candidate_input = SaveDataSourceInput {
+        id: Some(candidate.id), display_name: candidate.display_name.clone(),
+        host: candidate.host.clone(), port: candidate.port, database: candidate.database.clone(),
+        username: candidate.username.clone(), password: "unused".into(), ssh_password: None,
+        database_type: candidate.database_type, ssl_mode: candidate.ssl_mode, security: candidate.security.clone(),
+    };
     // Introspection fails before any Keychain or persistence write.
     assert!(
         capture_snapshot_using(
@@ -398,7 +405,7 @@ async fn failed_candidate_introspection_does_not_replace_profile_or_invalidate_c
                 trigger: None
             },
             &state,
-            Some((&candidate, "unused", None))
+            Some((&candidate, &candidate_input))
         )
         .await
         .is_err()

@@ -291,7 +291,7 @@ export function buildSchemaGraph(
             markerEnd: { type: MarkerType.ArrowClosed, color: relationColor(changeStatus, options.colorBlindPalette) },
             style: { stroke: relationColor(changeStatus, options.colorBlindPalette), strokeDasharray: changeStatus === "deleted" ? "8 5" : changeStatus === "modified" ? "3 3" : undefined, strokeWidth: options.highContrastRelations ? 3 : 1.8, opacity: relationshipOpacity(highlightedRelationshipIds, tableNodeId(schema, table.key.name), tableNodeId(foreignKey.referencedSchema, foreignKey.referencedTable)) },
             labelStyle: { fill: relationColor(changeStatus, options.colorBlindPalette), fontSize: 9, fontWeight: 600 },
-            labelBgStyle: { fill: "#eff6ff", fillOpacity: 0.94 },
+            labelBgStyle: { fill: "var(--ds-accent-soft)", fillOpacity: 0.94 },
             labelBgPadding: [4, 2] as [number, number],
             labelBgBorderRadius: 3,
             zIndex: 2,
@@ -349,15 +349,15 @@ export function buildSchemaGraph(
             targetHandle: options.fieldLevelEdges === false ? "table-target-left" : fieldHandleId("target", targetColumn, "left"),
             type: options.edgeStyle === "curved" ? "default" : "smoothstep",
             label: logicalRelationshipLabel(options, relationship.name, relationship.cardinality),
-            markerEnd: { type: MarkerType.ArrowClosed, color: invalid ? "#94a3b8" : "#7c3aed" },
+            markerEnd: { type: MarkerType.ArrowClosed, color: invalid ? "var(--ds-relation-muted)" : "var(--ds-relation-logical)" },
             style: {
-              stroke: invalid ? "#94a3b8" : "#7c3aed",
+              stroke: invalid ? "var(--ds-relation-muted)" : "var(--ds-relation-logical)",
               strokeWidth: options.highContrastRelations ? 3 : 2,
               strokeDasharray: invalid ? "3 5" : "8 5",
               opacity: relationshipOpacity(highlightedRelationshipIds, sourceId, targetId),
             },
-            labelStyle: { fill: invalid ? "#64748b" : "#6d28d9", fontSize: 9, fontWeight: 600 },
-            labelBgStyle: { fill: "#f5f3ff", fillOpacity: 0.94 },
+            labelStyle: { fill: invalid ? "var(--ds-relation-muted)" : "var(--ds-relation-logical)", fontSize: 9, fontWeight: 600 },
+            labelBgStyle: { fill: "var(--ds-logical-soft)", fillOpacity: 0.94 },
             labelBgPadding: [4, 2] as [number, number],
             labelBgBorderRadius: 3,
             zIndex: 2,
@@ -397,10 +397,10 @@ export function buildSchemaGraph(
         label: options.showRelationshipLabels
           ? `? ${relationship.column} → ${relationship.referencedColumn}`
           : undefined,
-        markerEnd: { type: MarkerType.ArrowClosed, color: options.colorBlindPalette ? "#d55e00" : "#b7791f" },
-        style: { stroke: options.colorBlindPalette ? "#d55e00" : "#b7791f", strokeWidth: options.highContrastRelations ? 2.6 : 1.4, strokeDasharray: "6 4", opacity: relationshipOpacity(highlightedRelationshipIds, relationship.sourceId, relationship.targetId) },
-        labelStyle: { fill: "#92400e", fontSize: 8 },
-        labelBgStyle: { fill: "#fffbeb", fillOpacity: 0.94 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: options.colorBlindPalette ? "var(--ds-relation-accessible-orange)" : "var(--ds-relation-inferred)" },
+        style: { stroke: options.colorBlindPalette ? "var(--ds-relation-accessible-orange)" : "var(--ds-relation-inferred)", strokeWidth: options.highContrastRelations ? 2.6 : 1.4, strokeDasharray: "6 4", opacity: relationshipOpacity(highlightedRelationshipIds, relationship.sourceId, relationship.targetId) },
+        labelStyle: { fill: "var(--ds-relation-inferred)", fontSize: 8 },
+        labelBgStyle: { fill: "var(--ds-warning-soft)", fillOpacity: 0.94 },
         labelBgPadding: [3, 2] as [number, number],
         labelBgBorderRadius: 3,
         zIndex: 1,
@@ -681,8 +681,8 @@ export function changeMarker(status: ChangeStatus): string {
 }
 
 function relationColor(status: ChangeStatus | undefined, colorBlind = false): string {
-  if (status === "deleted") return colorBlind ? "#d55e00" : "#c43e48";
-  if (status === "modified") return "#946200";
-  if (status === "added") return colorBlind ? "#0072b2" : "#16803c";
-  return colorBlind ? "#0072b2" : "#2563eb";
+  if (status === "deleted") return colorBlind ? "var(--ds-relation-accessible-orange)" : "var(--ds-relation-deleted)";
+  if (status === "modified") return "var(--ds-relation-modified)";
+  if (status === "added") return colorBlind ? "var(--ds-relation-accessible-blue)" : "var(--ds-relation-added)";
+  return colorBlind ? "var(--ds-relation-accessible-blue)" : "var(--ds-relation-physical)";
 }

@@ -221,6 +221,9 @@ async fn prepare(app: &AppState, input: DiscoveryInput) -> Result<Prepared, Stri
     if !ai.enabled {
         return Err("AI is disabled by your effective settings or project policy.".into());
     }
+    if input.task.operation == Operation::DraftSql && ai.provider == AiProviderKind::Offline {
+        return Err("SQL drafting needs an enabled AI model. Configure the existing AI provider in Settings.".into());
+    }
     let scope = match ai.context_scope {
         AiContextScope::CurrentTable => SendScope::CurrentTable,
         AiContextScope::OneHop => SendScope::OneHop,
@@ -332,6 +335,7 @@ fn request_body(
         Operation::Expand => discovery::EXPANSION_PROMPT,
         Operation::Rank => discovery::RANK_PROMPT,
         Operation::Path => discovery::PATH_PROMPT,
+        Operation::DraftSql => ai_context::sql_draft::PROMPT,
     };
     // Expansion must never serialize context, identifiers, candidates or history.
     let prompt = if input.task.operation == Operation::Expand {
@@ -414,6 +418,13 @@ async fn execute(
         validate_current(app, task).await?;
         accepted.ok_or("The model did not return an explanation.")?
     };
+    if let Some(sql) = answer
+        .sql_draft
+        .as_ref()
+        .and_then(|draft| draft.sql.as_deref())
+    {
+        query_engine::validate_read_only_postgres(sql).map_err(|e| e.to_string())?;
+    }
     Ok(DiscoveryResult {
         request_id: prepared.preview.request_id,
         source_id: prepared.preview.source_id,

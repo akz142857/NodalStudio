@@ -27,6 +27,15 @@ export interface DatabaseInfo {
   version: string;
 }
 
+export interface ConnectionTestProgress {
+  phase: "configuration" | "ssh" | "handshake" | "metadata" | "tls";
+  sshConnected: boolean;
+}
+export interface ConnectionTestOptions {
+  signal?: AbortSignal;
+  onProgress?: (progress: ConnectionTestProgress) => void;
+}
+
 export interface ConnectionTestResult {
   database: DatabaseInfo;
   sslActive: boolean | null;
@@ -125,6 +134,11 @@ export interface DatabaseSnapshot {
 
 export type SslMode = "disable" | "prefer" | "require" | "verifyCa" | "verifyFull";
 
+export interface ConnectionSecurity {
+  tls: { caCertificate?: string | null; clientCertificate?: string | null; clientKey?: string | null };
+  ssh?: { host: string; port: number; username: string; authentication: "agent" | "privateKey" | "password"; privateKey?: string | null; knownHosts?: string | null } | null;
+}
+
 export interface SaveDataSourceInput {
   id?: string;
   displayName: string;
@@ -133,8 +147,10 @@ export interface SaveDataSourceInput {
   database: string;
   username: string;
   password: string;
+  sshPassword?: string;
   databaseType: "postgreSql" | "mySql";
   sslMode: SslMode;
+  security?: ConnectionSecurity;
 }
 
 export interface DataSourceProfile {
@@ -146,6 +162,7 @@ export interface DataSourceProfile {
   username: string;
   databaseType: "postgreSql" | "mySql";
   sslMode: SslMode;
+  security?: ConnectionSecurity;
   createdAt: string;
   updatedAt: string;
 }
@@ -495,7 +512,7 @@ export type QueryCell =
   | { kind: "boolean"; value: boolean }
   | { kind: "number"; value: number }
   | { kind: "text"; value: string; truncated: boolean }
-  | { kind: "json"; value: unknown; truncated: boolean }
+  | { kind: "json"; value: unknown; raw?: string; truncated: boolean }
   | { kind: "binary"; byteLength: number };
 
 export interface QueryExecutionResult {
@@ -519,7 +536,10 @@ export interface QueryHistoryEntry {
   errorKind: QueryErrorKind | null;
 }
 
+export interface QueryExportInput { result: QueryExecutionResult; format: "csv" | "json" | "xlsx"; selectedRows: number[] | null; protectFormulas: boolean }
+
 export interface NodalStudioPlatform {
+  exportQueryResult(input: QueryExportInput): Promise<string | null>;
   prepareDiscovery(input: import("./discovery-types").DiscoveryInput): Promise<import("./discovery-types").DiscoveryPreview>;
   runDiscovery(requestId: string): Promise<import("./discovery-types").DiscoveryResult>;
   cancelDiscovery(requestId: string): Promise<void>;
@@ -534,11 +554,12 @@ export interface NodalStudioPlatform {
   getRuntimeInfo(): Promise<RuntimeInfo>;
   getDiagnosticInfo(): Promise<import("./settings-types").DiagnosticInfo>;
   revealAppDirectory(kind: "data" | "logs"): Promise<void>;
+  pickConnectionFile(): Promise<string | null>;
   listDataSources(): Promise<DataSourceProfile[]>;
   renameDataSource(sourceId: string, displayName: string): Promise<DataSourceProfile>;
   duplicateDataSource(sourceId: string): Promise<DataSourceProfile>;
   saveDataSource(input: SaveDataSourceInput): Promise<DataSourceProfile>;
-  testPostgresConnection(input: SaveDataSourceInput): Promise<ConnectionTestResult>;
+  testPostgresConnection(input: SaveDataSourceInput, options?: ConnectionTestOptions): Promise<ConnectionTestResult>;
   verifyAndRefreshDataSource(input: SaveDataSourceInput): Promise<VerifyAndRefreshDataSourceResult>;
   capturePostgresSnapshot(sourceId: string, trigger?: "manual" | "background"): Promise<CaptureSnapshotResult>;
   listSnapshots(sourceId: string): Promise<SnapshotSummary[]>;

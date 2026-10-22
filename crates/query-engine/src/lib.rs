@@ -97,9 +97,12 @@ pub enum QueryCell {
     },
     Json {
         value: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        raw: Option<String>,
         truncated: bool,
     },
     Binary {
+        #[serde(rename = "byteLength", alias = "byte_length")]
         byte_length: usize,
     },
 }

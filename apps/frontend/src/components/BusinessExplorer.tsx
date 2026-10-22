@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DatabaseSnapshot, DiscoveryOperation, EffectiveSettings, NodalStudioPlatform, SemanticBundle, TableDefinition } from "../platform";
 import { discoverTables, findKnownPath, knownRelationships, neighborhood, objectId, objectLabel } from "../graph/business-discovery";
+import type { QueryDraftSeed } from "./query/QueryDraftPanel";
 import { DiscoveryAssistant } from "./DiscoveryAssistant";
 import { SchemaCanvas } from "./SchemaCanvas";
 import "./business-explorer.css";
@@ -17,12 +18,13 @@ interface Props {
   onLocate: (table: TableDefinition) => void;
   onExplain: (table: TableDefinition) => void;
   onOpenSettings: () => void;
+  onDraftQuery?: (seed: Omit<QueryDraftSeed, "id">) => void;
 }
 export function BusinessExplorer(props: Props) {
   // Changing the model, effective policy or semantic bindings destroys every old task and focus.
   return <ExplorerSession key={JSON.stringify([props.snapshot, props.semantics.domainGroups, props.semantics.logicalRelationships, props.settings.source, props.settings.app.privacy, props.desktop, props.semantics.knowledge])} {...props} />;
 }
-function ExplorerSession({ snapshot, semantics, settings, platform, desktop, initialTable, sourceLabel, onClose, onLocate, onExplain, onOpenSettings }: Props) {
+function ExplorerSession({ snapshot, semantics, settings, platform, desktop, initialTable, sourceLabel, onClose, onLocate, onExplain, onOpenSettings, onDraftQuery }: Props) {
   const [question, setQuestion] = useState(""); const [searched, setSearched] = useState(false);
   const [terms, setTerms] = useState<string[]>([]); const [limit, setLimit] = useState(5);
   const [localDomain, setLocalDomain] = useState(""); const [aiDomain, setAiDomain] = useState("");
@@ -64,6 +66,7 @@ function ExplorerSession({ snapshot, semantics, settings, platform, desktop, ini
   const canStep = operation === "expand" || (operation === "rank" ? searched && candidates.length > 0 : !!path);
   const allowed = settings.source?.ai.contextScope;
   const needsScope = operation !== "expand" && (allowed === "currentTable" || (allowed === "oneHop" && !root) || (allowed === "domain" && !aiDomain));
+  const draftQuery = (table: TableDefinition, withPath = false) => onDraftQuery?.({ sourceId: snapshot.sourceId, snapshotId: snapshot.id, question, root: table.key, tables: withPath && path ? path.tables : [table.key], domainId: aiDomain || null });
   return <section className="business-explorer" aria-label="Business table discovery">
     <header className="discovery-header"><div><p className="eyebrow">UNDERSTAND A DATABASE</p><h2>Find tables by business question</h2></div><button type="button" onClick={onClose}>Back to previous view</button></header>
     <div className="discovery-workspace">
@@ -83,7 +86,7 @@ function ExplorerSession({ snapshot, semantics, settings, platform, desktop, ini
           <h4>{objectLabel(candidate.table.key)}</h4><small>{sourceLabel ?? snapshot.database.name} · {candidate.direct ? "Direct metadata match" : "Term hypothesis · needs confirmation"} · local order</small>
           {candidate.matchingColumns.length ? <p>Fields: {candidate.matchingColumns.join(", ")}</p> : null}
           <ul>{candidate.reasons.slice(0, 4).map((reason) => <li key={reason}>{reason}</li>)}</ul>
-          <div className="discovery-actions"><button type="button" onClick={() => onLocate(candidate.table)}>Locate table</button><button type="button" onClick={() => selectRoot(candidate.table)}>Expand relationships</button><button type="button" onClick={() => onExplain(candidate.table)} disabled={!desktop || !latest}>Explain this table</button></div>
+          <div className="discovery-actions"><button type="button" onClick={() => onLocate(candidate.table)}>Locate table</button><button type="button" onClick={() => selectRoot(candidate.table)}>Expand relationships</button><button type="button" onClick={() => onExplain(candidate.table)} disabled={!desktop || !latest}>Explain this table</button>{onDraftQuery ? <button type="button" disabled={!question.trim()} onClick={() => draftQuery(candidate.table)}>Draft query</button> : null}</div>
         </article>)}
         {candidates.length > limit ? <button type="button" onClick={() => setLimit((n) => n + 10)}>Show more candidates</button> : null}
         <section className="discovery-ai-controls">
@@ -107,7 +110,7 @@ function ExplorerSession({ snapshot, semantics, settings, platform, desktop, ini
         {local ? <div className="discovery-local-canvas"><SchemaCanvas key={JSON.stringify([rootId, depth, targetId])} snapshot={local.snapshot} query="" selectedTable={localSelection && local.snapshot.schemas.some((s) => s.tables.includes(localSelection)) ? localSelection : undefined} onSelectTable={setLocalSelection} semantics={localSemantics} platform={platform} runtimeKind={desktop ? "desktop" : "web"} canvasSettings={settings.app.canvas} temporaryViewLabel="Business discovery · temporary local view; full model layout is preserved." /></div> : <div className="discovery-map-empty"><h3>A small map around your question</h3><p>Expand a candidate’s relationships to inspect one or two hops locally.</p></div>}
         {local && local.omitted > 0 ? <p>{local.omitted} neighborhood tables omitted from the 100-table local view. The selected path is kept complete.</p> : null}
         <section className="discovery-path" aria-label="Known relationship path">
-          <h3>Known structural path</h3>
+          <h3>Known structural path</h3>{onDraftQuery && root ? <button type="button" disabled={!question.trim()} onClick={() => draftQuery(root, true)}>Draft query with this context</button> : null}
           {target && root && !path ? <p>No known relationship path in the current {depth}-hop range. This does not prove the tables are unrelated in the business.</p> : null}
           {path ? <><p>{path.tables.map(objectLabel).join(" ↔ ")}</p><ol>{path.relationships.map((edge) => <li key={edge.id}><strong>{edge.kind === "physical" ? "Physical FK" : "Confirmed logical relationship · model only"}</strong><ol>{edge.sourceColumns.map((column, i) => <li key={i}>{objectLabel(edge.source)}.{column} → {objectLabel(edge.target)}.{edge.targetColumns[i]}</li>)}</ol></li>)}</ol><p>Arrows show reference direction, not business execution order. Cardinality and business meaning need supporting key, nullability and domain evidence.</p></> : <p>Select a root and destination to compute a path from existing relationships. Unconfirmed naming inferences are excluded from known paths.</p>}
           {graph.gaps.length ? <details><summary>Snapshot information gaps ({graph.gaps.length})</summary><ul>{graph.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul></details> : null}

@@ -113,6 +113,8 @@ function downloadFile(blob: Blob, fileName: string): Promise<FileExportReceipt> 
 }
 
 export class WebPlatform implements NodalStudioPlatform {
+  pickConnectionFile(): Promise<string | null> { return Promise.reject(new Error("Local certificate files require the desktop app.")); }
+  exportQueryResult(): Promise<string | null> { return Promise.reject(new Error("Query result export requires the desktop app.")); }
   prepareKnowledgeDraft(): Promise<never> { return Promise.reject(new Error("Knowledge confirmation requires the desktop app.")); }
   confirmKnowledgeDraft(): Promise<never> { return Promise.reject(new Error("Knowledge confirmation requires the desktop app.")); }
   cancelKnowledgeDraft(): Promise<void> { return Promise.resolve(); }

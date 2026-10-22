@@ -155,6 +155,9 @@ async fn server() -> (
 
 fn answer(operation: Operation) -> String {
     let content = match operation {
+        Operation::DraftSql => {
+            serde_json::json!({"sqlDraft":{"sql":"SELECT o.id FROM public.orders AS o JOIN public.customers AS c ON o.id = c.id LIMIT 100", "explanation":"Orders linked to customers", "assumptions":[],"clarification":[]}})
+        }
         Operation::Expand => serde_json::json!({"terms":["customer","orders"]}),
         Operation::Rank => {
             serde_json::json!({"rankings":[{"candidateId":"c1","reason":"May contain customer orders","evidenceIds":["e1"]}]})
@@ -168,10 +171,18 @@ fn answer(operation: Operation) -> String {
 
 #[tokio::test]
 async fn every_operation_sends_exactly_its_preview_with_no_hidden_context() {
-    for operation in [Operation::Expand, Operation::Rank, Operation::Path] {
+    for operation in [
+        Operation::Expand,
+        Operation::Rank,
+        Operation::Path,
+        Operation::DraftSql,
+    ] {
         let (endpoint, received, respond, server) = server().await;
         let (app, mut input, _) = fixture(&endpoint).await;
         input.task.operation = operation;
+        if operation == Operation::DraftSql {
+            input.task.candidates.truncate(2);
+        }
         if operation == Operation::Path {
             input.task.path_tables = input.task.candidates[..2].to_vec();
             input.task.path_relationships =
@@ -531,4 +542,89 @@ async fn confirmed_notes_obey_wire_scope_switch_and_invalidate_old_tasks_on_text
             .iter()
             .all(|e| e.kind != "teamStatement")
     );
+}
+
+#[tokio::test]
+async fn sql_draft_requires_enabled_model_and_exact_scope_before_any_send() {
+    let (app, mut input, mut settings) = fixture("http://127.0.0.1:9").await;
+    input.task.operation = Operation::DraftSql;
+    input.task.candidates.truncate(1);
+    settings.ai.context_scope = AiContextScope::CurrentTable;
+    app.store
+        .save_data_source_settings(&settings)
+        .await
+        .unwrap();
+    let prepared = prepare(&app, input.clone()).await.unwrap();
+    assert_eq!(prepared.preview.context.tables, input.task.candidates);
+    assert!(
+        !prepared
+            .preview
+            .request_body
+            .to_string()
+            .contains("private_unrelated")
+    );
+    assert!(
+        !prepared
+            .preview
+            .request_body
+            .to_string()
+            .contains("private-field-comment")
+    );
+    input
+        .task
+        .candidates
+        .push(schema_model::ObjectKey::table("public", "customers"));
+    assert!(
+        prepare(&app, input.clone())
+            .await
+            .err()
+            .unwrap()
+            .contains("scope")
+    );
+    input.task.candidates.truncate(1);
+    settings.ai.provider = AiProviderKind::Offline;
+    app.store
+        .save_data_source_settings(&settings)
+        .await
+        .unwrap();
+    assert!(
+        prepare(&app, input)
+            .await
+            .err()
+            .unwrap()
+            .contains("enabled AI model")
+    );
+}
+
+#[tokio::test]
+async fn sql_draft_returns_clarification_and_rejects_unsafe_model_sql() {
+    for sql in [
+        None,
+        Some("DELETE FROM public.orders"),
+        Some("SELECT o.secret FROM public.orders o"),
+    ] {
+        let (endpoint, received, respond, server) = server().await;
+        let (app, mut input, _) = fixture(&endpoint).await;
+        input.task.operation = Operation::DraftSql;
+        input.task.candidates.truncate(1);
+        let prepared = task(prepare(&app, input).await.unwrap());
+        let running =
+            tokio::spawn(async move { execute(&app, &prepared, Some("fixture-key")).await });
+        received.await.unwrap();
+        let content = serde_json::json!({"sqlDraft":{"sql":sql,"explanation":"Review the business definition","assumptions":[],"clarification":if sql.is_none() { vec!["Which users count as active?"] } else { vec![] }}});
+        respond
+            .send((
+                200,
+                serde_json::json!({"choices":[{"message":{"content":content.to_string()}}]})
+                    .to_string(),
+            ))
+            .unwrap();
+        let result = running.await.unwrap();
+        if sql.is_none() {
+            assert!(result.unwrap().answer.sql_draft.unwrap().sql.is_none());
+        } else {
+            assert!(result.is_err());
+        }
+        server.await.unwrap();
+    }
 }

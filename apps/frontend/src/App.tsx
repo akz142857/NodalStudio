@@ -14,11 +14,12 @@ import { SchemaCanvas, type CanvasLocateRequest } from "./components/SchemaCanva
 import { SchemaChangesPanel } from "./components/SchemaChangesPanel";
 import { SchemaChangesDiagram } from "./components/SchemaChangesDiagram";
 import { SchemaTree } from "./components/SchemaTree";
-import { SnapshotSummary } from "./components/SnapshotSummary";
+import { DatabaseSnapshotHeader } from "./components/DatabaseSnapshotHeader";
 import { SchemaReportExportAction } from "./components/SchemaReportExportAction";
 import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
+import type { QueryDraftSeed } from "./components/query/QueryDraftPanel";
 import type { OpenQueryRequest } from "./components/query/QueryPage";
 import { tablePreviewSql } from "./components/query/query-format";
 import { clearQuerySessions } from "./components/query/query-state";
@@ -123,6 +124,7 @@ export function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [notices, setNotices] = useState<AppNotice[]>([]);
   const [noticesOpen, setNoticesOpen] = useState(false);
+  const [queryDraftSeed, setQueryDraftSeed] = useState<QueryDraftSeed>();
   const [openQueryRequest, setOpenQueryRequest] = useState<OpenQueryRequest>();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const autoConnectAttempted = useRef(false);
@@ -544,7 +546,7 @@ export function App() {
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
-      if (ddlPreviewOpen) return;
+      if (ddlPreviewOpen || event.defaultPrevented) return;
       const target = event.target as HTMLElement | null;
       if (
         !event.metaKey &&
@@ -802,7 +804,7 @@ export function App() {
           </div> : null}
         </label>
         <div className="runtime-actions" role="group" aria-label="Application tools">
-          {snapshot && runtime.data?.kind === "desktop" && discoveryLatest.data?.[0]?.id === snapshot.id && mode === "explore" && !preflightOpen && semanticsSettledSnapshot === snapshot ? <button type="button" onClick={() => { setSearchOpen(false); setDiscoverySnapshot(snapshot); }}>Business question</button> : null}
+          {snapshot && runtime.data?.kind === "desktop" && discoveryLatest.data?.[0]?.id === snapshot.id && mode === "explore" && !preflightOpen && semanticsSettledSnapshot === snapshot ? <IconButton icon="question" label="Business question" description="Find relevant tables from a business question" aria-pressed={Boolean(discoverySnapshot)} onClick={() => { setSearchOpen(false); setDiscoverySnapshot(snapshot); }} /> : null}
           <IconButton icon="import" label="Import DDL" onClick={() => setDdlPreviewOpen(true)} description="Open a temporary PostgreSQL/MySQL file or clipboard model; never execute SQL" />
           {refreshOperation.state?.phase === "error" ? <div className="refresh-operation-result"><OperationFeedback label="Snapshot refresh" state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel="Retry snapshot refresh" onDismiss={refreshOperation.dismiss} /></div> : null}
           {snapshot ? <IconButton icon="preflight" label="Structure preflight" aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} description="Check the entire loaded snapshot with dialect-aware metadata rules" /> : null}
@@ -818,8 +820,8 @@ export function App() {
               label={refreshState === "refreshing"
                 ? "Refreshing…"
                 : refreshState === "error"
-                  ? "Retry refresh"
-                  : "Refresh"}
+                  ? "Retry schema refresh"
+                  : "Refresh schema"}
             />
           ) : null}
           <span className="toolbar-separator" aria-hidden="true" />
@@ -882,14 +884,7 @@ export function App() {
               />
             ) : null}
           </ConnectionPanel>
-          {snapshot ? (
-            <SnapshotSummary
-              snapshot={snapshot}
-              refreshState={refreshState}
-              canRefresh={runtime.data?.kind === "desktop"}
-              onRefresh={() => void refreshActive()}
-            />
-          ) : null}
+
         </aside>
 
         <SidebarRail
@@ -904,7 +899,11 @@ export function App() {
           }
         />
 
-        <section className={`canvas-placeholder${mode === "changes" && changeSet ? " changes-workspace" : ""}`}>
+        <section className={`canvas-placeholder${snapshot && mode === "explore" && !preflightOpen ? " database-workspace" : ""}${mode === "changes" && changeSet ? " changes-workspace" : ""}`}>
+          {snapshot && mode === "explore" && !preflightOpen ? <DatabaseSnapshotHeader snapshot={snapshot} latestSnapshotId={discoveryLatest.data?.[0]?.id} refreshState={refreshState} onOpenHistory={() => {
+            setRightPanel((panel) => ({ ...panel, expanded: true }));
+            window.dispatchEvent(new Event("nodalstudio:inspect-history"));
+          }} /> : null}
           {!preflightOpen && mode === "changes" && changeSet ? (
             <div className="changes-view-toolbar">
               <Segmented
@@ -927,6 +926,11 @@ export function App() {
               platform={platform}
               snapshot={snapshot}
               runtimeKind={runtime.data?.kind}
+              settings={settings}
+              semantics={semantics}
+              selectedTable={historicalSelection ? undefined : selectedTable}
+              draftSeed={queryDraftSeed}
+              onOpenAiSettings={() => openSettings("ai")}
               openRequest={openQueryRequest}
               onConsumeOpenRequest={() => setOpenQueryRequest(undefined)}
             />
@@ -986,6 +990,7 @@ export function App() {
             snapshot={snapshot} semantics={semantics} settings={settings} platform={platform} desktop
             initialTable={historicalSelection ? undefined : selectedTable}
             sourceLabel={dataSources.find((source) => source.id === snapshot.sourceId)?.displayName}
+            onDraftQuery={querySupported ? (seed) => { setQueryDraftSeed({ ...seed, id: Date.now() }); setDiscoverySnapshot(undefined); setOpenQueryRequest(undefined); setMode("query"); } : undefined}
             onClose={() => setDiscoverySnapshot(undefined)}
             onLocate={(table) => { setDiscoverySnapshot(undefined); locateTable(table); }}
             onExplain={(table) => { setDiscoverySnapshot(undefined); locateTable(table); setRightPanel((panel) => ({ ...panel, expanded: true })); setExplainRequest((value) => value + 1); }}

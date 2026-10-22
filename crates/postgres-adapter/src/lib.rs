@@ -75,6 +75,28 @@ impl PostgresConnectionOptions {
         }
     }
 
+    /// Apply local PEM files without including their contents in the saved profile.
+    #[must_use]
+    pub fn with_tls(mut self, tls: &schema_model::TlsConfig) -> Self {
+        if let PostgresConnection::Fields(options) = self.connection {
+            let mut options = *options;
+            if let Some(path) = &tls.ca_certificate { options = options.ssl_root_cert(path); }
+            if let Some(path) = &tls.client_certificate { options = options.ssl_client_cert(path); }
+            if let Some(path) = &tls.client_key { options = options.ssl_client_key(path); }
+            self.connection = PostgresConnection::Fields(Box::new(options));
+        }
+        self
+    }
+
+    /// Keep the database hostname for TLS identity verification while routing via SSH.
+    #[must_use]
+    pub fn with_socket(mut self, path: Option<&std::path::Path>) -> Self {
+        if let (Some(path), PostgresConnection::Fields(options)) = (path, &mut self.connection) {
+            **options = (**options).clone().socket(path);
+        }
+        self
+    }
+
     #[must_use]
     pub fn with_connect_timeout(mut self, timeout: Duration) -> Self {
         self.connect_timeout = timeout;

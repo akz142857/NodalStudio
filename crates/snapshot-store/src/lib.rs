@@ -2297,6 +2297,7 @@ mod tests {
             username: "developer".into(),
             database_type: DatabaseType::PostgreSql,
             ssl_mode: SslMode::Prefer,
+            security: Default::default(),
             created_at: now,
             updated_at: now,
         }
@@ -2496,6 +2497,7 @@ mod tests {
             username: "developer".into(),
             database_type: DatabaseType::PostgreSql,
             ssl_mode: SslMode::Prefer,
+            security: Default::default(),
             created_at: now,
             updated_at: now,
         };

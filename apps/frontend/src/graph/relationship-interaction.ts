@@ -30,8 +30,18 @@ export function floatingRelationshipPanelPosition(
   const left = anchor.x + gap + panel.width <= viewport.width - margin
     ? anchor.x + gap
     : anchor.x - gap - panel.width;
+  return clampRelationshipPanelPosition({ left, top: anchor.y - panel.height / 2 }, viewport, panel);
+}
+
+/** Positions and measurements are viewport pixels, including application UI scaling. */
+export function clampRelationshipPanelPosition(
+  position: { left: number; top: number },
+  viewport: { width: number; height: number },
+  panel: { width: number; height: number },
+): { left: number; top: number } {
+  const margin = 12;
   return {
-    left: Math.max(margin, Math.min(left, viewport.width - panel.width - margin)),
-    top: Math.max(margin, Math.min(anchor.y - panel.height / 2, viewport.height - panel.height - margin)),
+    left: Math.max(margin, Math.min(position.left, viewport.width - panel.width - margin)),
+    top: Math.max(margin, Math.min(position.top, viewport.height - panel.height - margin)),
   };
 }

@@ -1,11 +1,11 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import type { LogicalRelationship } from "../../platform";
 import { RelationshipEndpoints } from "./RelationshipPresentation";
 import { relationshipCardinalityLabel, relationshipStatusLabels } from "./relationship-labels";
 import "./relationships.css";
 import type { FieldEdge } from "../../graph/schema-graph";
-import { floatingRelationshipPanelPosition } from "../../graph/relationship-interaction";
+import { clampRelationshipPanelPosition, floatingRelationshipPanelPosition } from "../../graph/relationship-interaction";
 
 interface RelationshipInspectorProps {
   edge: FieldEdge;
@@ -37,17 +37,43 @@ export function RelationshipInspector({
   const inspectorRef = useRef<HTMLElement>(null);
   const [position, setPosition] = useState({ left: 12, top: 12 });
   const [positioned, setPositioned] = useState(false);
-  const updatePosition = useCallback(() => {
+  const [dragging, setDragging] = useState(false);
+  const manualPosition = useRef<{ edgeId: string; left: number; top: number } | undefined>(undefined);
+  const drag = useRef<{ edgeId: string; pointerId: number; offsetX: number; offsetY: number } | undefined>(undefined);
+  const measurePanel = useCallback(() => {
     const inspector = inspectorRef.current;
     if (!inspector) return;
+    // The app scales document.body with CSS zoom; pointer coordinates are unscaled viewport pixels.
+    const scale = Number.parseFloat(getComputedStyle(document.body).zoom) || 1;
+    inspector.style.maxWidth = `${Math.max(0, window.innerWidth - 24) / scale}px`;
+    inspector.style.maxHeight = `${Math.max(0, window.innerHeight - 24) / scale}px`;
     const bounds = inspector.getBoundingClientRect();
-    setPosition(floatingRelationshipPanelPosition(
-      anchor,
-      { width: window.innerWidth, height: window.innerHeight },
-      { width: Math.ceil(bounds.width), height: Math.ceil(bounds.height) },
-    ));
+    return { scale, bounds, viewport: { width: window.innerWidth, height: window.innerHeight }, panel: { width: Math.ceil(bounds.width), height: Math.ceil(bounds.height) } };
+  }, []);
+  const updatePosition = useCallback(() => {
+    const measured = measurePanel();
+    if (!measured) return;
+    const { scale, viewport, panel } = measured;
+    const manual = manualPosition.current?.edgeId === edge.id ? manualPosition.current : undefined;
+    const next = manual ? clampRelationshipPanelPosition(manual, viewport, panel) : floatingRelationshipPanelPosition(anchor, viewport, panel);
+    if (manual) manualPosition.current = { edgeId: edge.id, ...next };
+    setPosition({ left: next.left / scale, top: next.top / scale });
     setPositioned(true);
-  }, [anchor]);
+  }, [anchor, edge.id, measurePanel]);
+
+  const movePanel = (next: { left: number; top: number }) => {
+    const measured = measurePanel();
+    if (!measured) return;
+    const clamped = clampRelationshipPanelPosition(next, measured.viewport, measured.panel);
+    manualPosition.current = { edgeId: edge.id, ...clamped };
+    setPosition({ left: clamped.left / measured.scale, top: clamped.top / measured.scale });
+  };
+  const endDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    if (drag.current?.pointerId !== event.pointerId) return;
+    drag.current = undefined;
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
 
   useLayoutEffect(() => {
     updatePosition();
@@ -72,7 +98,33 @@ export function RelationshipInspector({
       : "Inferred candidate";
   return createPortal(
     <aside ref={inspectorRef} className="ds-surface relationship-inspector nodrag nopan" aria-label="Relationship details" style={{ ...position, visibility: positioned ? "visible" : "hidden" }}>
-      <header><div><span className="relationship-kind" data-kind={data.relationshipKind}>{kindLabel}</span><h2>{data.relationshipKind === "logical" ? "Model relationship" : data.relationshipKind === "physical" ? "Database foreign key" : "Suggested relationship"}</h2></div><button type="button" aria-label="Close relationship details" onClick={onClose}>×</button></header>
+      <header className="relationship-inspector-drag-handle" data-dragging={dragging || undefined} tabIndex={0} aria-label="Move relationship details" title="Drag to move · Arrow keys move 10 px · Shift + arrow keys move 1 px"
+        onPointerDown={(event) => {
+          if (event.button !== 0 || event.isPrimary === false || (event.target instanceof Element && event.target.closest("button"))) return;
+          const measured = measurePanel();
+          if (!measured) return;
+          event.preventDefault(); event.stopPropagation();
+          event.currentTarget.focus({ preventScroll: true });
+          event.currentTarget.setPointerCapture(event.pointerId);
+          drag.current = { edgeId: edge.id, pointerId: event.pointerId, offsetX: event.clientX - measured.bounds.left, offsetY: event.clientY - measured.bounds.top };
+          setDragging(true);
+        }}
+        onPointerMove={(event) => {
+          const active = drag.current;
+          if (!active || active.edgeId !== edge.id || active.pointerId !== event.pointerId) return;
+          event.preventDefault(); event.stopPropagation();
+          movePanel({ left: event.clientX - active.offsetX, top: event.clientY - active.offsetY });
+        }}
+        onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+          const measured = measurePanel();
+          if (!measured) return;
+          event.preventDefault(); event.stopPropagation();
+          const step = event.shiftKey ? 1 : 10;
+          movePanel({ left: measured.bounds.left + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0), top: measured.bounds.top + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0) });
+        }}
+      ><div><span className="relationship-kind" data-kind={data.relationshipKind}>{kindLabel}</span><h2>{data.relationshipKind === "logical" ? "Model relationship" : data.relationshipKind === "physical" ? "Database foreign key" : "Suggested relationship"}</h2></div><button type="button" aria-label="Close relationship details" onClick={onClose}>×</button></header>
       {data.relationshipKind === "logical" ? <p className="relationship-fact-note">User-defined link · model only. This dashed line is independent of database foreign key constraints.</p> : null}
       {data.constraintName ? <p className="relationship-name">{data.constraintName}</p> : null}
       <RelationshipEndpoints source={logicalRelationship?.source ?? { schema: "", table: edge.source, columns: [data.sourceColumn] }} target={logicalRelationship?.target ?? { schema: "", table: edge.target, columns: [data.targetColumn] }} />

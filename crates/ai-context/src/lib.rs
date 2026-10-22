@@ -1,6 +1,7 @@
 //! Privacy-bounded schema context selection and provider-independent explanations.
 
 pub mod discovery;
+pub mod sql_draft;
 pub mod understanding;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};

@@ -1,3 +1,4 @@
+import { useResolvedTheme } from "../design-system/theme";
 import {
   Background,
   Controls,
@@ -64,6 +65,7 @@ import {
 } from "../graph/schema-graph";
 import { TableNode } from "./TableNode";
 import { useFieldRowConnection } from "./use-field-row-connection";
+import { CanvasToolbar } from "./CanvasToolbar";
 import { DiagramMiniMap } from "./DiagramMiniMap";
 import { relationshipEndpointFromHandle, sameRelationshipEndpoint } from "../graph/relationship-interaction";
 import { presentEdgesDuringDrag, prioritiseMovingEdges } from "../graph/drag-edge-presentation";
@@ -185,6 +187,7 @@ function SchemaCanvasInner({
   if (locateKey && previousLocate !== locateKey) { setPreviousLocate(locateKey); setFocusNodeId(undefined); }
   const [boxSelectMode, setBoxSelectMode] = useState(false);
   const spacePanMode = useKeyPress("Space");
+  const theme = useResolvedTheme();
   const { fitView, getNodes, getViewport } = useReactFlow<TableNodeType, FieldEdge>();
   const nodesInitialized = useNodesInitialized();
   const handledLocate = useRef<string | undefined>(undefined);
@@ -424,19 +427,19 @@ function SchemaCanvasInner({
   const displayedEdges = useMemo(() => edges.map((edge) => {
     if (!selectedEdge) return edge;
     const highlighted = edge.id === selectedEdge.id;
-    const originalStroke = typeof edge.style?.stroke === "string" ? edge.style.stroke : "#2563eb";
+    const originalStroke = typeof edge.style?.stroke === "string" ? edge.style.stroke : "var(--ds-relation-physical)";
     return {
       ...edge,
       zIndex: highlighted ? 30 : 0,
       style: {
         ...edge.style,
-        stroke: highlighted ? originalStroke : "#9ca3af",
+        stroke: highlighted ? originalStroke : "var(--ds-relation-muted)",
         strokeWidth: highlighted ? Math.max(Number(edge.style?.strokeWidth ?? 1.8), 3.4) : 1.15,
         opacity: highlighted ? 1 : 0.18,
       },
       markerEnd: typeof edge.markerEnd === "object" ? {
         ...edge.markerEnd,
-        color: highlighted ? originalStroke : "#9ca3af",
+        color: highlighted ? originalStroke : "var(--ds-relation-muted)",
       } : edge.markerEnd,
       labelStyle: { ...edge.labelStyle, opacity: highlighted ? 1 : 0.12 },
       labelBgStyle: { ...edge.labelBgStyle, fillOpacity: highlighted ? 0.94 : 0.08 },
@@ -1012,7 +1015,7 @@ function SchemaCanvasInner({
         fitView
         minZoom={0.1}
         maxZoom={1.8}
-        colorMode="light"
+        colorMode={theme}
       >
         <Background gap={20} size={1} />
         <DiagramMiniMap dense={graph.nodes.length >= 500} />
@@ -1052,6 +1055,7 @@ function SchemaCanvasInner({
       ) : null}
       {selectedEdge && selectedEdgeAnchor?.edgeId === selectedEdge.id ? (
         <RelationshipInspector
+          key={selectedEdge.id}
           edge={selectedEdge}
           logicalRelationship={selectedLogicalRelationship}
           readOnly={!relationshipsEditable}
@@ -1149,40 +1153,27 @@ function SchemaCanvasInner({
         }}
       /> : null}
       {relationshipActionError ? <div className="relationship-action-error" role="alert">{relationshipActionError}<button type="button" onClick={() => setRelationshipActionError("")}>Dismiss</button></div> : null}
-      <div className="canvas-status">
-        {edgesRendering && layoutReady ? <span role="status">Drawing relationships…</span> : null}
-        {denseGesture ? <span role="status">Moving tables · Showing connected relationships</span> : null}
-        <span>{nodes.length} tables{changeSet ? beforeSnapshot ? " · Before + After" : " · After" : ""}</span>
-        <button type="button" disabled={exportRendering} className="relationship-filter relationship-filter-physical" data-active={showPhysicalRelationships || undefined} onClick={() => setPhysicalRelationshipOverride(!showPhysicalRelationships)}>{showPhysicalRelationships ? "✓" : ""} {graph.physicalRelationshipCount} {readOnlyPreview ? "declared FKs" : "physical"}{changeSet ? " versions" : ""}</button>
-        <button type="button" disabled={exportRendering} className="relationship-filter relationship-filter-logical" data-active={showLogicalRelationships || undefined} onClick={() => setShowLogicalRelationships((value) => !value)}>{showLogicalRelationships ? "✓" : ""} {graph.logicalRelationshipCount} logical</button>
-        <button type="button" onClick={() => window.dispatchEvent(new Event("nodalstudio:view-all-tables"))} title="Exit table focus and fit every table into the viewport">View all</button>
-        <button type="button" disabled={layoutActionsDisabled || edgesRendering || nodes.every((node) => node.data.layoutPinned)} onClick={() => autoLayoutTables(false)} title="Arrange movable tables into compact groups; fixed tables stay in place. Groups of 200+ tables use compact relationship-guided placement to keep layout responsive.">Auto layout</button>
-        {relationshipsEditable ? <button type="button" onClick={() => setRelationshipManagerOpen(true)}>Manage relationships</button> : null}
-        {semantics?.logicalRelationships.some((relationship) => relationship.status !== "active") ? <button type="button" data-active={showInvalidRelationships || undefined} onClick={() => setShowInvalidRelationships((value) => !value)}>{showInvalidRelationships ? "Hide" : "Show"} inactive</button> : null}
-        {selectedEdge ? <><span className="selected-relation-summary" title={selectedEdge.data?.relationshipKind === "logical" ? "Double-click to edit · Delete or Backspace to remove" : undefined}>{selectedEdge.data?.constraintName ?? selectedEdge.data?.relationshipKind}: {selectedEdge.source}.{selectedEdge.data?.sourceColumn} → {selectedEdge.target}.{selectedEdge.data?.targetColumn}</span><button type="button" onClick={() => setSelectedEdgeId(undefined)}>Clear relation</button></> : null}
-        {query ? <span>Filtered by “{query}”</span> : null}
-        {focusNodeId ? (
-          <button type="button" onClick={() => setFocusNodeId(undefined)}>
-            Show all relations
-          </button>
-        ) : (
-          <span>
-            {savedView
-              ? `${savedView.name} · ${savedView.relationshipDepth} hops`
-              : "Double-click a table to isolate its relations"}
-          </span>
-        )}
-        {graph.inferredRelationshipCount > 0 ? (
-          <button
-            type="button"
-            data-active={showInferredRelationships || undefined}
-            onClick={() => setInferredRelationshipOverride(!showInferredRelationships)}
-            title="Naming-based suggestions are not database constraints"
-          >
-            {showInferredRelationships ? "Hide" : "Show"} {graph.inferredRelationshipCount} inferred
-          </button>
-        ) : null}
-      </div>
+      <CanvasToolbar
+        tableCount={nodes.length}
+        comparisonLabel={changeSet ? beforeSnapshot ? "Before + After" : "After" : undefined}
+        disabled={exportRendering}
+        layoutDisabled={layoutActionsDisabled || edgesRendering || nodes.every((node) => node.data.layoutPinned)}
+        onViewAll={() => window.dispatchEvent(new Event("nodalstudio:view-all-tables"))}
+        onAutoLayout={() => autoLayoutTables(false)}
+        onManageRelationships={relationshipsEditable ? () => setRelationshipManagerOpen(true) : undefined}
+        status={denseGesture ? "Moving tables · Showing connected relationships" : edgesRendering && layoutReady ? "Drawing relationships…" : undefined}
+        filters={[
+          { id: "physical", label: readOnlyPreview ? "Declared foreign keys" : "Physical relationships", count: graph.physicalRelationshipCount, description: changeSet ? "Declared constraints · Before and after versions" : "Foreign keys declared in the database", checked: showPhysicalRelationships, onChange: () => setPhysicalRelationshipOverride(!showPhysicalRelationships) },
+          { id: "logical", label: "Logical relationships", count: graph.logicalRelationshipCount, description: "Relationships defined in your model", checked: showLogicalRelationships, onChange: () => setShowLogicalRelationships((value) => !value) },
+          ...(graph.inferredRelationshipCount > 0 ? [{ id: "inferred", label: "Inferred relationships", count: graph.inferredRelationshipCount, description: "Naming suggestions, not database constraints", checked: showInferredRelationships, onChange: () => setInferredRelationshipOverride(!showInferredRelationships) }] : []),
+          ...(semantics?.logicalRelationships.some((relationship) => relationship.status !== "active") ? [{ id: "inactive", label: "Include inactive", description: "Disabled, conflicted or missing endpoints", checked: showInvalidRelationships, onChange: () => setShowInvalidRelationships((value) => !value) }] : []),
+        ]}
+        context={selectedEdge || query || focusNodeId || savedView ? <>
+          {selectedEdge ? <><span className="selected-relation-summary" title={`${selectedEdge.source}.${selectedEdge.data?.sourceColumn} → ${selectedEdge.target}.${selectedEdge.data?.targetColumn}`}>{selectedEdge.data?.constraintName ?? selectedEdge.data?.relationshipKind}: {selectedEdge.source}.{selectedEdge.data?.sourceColumn} → {selectedEdge.target}.{selectedEdge.data?.targetColumn}</span><button type="button" onClick={() => setSelectedEdgeId(undefined)}>Clear relation</button></> : null}
+          {query ? <span title={`Filtered by “${query}”`}>Filtered by “{query}”</span> : null}
+          {focusNodeId ? <button type="button" onClick={() => setFocusNodeId(undefined)}>Show all relations</button> : savedView ? <span>{savedView.name} · {savedView.relationshipDepth} hops</span> : null}
+        </> : undefined}
+      />
       {!readOnlyPreview ? <DiagramExportActions scope={layoutScope}
         platform={platform}
         disabled={!layoutReady || !nodes.length || edgesRendering || geometryGestureActive}

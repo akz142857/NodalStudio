@@ -3,14 +3,16 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { linter, lintGutter } from "@codemirror/lint";
 import { EditorState } from "@codemirror/state";
-import { EditorView, keymap, placeholder } from "@codemirror/view";
+import { EditorView, highlightActiveLine, lineNumbers, keymap, placeholder } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { DatabaseSnapshot } from "../../platform";
 import { executableSql } from "./query-format";
-import { postgresSqlLanguage, postgresSqlSyntaxDiagnostics } from "./sql-validation";
+import { currentPostgresStatement, postgresSqlLanguage, postgresSqlSyntaxDiagnostics } from "./sql-validation";
+
 
 export interface SqlEditorHandle {
+  getCurrentStatementSql(): string;
   getExecutableSql(): string;
   focus(): void;
 }
@@ -20,6 +22,9 @@ interface SqlEditorProps {
   snapshot?: DatabaseSnapshot;
   onChange: (value: string) => void;
   onRun: (sqlText: string) => void;
+  executing: boolean;
+  disabled: boolean;
+  onStop: () => void;
 }
 
 function completions(snapshot?: DatabaseSnapshot): Completion[] {
@@ -35,37 +40,32 @@ function completions(snapshot?: DatabaseSnapshot): Completion[] {
 }
 
 const sqlHighlightStyle = HighlightStyle.define([
-  { tag: tags.keyword, color: "#7aa2f7", fontWeight: "650" },
-  { tag: [tags.string, tags.special(tags.string)], color: "#9ece6a" },
-  { tag: [tags.number, tags.bool, tags.null], color: "#ff9e64" },
-  { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "#667085", fontStyle: "italic" },
-  { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: "#7dcfff" },
-  { tag: [tags.typeName, tags.className], color: "#bb9af7" },
-  { tag: [tags.operator, tags.punctuation], color: "#89a4c7" },
-  { tag: tags.variableName, color: "#c9d3e4" },
+  { tag: tags.keyword, color: "var(--ds-syntax-keyword)", fontWeight: "650" },
+  { tag: [tags.string, tags.special(tags.string)], color: "var(--ds-syntax-string)" },
+  { tag: [tags.number, tags.bool, tags.null], color: "var(--ds-syntax-number)" },
+  { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "var(--ds-tertiary)", fontStyle: "italic" },
+  { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: "var(--ds-syntax-function)" },
+  { tag: [tags.typeName, tags.className], color: "var(--ds-syntax-type)" },
+  { tag: [tags.operator, tags.punctuation], color: "var(--ds-secondary)" },
+  { tag: tags.variableName, color: "var(--ds-text)" },
 ]);
 
-function selectedSql(view: EditorView): string {
-  const selection = view.state.selection.main;
-  return view.state.sliceDoc(selection.from, selection.to).trim();
-}
-
 export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function SqlEditor(
-  { value, snapshot, onChange, onRun },
+  { value, snapshot, onChange },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const currentValueRef = useRef(value);
   const onChangeRef = useRef(onChange);
-  const onRunRef = useRef(onRun);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sql: string }>();
   currentValueRef.current = value;
   onChangeRef.current = onChange;
-  onRunRef.current = onRun;
 
   useImperativeHandle(ref, () => ({
+    getCurrentStatementSql() {
+      const view = viewRef.current;
+      return view ? currentPostgresStatement(view.state.doc.toString(), view.state.selection.main.head) : "";
+    },
     getExecutableSql() {
       const view = viewRef.current;
       if (!view) return "";
@@ -85,6 +85,8 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
         history(),
         placeholder("Write a read-only SELECT query…"),
         linter((view) => postgresSqlSyntaxDiagnostics(view.state), { delay: 250 }),
+        lineNumbers(),
+        highlightActiveLine(),
         lintGutter(),
         autocompletion({
           override: [(context) => ({
@@ -93,16 +95,6 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
           })],
         }),
         keymap.of([
-          { key: "Mod-Enter", run: (view) => {
-            const selection = view.state.selection.main;
-            onRunRef.current(executableSql(view.state.doc.toString(), selection.from, selection.to));
-            return true;
-          } },
-          { key: "Mod-r", preventDefault: true, run: (view) => {
-            const sqlText = selectedSql(view);
-            if (sqlText) onRunRef.current(sqlText);
-            return true;
-          } },
           indentWithTab,
           ...defaultKeymap,
           ...historyKeymap,
@@ -111,12 +103,19 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
           if (update.docChanged) onChangeRef.current(update.state.doc.toString());
         }),
         EditorView.theme({
-          "&": { height: "100%", fontSize: "13px", color: "#dce2ec", backgroundColor: "#15181e" },
+          "&": { height: "100%", fontSize: "13px", color: "var(--ds-text)", backgroundColor: "var(--ds-field)" },
           ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" },
-          ".cm-content": { minHeight: "100%", padding: "14px 0", caretColor: "#7ea8ff" },
-          ".cm-placeholder": { color: "#657083", fontStyle: "italic" },
-          ".cm-selectionBackground, .cm-content ::selection": { backgroundColor: "rgba(62, 111, 205, .38) !important" },
-          ".cm-gutters": { backgroundColor: "var(--panel-strong)", color: "var(--muted)", border: "none" },
+          ".cm-content": { minHeight: "100%", padding: "14px 0", caretColor: "var(--ds-accent)" },
+          ".cm-activeLine": { backgroundColor: "var(--ds-subtle)" },
+          ".cm-lineNumbers .cm-gutterElement": { padding: "0 10px", minWidth: "36px" },
+          ".cm-line": { padding: "0 14px" },
+          ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--ds-accent)" },
+          ".cm-placeholder": { color: "var(--ds-tertiary)", fontStyle: "italic" },
+          ".cm-selectionBackground, .cm-content ::selection": { backgroundColor: "var(--ds-selection) !important" },
+          ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "var(--ds-selection)", color: "var(--ds-selection-text)" },
+          ".cm-searchMatch": { backgroundColor: "var(--ds-warning-soft)" },
+          ".cm-diagnostic-error": { borderLeftColor: "var(--ds-danger)" },
+          ".cm-gutters": { backgroundColor: "var(--ds-subtle)", color: "var(--ds-tertiary)", border: "none" },
           "&.cm-focused": { outline: "none" },
         }),
       ],
@@ -130,42 +129,12 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   }, [snapshot]);
 
   useEffect(() => {
-    if (!contextMenu) return;
-    const close = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setContextMenu(undefined);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setContextMenu(undefined);
-    };
-    window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [contextMenu]);
-
-  useEffect(() => {
     const view = viewRef.current;
     if (!view || view.state.doc.toString() === value) return;
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
   }, [value]);
 
-  function openContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const sqlText = viewRef.current ? selectedSql(viewRef.current) : "";
-    setContextMenu({
-      x: Math.max(8, Math.min(event.clientX - bounds.left, bounds.width - 210)),
-      y: Math.max(8, Math.min(event.clientY - bounds.top, bounds.height - 54)),
-      sql: sqlText,
-    });
-  }
-
-  return <div className="query-sql-editor-shell" onContextMenu={openContextMenu}>
+  return <div className="query-sql-editor-shell" onContextMenu={(event) => event.preventDefault()}>
     <div className="query-sql-editor" ref={hostRef} aria-label="SQL editor" />
-    {contextMenu ? <div className="query-editor-menu" ref={menuRef} role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={(event) => event.stopPropagation()}>
-      <button type="button" role="menuitem" disabled={!contextMenu.sql} onClick={() => { if (contextMenu.sql) onRunRef.current(contextMenu.sql); setContextMenu(undefined); }}><span>Run Selected</span><kbd>⌘/Ctrl R</kbd></button>
-    </div> : null}
   </div>;
 });

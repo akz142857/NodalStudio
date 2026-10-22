@@ -1,0 +1,87 @@
+.connection-security-options { display: grid; gap: 12px; margin-top: 14px; }
+.connection-security-disclosure, .connection-ssh-section { border: 1px solid var(--ds-separator); border-radius: 10px; background: var(--ds-field); overflow: hidden; }
+.connection-security-disclosure > summary { padding: 12px 14px; }
+.connection-security-options summary { cursor: pointer; font-size: 12px; font-weight: 500; }
+.connection-security-options summary > span { margin-left: 8px; color: var(--ds-tertiary); font-weight: 400; }
+.connection-security-content { display: grid; gap: 12px; padding: 0 14px 14px; }
+.connection-security-content p { margin: 0; font-size: 11px; color: var(--ds-secondary); line-height: 1.5; }
+.connection-security-content > details { border-top: 1px solid var(--ds-separator); padding-top: 12px; }
+.connection-security-content > details[open] { display: grid; gap: 10px; }
+.connection-security-content > details[open] > :not(summary) { margin-top: 10px; }
+.connection-file-field > label { font-size: 12px; }
+.connection-file-field > div { display: flex; gap: 8px; margin-top: 6px; }
+.connection-file-field input { flex: 1; min-width: 0; font-size: 12px; }
+.connection-file-field button { flex: none; padding: 5px 10px; font-size: 12px; }
+.connection-file-field [role="alert"] { color: var(--ds-danger); margin-top: 6px; }
+.connection-ssh-section .connection-ssh-toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; }
+.connection-ssh-toggle input[type="checkbox"] { appearance: auto; width: 15px; height: 15px; min-height: 0; margin: 0; accent-color: var(--ds-accent); flex: none; }
+.connection-ssh-toggle span { display: grid; gap: 3px; }
+.connection-ssh-toggle strong { font-size: 12px; font-weight: 500; }
+.connection-ssh-toggle small { color: var(--ds-secondary); font-size: 11px; }
+.connection-security-options :focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
+.connection-panel .connection-file-field button { color: var(--ds-text); background: var(--ds-control); border: 1px solid var(--ds-border); border-radius: 7px; }
+.connection-panel .connection-file-field button:hover:not(:disabled) { background: var(--ds-hover); }
+/* A bounded sheet: only the selected tab scrolls; actions stay in view. */
+section.connection-dialog { width: min(760px, calc(100vw - 48px)); height: min(680px, calc(100vh - 48px)); display: flex; flex-direction: column; overflow: hidden; padding: 20px; }
+.connection-dialog > header { flex: none; }
+.connection-dialog > .dialog-description { flex: none; margin: 8px 0 16px; }
+.connection-dialog > .connection-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0; }
+.connection-tabs { display: flex; gap: 3px; flex: none; align-self: flex-start; padding: 3px; margin-bottom: 16px; border-radius: 9px; background: var(--ds-control); }
+.connection-panel .connection-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 88px; padding: 6px 14px; border: 0; border-radius: 7px; background: transparent; color: var(--ds-secondary); font: inherit; font-size: 12px; font-weight: 500; }
+.connection-panel .connection-tabs button[aria-selected="true"] { background: var(--ds-selected-control); color: var(--ds-text); box-shadow: 0 1px 3px #0002; }
+.connection-panel .connection-tabs button:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
+.connection-tab-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ds-positive); }
+.connection-dialog-body { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: 2px; }
+.connection-tab-panel[hidden] { display: none; }
+.connection-tab-panel > .connection-form-section { margin: 0 0 12px; padding: 14px; }
+.connection-tab-panel .connection-section-heading { margin-bottom: 10px; }
+.connection-tab-panel .connection-security-setting { margin: 0 0 14px; padding: 0; border: 0; }
+.connection-tab-panel .connection-security-options { margin: 0; }
+.connection-tab-panel .connection-credential-note { padding: 0; background: transparent; }
+.connection-security-content .connection-form-grid { grid-template-columns: minmax(0, 1fr) minmax(160px, .55fr); }
+.connection-ssh-password { display: grid; gap: 7px; }
+.connection-ssh-password input { width: 100%; }
+.connection-dialog .connection-live-action { flex: none; margin: 10px 0 0; padding: 10px 12px; }
+.connection-dialog .connection-panel > .error-message { flex: none; max-height: 60px; overflow: auto; margin: 8px 0 0; }
+.connection-dialog .connection-panel > footer { flex: none; padding-top: 14px; margin-top: 12px; border-top: 1px solid var(--ds-separator); }
+@media (max-width: 560px) {
+  section.connection-dialog { width: calc(100vw - 16px); height: calc(100vh - 16px); padding: 16px; }
+  .connection-security-content .connection-form-grid { grid-template-columns: minmax(0,1fr); }
+}
+.connection-panel .connection-tabs button { cursor: pointer; transition: background-color 120ms ease, box-shadow 120ms ease, color 120ms ease; }
+.connection-panel .connection-tabs button:hover { background: var(--ds-hover); color: var(--ds-text); }
+.connection-panel .connection-tabs button[aria-selected="true"]:hover { background: var(--ds-selected-control); }
+.connection-panel .connection-tabs button:active { background: var(--ds-accent-soft); color: var(--ds-accent); box-shadow: inset 0 0 0 1px var(--ds-accent); }
+.connection-panel .connection-tabs button[aria-selected="true"] { box-shadow: 0 1px 3px #0002, inset 0 0 0 1px var(--ds-border); }
+.connection-panel .connection-tabs button[aria-selected="true"]:active { box-shadow: inset 0 0 0 1px var(--ds-accent); }
+/* Connection test results stay beside the actions while the form scrolls. */
+.connection-test-status { flex: none; max-height: 228px; overflow: auto; padding: 14px; margin-top: 12px; border: 1px solid var(--ds-separator); border-radius: 12px; background: var(--ds-field); }
+.connection-test-heading, .connection-test-heading > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.connection-test-heading { justify-content: space-between; min-height: 26px; margin-bottom: 10px; }
+.connection-test-heading strong { color: var(--ds-text); font-size: 12px; font-weight: 600; }
+.connection-check-icon { width: 18px; height: 18px; flex: none; }
+.connection-test-status [data-tone="success"] { color: var(--ds-positive); }
+.connection-test-status [data-tone="error"] { color: var(--ds-danger); }
+.connection-test-status [data-tone="warning"] { color: var(--ds-warning); }
+.connection-test-status [data-tone="running"] { color: var(--ds-accent); }
+.connection-test-status [data-tone="neutral"] { color: var(--ds-tertiary); }
+.connection-test-checks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.connection-test-check { display: flex; align-items: flex-start; gap: 8px; padding: 10px; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-surface); }
+.connection-test-check > div { min-width: 0; display: grid; gap: 4px; }
+.connection-test-check span { color: var(--ds-secondary); font-size: 11px; line-height: 16px; }
+.connection-test-check strong { font-size: 12px; font-weight: 500; line-height: 16px; overflow-wrap: anywhere; }
+.connection-panel .connection-test-cancel { border: 1px solid var(--ds-border); border-radius: 7px; padding: 4px 10px; background: var(--ds-control); color: var(--ds-text); font-size: 11px; font-weight: 500; cursor: pointer; }
+.connection-panel .connection-test-cancel:hover:not(:disabled) { background: var(--ds-hover); }
+.connection-panel .connection-test-cancel:active:not(:disabled) { background: var(--ds-selected-control); }
+.connection-test-cancel:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
+.connection-test-progress { height: 3px; overflow: hidden; border-radius: 2px; background: var(--ds-control); margin-top: 10px; }
+.connection-test-progress > span { display: block; width: 35%; height: 100%; background: var(--ds-accent); border-radius: inherit; animation: connection-progress 1.4s ease-in-out infinite; }
+.connection-check-icon.is-spinning { animation: connection-spin 1s linear infinite; }
+.connection-test-detail, .connection-test-hint { color: var(--ds-secondary); font-size: 11px; line-height: 1.5; margin: 9px 0 0; }
+.connection-test-hint { flex: none; }
+@keyframes connection-progress { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
+@keyframes connection-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .connection-check-icon.is-spinning, .connection-test-progress > span { animation: none; } }
+@media (max-width: 560px) { .connection-test-checks { gap: 5px; } .connection-test-check { flex-direction: column; padding: 8px; gap: 5px; } }
+@media (prefers-reduced-motion: reduce) { .connection-panel .connection-tabs button { transition: none; } }
+@media (max-width: 560px) { .connection-dialog .connection-panel > footer, .connection-footer-actions { flex-wrap: wrap; gap: 8px; } }

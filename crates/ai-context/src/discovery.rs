@@ -14,6 +14,7 @@ pub enum Operation {
     Expand,
     Rank,
     Path,
+    DraftSql,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -169,6 +170,9 @@ pub fn build_context(
     }
     let relations = known_relationships(snapshot, logical);
     let allowed: BTreeSet<_> = match scope {
+        SendScope::CurrentTable if task.operation == Operation::DraftSql => {
+            BTreeSet::from([task.root.clone().ok_or("Select a root table to draft a query.")?])
+        }
         SendScope::CurrentTable => return Err("Current table scope supports single-table explanations only. Candidates and paths remain local.".into()),
         SendScope::OneHop => {
             let root = task.root.as_ref().ok_or("Select a root table before requesting candidate ranking or a path explanation.")?;
@@ -185,7 +189,45 @@ pub fn build_context(
             domain.table_keys.iter().filter(|key| tables.contains_key(*key)).cloned().collect()
         }
     };
-    let requested = if task.operation == Operation::Path {
+    let requested = if task.operation == Operation::DraftSql {
+        if snapshot.database.database_type != schema_model::DatabaseType::PostgreSql {
+            return Err("SQL drafting currently supports PostgreSQL only.".into());
+        }
+        if task.candidates.is_empty()
+            || task.candidates.len() > 3
+            || task.candidates.iter().collect::<BTreeSet<_>>().len() != task.candidates.len()
+            || task
+                .root
+                .as_ref()
+                .is_none_or(|root| !task.candidates.contains(root))
+            || task
+                .candidates
+                .iter()
+                .any(|key| !tables.contains_key(key) || !allowed.contains(key))
+        {
+            return Err("Choose one to three distinct tables, including the root, within your AI send scope. No tables were sent.".into());
+        }
+        context.path = relations
+            .iter()
+            .filter(|r| task.candidates.contains(&r.source) && task.candidates.contains(&r.target))
+            .cloned()
+            .collect();
+        let mut reached = BTreeSet::from([task.candidates[0].clone()]);
+        for _ in 0..task.candidates.len() {
+            for r in &context.path {
+                if reached.contains(&r.source) {
+                    reached.insert(r.target.clone());
+                }
+                if reached.contains(&r.target) {
+                    reached.insert(r.source.clone());
+                }
+            }
+        }
+        if task.candidates.iter().any(|key| !reached.contains(key)) {
+            return Err("Selected tables need a connected path of physical or confirmed logical relationships. Unconfirmed inferences cannot be used.".into());
+        }
+        task.candidates.clone()
+    } else if task.operation == Operation::Path {
         if task.path_tables.len() < 2
             || task.path_relationships.len() + 1 != task.path_tables.len()
             || task.root.as_ref() != task.path_tables.first()
@@ -224,7 +266,7 @@ pub fn build_context(
         if context.tables.len() >= understanding::MAX_TABLES
             || columns + table.columns.len() > understanding::MAX_COLUMNS
         {
-            if task.operation == Operation::Path {
+            if matches!(task.operation, Operation::Path | Operation::DraftSql) {
                 return Err("The full path exceeds the context budget. It remains available locally; no partial path was sent.".into());
             }
             context.coverage.push(
@@ -289,6 +331,8 @@ pub struct RankedCandidate {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DiscoveryAnswer {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sql_draft: Option<crate::sql_draft::SqlDraft>,
     #[serde(default)]
     pub terms: Vec<String>,
     #[serde(default)]
@@ -314,6 +358,28 @@ pub fn validate_output(text: &str, context: &DiscoveryContext) -> Result<Discove
     }
     let answer: DiscoveryAnswer =
         serde_json::from_str(text).map_err(|_| "The model returned invalid discovery JSON.")?;
+    if context.operation == Operation::DraftSql {
+        if !answer.terms.is_empty()
+            || !answer.meanings.is_empty()
+            || !answer.rankings.is_empty()
+            || !answer.interpretations.is_empty()
+            || !answer.reading_order.is_empty()
+            || !answer.unknowns.is_empty()
+        {
+            return Err("SQL drafting returned mixed operation content.".into());
+        }
+        crate::sql_draft::validate(
+            answer
+                .sql_draft
+                .as_ref()
+                .ok_or("The model did not return a SQL draft or clarification.")?,
+            context,
+        )?;
+        return Ok(answer);
+    }
+    if answer.sql_draft.is_some() {
+        return Err("Unexpected SQL draft in discovery output.".into());
+    }
     let text_valid = |s: &str, max| !s.trim().is_empty() && s.chars().count() <= max;
     let terms_valid =
         |terms: &[String]| terms.len() <= 12 && terms.iter().all(|s| text_valid(s, 64));
@@ -350,6 +416,7 @@ pub fn validate_output(text: &str, context: &DiscoveryContext) -> Result<Discove
             .all(|id| candidates.contains(id))
         && answer.reading_order.iter().collect::<BTreeSet<_>>().len() == answer.reading_order.len();
     let operation_valid = match context.operation {
+        Operation::DraftSql => unreachable!(),
         Operation::Expand => {
             answer.rankings.is_empty()
                 && answer.interpretations.is_empty()

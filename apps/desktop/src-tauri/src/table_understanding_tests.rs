@@ -620,6 +620,7 @@ async fn prepared_response_is_stale_when_endpoint_changes_even_with_identical_sn
         username: "reader".into(),
         database_type: DatabaseType::PostgreSql,
         ssl_mode: schema_model::SslMode::Prefer,
+            security: Default::default(),
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };

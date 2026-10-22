@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { OperationFeedback } from "./OperationFeedback";
 describe("OperationFeedback", () => {
@@ -27,4 +27,17 @@ describe("OperationFeedback", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Information"); expect(screen.queryByRole("button")).not.toBeInTheDocument();
     rerender(<OperationFeedback label="Check" />); expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
+});
+
+it("auto-dismisses simple layout success after five seconds, pauses on hover, and keeps errors", async () => {
+  vi.useFakeTimers();
+  try {
+    const dismiss = vi.fn();
+    const { rerender } = render(<OperationFeedback label="Layout" state={{phase:"success",summary:"Saved"}} autoDismissMs={5000} onDismiss={dismiss}/>);
+    await act(async ()=>{await vi.advanceTimersByTimeAsync(4000);}); expect(dismiss).not.toHaveBeenCalled();
+    fireEvent.mouseEnter(screen.getByRole("group")); await act(async ()=>{await vi.advanceTimersByTimeAsync(6000);}); expect(dismiss).not.toHaveBeenCalled();
+    fireEvent.mouseLeave(screen.getByRole("group")); await act(async ()=>{await vi.advanceTimersByTimeAsync(5000);}); expect(dismiss).toHaveBeenCalledOnce();
+    rerender(<OperationFeedback label="Layout" state={{phase:"error",summary:"Failed"}} autoDismissMs={5000} onDismiss={dismiss}/>);
+    await act(async ()=>{await vi.advanceTimersByTimeAsync(10000);}); expect(dismiss).toHaveBeenCalledOnce();
+  } finally { vi.useRealTimers(); }
 });

@@ -72,6 +72,6 @@ it.each(['manual', 'domain-race', 'create', 'update', 'delete', 'delete-missing'
   await waitFor(()=>expect(semantics).toHaveBeenCalledTimes(2));
   await waitFor(()=>expect(screen.getByText('Needs review')).toBeVisible());
   if(kind==='domain-race') await act(async()=>{finishGroup({id:'late-group',sourceId:reportSnapshot.sourceId,name:'Late group',description:null,color:'#123456',tableKeys:[key],updatedAt:'new'});await Promise.resolve();});
-  fireEvent.click(screen.getByRole('button',{name:'Business question'}));fireEvent.change(screen.getByLabelText('Business question'),{target:{value:'quasarzephyr'}});fireEvent.click(screen.getByRole('button',{name:'Search locally'}));
+  fireEvent.click(screen.getByRole('button',{name:'Business question'}));fireEvent.change(screen.getByRole('textbox', {name:'Business question'}),{target:{value:'quasarzephyr'}});fireEvent.click(screen.getByRole('button',{name:'Search locally'}));
   expect(screen.queryByText('public.orders',{selector:'h4'})).toBeNull();
 });

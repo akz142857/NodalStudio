@@ -8,6 +8,7 @@ const dictionary: [string, string[]][] = [
   ["订单", ["order"]], ["客户", ["customer", "client"]], ["用户", ["user"]],
   ["支付", ["payment", "pay"]], ["失败", ["failed", "failure", "error"]],
   ["权限", ["permission", "role", "access"]], ["商品", ["product", "item"]],
+  ["租户", ["tenant"]], ["会话", ["session"]], ["身份", ["identity", "identities"]], ["审计", ["audit"]],
   ["库存", ["stock", "inventory"]], ["账户", ["account"]], ["账号", ["account", "login"]],
   ["退款", ["refund"]], ["发票", ["invoice"]], ["物流", ["shipment", "shipping"]],
 ];

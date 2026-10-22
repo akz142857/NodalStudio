@@ -457,6 +457,7 @@ fn profile(source: Uuid) -> schema_model::DataSourceProfile {
         username: "reader".into(),
         database_type: DatabaseType::PostgreSql,
         ssl_mode: schema_model::SslMode::Prefer,
+            security: Default::default(),
         created_at: Utc::now(),
         updated_at: Utc::now(),
     }

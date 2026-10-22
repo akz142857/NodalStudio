@@ -109,8 +109,7 @@ export function InspectorPanel({
   const focusedEvidence = evidenceSelection?.scope === evidenceScope && evidenceSelection.requestId === evidenceRequestId ? evidenceSelection.evidence : undefined;
   const evidenceTable = focusedEvidence && snapshot?.schemas.flatMap((schema) => schema.tables).find((table) => table.key.schema === focusedEvidence.tableKey.schema && table.key.name === focusedEvidence.tableKey.name);
 
-  // The sidebar's "Compare…" reaches the History segment the same way the
-  // command palette reaches the canvas, so a collapsed panel is not a dead end.
+  // The Database title opens schema history without changing the selected object.
   useEffect(() => {
     const openHistory = () => setSegment("history");
     window.addEventListener("nodalstudio:inspect-history", openHistory);
@@ -174,10 +173,6 @@ export function InspectorPanel({
                 {snapshot.schemas.reduce((total, schema) => total + schema.tables.length, 0)}
               </dd>
             </div>
-            <div>
-              <dt>Fingerprint</dt>
-              <dd title={snapshot.fingerprint}>{snapshot.fingerprint.slice(0, 12)}</dd>
-            </div>
           </dl>
         )
       ) : null}
@@ -229,6 +224,7 @@ export function InspectorPanel({
           <HistoryPanel
             key={snapshot.sourceId}
             sourceId={snapshot.sourceId}
+            activeSnapshot={snapshot}
             revision={historyRevision}
             platform={platform}
             onSelect={onSelectSnapshot}

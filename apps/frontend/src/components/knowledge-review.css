@@ -1,4 +1,4 @@
-.knowledge-review { margin: 14px 0; padding: 12px; border: 1px solid #cbd5df; border-radius: 8px; font-size: 12px; }
+.knowledge-review { margin: 14px 0; padding: 12px; border: 1px solid var(--ds-border); border-radius: 8px; font-size: 12px; }
 .knowledge-review button { margin: 4px 6px 4px 0; }
 .knowledge-review pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .knowledge-comparison { display: grid; gap: 10px; }

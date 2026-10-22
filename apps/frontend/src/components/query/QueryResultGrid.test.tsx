@@ -27,10 +27,10 @@ describe("QueryResultGrid", () => {
     render(<QueryResultGrid result={result} />);
     expect(screen.getByText("NULL")).toHaveClass("query-null");
     expect(screen.getByText('{"active":true}')).toBeInTheDocument();
-    expect(screen.getByText("partial…")).toBeInTheDocument();
-    expect(screen.getByText("<42 bytes>")).toBeInTheDocument();
+    expect(screen.getByText("partial… [truncated]")).toBeInTheDocument();
+    expect(screen.getByText("[Binary not loaded · 42 bytes]")).toBeInTheDocument();
 
-    const selectedRow = screen.getByText("partial…").closest("tr");
+    const selectedRow = screen.getByText("partial… [truncated]").closest("tr");
     expect(selectedRow).not.toBeNull();
     fireEvent.click(selectedRow!);
     expect(selectedRow).toHaveAttribute("aria-selected", "true");

@@ -96,7 +96,8 @@ describe("Model relationship deletion", () => {
   it("confirms manager deletion and drops the pending request when the source changes", async () => {
     const remove = vi.fn();
     const { rerender } = render(<CanvasHarness {...relationshipActions} onDeleteLogicalRelationship={remove} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Manage relationships/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Relationships" }));
+    fireEvent.click(screen.getByRole("button", { name: /Manage relationships/ }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.getByRole("dialog", { name: "Delete model relationship?" })).toBeVisible();
     rerender(<CanvasHarness {...relationshipActions} snapshot={{ ...reportSnapshot, sourceId: "other-source" }} onDeleteLogicalRelationship={remove} />);

@@ -23,6 +23,7 @@ const table = {
 const snapshot = {
   id: "snapshot",
   sourceId: "source",
+  capturedAt: "2026-10-22T10:00:00Z",
   fingerprint: "abcdef123456",
   database: { name: "flow", databaseType: "postgres" },
   schemas: [{ name: "public", tables: [table], views: [], enums: [] }],
@@ -68,7 +69,7 @@ describe("InspectorPanel", () => {
     for (const name of ["Table", "Semantics", "History", "AI"]) {
       expect(screen.getByRole("button", { name })).toBeVisible();
     }
-    expect(screen.getByText("Fingerprint")).toBeVisible();
+    expect(screen.queryByText("Fingerprint")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "flow" })).toBeVisible();
   });
 
@@ -107,12 +108,12 @@ describe("InspectorPanel", () => {
     expect(onSaveAnnotation).not.toHaveBeenCalled();
   });
 
-  it("opens the History segment when the sidebar asks for a comparison", () => {
+  it("opens the History segment when the database title requests it", () => {
     renderPanel();
     expect(screen.queryByRole("heading", { name: /Snapshots|History/ })).not.toBeInTheDocument();
 
     fireEvent(window, new Event("nodalstudio:inspect-history"));
-    // The History segment becomes the pressed one; the sidebar's "Compare…" has
+    // The History segment becomes the pressed one; the Database title's "History" has
     // no panel of its own to fall back on.
     expect(screen.getByRole("button", { name: "History" })).toHaveAttribute(
       "aria-pressed",

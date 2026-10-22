@@ -91,20 +91,23 @@ describe("SchemaTree", () => {
     const event = createEvent.contextMenu(row, { clientX: 40, clientY: 80 });
     fireEvent(row, event);
     expect(event.defaultPrevented).toBe(true);
+    expect(screen.queryByRole("menu")).toBeNull();
+    const trigger = screen.getByRole("button", { name: "Actions for public.orders" });
+    fireEvent.click(trigger);
     const menu = screen.getByRole("menu", { name: "Actions for public.orders" });
     const locate = within(menu).getByRole("menuitem", { name: "Locate in diagram" });
     expect(locate).toHaveFocus();
     fireEvent.keyDown(locate, { key: "ArrowDown" });
     expect(screen.getByRole("menuitem", { name: "Open read-only query…" })).toHaveFocus();
     fireEvent.keyDown(menu, { key: "Escape" });
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument(); expect(row).toHaveFocus();
-    fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument(); expect(trigger).toHaveFocus();
+    fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("menuitem", { name: "Locate in diagram" }));
     expect(select).toHaveBeenCalledWith(snapshot.schemas[0].tables[0]);
-    fireEvent.contextMenu(row);
+    fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("menuitem", { name: "Open read-only query…" }));
     expect(query).toHaveBeenCalledWith(snapshot.schemas[0].tables[0]);
-    fireEvent.contextMenu(row); fireEvent.pointerDown(document.body);
+    fireEvent.click(trigger); fireEvent.pointerDown(document.body);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
@@ -113,7 +116,7 @@ describe("SchemaTree", () => {
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     render(<SchemaTree snapshot={snapshot} onSelectTable={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /Tables/ }));
-    fireEvent.contextMenu(screen.getByRole("button", { name: /^orders/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for public.orders" }));
     expect(screen.queryByRole("menuitem", { name: "Open read-only query…" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy qualified name" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Clipboard denied");
@@ -128,7 +131,7 @@ describe("SchemaTree", () => {
     const select = vi.fn();
     render(<SchemaTree snapshot={model} onSelectTable={select} />);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "totals" } });
-    fireEvent.contextMenu(screen.getByRole("button", { name: "order_totals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for public.order_totals" }));
     expect(screen.queryByRole("menuitem", { name: "Locate in diagram" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: "Show view definition" }));
     const preview = screen.getByRole("region", { name: "Definition of public.order_totals" });
@@ -176,13 +179,13 @@ describe("SchemaTree", () => {
 
     const [orders] = snapshot.schemas[0].tables;
     fireEvent.click(screen.getByRole("button", { name: /Tables/ }));
-    fireEvent.click(screen.getByRole("button", { name: /orders/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^orders/ }));
     expect(onSelectTable).toHaveBeenCalledWith(orders);
 
     rerender(
       <SchemaTree snapshot={snapshot} selectedTable={orders} onSelectTable={onSelectTable} />,
     );
-    expect(screen.getByRole("button", { name: /orders/ })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /^orders/ })).toHaveAttribute(
       "aria-current",
       "true",
     );

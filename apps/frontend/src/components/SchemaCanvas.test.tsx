@@ -98,7 +98,8 @@ describe("SchemaCanvas table selection", () => {
     expect(screen.getByRole("button", { name: "Business domain" })).toHaveAttribute("title", expect.stringContaining("DDL previews cannot edit business semantics")); expect(screen.queryByRole("button", { name: "Export SVG" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Fix table positions" }));
     expect(save).not.toHaveBeenCalled(); expect(add).not.toHaveBeenCalled(); expect(query).not.toHaveBeenCalled(); expect(localStorage.length).toBe(0);
-    expect(screen.getByRole("button", { name: /declared FKs/ })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Relationships" }));
+    expect(screen.getByRole("checkbox", { name: "Declared foreign keys" })).toBeVisible();
   });
 
   it.each([false, true])("reports failed automatic layout and retries the same operation (selected=%s)", async (selected) => {

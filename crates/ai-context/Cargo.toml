@@ -11,6 +11,7 @@ schema-model = { path = "../schema-model" }
 semantic-model = { path = "../semantic-model" }
 serde.workspace = true
 serde_json.workspace = true
+sqlparser.workspace = true
 
 [dev-dependencies]
 uuid.workspace = true

@@ -37,7 +37,7 @@ it('refreshes committed confirmation after switching away from the editing segme
   await act(async()=>{finish();await Promise.resolve();});
   fireEvent.click(screen.getByRole('button',{name:'Semantics'}));
   expect.soft(screen.getByLabelText('Description')).toHaveValue('Current confirmed note');
-  fireEvent.click(screen.getByRole('button',{name:'Business question'}));fireEvent.change(screen.getByLabelText('Business question'),{target:{value:'quasarzephyr'}});fireEvent.click(screen.getByRole('button',{name:'Search locally'}));
+  fireEvent.click(screen.getByRole('button',{name:'Business question'}));fireEvent.change(screen.getByRole('textbox', {name:'Business question'}),{target:{value:'quasarzephyr'}});fireEvent.click(screen.getByRole('button',{name:'Search locally'}));
   expect.soft(screen.queryByText('public.orders',{selector:'h4'})).toBeNull();
   expect(reads).toHaveBeenCalledTimes(2);
 });
@@ -93,7 +93,7 @@ it.each(['annotation-return', 'confirmation-return', 'confirmation-other'] as co
   await act(async()=>{finish();await Promise.resolve();});
   fireEvent.click(screen.getByRole('button',{name:'Semantics'}));
   expect.soft(screen.getByLabelText('Description')).toHaveValue('Current confirmed note');
-  fireEvent.click(screen.getByRole('button',{name:'Business question'}));fireEvent.change(screen.getByLabelText('Business question'),{target:{value:'quasarzephyr'}});fireEvent.click(screen.getByRole('button',{name:'Search locally'}));
+  fireEvent.click(screen.getByRole('button',{name:'Business question'}));fireEvent.change(screen.getByRole('textbox', {name:'Business question'}),{target:{value:'quasarzephyr'}});fireEvent.click(screen.getByRole('button',{name:'Search locally'}));
   expect.soft(screen.queryByText('public.orders',{selector:'h4'})).toBeNull();
   expect(reads).toHaveBeenCalledTimes(4);
 });

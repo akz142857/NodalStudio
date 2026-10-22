@@ -35,14 +35,14 @@ describe("business discovery app integration", () => {
     const original = screen.getByRole("region", { name: "Full model canvas" });
     fireEvent.click(screen.getByRole("button", { name: "Business question" }));
     expect(screen.getByTestId("original-paused")).toHaveTextContent("true");
-    fireEvent.change(screen.getByLabelText("Business question"), { target: { value: "订单" } }); fireEvent.click(screen.getByRole("button", { name: "Search locally" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Business question" }), { target: { value: "订单" } }); fireEvent.click(screen.getByRole("button", { name: "Search locally" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Expand relationships" })[0]); fireEvent.change(screen.getByLabelText("Local graph depth"), { target: { value: "2" } });
     fireEvent.click(screen.getByRole("button", { name: "Back to previous view" }));
     expect(screen.getByRole("region", { name: "Full model canvas" })).toBe(original); expect(screen.getByTestId("original-viewport")).toHaveTextContent("custom viewport and layout"); expect(screen.getByTestId("original-selection")).toHaveTextContent("customers"); expect(screen.getByTestId("original-query")).toHaveTextContent("customer"); expect(screen.getByTestId("original-paused")).toHaveTextContent("false"); expect(save).not.toHaveBeenCalled();
   });
   it("explaining a candidate opens that table in the existing AI inspector", async () => {
     mount(); await screen.findByText("Discovery runtime"); fireEvent.click(screen.getByRole("button", { name: "Load business fixture" })); fireEvent.click(await screen.findByRole("button", { name: "Business question" }));
-    fireEvent.change(screen.getByLabelText("Business question"), { target: { value: "orders" } }); fireEvent.click(screen.getByRole("button", { name: "Search locally" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Business question" }), { target: { value: "orders" } }); fireEvent.click(screen.getByRole("button", { name: "Search locally" }));
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Explain this table" })[0]).toBeEnabled());
     const card = screen.getByText("public.orders", { selector: "h4" }).closest("article")!;
     fireEvent.click(within(card).getByRole("button", { name: "Explain this table" }));
@@ -60,7 +60,7 @@ describe("discovery navigation regression", () => {
     mount(); await screen.findByText("Discovery runtime");
     fireEvent.click(screen.getByRole("button", { name: "Load business fixture" }));
     fireEvent.click(await screen.findByRole("button", { name: "Business question" }));
-    fireEvent.change(screen.getByLabelText("Business question"), { target: { value: "orders" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Business question" }), { target: { value: "orders" } });
     fireEvent.click(screen.getByRole("button", { name: "Search locally" }));
     const globalSearch = screen.getByPlaceholderText("Table, field, schema…");
     fireEvent.change(globalSearch, { target: { value: "customers" } });
