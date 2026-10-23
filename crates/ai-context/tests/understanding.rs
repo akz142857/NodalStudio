@@ -367,6 +367,10 @@ fn model_cannot_author_facts_actions_or_invent_evidence_ids() {
             serde_json::json!(vec![base["interpretations"][0].clone(); 4]),
         ),
         ("/unknowns", serde_json::json!(["x".repeat(151)])),
+        (
+            "/unknowns",
+            serde_json::json!([{"text": "The currency is not specified", "evidenceIds": ["e1"]}]),
+        ),
     ] {
         let mut invalid = base.clone();
         *invalid.pointer_mut(pointer).unwrap() = replacement;
