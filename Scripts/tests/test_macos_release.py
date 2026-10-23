@@ -42,8 +42,9 @@ elif name == "pnpm":
     # Tauri removes the intermediate app when only the DMG is requested.
     if "app" in bundles:
         (bundle / "macos/Nodal Studio.app").mkdir(parents=True)
-    (bundle / "dmg").mkdir(parents=True)
-    (bundle / "dmg/Nodal Studio_0.1.0_test.dmg").write_bytes(b"fixture disk image")
+    (bundle / "dmg").mkdir(parents=True, exist_ok=True)
+    if os.environ.get("RELEASE_TEST_MISSING_DMG") != "1":
+        (bundle / "dmg/Nodal Studio_0.1.0_test.dmg").write_bytes(b"fixture disk image")
     if os.environ.get("RELEASE_TEST_UPDATER") == "1":
         assert "--config" in args
         config = json.loads(pathlib.Path(args[args.index("--config") + 1]).read_text())
@@ -84,7 +85,7 @@ else:
 
 
 class MacOSReleaseCheckTests(unittest.TestCase):
-    def run_release(self, *, has_identity=True, check_only=True, notary="Accepted", updater=False, keychain=False, keychain_failure=False):
+    def run_release(self, *, has_identity=True, check_only=True, notary="Accepted", updater=False, keychain=False, keychain_failure=False, existing_dmgs=(), missing_dmg=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "release fixture"
             commands = root / "bin"
@@ -118,6 +119,10 @@ class MacOSReleaseCheckTests(unittest.TestCase):
             )
             public_key = root / "updater.key.pub"
             public_key.write_text(base64.b64encode(("untrusted comment: fixture\n" + base64.b64encode(b"Ed12345678" + b"k" * 32).decode() + "\n").encode()).decode())
+            for name in existing_dmgs:
+                old_dmg = root / "target/release/bundle/dmg" / name
+                old_dmg.parent.mkdir(parents=True, exist_ok=True)
+                old_dmg.write_bytes(b"stale disk image")
             env = {
                 **os.environ,
                 "PATH": str(commands) + os.pathsep + os.environ["PATH"],
@@ -126,6 +131,7 @@ class MacOSReleaseCheckTests(unittest.TestCase):
                 "RELEASE_TEST_NODE": shutil.which("node"),
                 "RELEASE_TEST_NOTARY": notary,
                 "RELEASE_TEST_UPDATER": "1" if updater else "0",
+                "RELEASE_TEST_MISSING_DMG": "1" if missing_dmg else "0",
                 "UPDATER_PUBLIC_KEY_PATH": str(public_key) if updater else "",
                 "UPDATER_NOTES_PATH": "",
                 "TAURI_SIGNING_PRIVATE_KEY": "fixture-only" if updater else "",
@@ -176,6 +182,22 @@ class MacOSReleaseCheckTests(unittest.TestCase):
         self.assertIn("DMG notarization was not accepted: Invalid", result.stderr)
         self.assertNotIn("xcrun stapler staple", commands)
         self.assertIsNone(checksum)
+
+    def test_release_ignores_dmg_from_previous_version(self):
+        old_name = "Nodal Studio_0.0.9_test.dmg"
+        result, commands, checksum = self.run_release(check_only=False, existing_dmgs=(old_name,))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn(old_name, commands)
+        self.assertTrue(checksum.startswith(hashlib.sha256(b"fixture disk image").hexdigest()))
+
+    def test_release_rejects_missing_or_ambiguous_current_version_dmg(self):
+        for name, missing in [("Nodal Studio_0.0.9_test.dmg", True), ("Nodal Studio_0.1.0_other.dmg", False)]:
+            with self.subTest(name=name):
+                result, commands, checksum = self.run_release(check_only=False, existing_dmgs=(name,), missing_dmg=missing)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Expected exactly one DMG for version 0.1.0", result.stderr)
+                self.assertNotIn("xcrun notarytool submit", commands)
+                self.assertIsNone(checksum)
 
     def test_updater_release_prepares_verified_manifest_without_publishing(self):
         result, commands, _ = self.run_release(check_only=False, updater=True)

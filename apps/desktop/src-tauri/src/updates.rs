@@ -269,6 +269,15 @@ pub async fn open_update_releases(
         .map_err(|_| "Unable to open GitHub Releases in your browser.")?;
     Ok(())
 }
+
+fn should_offer_update(
+    current: &semver::Version,
+    candidate: &semver::Version,
+    stable: bool,
+) -> bool {
+    candidate.cmp_precedence(current).is_gt() && (!stable || candidate.pre.is_empty())
+}
+
 #[tauri::command]
 pub async fn check_for_updates(
     app: tauri::AppHandle,
@@ -314,7 +323,7 @@ pub async fn check_for_updates(
             .map_err(|_| "Invalid update feed configuration")?
             .timeout(Duration::from_secs(30))
             .version_comparator(move |current, remote| {
-                remote.version > current && (!stable || remote.version.pre.is_empty())
+                should_offer_update(&current, &remote.version, stable)
             })
             .configure_client(move |client| {
                 let client = client
@@ -705,6 +714,31 @@ fn available_space(path: &Path) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn signed_updates_follow_semver_precedence_and_channel() {
+        for (current, candidate, stable, expected) in [
+            ("0.1.3", "0.1.3+rebuild", true, false),
+            ("0.1.3+build.1", "0.1.3+build.2", false, false),
+            ("0.1.3", "0.1.2+rebuild", true, false),
+            ("0.1.3", "0.1.4+rebuild", true, true),
+            ("0.1.3", "0.1.4-beta.1", true, false),
+            ("0.1.3", "0.1.4-beta.1", false, true),
+            ("0.1.4-beta.2", "0.1.4-beta.10", false, true),
+            ("0.1.4-beta.10", "0.1.4", true, true),
+        ] {
+            assert_eq!(
+                should_offer_update(
+                    &current.parse().unwrap(),
+                    &candidate.parse().unwrap(),
+                    stable
+                ),
+                expected,
+                "current={current}, candidate={candidate}, stable={stable}",
+            );
+        }
+    }
+
     #[test]
     fn github_checks_do_not_authorize_unsigned_installation() {
         let feed = resolve_feed(None, None, "stable", "com.claycosmos.nodalstudio", true).unwrap();

@@ -84,6 +84,10 @@ installer and verification evidence as a downloadable artifact.
 
 ## Signed macOS release
 
+The [v0.1.3 release candidate notes](docs/releases/v0.1.3.md) and
+[validation record](docs/releases/v0.1.3-validation.md) describe the current
+preparation and remaining publication gates.
+
 The [v0.1.0 release notes](docs/releases/v0.1.0.md) and
 [verification record](docs/releases/v0.1.0-readiness.md) document the signed release.
 

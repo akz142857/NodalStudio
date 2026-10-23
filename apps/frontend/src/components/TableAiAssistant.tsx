@@ -112,7 +112,7 @@ function TableSession({ platform, snapshot, table, settings, domains, desktop, a
     } catch (reason) { if (current === epoch.current) { setError(String(reason instanceof Error ? reason.message : reason)); setPhase("error"); } }
     finally { if (current === epoch.current) busy.current = false; }
   }
-  function editQuestion(value: string) { invalidate(); setQuestion(value); }
+  function editQuestion(value: string) { invalidate(); setQuestion(value); setAttempt(n => n + 1); }
   function evidenceName(e: TableAiEvidence) {
     const kinds: Record<string, string> = { column: t("field", "字段"), primaryKey: t("primary key", "主键"), databaseComment: t("comment", "注释"), table: t("table", "表"), foreignKey: t("foreign key", "外键"), teamStatement: t("team statement", "团队说明"), index: t("index", "索引"), constraint: t("constraint", "约束"), physicalRelationship: t("foreign key", "外键"), logicalRelationship: t("logical relationship", "逻辑关系") };
     const name = e.tableKey.schema === table.key.schema && e.tableKey.name === table.key.name ? e.objectKey.name : `${e.tableKey.schema}.${e.tableKey.name}.${e.objectKey.name}`;

@@ -8,8 +8,9 @@ function EditorSession({ platform, input, sourceId, label = "Review and confirm 
   const t = (en: string, zh: string) => chinese ? zh : en;
   const [draft, setDraft] = useState<KnowledgeDraft>(); const [text, setText] = useState("");
   const [phase, setPhase] = useState("idle"); const [error, setError] = useState("");
+  const [refreshError, setRefreshError] = useState(""); const [refreshing, setRefreshing] = useState(false);
   const version = useRef(0); const currentId = useRef<string | undefined>(undefined); const busy = useRef(false);
-  const cancel = useCallback((next = "idle") => { version.current++; busy.current = false; if (currentId.current) void platform.cancelKnowledgeDraft(currentId.current).catch(() => undefined); currentId.current = undefined; setDraft(undefined); setText(""); setError(""); setPhase(next); }, [platform]);
+  const cancel = useCallback((next = "idle") => { version.current++; busy.current = false; if (currentId.current) void platform.cancelKnowledgeDraft(currentId.current).catch(() => undefined); currentId.current = undefined; setDraft(undefined); setText(""); setError(""); setRefreshError(""); setRefreshing(false); setPhase(next); }, [platform]);
   useEffect(() => () => { version.current++; if (currentId.current) void platform.cancelKnowledgeDraft(currentId.current).catch(() => undefined); }, [platform]);
   useEffect(() => {
     // A confirmation already submitted before expiry may commit before its response arrives.
@@ -38,12 +39,18 @@ function EditorSession({ platform, input, sourceId, label = "Review and confirm 
       await platform.confirmKnowledgeDraft(draft.id, text);
       if (epoch === version.current) setPhase("saved");
       // Unmount/cancel can discard UI feedback, but cannot undo a committed write.
-      await onSaved();
+      await refreshKnowledge(epoch);
     } catch (reason) { if (epoch === version.current) { setError(String(reason)); setPhase("error"); } }
     finally { if (epoch === version.current) busy.current = false; }
   }
+  async function refreshKnowledge(epoch = version.current) {
+    if (epoch === version.current) { setRefreshing(true); setRefreshError(""); }
+    try { await onSaved(); }
+    catch (reason) { if (epoch === version.current) setRefreshError(String(reason)); }
+    finally { if (epoch === version.current) setRefreshing(false); }
+  }
   return <section className="knowledge-review" aria-label="Knowledge confirmation">
-    <button type="button" onClick={() => void prepare()} disabled={phase === "preparing" || phase === "saving"}>{draft ? t("Prepare a fresh comparison", "重新核对改动") : label}</button>
+    <button type="button" onClick={() => void prepare()} disabled={phase === "preparing" || phase === "saving" || refreshing}>{draft ? t("Prepare a fresh comparison", "重新核对改动") : label}</button>
     {phase === "preparing" || (draft && phase !== "saved") ? <button type="button" onClick={() => cancel("cancelled")} disabled={phase === "saving"}>{t("Cancel draft", "取消草稿")}</button> : null}
     {draft ? <><h4>{objectLabel(draft.target)} · {draft.target.kind}</h4><p className="ai-policy">{t("Confirming records a team statement on this device, not a database fact. Keep uncertainty and unresolved business questions. Tags, owner and core-table flag are preserved.", "保存为本机确认的团队说明。请保留推测与待确认事项；不会修改数据库结构、标签或负责人。")}</p>
       <div className="knowledge-comparison"><div><strong>{t("Current description", "当前说明")}</strong><p>{draft.oldDescription || t("No saved description", "暂无已保存说明")}</p></div><label>{t("Proposed description", "拟保存的说明")}<textarea rows={5} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} disabled={phase === "saving" || phase === "saved"} /></label></div>
@@ -52,6 +59,7 @@ function EditorSession({ platform, input, sourceId, label = "Review and confirm 
       {phase !== "saved" ? <button type="button" onClick={() => void confirm()} disabled={phase === "preparing" || phase === "saving" || !text.trim()}>{phase === "saving" ? t("Saving…", "正在保存…") : t("Confirm this description", "确认保存说明")}</button> : null}
     </> : null}
     {error ? <p role="alert">{error} {t("Your edited draft is retained. Retry, or prepare a fresh comparison if the evidence changed.", "已保留你编辑的草稿。可重试；依据变化后请重新核对。")}</p> : null}
+    {refreshError ? <div role="alert"><p>{t("The description was saved, but the view could not refresh.", "说明已保存，但视图刷新失败。")} {refreshError}</p><button type="button" disabled={refreshing} onClick={() => void refreshKnowledge()}>{t("Retry refresh", "重试刷新")}</button></div> : null}
     <p role="status">{phase === "saved" ? t("Description confirmed on this device.", "说明已在本机确认。") : phase === "expired" ? t("Draft expired. Review current evidence again.", "草稿已过期，请重新核对。") : phase === "cancelled" ? t("Draft cancelled.", "已取消草稿。") : ""}</p>
   </section>;
 }

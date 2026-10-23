@@ -204,6 +204,64 @@ async fn knowledge_draft_uses_one_current_claim_and_cancel_prevents_late_answer_
 }
 
 #[tokio::test]
+async fn cancelling_completed_answer_invalidates_already_borrowed_draft_source() {
+    let (app, input, _) = fixture("http://localhost:9").await;
+    let tasks = TableAiState::default();
+    let request = Arc::new(task(prepare(&app, input).await.unwrap()));
+    let id = request.prepared.preview.request_id;
+    tasks.tasks.lock().await.insert(id, request.clone());
+    let result = completed_result(&request);
+    tasks.finish(id, request, Ok(result)).await.unwrap();
+    // draft_source clones this task before asynchronously validating its evidence.
+    let borrowed = tasks.completed.lock().await.get(&id).unwrap().0.clone();
+    tasks.cancel(id).await;
+    assert!(
+        validate_current(&app, &borrowed)
+            .await
+            .unwrap_err()
+            .contains("cancelled")
+    );
+    assert!(tasks.draft_source(&app, id, None).await.is_err());
+}
+
+#[tokio::test]
+async fn complete_answer_draft_preserves_all_unicode_text_at_contract_limits() {
+    let (app, input, _) = fixture("http://localhost:9").await;
+    let tasks = TableAiState::default();
+    let request = Arc::new(task(prepare(&app, input).await.unwrap()));
+    let id = request.prepared.preview.request_id;
+    let mut result = completed_result(&request);
+    let summary = "答".repeat(600);
+    let supporting = ["甲".repeat(250), "乙".repeat(250), "丙".repeat(250)];
+    let unknowns = ["疑".repeat(150), "问".repeat(150), "待".repeat(150)];
+    let model_output = serde_json::json!({
+        "schemaVersion": 2,
+        "summary": {"text": summary, "evidenceIds": ["e1"]},
+        "interpretations": supporting.iter().map(|text| {
+            serde_json::json!({"text": text, "evidenceIds": ["e1"]})
+        }).collect::<Vec<_>>(),
+        "unknowns": unknowns,
+    });
+    result.answer = understanding::validate_model_output(
+        &model_output.to_string(),
+        &request.prepared.preview.context,
+    )
+    .unwrap();
+    tasks.tasks.lock().await.insert(id, request.clone());
+    tasks.finish(id, request, Ok(result)).await.unwrap();
+    let (_, draft, origin) = tasks.draft_source(&app, id, None).await.unwrap();
+    let expected = std::iter::once(&summary)
+        .chain(&supporting)
+        .chain(&unknowns)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    assert_eq!(draft, expected);
+    assert_eq!(origin.evidence["answer"], model_output);
+    assert_eq!(draft.chars().count(), 1_812);
+}
+
+#[tokio::test]
 async fn wire_body_equals_reviewed_preview_and_excludes_unrelated_metadata() {
     let (endpoint, received, respond, server) = server().await;
     let (app, input, _) = fixture(&endpoint).await;

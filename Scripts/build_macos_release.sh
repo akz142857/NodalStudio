@@ -235,6 +235,7 @@ validate_boolean INSTALL_DEPENDENCIES
 for command in cargo codesign git node pnpm rustup security shasum spctl uuidgen xcrun; do
   require_command "$command"
 done
+RELEASE_VERSION="$(node -p 'require("./apps/desktop/src-tauri/tauri.conf.json").version')"
 
 if [[ -n "${UPDATER_PUBLIC_KEY_PATH:-}" ]]; then
   require_command python3
@@ -261,7 +262,6 @@ if [[ -n "${UPDATER_PUBLIC_KEY_PATH:-}" ]]; then
       esac ;;
     *) fail "Unsupported macOS updater target: $BUILD_TARGET" ;;
   esac
-  RELEASE_VERSION="$(node -p 'require("./apps/desktop/src-tauri/tauri.conf.json").version')"
   UPDATER_OUTPUT="$REPOSITORY_ROOT/dist/releases/macos-$RELEASE_VERSION-updater"
   [[ ! -e "$UPDATER_OUTPUT" ]] || fail "Updater output already exists: $UPDATER_OUTPUT. Preserve it and use a new release version."
 fi
@@ -312,8 +312,14 @@ BUNDLE_ROOT="$(bundle_root)"
 APP_PATH="$BUNDLE_ROOT/macos/Nodal Studio.app"
 [[ -d "$APP_PATH" ]] || fail "App bundle was not generated: $APP_PATH"
 
-DMG_PATH="$(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
-[[ -n "$DMG_PATH" && -f "$DMG_PATH" ]] || fail "DMG was not generated below $BUNDLE_ROOT/dmg"
+# Tauri retains older release artifacts in this directory. Never publish the
+# first arbitrary DMG under a new version's name.
+shopt -s nullglob
+DMG_CANDIDATES=("$BUNDLE_ROOT/dmg/Nodal Studio_${RELEASE_VERSION}_"*.dmg)
+shopt -u nullglob
+[[ ${#DMG_CANDIDATES[@]} -eq 1 ]] || fail "Expected exactly one DMG for version $RELEASE_VERSION below $BUNDLE_ROOT/dmg"
+DMG_PATH="${DMG_CANDIDATES[0]}"
+[[ -f "$DMG_PATH" ]] || fail "DMG was not generated: $DMG_PATH"
 
 info "Verifying code signature"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"

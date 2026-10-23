@@ -1,4 +1,5 @@
 import base64
+import gzip
 import importlib.util
 import io
 import json
@@ -103,6 +104,23 @@ class GithubUpdateTests(unittest.TestCase):
         second = subprocess.run(command, capture_output=True, text=True, check=False)
         self.assertNotEqual(second.returncode, 0)
         self.assertEqual(json.loads(output.read_text()), before)
+
+    @patch.object(updater.subprocess, "run")
+    def test_damaged_gzip_trailer_cannot_generate_manifest(self, _verify):
+        original = self.archive.read_bytes()
+        for damaged in [original[:-8], original[:-8] + bytes(8)]:
+            with self.subTest(truncated=len(damaged) < len(original)):
+                self.archive.write_bytes(damaged)
+                with self.assertRaisesRegex(ValueError, "compressed update archive is damaged"):
+                    self.manifest()
+
+    @patch.object(updater.subprocess, "run")
+    def test_expansion_limit_includes_data_after_tar_end_marker(self, _verify):
+        payload = gzip.decompress(self.archive.read_bytes()) + bytes(32 * 1024)
+        self.archive.write_bytes(gzip.compress(payload))
+        with patch.object(updater, "MAX_BYTES", 20 * 1024):
+            with self.assertRaisesRegex(ValueError, "Expanded update"):
+                self.manifest()
 
 
 if __name__ == "__main__":

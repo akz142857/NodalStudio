@@ -18,6 +18,17 @@ describe("local knowledge confirmation",()=>{
   it("retains edits after a failed save and retries the same draft identity",async()=>{
     const p=fixture();p.mocks.confirmKnowledgeDraft.mockRejectedValueOnce(new Error("Concurrent annotation edit"));render(<KnowledgeEditor {...p}/>);await prepare();fireEvent.change(screen.getByLabelText("Proposed description"),{target:{value:"My edited description"}});fireEvent.click(screen.getByRole("button",{name:"Confirm this description"}));await screen.findByRole("alert");expect(screen.getByLabelText("Proposed description")).toHaveValue("My edited description");fireEvent.click(screen.getByRole("button",{name:"Confirm this description"}));await screen.findByText("Description confirmed on this device.");expect(p.mocks.confirmKnowledgeDraft).toHaveBeenNthCalledWith(2,"draft","My edited description");
   });
+  it("keeps a committed draft saved when refreshing fails and retries only the refresh",async()=>{
+    const p=fixture();p.onSaved.mockRejectedValueOnce(new Error("Refresh unavailable"));render(<KnowledgeEditor {...p}/>);await prepare();
+    fireEvent.click(screen.getByRole("button",{name:"Confirm this description"}));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The description was saved, but the view could not refresh.");
+    expect(screen.getByText("Description confirmed on this device.")).toBeVisible();
+    expect(screen.queryByRole("button",{name:"Confirm this description"})).toBeNull();
+    expect(screen.getByLabelText("Proposed description")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button",{name:"Retry refresh"}));
+    await act(async()=>{await Promise.resolve();});
+    expect(screen.queryByRole("alert")).toBeNull();expect(p.onSaved).toHaveBeenCalledTimes(2);expect(p.mocks.confirmKnowledgeDraft).toHaveBeenCalledOnce();
+  });
   it("cancels an old preparation and never attaches its late draft to another target",async()=>{
     const p=fixture();let resolve!:(draft:KnowledgeDraft)=>void;p.mocks.prepareKnowledgeDraft.mockReturnValueOnce(new Promise((r)=>{resolve=r;}));const view=render(<KnowledgeEditor {...p}/>);fireEvent.click(screen.getByRole("button",{name:"Review and confirm description"}));view.rerender(<KnowledgeEditor {...p} input={{...input,target:{...input.target,name:"customers"}}}/>);await act(async()=>{resolve(p.draft);await Promise.resolve();});expect(screen.queryByLabelText("Proposed description")).toBeNull();expect(p.mocks.cancelKnowledgeDraft).toHaveBeenCalledWith("draft");expect(p.mocks.confirmKnowledgeDraft).not.toHaveBeenCalled();
   });

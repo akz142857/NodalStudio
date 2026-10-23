@@ -423,6 +423,10 @@ async fn validate_current(app: &AppState, task: &Task) -> Result<(), String> {
         return Err("The request preview expired. Prepare a new preview.".into());
     }
     let current = prepare(app, task.prepared.input.clone()).await?;
+    // Cancellation may arrive while current metadata and settings are being loaded.
+    if task.cancellation.is_cancelled() {
+        return Err("Explanation cancelled.".into());
+    }
     if current.signature != task.prepared.signature {
         return Err("The snapshot, domain or effective AI settings changed. Prepare and review a new request.".into());
     }
@@ -555,7 +559,11 @@ impl TableAiState {
         if let Some(task) = tasks.remove(&id) {
             task.cancellation.cancel();
         }
-        self.completed.lock().await.remove(&id);
+        if let Some((task, _, _)) = self.completed.lock().await.remove(&id) {
+            // A draft request may already hold a clone of the completed task.
+            // Removing the cache entry alone would leave that request valid.
+            task.cancellation.cancel();
+        }
     }
 
     async fn finish(

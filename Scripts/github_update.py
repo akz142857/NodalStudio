@@ -55,6 +55,15 @@ def inspect_archive(archive_path, version, target):
                 metadata = plistlib.loads(archive.extractfile(entry).read())
             if len(path.parts) == 4 and path.parts[1:3] == ("Contents", "MacOS") and entry.isfile():
                 executables[path.name] = (entry, archive.extractfile(entry).read(4096))
+        # Tar stops at its end marker, before gzip verifies its trailer. Match
+        # the installer's full-stream validation before publishing a manifest.
+        try:
+            while chunk := archive.fileobj.read(min(64 * 1024, MAX_BYTES - total + 1)):
+                total += len(chunk)
+                if total > MAX_BYTES:
+                    raise ValueError("Expanded update exceeds 512 MB")
+        except (EOFError, OSError) as error:
+            raise ValueError("The compressed update archive is damaged") from error
     if len(roots) != 1 or not next(iter(roots)).endswith(".app") or metadata is None:
         raise ValueError("Expected exactly one application bundle")
     if metadata.get("CFBundleIdentifier") != IDENTIFIER or metadata.get("CFBundleShortVersionString") != version:

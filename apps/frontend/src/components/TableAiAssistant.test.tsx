@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NodalStudioPlatform, TableAiPreview, TableAiResult } from "../platform";
+import type { NodalStudioPlatform, TableAiInput, TableAiPreview, TableAiResult } from "../platform";
 import { reportSemantics, reportSnapshot } from "../test/schema-report-fixture";
 import { aiTable, tableAiPreview, tableAiResult, tableAiSettings } from "../test/table-ai-fixture";
 import { TableAiAssistant } from "./TableAiAssistant";
@@ -42,6 +42,15 @@ describe("task-first table understanding", () => {
     expect(screen.getByRole("button", { name: "Send and answer" })).toBeDisabled();
     await ready(); expect(p.mocks.runTableExplanation).toHaveBeenCalledTimes(1);
   });
+  it("prepares again when choosing the suggestion that is already in the composer", async () => {
+    const p = props(); render(<TableAiAssistant {...p} />); await ready();
+    fireEvent.click(screen.getByRole("button", { name: "What does one row represent?" }));
+    expect(screen.getByRole("button", { name: "Send and answer" })).toBeDisabled();
+    await ready();
+    expect(p.mocks.cancelTableExplanation).toHaveBeenCalledWith("fixture-request");
+    expect(p.mocks.prepareTableExplanation).toHaveBeenCalledTimes(2);
+    expect(p.mocks.runTableExplanation).not.toHaveBeenCalled();
+  });
   it("does not prepare a hidden panel, and suggestions never send", async () => {
     vi.useFakeTimers(); const p = props(); const view = render(<TableAiAssistant {...p} active={false} />);
     await act(async () => { await vi.advanceTimersByTimeAsync(500); }); expect(p.mocks.prepareTableExplanation).not.toHaveBeenCalled();
@@ -52,7 +61,7 @@ describe("task-first table understanding", () => {
   });
   it("requires a selected domain and binds the focused field without expanding scope", async () => {
     const p = props(); p.settings.source!.ai.contextScope = "domain";
-    p.mocks.prepareTableExplanation.mockImplementation(input => Promise.resolve({ ...freshPreview(), context: { ...tableAiPreview.context, scope: "domain", focusColumn: input.focusColumn } }));
+    p.mocks.prepareTableExplanation.mockImplementation((input: TableAiInput) => Promise.resolve({ ...freshPreview(), context: { ...tableAiPreview.context, scope: "domain", focusColumn: input.focusColumn } }));
     render(<TableAiAssistant {...p} />);
     expect(screen.getByRole("button", { name: "Send and answer" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Business domain"), { target: { value: "domain-private-id" } });
