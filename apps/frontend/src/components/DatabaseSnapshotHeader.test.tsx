@@ -4,11 +4,12 @@ import { DatabaseSnapshotHeader } from "./DatabaseSnapshotHeader";
 import { reportSnapshot } from "../test/schema-report-fixture";
 
 describe("Database snapshot context", () => {
-  it("keeps capture time visible while refreshing and distinguishes historical snapshots", () => {
+  it("keeps capture time accessible in the history control and distinguishes historical snapshots", () => {
     const onOpenHistory = vi.fn();
     const {rerender} = render(<DatabaseSnapshotHeader snapshot={reportSnapshot} latestSnapshotId="newer" refreshState="refreshing" onOpenHistory={onOpenHistory}/>);
     expect(screen.getByText("Historical snapshot")).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("Refreshing schema");
+    expect(screen.getByRole("button", { name: "Open schema history" })).toHaveAttribute("title", expect.stringContaining("Schema captured"));
     expect(document.querySelector("time")).toHaveAttribute("datetime",reportSnapshot.capturedAt);
     fireEvent.click(screen.getByRole("button",{name:"Open schema history"}));
     expect(onOpenHistory).toHaveBeenCalledOnce();

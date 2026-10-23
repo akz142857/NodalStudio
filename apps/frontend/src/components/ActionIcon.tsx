@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 
 const paths = {
+  more: <><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>,
+  undo: <path d="M9 5 4 10l5 5M4 10h10a6 6 0 0 1 6 6v3" />,
+  redo: <path d="m15 5 5 5-5 5m5-5H10a6 6 0 0 0-6 6v3" />,
+  select: <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M9 9h6v6H9Z" />,
+  close: <path d="m6 6 12 12M6 18 18 6" />,
+
   export: <><path d="M12 15V3m-4 4 4-4 4 4M5 11v9h14v-9" /></>,
   chart: <><path d="M4 20V10m8 10V4m8 16v-7" /></>,
   copy: <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V3H3v13h5" /></>,

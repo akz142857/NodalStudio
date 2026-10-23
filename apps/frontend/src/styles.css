@@ -3039,17 +3039,7 @@ textarea {
 /* Database context belongs to the content; the source sidebar remains navigation. */
 .canvas-placeholder.database-workspace { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; min-width: 0; min-height: 0; }
 .database-workspace > .schema-canvas-workspace { flex: 1; height: auto; min-height: 0; }
-.database-snapshot-header { display: flex; align-items: center; gap: 12px; flex: none; min-width: 0; padding: 12px 16px; border-bottom: 1px solid var(--ds-separator); background: var(--ds-sidebar); }
-.database-snapshot-header > svg { width: 22px; height: 22px; flex: none; color: var(--ds-secondary); }
-.database-snapshot-title { flex: 1; min-width: 0; }
-.database-snapshot-title > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.database-snapshot-title h2 { margin: 0; font-size: 14px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
-.database-snapshot-title p { margin: 3px 0 0; color: var(--ds-tertiary); font-size: 11px; line-height: 1.5; }
 .snapshot-version-badge { display: inline-block; border-radius: 4px; padding: 2px 6px; background: var(--ds-accent-soft); color: var(--ds-accent); font-size: 10px; font-weight: 500; }
-.database-snapshot-header button { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 30px; border: 0; border-radius: 6px; padding: 5px 8px; color: var(--ds-secondary); background: transparent; font: 12px var(--ds-font-ui); cursor: pointer; }
-.database-snapshot-header button svg { width: 16px; height: 16px; }
-.database-snapshot-header button:hover { background: var(--ds-hover); color: var(--ds-text); }
-.database-snapshot-header button:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
 .history-current-snapshot { margin-bottom: 14px; padding: 12px; border: 1px solid var(--ds-separator); border-radius: 9px; background: var(--ds-field); font-size: 11px; }
 .history-current-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
 .history-current-heading strong { font-weight: 600; }

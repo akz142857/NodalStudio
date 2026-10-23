@@ -42,7 +42,9 @@ import { DiagramExportSurface, type DiagramExportSurfaceHandle } from "./Diagram
 import { guardExportInput } from "./export-input-guard";
 import { DiagramExportActions } from "./DiagramExportActions";
 import { DiagramSelectionActions } from "./DiagramSelectionActions";
-import { SavedViewsToolbar } from "./SavedViewsToolbar";
+import { DatabaseSnapshotHeader } from "./DatabaseSnapshotHeader";
+import { ActionIcon } from "./ActionIcon";
+import { SavedViewsToolbar, type SavedViewControls } from "./SavedViewsToolbar";
 import { DiagramLayoutActions } from "./DiagramLayoutActions";
 import { arrangeTables, tableArrangementLabels, type TableArrangement } from "../graph/arrange-tables";
 import { captureLayoutFrame, DiagramLayoutHistory, type LayoutFrame } from "../graph/layout-history";
@@ -115,6 +117,9 @@ export interface SchemaCanvasProps {
   semantics?: SemanticBundle;
   savedView?: SavedView;
   layoutLoaded?: boolean;
+  onOpenHistory?: () => void;
+  latestSnapshotId?: string;
+  refreshState?: "idle" | "refreshing" | "error";
   onApplyView?: (view: SavedView | undefined) => void;
   onSaveView?: (input: import("../platform/types").SaveViewInput) => Promise<SavedView>;
   onDeleteView?: (id: string) => Promise<void>;
@@ -167,6 +172,9 @@ function SchemaCanvasInner({
   semantics,
   savedView,
   layoutLoaded = true,
+  onOpenHistory,
+  latestSnapshotId,
+  refreshState,
   onApplyView,
   onSaveView,
   onDeleteView,
@@ -846,31 +854,56 @@ function SchemaCanvasInner({
   const selectedNodes = nodes.filter((node) => node.selected && visibleNodeIds.has(node.id));
   const selectedTableKeys = selectedCurrentTableKeys(selectedNodes, snapshot);
 
-  return (
-    <div className="schema-canvas-workspace" ref={workspaceRef} aria-busy={exportRendering} inert={interactionPaused}>
-      {onApplyView && onSaveView && onDeleteView && !readOnlyPreview && !changeSet && runtimeKind === "desktop" ? <SavedViewsToolbar key={`${snapshot.sourceId}:${snapshot.id}:${savedView?.id ?? "full"}`}
-        snapshot={snapshot} views={semantics?.savedViews ?? []} activeView={savedView} selectedKeys={selectedTableKeys}
-        positions={serializeCanvasLayout(nodes)} viewport={getViewport()} layouts={semantics?.viewLayouts}
-        disabled={!layoutReady || !layoutLoaded || exportRendering} onApply={(view) => { setFocusNodeId(undefined); onClearSearch?.(); onApplyView(view); }} onSave={onSaveView} onDelete={onDeleteView} /> : null}
-      {nodes.length ? <DiagramSelectionActions key={selectionScope} snapshot={snapshot} selectedCount={selectedNodes.length} selectedTableKeys={selectedTableKeys}
-        domainGroups={semantics?.domainGroups ?? emptyDomainGroups} disabled={!layoutReady || exportRendering}
-        readOnlyReason={readOnlyPreview ? "DDL previews cannot edit business semantics or become database sources." : changeSet ? "Comparison diagrams are read only. Open Database to edit business domains." : runtimeKind === "web" ? "Shared diagrams are read only." : undefined}
-        onAddTablesToDomain={readOnlyPreview || changeSet || runtimeKind === "web" ? undefined : onAddTablesToDomain}
-        layoutActions={<DiagramLayoutActions selectedCount={selectedNodes.length}
+  // Keep contextual actions above the existing dock, including search/focus
+  // labels and wrapped controls, without changing or saving the viewport.
+  useLayoutEffect(() => {
+    const workspace = workspaceRef.current;
+    const dock = workspace?.querySelector<HTMLElement>(".canvas-command-dock");
+    const status = workspace?.querySelector<HTMLElement>(".workspace-layout-status");
+    if (!workspace || !dock || !status) return;
+    const position = () => workspace.style.setProperty("--workspace-selection-bottom", `${Math.max(80, dock.offsetHeight + status.offsetHeight + 24)}px`);
+    position();
+    const observer = new ResizeObserver(position);
+    observer.observe(dock); observer.observe(status);
+    return () => observer.disconnect();
+  }, [selectedNodes.length]);
+
+  const layoutActions = (part: "history" | "selection" | "status") => <DiagramLayoutActions part={part} selectedCount={selectedNodes.length}
           pinnedCount={selectedNodes.filter((node) => node.data.layoutPinned).length} movableCount={selectedNodes.filter((node) => !node.data.layoutPinned).length}
           onPin={() => fixSelectedTables(true)} onUnpin={() => fixSelectedTables(false)} onAutoLayoutSelected={() => autoLayoutTables(true)} disabled={layoutActionsDisabled} waitingForLayout={!temporaryReason && !layoutLoaded}
           undoLabel={historyActions.scope === historyScope ? historyActions.undo : undefined} redoLabel={historyActions.scope === historyScope ? historyActions.redo : undefined}
           onUndo={() => restoreLayoutEdit("undo")} onRedo={() => restoreLayoutEdit("redo")}
-          onDismissFeedback={() => setLayoutFeedback(undefined)} temporaryReason={temporaryReason} feedback={layoutFeedback?.scope === layoutScope ? layoutFeedback.state : undefined}
+          temporaryReason={temporaryReason} feedback={layoutFeedback?.scope === layoutScope ? layoutFeedback.state : undefined}
           onArrange={arrangeSelectedTables} retryLabel={layoutFeedback?.retry === "save" ? "Retry layout save" : "Retry arrangement"}
           onRetry={layoutFeedback?.scope === layoutScope && layoutFeedback.retry ? () => {
             if (layoutFeedback.retry === "save") saveLayout(getNodes(), getViewport());
             else if (layoutFeedback.retry === "restore") { previousLayoutScope.current = undefined; setLayoutFeedback(undefined); setInitialLayoutRetry((value) => value + 1); }
             else if (layoutFeedback.retry === "auto" || layoutFeedback.retry === "selected") autoLayoutTables(layoutFeedback.retry === "selected");
             else if (layoutFeedback.retry) arrangeSelectedTables(layoutFeedback.retry);
-          } : undefined} />}
-        boxSelectionActive={boxSelectMode} onToggleBoxSelection={() => setBoxSelectMode((value) => !value)}
-        onClear={() => setNodes((current) => current.map((node) => node.selected ? { ...node, selected: false } : node))} /> : null}
+          } : undefined} />;
+  const renderWorkspaceTools = (controls?: SavedViewControls) => <>
+    <DatabaseSnapshotHeader snapshot={snapshot} latestSnapshotId={latestSnapshotId} refreshState={refreshState} onOpenHistory={onOpenHistory}
+      title={controls?.picker ?? <h2>{savedView?.name ?? (temporaryViewLabel?.startsWith("Historical") ? "Historical model" : changeSet ? "Schema comparison" : readOnlyPreview ? "DDL preview" : "Full model")}</h2>}
+      tableCount={graph.nodes.length} viewActions={controls?.menu}
+      tools={<>{layoutActions("history")}<button className="workspace-select-button" type="button" aria-label="Box select" title={boxSelectMode ? "Drag empty canvas to select tables. Hold Space to pan." : "Box select · Shift-drag, or Shift / ⌘ / Ctrl-click to add tables to selection"} aria-pressed={boxSelectMode} disabled={!layoutReady || exportRendering} onClick={() => setBoxSelectMode((value) => !value)}><ActionIcon name="select" /><span>Select</span></button></>} />
+    {controls?.notice}
+    {selectedNodes.length ? <div className="workspace-selection-bar">
+      <DiagramSelectionActions key={selectionScope} snapshot={snapshot} selectedCount={selectedNodes.length} selectedTableKeys={selectedTableKeys}
+        domainGroups={semantics?.domainGroups ?? emptyDomainGroups} disabled={!layoutReady || exportRendering}
+        readOnlyReason={readOnlyPreview ? "DDL previews cannot edit business semantics or become database sources." : changeSet ? "Comparison diagrams are read only. Open Database to edit business domains." : runtimeKind === "web" ? "Shared diagrams are read only." : temporaryViewLabel ? "Temporary diagrams cannot edit business domains." : undefined}
+        onAddTablesToDomain={readOnlyPreview || changeSet || runtimeKind === "web" || temporaryViewLabel ? undefined : onAddTablesToDomain}
+        layoutActions={layoutActions("selection")} createViewAction={controls?.createAction}
+        onClear={() => setNodes((current) => current.map((node) => node.selected ? { ...node, selected: false } : node))} />
+    </div> : null}
+    {layoutActions("status")}
+  </>;
+
+  return (
+    <div className="schema-canvas-workspace" ref={workspaceRef} aria-busy={exportRendering} inert={interactionPaused}>
+      {onApplyView && onSaveView && onDeleteView && !readOnlyPreview && !changeSet && runtimeKind === "desktop" ? <SavedViewsToolbar key={`${snapshot.sourceId}:${snapshot.id}:${savedView?.id ?? "full"}`}
+        snapshot={snapshot} views={semantics?.savedViews ?? []} activeView={savedView} selectedKeys={selectedTableKeys}
+        positions={serializeCanvasLayout(nodes)} viewport={getViewport()} layouts={semantics?.viewLayouts}
+        disabled={!layoutReady || !layoutLoaded || exportRendering} onApply={(view) => { setFocusNodeId(undefined); onClearSearch?.(); onApplyView(view); }} onSave={onSaveView} onDelete={onDeleteView}>{renderWorkspaceTools}</SavedViewsToolbar> : renderWorkspaceTools()}
       <div className="schema-canvas-surface" data-exporting={exportRendering || undefined}
         onPointerDownCapture={(event) => { guardExportInput(event, exportRendering); }}
         onMouseDownCapture={(event) => { if (!exportRendering) fieldConnection.onMouseDown(event); guardExportInput(event, exportRendering); }}
@@ -1207,10 +1240,10 @@ function SchemaCanvasInner({
           ...(graph.inferredRelationshipCount > 0 ? [{ id: "inferred", label: "Inferred relationships", count: graph.inferredRelationshipCount, description: "Naming suggestions, not database constraints", checked: showInferredRelationships, onChange: () => setInferredRelationshipOverride(!showInferredRelationships) }] : []),
           ...(semantics?.logicalRelationships.some((relationship) => relationship.status !== "active") ? [{ id: "inactive", label: "Include inactive", description: "Disabled, conflicted or missing endpoints", checked: showInvalidRelationships, onChange: () => setShowInvalidRelationships((value) => !value) }] : []),
         ]}
-        context={selectedEdge || query || focusNodeId || savedView ? <>
+        context={selectedEdge || query || focusNodeId ? <>
           {selectedEdge ? <><span className="selected-relation-summary" title={`${selectedEdge.source}.${selectedEdge.data?.sourceColumn} → ${selectedEdge.target}.${selectedEdge.data?.targetColumn}`}>{selectedEdge.data?.constraintName ?? selectedEdge.data?.relationshipKind}: {selectedEdge.source}.{selectedEdge.data?.sourceColumn} → {selectedEdge.target}.{selectedEdge.data?.targetColumn}</span><button type="button" onClick={() => setSelectedEdgeId(undefined)}>Clear relation</button></> : null}
           {query ? <span title={`Filtered by “${query}”`}>Filtered by “{query}”</span> : null}
-          {focusNodeId ? <button type="button" onClick={() => setFocusNodeId(undefined)}>Show all relations</button> : savedView ? <span>{savedView.name} · {savedView.relationshipDepth ? `${savedView.relationshipDepth} hops` : `${savedView.rootTableKeys.length} members`}</span> : null}
+          {focusNodeId ? <button type="button" onClick={() => setFocusNodeId(undefined)}>Show all relations</button> : null}
         </> : undefined}
       />
       {!readOnlyPreview ? <DiagramExportActions scope={layoutScope}

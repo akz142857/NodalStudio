@@ -5,13 +5,14 @@ import { App } from "./App";
 import { getPlatform } from "./platform";
 import type { CaptureSnapshotResult } from "./platform";
 import { reportSnapshot } from "./test/schema-report-fixture";
+import { DatabaseSnapshotHeader } from "./components/DatabaseSnapshotHeader";
 import type { SchemaCanvasProps } from "./components/SchemaCanvas";
 const other = { ...reportSnapshot, sourceId: "other-source", id: "other-snapshot", database: { ...reportSnapshot.database, name: "Other Commerce" } };
 vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot }: { onSnapshot: (result: CaptureSnapshotResult) => void }) => <>
   <button onClick={() => onSnapshot({ snapshot: reportSnapshot, stored: true, changeSet: null })}>Load operation fixture</button>
   <button onClick={() => onSnapshot({ snapshot: other, stored: true, changeSet: null })}>Load other source</button>
 </> }));
-vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: ({ snapshot }: SchemaCanvasProps) => <p data-testid="operation-canvas">{snapshot.sourceId} · {snapshot.id}</p> }));
+vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: ({ snapshot, onOpenHistory }: SchemaCanvasProps) => <><DatabaseSnapshotHeader snapshot={snapshot} onOpenHistory={onOpenHistory} /><p data-testid="operation-canvas">{snapshot.sourceId} · {snapshot.id}</p></> }));
 async function mount() {
   const platform = getPlatform();
   vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "desktop", label: "Desktop test runtime", version: "test" });

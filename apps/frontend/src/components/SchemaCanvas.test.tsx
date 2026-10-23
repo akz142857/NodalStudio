@@ -73,11 +73,12 @@ describe("SchemaCanvas table selection", () => {
     expect(save.mock.calls[0][1]?.zoom).toBeGreaterThan(0.5);
   });
 
-  it("places working selection tools above the canvas, removes the floating panel and allows dismissing layout results", async () => {
+  it("keeps a compact title bar and shows selection tools only while tables are selected", async () => {
     const { container } = render(<CanvasHarness runtimeKind="web" />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
     const toolbar = screen.getByRole("toolbar", { name: "Diagram tools" }); const flow = container.querySelector(".schema-canvas-flow")!;
-    expect(toolbar.parentElement).toBe(flow.parentElement!.parentElement);
+    expect(toolbar.closest(".model-workspace-header")).toBeTruthy();
+    expect(screen.queryByRole("toolbar", { name: "Selected tables" })).not.toBeInTheDocument();
     expect(flow.parentElement!.contains(toolbar)).toBe(false); expect(container.querySelector(".diagram-selection-actions")).toBeNull();
     expect(screen.queryByText(/Shift \/ ⌘ \/ Ctrl-click/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Box select" })); expect(screen.getByRole("button", { name: "Box select" })).toHaveAttribute("aria-pressed", "true");
@@ -85,7 +86,9 @@ describe("SchemaCanvas table selection", () => {
     expect(screen.queryByRole("button", { name: "Align left" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Fix table positions" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Fixed states adjusted");
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss layout result" })); expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Dismiss layout result" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+    expect(screen.queryByRole("toolbar", { name: "Selected tables" })).not.toBeInTheDocument();
   });
 
   it("keeps layout undo shortcuts working from the new toolbar outside the React Flow surface", async () => {
@@ -227,7 +230,7 @@ describe("SchemaCanvas table selection", () => {
     expect(Object.values(save.mock.calls[1][0]).every((node) => node.x === 0)).toBe(true);
     expect(container.querySelector('.react-flow__node[data-id="public.orders"]')).toHaveStyle({ transform: "translate(0px,600px)" });
     expect(screen.getByText("3 tables selected")).toBeVisible();
-    expect(screen.getByText(/Layout saved on this device\./)).toBeVisible();
+    expect(screen.getByText(/Saved on this device/)).toBeVisible();
     expect(screen.getByRole("group", { name: "Diagram layout" })).toHaveAttribute("title", expect.stringContaining("Selection is temporary"));
   });
 
@@ -333,7 +336,7 @@ describe("SchemaCanvas table selection", () => {
     expect(Object.keys(save.mock.calls[0][0])).toHaveLength(3);
     expect(save.mock.calls[0][0]["public.customers"]).toMatchObject(positions["public.customers"]);
     fireEvent.click(screen.getByRole("button", { name: "Retry layout save" }));
-    await waitFor(() => expect(screen.getByText(/Layout saved on this device\./)).toBeVisible());
+    await waitFor(() => expect(screen.getByText(/Saved on this device/)).toBeVisible());
     expect(save.mock.calls[1][0]).toEqual(save.mock.calls[0][0]);
   });
 
@@ -353,7 +356,7 @@ describe("SchemaCanvas table selection", () => {
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
     expect(save.mock.calls[1][0]["public.orders"].y).toBeGreaterThan(save.mock.calls[0][0]["public.orders"].y);
     expect(container.querySelector('.react-flow__node[data-id="public.orders"]')).toHaveStyle({ transform: "translate(9000px,600px)" });
-    expect(screen.queryByText(/Layout saved on this device\./)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Saved on this device/)).not.toBeInTheDocument();
   });
 
   it("does not apply a pending auto layout after a newer manual arrangement", async () => {
@@ -406,7 +409,7 @@ describe("SchemaCanvas table selection", () => {
     const { container, rerender, unmount } = render(<CanvasHarness semantics={positionedSemantics} />);
     await selectNodes(container);
     fireEvent.click(arrangementButton("Align left"));
-    await waitFor(() => expect(screen.getByText(/Layout saved in this browser\./)).toBeVisible());
+    await waitFor(() => expect(screen.getByText(/Saved in this browser/)).toBeVisible());
     const otherSnapshot = { ...reportSnapshot, sourceId: "another-source", id: "another-snapshot" };
     rerender(<CanvasHarness snapshot={otherSnapshot} semantics={positionedSemantics} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Export SVG" })).toBeEnabled());
@@ -555,7 +558,7 @@ describe("SchemaCanvas table selection", () => {
     expect(container.querySelector('.react-flow__node[data-id="public.orders"]')).toHaveStyle({ transform: "translate(4000px,600px)" });
     expect(screen.getByRole("button", { name: "Redo layout" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Retry layout save" }));
-    await waitFor(() => expect(screen.getByText(/Layout saved on this device\./)).toBeVisible());
+    await waitFor(() => expect(screen.getByText(/Saved on this device/)).toBeVisible());
     expect(save.mock.calls[2][0]).toMatchObject(positions);
     expect(screen.getByRole("button", { name: "Redo layout" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Redo layout" }));

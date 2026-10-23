@@ -15,7 +15,7 @@ describe("DiagramSelectionActions", () => {
     const input = props();
     render(<DiagramSelectionActions {...input} />);
     expect(screen.getByText("2 tables selected")).toBeVisible();
-    expect(screen.getByRole("toolbar", { name: "Diagram tools" })).toBeVisible();
+    expect(screen.getByRole("toolbar", { name: "Selected tables" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Business domain" }));
     expect(screen.getByRole("button", { name: "Add to domain" })).toBeDisabled();
     fireEvent.change(screen.getByRole("combobox", { name: "Existing business domain" }), { target: { value: input.domainGroups[0].id } });

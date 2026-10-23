@@ -14,7 +14,6 @@ import { SchemaCanvas, type CanvasLocateRequest } from "./components/SchemaCanva
 import { SchemaChangesPanel } from "./components/SchemaChangesPanel";
 import { SchemaChangesDiagram } from "./components/SchemaChangesDiagram";
 import { SchemaTree } from "./components/SchemaTree";
-import { DatabaseSnapshotHeader } from "./components/DatabaseSnapshotHeader";
 import { SchemaReportExportAction } from "./components/SchemaReportExportAction";
 import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import type { SettingsCategory } from "./components/SettingsPage";
@@ -957,11 +956,7 @@ export function App() {
         />
 
         <section className={`canvas-placeholder${snapshot && mode === "explore" && !preflightOpen ? " database-workspace" : ""}${mode === "changes" && changeSet ? " changes-workspace" : ""}`}>
-          {snapshot && mode === "explore" && !preflightOpen ? <DatabaseSnapshotHeader snapshot={snapshot} latestSnapshotId={discoveryLatest.data?.[0]?.id} refreshState={refreshState} onOpenHistory={() => {
-            setRightPanel((panel) => ({ ...panel, expanded: true }));
-            window.dispatchEvent(new Event("nodalstudio:inspect-history"));
-          }} /> : null}
-          {historyPreview && snapshot ? <div className="saved-views-toolbar" role="status"><span>Historical workspace · layout changes are temporary.</span><button type="button" onClick={() => { void returnToLatestModel().catch((reason: unknown) => publishNotice({ id: "return-latest-failed", title: "Unable to open latest model", message: noticeReason(reason), createdAt: new Date().toISOString() })); }}>Return to latest model</button></div> : null}
+          {historyPreview && snapshot ? <div className="workspace-history-banner" role="status"><span>Historical workspace · layout changes are temporary.</span><button type="button" onClick={() => { void returnToLatestModel().catch((reason: unknown) => publishNotice({ id: "return-latest-failed", title: "Unable to open latest model", message: noticeReason(reason), createdAt: new Date().toISOString() })); }}>Return to latest model</button></div> : null}
           {!preflightOpen && mode === "changes" && changeSet ? (
             <div className="changes-view-toolbar">
               <Segmented
@@ -1002,6 +997,12 @@ export function App() {
             />
           ) : snapshot ? (
             <WorkspaceCanvas
+              onOpenHistory={mode === "explore" ? () => {
+                setRightPanel((panel) => ({ ...panel, expanded: true }));
+                window.dispatchEvent(new Event("nodalstudio:inspect-history"));
+              } : undefined}
+              latestSnapshotId={discoveryLatest.data?.[0]?.id}
+              refreshState={refreshState}
               interactionPaused={discoverySnapshot === snapshot && mode === "explore" && !preflightOpen}
               platform={platform}
               runtimeKind={runtime.data?.kind}

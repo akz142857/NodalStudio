@@ -25,4 +25,20 @@ describe("diagram toolbar disclosure", () => {
     rerender(<DiagramToolbarMenu label="Domain"><button>Add to domain</button></DiagramToolbarMenu>); fireEvent.click(screen.getByRole("button", { name: "Domain" }));
     fireEvent(window, new Event("resize")); expect(screen.getByRole("button", { name: "Domain" })).toHaveAttribute("aria-expanded", "false");
   });
+  it("supports keyboard traversal, skips disabled actions and closes after an action", () => {
+    const edit = vi.fn();
+    render(<DiagramToolbarMenu label="View actions" icon="more" closeOnAction><button onClick={edit}>Edit</button><button disabled>Unavailable</button><button>Delete</button></DiagramToolbarMenu>);
+    const trigger = screen.getByRole("button", { name: "View actions" });
+    fireEvent.click(trigger);
+    const first = screen.getByRole("button", { name: "Edit" }); first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    expect(first).toHaveFocus();
+    fireEvent.click(first);
+    expect(edit).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveFocus();
+  });
+
 });
