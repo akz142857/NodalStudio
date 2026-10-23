@@ -56,6 +56,7 @@ use sqlx::{
 };
 use tauri::{Manager, State};
 
+mod ai_chat;
 mod connection_credentials;
 mod connection_diagnostics;
 mod connection_tests;
@@ -463,34 +464,6 @@ struct AiProviderTestResult {
     model: Option<String>,
     tested_at: String,
     network_used: bool,
-}
-
-#[derive(Serialize)]
-struct OpenAiChatRequest<'a> {
-    model: &'a str,
-    messages: Vec<OpenAiMessage<'a>>,
-    temperature: f32,
-}
-
-#[derive(Serialize)]
-struct OpenAiMessage<'a> {
-    role: &'a str,
-    content: &'a str,
-}
-
-#[derive(Deserialize)]
-struct OpenAiChatResponse {
-    choices: Vec<OpenAiChoice>,
-}
-
-#[derive(Deserialize)]
-struct OpenAiChoice {
-    message: OpenAiResponseMessage,
-}
-
-#[derive(Deserialize)]
-struct OpenAiResponseMessage {
-    content: String,
 }
 
 #[derive(Deserialize)]
@@ -4163,6 +4136,13 @@ async fn remote_ai_explanation(
         question.unwrap_or("None"),
         context_json
     );
+    let body = ai_chat::request_body(
+        &endpoint,
+        &settings.model,
+        "You explain database structure using only supplied metadata. Never claim access to credentials or row data.",
+        &user_prompt,
+        None,
+    );
     let permits = AI_PERMITS / u32::from(settings.max_concurrency.max(1));
     let _permit = Arc::clone(limiter)
         .acquire_many_owned(permits)
@@ -4177,27 +4157,11 @@ async fn remote_ai_explanation(
         match client
             .post(endpoint.clone())
             .bearer_auth(&key)
-            .json(&OpenAiChatRequest {
-                model: &settings.model,
-                messages: vec![
-                    OpenAiMessage {
-                        role: "system",
-                        content: "You explain database structure using only supplied metadata. Never claim access to credentials or row data.",
-                    },
-                    OpenAiMessage {
-                        role: "user",
-                        content: &user_prompt,
-                    },
-                ],
-                temperature: 0.2,
-            })
+            .json(&body)
             .send()
             .await
         {
-            Ok(value)
-                if value.status().is_server_error()
-                    && attempt < settings.max_retries =>
-            {}
+            Ok(value) if value.status().is_server_error() && attempt < settings.max_retries => {}
             Ok(value) => {
                 response = Some(value);
                 break;
@@ -4217,16 +4181,11 @@ async fn remote_ai_explanation(
             "Remote AI rejected the request. Check the endpoint, model, and API key.".into(),
         );
     }
-    let generated_text = response
-        .json::<OpenAiChatResponse>()
+    let envelope = response
+        .json::<serde_json::Value>()
         .await
-        .map_err(|_| "Remote AI returned an invalid response.".to_owned())?
-        .choices
-        .into_iter()
-        .next()
-        .map(|choice| choice.message.content.trim().to_owned())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "Remote AI returned an empty explanation.".to_owned())?;
+        .map_err(|_| "Remote AI returned an invalid response.".to_owned())?;
+    let generated_text = ai_chat::response_text(&envelope)?.trim().to_owned();
     let mut explanation = OfflineSchemaProvider.explain(context, question);
     explanation.provider = "openai-compatible".into();
     explanation.model = Some(settings.model.clone());

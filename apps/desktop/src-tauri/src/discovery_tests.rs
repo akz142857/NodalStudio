@@ -215,6 +215,60 @@ async fn every_operation_sends_exactly_its_preview_with_no_hidden_context() {
     }
 }
 #[tokio::test]
+async fn deepseek_options_are_part_of_every_discovery_preview() {
+    for operation in [
+        Operation::Expand,
+        Operation::Rank,
+        Operation::Path,
+        Operation::DraftSql,
+    ] {
+        let (app, mut input, mut settings) = fixture("https://api.deepseek.com").await;
+        settings.ai.model = "deepseek-flash".into();
+        app.store
+            .save_data_source_settings(&settings)
+            .await
+            .unwrap();
+        input.task.operation = operation;
+        if operation == Operation::DraftSql {
+            input.task.candidates.truncate(2);
+        }
+        if operation == Operation::Path {
+            input.task.path_tables = input.task.candidates[..2].to_vec();
+            input.task.path_relationships =
+                vec!["physical|[\"public\",\"orders\",\"orders_customer\"]".into()];
+        }
+        let prepared = prepare(&app, input).await.unwrap();
+        assert_eq!(
+            prepared.preview.request_body["thinking"],
+            serde_json::json!({"type":"disabled"})
+        );
+        assert_eq!(prepared.preview.request_body["max_tokens"], 2048);
+        if operation == Operation::Expand {
+            assert!(prepared.preview.context.evidence.is_empty());
+            assert!(prepared.preview.context.tables.is_empty());
+        }
+    }
+}
+
+#[tokio::test]
+async fn truncated_discovery_answer_is_not_accepted_or_retried() {
+    let (endpoint, received, respond, server) = server().await;
+    let (app, input, settings) = fixture(&endpoint).await;
+    assert!(settings.ai.max_retries > 0);
+    let task = task(prepare(&app, input).await.unwrap());
+    let running = tokio::spawn(async move { execute(&app, &task, Some("fixture-key")).await });
+    received.await.unwrap();
+    let mut truncated: Value = serde_json::from_str(&answer(Operation::Rank)).unwrap();
+    truncated["choices"][0]["finish_reason"] = serde_json::json!("length");
+    respond.send((200, truncated.to_string())).unwrap();
+    assert_eq!(
+        running.await.unwrap().err().unwrap(),
+        crate::ai_chat::TRUNCATED_OUTPUT
+    );
+    server.await.unwrap();
+}
+
+#[tokio::test]
 async fn policy_changes_during_success_or_retry_reject_old_answers_and_release_permits() {
     for status in [200, 500] {
         let (endpoint, received, respond, server) = server().await;

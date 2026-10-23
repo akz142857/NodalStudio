@@ -75,8 +75,12 @@ async fn run_case(
     let mut settings = DataSourceSettings::defaults_for(snapshot.source_id);
     settings.ai.enabled = true;
     settings.ai.provider = AiProviderKind::OpenAiCompatible;
-    settings.ai.endpoint = endpoint.into();
-    settings.ai.model = "codex-cli-evaluation".into();
+    // Optional provider identity exercises real request adaptation before routing
+    // the unchanged payload through the operator-controlled loopback bridge.
+    settings.ai.endpoint =
+        std::env::var("NODAL_ACCEPTANCE_PROVIDER_ENDPOINT").unwrap_or_else(|_| endpoint.into());
+    settings.ai.model = std::env::var("NODAL_ACCEPTANCE_MODEL_NAME")
+        .unwrap_or_else(|_| "codex-cli-evaluation".into());
     settings.ai.timeout_seconds = 180;
     settings.ai.max_retries = 0;
     settings.ai.context_scope = settings_model::AiContextScope::CurrentTable;
@@ -121,6 +125,7 @@ async fn run_case(
                 question: case.question.clone(),
             },
             send,
+            endpoint,
         )
         .await;
     }
@@ -161,6 +166,7 @@ async fn run_case(
             },
         },
         send,
+        endpoint,
     )
     .await
 }

@@ -29,12 +29,16 @@ pub(crate) async fn run_live_acceptance(
     app: &AppState,
     input: TableInput,
     send: bool,
+    transport_endpoint: &str,
 ) -> Result<(Value, Value), String> {
-    let prepared = prepare(app, input).await?;
+    let mut prepared = prepare(app, input).await?;
     let preview = serde_json::to_value(&prepared.preview).map_err(|e| e.to_string())?;
     if !send {
         return Ok((preview, Value::Null));
     }
+    // Test-only routing: preserve the provider-built body and settings signature.
+    // The bridge must forward the reviewed body without adding provider options.
+    prepared.preview.endpoint = Some(remote_chat_endpoint(transport_endpoint)?.to_string());
     let task = Task {
         prepared,
         created: Instant::now(),
@@ -392,10 +396,7 @@ pub(super) fn remote_request_body(
     }
     let request = (
         Some(endpoint.to_string()),
-        serde_json::json!({
-            "model": ai.model, "messages": [{"role":"system","content":system},{"role":"user","content":prompt}],
-            "temperature":0.2, "max_tokens":2048
-        }),
+        crate::ai_chat::request_body(&endpoint, &ai.model, system, prompt, Some(2048)),
     );
     if serde_json::to_vec(&request.1)
         .map_err(|_| "Unable to serialize the request.")?
@@ -534,17 +535,7 @@ pub(super) async fn send_request(
     }
     let envelope: Value = serde_json::from_slice(&bytes)
         .map_err(|_| ("The provider returned an invalid response.".into(), false))?;
-    envelope
-        .pointer("/choices/0/message/content")
-        .and_then(Value::as_str)
-        .filter(|s| !s.trim().is_empty())
-        .map(str::to_owned)
-        .ok_or_else(|| {
-            (
-                "The provider returned no textual explanation.".into(),
-                false,
-            )
-        })
+    crate::ai_chat::response_text(&envelope).map_err(|message| (message, false))
 }
 
 #[cfg(test)]

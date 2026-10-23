@@ -210,6 +210,50 @@ async fn wire_body_equals_reviewed_preview_and_excludes_unrelated_metadata() {
 }
 
 #[tokio::test]
+async fn deepseek_provider_body_is_previewed_and_forwarded_without_bridge_changes() {
+    let (endpoint, received, respond, server) = server().await;
+    let (app, input, mut settings) = fixture("https://api.deepseek.com/v1").await;
+    settings.ai.model = "deepseek-flash".into();
+    app.store
+        .save_data_source_settings(&settings)
+        .await
+        .unwrap();
+    let running =
+        tokio::spawn(async move { run_live_acceptance(&app, input, true, &endpoint).await });
+    let wire = received.await.unwrap();
+    assert_eq!(wire["thinking"], serde_json::json!({"type":"disabled"}));
+    assert_eq!(wire["max_tokens"], 2048);
+    assert_eq!(wire["model"], "deepseek-flash");
+    respond.send((200, answer())).unwrap();
+    let (preview, result) = running.await.unwrap().unwrap();
+    assert_eq!(wire, preview["requestBody"]);
+    assert_eq!(
+        preview["endpoint"],
+        "https://api.deepseek.com/v1/chat/completions"
+    );
+    assert_eq!(result["model"], "deepseek-flash");
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn truncated_table_answer_is_rejected_even_if_json_is_valid_and_retries_are_enabled() {
+    let (endpoint, received, respond, server) = server().await;
+    let (app, input, settings) = fixture(&endpoint).await;
+    assert!(settings.ai.max_retries > 0);
+    let task = task(prepare(&app, input).await.unwrap());
+    let running = tokio::spawn(async move { execute(&app, &task, Some("fixture-key")).await });
+    received.await.unwrap();
+    let mut truncated: Value = serde_json::from_str(&answer()).unwrap();
+    truncated["choices"][0]["finish_reason"] = serde_json::json!("length");
+    respond.send((200, truncated.to_string())).unwrap();
+    assert_eq!(
+        running.await.unwrap().err().unwrap(),
+        crate::ai_chat::TRUNCATED_OUTPUT
+    );
+    server.await.unwrap();
+}
+
+#[tokio::test]
 async fn effective_changes_expiry_and_new_snapshots_invalidate_previews() {
     let (app, input, mut settings) = fixture("http://localhost:9").await;
     let mut prepared_task = task(prepare(&app, input.clone()).await.unwrap());

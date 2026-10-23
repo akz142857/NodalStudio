@@ -30,6 +30,11 @@ The [delivery summary](./docs/AI_DATABASE_UNDERSTANDING_DELIVERY.md) links the i
 review fixes and acceptance evidence. Independent user evaluation, physical two-device
 round trips and production-environment acceptance remain pending.
 
+For the official DeepSeek API, desktop AI requests explicitly disable thinking so
+the bounded output budget remains available for the answer. Truncated completions
+are rejected with a clear message. See the [DeepSeek fix and eight-case synthetic
+acceptance record](./docs/DEEPSEEK_ACCEPTANCE.md) for results and validation limits.
+
 ## Prerequisites
 
 - Rust 1.95 (pinned by `rust-toolchain.toml`)

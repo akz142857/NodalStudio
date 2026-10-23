@@ -29,12 +29,15 @@ pub(crate) async fn run_live_acceptance(
     app: &AppState,
     input: DiscoveryInput,
     send: bool,
+    transport_endpoint: &str,
 ) -> Result<(Value, Value), String> {
-    let prepared = prepare(app, input).await?;
+    let mut prepared = prepare(app, input).await?;
     let preview = serde_json::to_value(&prepared.preview).map_err(|e| e.to_string())?;
     if !send {
         return Ok((preview, Value::Null));
     }
+    // Route only the test transport; provider options are already in the preview.
+    prepared.preview.endpoint = Some(crate::remote_chat_endpoint(transport_endpoint)?.to_string());
     let task = Task {
         prepared,
         created: Instant::now(),
