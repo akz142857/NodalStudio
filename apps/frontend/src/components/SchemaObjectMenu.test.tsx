@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { SchemaObjectMenu } from "./SchemaObjectMenu";
 
@@ -14,4 +14,15 @@ it("keeps a zoomed context menu within the viewport near the bottom-right edge",
   expect(left + 480).toBeLessThanOrEqual(window.innerWidth);
   expect(top + 256).toBeLessThanOrEqual(window.innerHeight);
   expect(screen.getByRole("menuitem")).toHaveFocus();
+});
+
+it("activates enabled menu actions with Enter and skips disabled commands", () => {
+  const run = vi.fn(), onClose = vi.fn();
+  render(<SchemaObjectMenu x={20} y={20} name="Databases" actions={[
+    { label: "Unavailable", disabled: true, run: vi.fn() }, { label: "Manage", run },
+  ]} onClose={onClose} />);
+  expect(screen.getByRole("menuitem", { name: "Manage" })).toHaveFocus();
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "Enter" });
+  expect(run).toHaveBeenCalledOnce();
+  expect(onClose).toHaveBeenCalledWith(true);
 });

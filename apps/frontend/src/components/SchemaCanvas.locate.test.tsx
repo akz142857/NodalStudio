@@ -1,3 +1,4 @@
+import { canvasToolButton } from "../test/canvas-tools";
 import { BusinessExplorer } from "./BusinessExplorer";
 import { discoverySettings } from "../test/discovery-fixture";
 import { objectId } from "../graph/business-discovery";
@@ -48,7 +49,7 @@ describe("SchemaCanvas requested navigation", () => {
     const { container, rerender } = render(<Diagram locate={locate} done={done} ready={false} />);
     expect(fits()).toHaveLength(0);
     await act(async () => { finish(layoutNodes.map((node) => ({ ...node, position: { x: 6000, y: 2000 } }))); await Promise.resolve(); });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
+    await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
     expect(fits()).toHaveLength(0);
     viewport.measured = true; rerender(<Diagram locate={locate} done={done} ready={false} />);
     expect(fits()).toHaveLength(0);
@@ -66,7 +67,7 @@ describe("SchemaCanvas requested navigation", () => {
 
   it("exits an isolated graph, restores a hidden table and supports locating it again", async () => {
     const { container, rerender } = render(<Diagram />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
+    await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
     fireEvent.doubleClick(container.querySelector('.react-flow__node[data-id="public.customers"]')!);
     await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="archive.orders"]')).toBeNull());
     rerender(<Diagram locate={request(1)} />);
@@ -83,13 +84,13 @@ describe("SchemaCanvas requested navigation", () => {
     const { rerender } = render(<Diagram locate={locate} done={done} />);
     rerender(<Diagram snapshot={{ ...reportSnapshot, id: "other-snapshot", sourceId: "other-source" }} locate={locate} done={done} />);
     await act(async () => { finish(layoutNodes); await Promise.resolve(); });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
+    await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
     expect(fits()).toHaveLength(0); expect(done).not.toHaveBeenCalled();
   });
   it("pauses background canvas commands while a temporary explorer is open, then resumes them", async () => {
     const props = { snapshot: reportSnapshot, semantics: reportSemantics, query: "", canvasSettings: canvas, onSelectTable: vi.fn(), runtimeKind: "web" as const };
     const view = render(<SchemaCanvas {...props} />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
+    await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
     view.rerender(<SchemaCanvas {...props} interactionPaused />);
     const calls = vi.mocked(layoutSchemaGraph).mock.calls.length;
     fireEvent(window, new Event("nodalstudio:view-all-tables"));
@@ -107,7 +108,7 @@ describe("SchemaCanvas requested navigation", () => {
     const root = reportSnapshot.schemas[0].tables[0];
     fireEvent.change(screen.getByLabelText("Explicit root table"), { target: { value: objectId(root.key) } });
     fireEvent.change(screen.getByLabelText("Local graph depth"), { target: { value: "2" } });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Auto layout" })).toBeEnabled());
+    await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
     fireEvent.click(view.container.querySelector('.react-flow__node[data-id="archive.orders"]')!);
     expect(view.container.querySelector('.react-flow__node[data-id="archive.orders"]')).toHaveClass("selected");
     fireEvent(window, new Event("nodalstudio:focus-selected-table"));

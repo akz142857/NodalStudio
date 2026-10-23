@@ -166,9 +166,11 @@ describe("SchemaTree", () => {
     expect(screen.getByRole("button", { name: /public/ })).toHaveTextContent("3");
   });
 
-  it("disables a type node that has nothing behind it", () => {
+  it("omits empty object groups while keeping populated groups available", () => {
     render(<SchemaTree snapshot={snapshot} onSelectTable={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /Enums/ })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Enums/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tables/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Views/ })).toBeEnabled();
   });
 
   it("reports the chosen table and marks it as current", () => {

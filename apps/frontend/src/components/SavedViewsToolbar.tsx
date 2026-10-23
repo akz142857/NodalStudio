@@ -75,7 +75,7 @@ export function SavedViewsToolbar({ snapshot, views, activeView, selectedKeys, p
       <hr />
       <button type="button" className="workspace-destructive" aria-label="Delete view" onClick={() => { setDraft(undefined); setDeleting(true); setError(""); }}>Delete view…</button>
     </DiagramToolbarMenu> : null;
-  const createAction = selectedKeys.length ? <button className="create-view-action" type="button" aria-label="Save selection as view" disabled={disabled || busy} onClick={() => begin("create")}>Create view…</button> : null;
+  const createAction = selectedKeys.length ? <button className="create-view-action" type="button" aria-label="Save selection as view" disabled={disabled || busy} onClick={() => begin("create")}>Save as view…</button> : null;
   const notice = missingCount || view?.relationshipDepth ? <div className="workspace-view-notice" role="status">
     {view?.relationshipDepth ? <span>Relationship view · {view.relationshipDepth} hops</span> : null}
     {missingCount ? <span>{missingCount} members unavailable in this snapshot; their references are preserved.</span> : null}

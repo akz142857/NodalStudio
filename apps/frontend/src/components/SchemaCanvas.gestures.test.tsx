@@ -1,3 +1,4 @@
+import { canvasToolButton } from "../test/canvas-tools";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactFlowProps } from "@xyflow/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -94,7 +95,7 @@ describe("Diagram geometry gestures", () => {
   it("rejects fixed-card gesture frames while moving the remaining selection normally", async () => {
     const { container, save } = await mount();
     fireEvent.click(container.querySelector('.react-flow__node[data-id="public.orders"]')!);
-    fireEvent.click(screen.getByRole("button", { name: "Fix table positions" }));
+    fireEvent.click(canvasToolButton("Fix table positions"));
     fireEvent.click(container.querySelector('.react-flow__node[data-id="archive.orders"]')!, { shiftKey: true });
     act(() => { flow.props!.onNodeDragStart!(new MouseEvent("mousedown"), flow.props!.nodes![2], flow.props!.nodes!); });
     act(() => { flow.props!.onNodesChange!([

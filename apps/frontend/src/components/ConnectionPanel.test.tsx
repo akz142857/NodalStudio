@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   CaptureSnapshotResult,
@@ -85,7 +85,7 @@ describe("ConnectionPanel", () => {
       return new Promise<ConnectionTestResult>((resolve) => { finish = resolve; });
     });
     renderPanel(platformMock({ testPostgresConnection }));
-    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
     fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
     act(() => options?.onProgress?.({ phase: "handshake", sshConnected: false }));
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Connecting to the database and negotiating TLS…");
@@ -103,7 +103,7 @@ describe("ConnectionPanel", () => {
     const saveDataSource = vi.fn(), capturePostgresSnapshot = vi.fn();
     const platform = platformMock({ saveDataSource, capturePostgresSnapshot });
     renderPanel(platform);
-    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-secret" } });
     fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
     expect(await screen.findByText("Connection successful")).toBeVisible();
@@ -117,7 +117,7 @@ describe("ConnectionPanel", () => {
 
   it("shows the failed stage and keeps saving disabled", async () => {
     renderPanel(platformMock({ testPostgresConnection: vi.fn().mockRejectedValue({ stage: "tls", message: "Check the CA certificate.", sshConnected: true }) }));
-    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-secret" } });
     fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("TLS verification failed");
@@ -127,7 +127,7 @@ describe("ConnectionPanel", () => {
 
   it("keeps edits across security tabs and clears passwords when closing", async () => {
     renderPanel();
-    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
     expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
     fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
     expect(screen.getByLabelText("Database")).not.toBeVisible();
@@ -140,7 +140,7 @@ describe("ConnectionPanel", () => {
     fireEvent.click(screen.getByRole("tab", { name: /SSH/ }));
     expect(screen.getByLabelText("SSH password")).toHaveValue("test-only");
     fireEvent.click(screen.getByRole("button", { name: "Close connection dialog" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add database" }));
     expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
     fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
     expect(screen.getByRole("checkbox", { name: /Connect through SSH/ })).not.toBeChecked();
@@ -193,12 +193,16 @@ describe("ConnectionPanel", () => {
     expect(screen.getByRole("dialog", { name: "Edit Flow" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Expand Flow" })).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open local snapshot for Other" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Data source" }), { target: { value: other.id } });
     await waitFor(() => expect(onSnapshot).toHaveBeenCalledOnce());
     expect(listSnapshots).toHaveBeenCalledWith(other.id);
     rerender(panel(other.id));
     expect(screen.getByRole("button", { name: "Collapse Other" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("textbox", { name: "Source content" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Add database" }));
+    expect(screen.getByRole("dialog", { name: "Create database connection" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("combobox", { name: "Data source" })).toHaveValue(other.id);
     // Returning to a source is a new selection, so a stale collapsed state must not leak.
     rerender(panel(profile.id));
     expect(screen.getByRole("button", { name: "Collapse Flow" })).toHaveAttribute("aria-expanded", "true");
@@ -210,7 +214,7 @@ describe("ConnectionPanel", () => {
     expect(await screen.findByText("Flow")).toBeInTheDocument();
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add database" }));
 
     expect(screen.getByRole("dialog", { name: "Create database connection" })).toBeInTheDocument();
     expect(screen.getByLabelText("Database engine")).toHaveValue("mySql");
@@ -349,7 +353,7 @@ describe("ConnectionPanel", () => {
     const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([]), saveDataSource });
     renderPanel(platform);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "secret" } });
     expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
@@ -360,5 +364,89 @@ describe("ConnectionPanel", () => {
     await waitFor(() => expect(saveDataSource).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByText(/Connected to flow/)).toBeInTheDocument();
+  });
+});
+
+describe("database navigation actions", () => {
+  it("opens a keyboard-accessible blank-space menu without taking over object or input context menus", async () => {
+    const capturePostgresSnapshot = vi.fn();
+    const onRefresh = vi.fn(), platform = platformMock({ capturePostgresSnapshot });
+    const panel = (refreshDisabled = false) => <ConnectionPanel enabled activeSourceId={profile.id} platform={platform} onSnapshot={vi.fn()}
+      onRefresh={onRefresh} refreshDisabled={refreshDisabled} defaultDatabaseType="mySql" defaultSslMode="prefer">
+      <input aria-label="Object search" /><button>Table object</button>
+    </ConnectionPanel>;
+    const { rerender } = render(panel());
+    await screen.findByRole("button", { name: "Edit Flow" });
+    const region = screen.getByRole("region", { name: "Data sources" });
+    fireEvent.contextMenu(screen.getByRole("textbox", { name: "Object search" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Table object" }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    fireEvent.contextMenu(region, { clientX: 40, clientY: 300 });
+    expect(screen.getByRole("menuitem", { name: "New connection…" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Refresh schema" }));
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(region).toHaveFocus();
+    rerender(panel(true));
+    fireEvent.keyDown(region, { key: "F10", shiftKey: true });
+    expect(screen.getByRole("menuitem", { name: "Refresh schema" })).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "End" });
+    expect(screen.getByRole("menuitem", { name: "Manage connections…" })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(region).toHaveFocus();
+    fireEvent.contextMenu(region);
+    fireEvent.click(screen.getByRole("menuitem", { name: "New connection…" }));
+    expect(screen.getByRole("dialog", { name: "Create database connection" })).toBeVisible();
+    expect(capturePostgresSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("disables refresh without an active snapshot or permitted refresh callback", async () => {
+    renderPanel();
+    await screen.findByRole("button", { name: "Edit Flow" });
+    fireEvent.contextMenu(screen.getByRole("region", { name: "Data sources" }));
+    expect(screen.getByRole("menuitem", { name: "Refresh schema" })).toBeDisabled();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("manages every saved connection and reuses existing open and edit flows", async () => {
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function(this: HTMLDialogElement) { this.open = true; } });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function(this: HTMLDialogElement) { this.open = false; } });
+    try {
+      const other = { ...profile, id: "other", displayName: "Warehouse", database: "warehouse" };
+      const listSnapshots = vi.fn().mockResolvedValue([{ id: "snapshot-1" }]), saveDataSource = vi.fn(), capturePostgresSnapshot = vi.fn();
+      const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listSnapshots, saveDataSource, capturePostgresSnapshot });
+      const { onSnapshot } = renderPanel(platform);
+      await screen.findByRole("button", { name: "Edit Flow" });
+      const region = screen.getByRole("region", { name: "Data sources" });
+      const manage = () => {
+        fireEvent.contextMenu(region);
+        fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
+      };
+      manage();
+      const manager = screen.getByRole("dialog", { name: "Manage connections" });
+      const search = screen.getByRole("searchbox", { name: "Find database connections" });
+      expect(search).toHaveFocus();
+      fireEvent.change(search, { target: { value: "warehouse" } });
+      expect(manager.querySelectorAll('.connection-manager-row')).toHaveLength(1);
+      fireEvent.click(screen.getByRole("button", { name: "Open Warehouse" }));
+      await waitFor(() => expect(onSnapshot).toHaveBeenCalledOnce());
+      expect(listSnapshots).toHaveBeenCalledWith(other.id);
+      manage();
+      fireEvent.click(within(screen.getByRole("dialog", { name: "Manage connections" })).getByRole("button", { name: "Edit Warehouse" }));
+      expect(screen.getByRole("dialog", { name: "Edit Warehouse" })).toBeVisible();
+      expect(screen.getByRole("textbox", { name: "Name" })).toHaveFocus();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      manage();
+      fireEvent(screen.getByRole("dialog", { name: "Manage connections" }), new Event("cancel", { bubbles: false, cancelable: true }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(region).toHaveFocus();
+      expect(saveDataSource).not.toHaveBeenCalled();
+      expect(capturePostgresSnapshot).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+      Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
+    }
   });
 });

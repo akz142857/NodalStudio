@@ -2,6 +2,10 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { ConnectionTestStatus } from "./ConnectionTestStatus";
 import { connectionFailure, type ConnectionTestState } from "./connection-test-state";
 import { ConnectionSecurityFields } from "./ConnectionSecurityFields";
+import { ConnectionManager } from "./ConnectionManager";
+import { SchemaObjectMenu } from "./SchemaObjectMenu";
+import { ActionIcon } from "./ActionIcon";
+import "./model-navigation.css";
 import { TreeDisclosureIcon } from "./TreeDisclosureIcon";
 import type {
   DataSourceProfile,
@@ -20,6 +24,8 @@ interface ConnectionPanelProps {
   children?: ReactNode;
   platform: NodalStudioPlatform;
   onSnapshot: (result: CaptureSnapshotResult) => void;
+  onRefresh?: () => void;
+  refreshDisabled?: boolean;
   onSourceDeleted?: (sourceId: string) => void;
   defaultDatabaseType: SaveDataSourceInput["databaseType"];
   defaultSslMode: SslMode;
@@ -71,7 +77,10 @@ function connectionDetailsDiffer(
   );
 }
 
-export function ConnectionPanel({ enabled, activeSourceId, children, platform, onSnapshot, onSourceDeleted, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
+export function ConnectionPanel({ enabled, activeSourceId, children, platform, onSnapshot, onSourceDeleted, onRefresh, refreshDisabled, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
+  const navigation = useRef<HTMLElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number }>();
+  const [managerOpen, setManagerOpen] = useState(false);
   const [form, setForm] = useState<SaveDataSourceInput>(() => newConnectionForm(defaultDatabaseType, defaultSslMode));
   const [profiles, setProfiles] = useState<DataSourceProfile[]>([]);
   const testController = useRef<AbortController | null>(null);
@@ -310,25 +319,64 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
     }
   }
 
+  const activeProfile = profiles.find((profile) => profile.id === activeSourceId);
+  const expanded = !disclosure.collapsed;
+
   return (
-    <section className="connection-stack" aria-labelledby="data-sources-title">
-      <header className="section-heading connection-heading">
-        <div>
-          <h2 id="data-sources-title">Data sources</h2>
-          <span>{profiles.length}</span>
-        </div>
-        <button type="button" className="create-connection-button" onClick={openCreateDialog} disabled={!enabled || pending}>
-          <span aria-hidden="true">＋</span> Create
-        </button>
+    <section ref={navigation} className="connection-stack model-navigation" aria-label="Data sources" tabIndex={0}
+      onContextMenu={(event) => {
+        if (dialogOpen || managerOpen) return;
+        if ((event.target as Element).closest('button, input, select, textarea, a, [role="dialog"], [role="menu"], .tree-row')) return;
+        event.preventDefault(); event.stopPropagation();
+        setMenu({ x: event.clientX, y: event.clientY });
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+        event.preventDefault();
+        const bounds = event.currentTarget.getBoundingClientRect();
+        setMenu({ x: bounds.left + 12, y: bounds.top + 40 });
+      }}>
+      <header className="source-navigation-heading">
+        <h2 id="data-sources-title">Databases</h2>
+        <button type="button" className="create-connection-button" aria-label="Add database" onClick={openCreateDialog} disabled={!enabled || pending}><span aria-hidden="true">＋</span> Add</button>
       </header>
+      {activeProfile ? <div className="source-navigation-current">
+        <div className="source-navigation-picker">
+          <div className="source-navigation-summary" aria-hidden="true">
+            <ActionIcon name="database" />
+            <div><strong>{activeProfile.displayName}</strong><span>{activeProfile.database}</span></div>
+            <ActionIcon name="chevronDown" />
+          </div>
+          <select id="active-data-source" aria-label="Data source" value={activeProfile.id} disabled={pending} title={`Switch database: ${activeProfile.displayName} — ${activeProfile.database}`} onChange={(event) => {
+            const profile = profiles.find((item) => item.id === event.target.value);
+            if (profile && profile.id !== activeSourceId) void handleExistingOpen(profile);
+          }}>
+            {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}</option>)}
+          </select>
+        </div>
+        <div className="source-navigation-details">
+          <span>{activeProfile.databaseType === "mySql" ? "MySQL" : "PostgreSQL"}</span>
+          <button type="button" aria-label={`Edit ${activeProfile.displayName}`} title="Edit connection" disabled={pending} onClick={() => openEditDialog(activeProfile)}>Edit connection…</button>
+        </div>
+        <button className="source-disclosure" type="button" aria-label={`${expanded ? "Collapse" : "Expand"} ${activeProfile.displayName}`} aria-expanded={expanded} onClick={() => setDisclosure({ sourceId: activeSourceId, collapsed: expanded })}><TreeDisclosureIcon open={expanded} /><span>Model navigation</span></button>
+      </div> : null}
+      {menu ? <SchemaObjectMenu {...menu} name="Databases" actions={[
+        { label: "New connection…", disabled: !enabled || pending, run: openCreateDialog },
+        { label: "Manage connections…", disabled: !enabled || pending, run: () => setManagerOpen(true) },
+        { label: "Refresh schema", separatorBefore: true, disabled: !activeProfile || !onRefresh || refreshDisabled || pending, run: () => onRefresh?.() },
+      ]} onClose={(restore) => { setMenu(undefined); if (restore) navigation.current?.focus(); }} /> : null}
+      {managerOpen ? <ConnectionManager profiles={profiles} activeSourceId={activeSourceId} onClose={() => setManagerOpen(false)}
+        onCreate={() => { setManagerOpen(false); openCreateDialog(); }}
+        onEdit={(profile) => { setManagerOpen(false); openEditDialog(profile); }}
+        onOpen={(profile) => { setManagerOpen(false); if (profile.id !== activeSourceId) void handleExistingOpen(profile); }} /> : null}
       {profiles.length > 0 ? (
         <div className="saved-sources">
-          {profiles.map((profile) => {
+          {profiles.filter((profile) => !activeProfile || profile.id === activeSourceId).map((profile) => {
             const active = profile.id === activeSourceId;
             const expanded = active && !(disclosure.sourceId === profile.id && disclosure.collapsed);
             return (
               <div className="tree-node" key={profile.id}>
-                <div className="tree-row tree-row-source" data-active={active || undefined}>
+                <div className="tree-row tree-row-source" data-active={active || undefined} hidden={active}>
                   <button
                     type="button"
                     className="tree-row-main"

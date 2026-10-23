@@ -1,3 +1,4 @@
+import { canvasToolButton } from "../test/canvas-tools";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { ReactFlowProps } from "@xyflow/react";
@@ -93,10 +94,10 @@ describe("Model relationship deletion", () => {
     expect(remove).toHaveBeenCalledTimes(2);
   });
 
-  it("confirms manager deletion and drops the pending request when the source changes", async () => {
+  it("confirms manager deletion and drops the pending request when the source changes", () => {
     const remove = vi.fn();
     const { rerender } = render(<CanvasHarness {...relationshipActions} onDeleteLogicalRelationship={remove} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Relationships" }));
+    fireEvent.click(canvasToolButton("Relationships"));
     fireEvent.click(screen.getByRole("button", { name: /Manage relationships/ }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.getByRole("dialog", { name: "Delete model relationship?" })).toBeVisible();

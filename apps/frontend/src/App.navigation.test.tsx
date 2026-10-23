@@ -15,6 +15,7 @@ vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot,
   {children}
 </> }));
 vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: (props: SchemaCanvasProps) => <section aria-label="Navigation canvas">
+  <output data-testid="canvas-view">{props.savedView?.name ?? "Full model"}</output>
   <output data-testid="canvas-query">{props.query}</output>
   <output data-testid="navigation-ready">{String(props.navigationReady)}</output>
   <output data-testid="locate-request">{props.locateRequest ? JSON.stringify(props.locateRequest) : "none"}</output>
@@ -55,6 +56,27 @@ describe("App sidebar object navigation", () => {
     expect(requested().revision).toBe(2); expect(details).toBeVisible();
     fireEvent.click(within(details).getByRole("button", { name: "Locate public.orders in diagram" }));
     expect(requested().nodeId).toBe("public.orders"); expect(requested().revision).toBe(3);
+  });
+  it("opens a saved view from the sidebar, leaves preflight, and reuses navigation without writing layouts", async () => {
+    const platform = await mount();
+    const view = { id: "navigation-view", sourceId: reportSnapshot.sourceId, name: "Order fulfillment", rootTableKeys: [reportSnapshot.schemas[0].tables[0].key], relationshipDepth: 0, updatedAt: "now" };
+    vi.spyOn(platform, "getSemantics").mockResolvedValue({ ...reportSemantics, savedViews: [view, { ...view, id: "foreign", sourceId: "another-source", name: "Other database view" }] });
+    const save = vi.spyOn(platform, "saveLayout");
+    fireEvent.click(screen.getByRole("button", { name: "Load navigation fixture" }));
+    const navigation = await screen.findByRole("navigation", { name: "Model views" });
+    await waitFor(() => expect(within(navigation).getByRole("button", { name: "Order fulfillment" })).toBeEnabled());
+    expect(within(navigation).queryByRole("button", { name: "Other database view" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search schema" }), { target: { value: "orders" } });
+    fireEvent.click(screen.getByRole("button", { name: "Structure preflight" }));
+    fireEvent.click(within(navigation).getByRole("button", { name: "Order fulfillment" }));
+    expect(screen.getByRole("region", { name: "Navigation canvas" })).toBeVisible();
+    expect(screen.getByTestId("canvas-view")).toHaveTextContent("Order fulfillment");
+    expect(screen.getByRole("searchbox", { name: "Search schema" })).toHaveValue("");
+    expect(localStorage.getItem(`nodalstudio:last-view:${reportSnapshot.sourceId}`)).toBe(view.id);
+    fireEvent.click(within(navigation).getByRole("button", { name: "Full model" }));
+    expect(screen.getByTestId("canvas-view")).toHaveTextContent("Full model");
+    expect(localStorage.getItem(`nodalstudio:last-view:${reportSnapshot.sourceId}`)).toBeNull();
+    expect(save).not.toHaveBeenCalled();
   });
   it("keeps sidebar search independent, reveals filtered tables, and issues a new request for repeated clicks", async () => {
     await mount(); fireEvent.click(screen.getByRole("button", { name: "Load navigation fixture" }));

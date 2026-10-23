@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 
 const paths = {
+  map: <><rect x="3" y="3" width="18" height="18" rx="2" /><rect x="6" y="7" width="8" height="6" rx="1" /><path d="M17 6h1m-1 4h1M6 17h3m4 0h5" /></>,
+  table: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 9v12" /></>,
+  list: <><path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1" /></>,
   more: <><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>,
   undo: <path d="M9 5 4 10l5 5M4 10h10a6 6 0 0 1 6 6v3" />,
   redo: <path d="m15 5 5 5-5 5m5-5H10a6 6 0 0 0-6 6v3" />,
@@ -16,6 +19,7 @@ const paths = {
   split: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 12h18" /></>,
   fit: <><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6" /><rect x="8" y="8" width="8" height="8" rx="1" /></>,
   relationships: <><rect x="3" y="3" width="7" height="6" rx="1.5" /><rect x="14" y="15" width="7" height="6" rx="1.5" /><path d="M6.5 9v7a2 2 0 0 0 2 2H14" /></>,
+  chevronDown: <path d="m6 9 6 6 6-6" />,
   chevronUp: <path d="m6 15 6-6 6 6" />,
   chevronRight: <path d="m9 6 6 6-6 6" />,
   question: <><path d="M21 11a8 8 0 0 1-8 8H8l-5 3V11a9 9 0 0 1 18 0Z" /><path d="M9.5 8a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5M12 15h.01" /></>,

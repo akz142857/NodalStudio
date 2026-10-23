@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { ModelViewNavigation } from "./components/ModelViewNavigation";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { InspectorPanel } from "./components/InspectorPanel";
 import { BusinessExplorer } from "./components/BusinessExplorer";
@@ -916,6 +917,8 @@ export function App() {
             enabled={runtime.data?.kind === "desktop"}
             platform={platform}
             onSnapshot={handleCapture}
+            onRefresh={snapshot && !historyPreview ? () => void refreshActive() : undefined}
+            refreshDisabled={refreshState === "refreshing"}
             onSourceDeleted={(sourceId) => {
               setDataSources((current) => current.filter((source) => source.id !== sourceId));
               if (snapshot?.sourceId === sourceId) {
@@ -933,6 +936,9 @@ export function App() {
           >
             {snapshot ? (
               <SchemaTree
+                navigation={runtime.data?.kind === "desktop" ? <ModelViewNavigation sourceId={snapshot.sourceId} views={semantics.savedViews} activeView={savedView}
+                  disabled={historyPreview || semanticsSnapshot !== snapshot}
+                  onApply={(view) => { setMode("explore"); setPreflightOpen(false); setDiscoverySnapshot(undefined); setSearchOpen(false); applyView(view); }} /> : undefined}
                 snapshot={snapshot}
                 selectedTable={selectedTable}
                 onSelectTable={locateTable}

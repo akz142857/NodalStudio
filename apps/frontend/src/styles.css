@@ -2991,7 +2991,7 @@ textarea {
 .schema-object-menu { position: fixed; z-index: 2000; width: 240px; max-width: calc(100vw - 12px); padding: 5px; overflow: auto; border: 1px solid var(--ds-border); border-radius: 8px; color: var(--ds-text); background: var(--ds-control); box-shadow: 0 10px 32px #0006; font-size: 12px; }
 .schema-object-menu > p { overflow: hidden; margin: 3px 7px 6px; color: var(--ds-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .schema-object-menu > button { display: block; width: 100%; min-height: 32px; padding: 6px 9px; border: 0; border-radius: 4px; color: inherit; background: transparent; text-align: left; cursor: pointer; }
-.schema-object-menu > button:hover, .schema-object-menu > button:focus-visible { outline: none; color: var(--ds-selection-text); background: var(--ds-selection); }
+.schema-object-menu > button:hover:not(:disabled), .schema-object-menu > button:focus-visible { outline: none; color: var(--ds-selection-text); background: var(--ds-selection); }
 .schema-object-preview { margin: 6px 0 10px; padding: 9px; border: 1px solid var(--ds-border); border-radius: 7px; color: var(--ds-text); background: var(--ds-sidebar); font-size: 11px; }
 .schema-object-preview header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; overflow-wrap: anywhere; }
 .schema-object-preview header button { flex: 0 0 24px; }

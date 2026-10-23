@@ -43,7 +43,7 @@ export function DiagramLayoutActions({ selectedCount, movableCount = selectedCou
         {movableCount > 0 ? <button type="button" aria-label="Fix table positions" title="Fix selected table positions and sizes" disabled={disabled || !onPin} onClick={onPin}>Fix positions</button> : null}
         {pinnedCount > 0 ? <button type="button" aria-label="Unlock table positions" title="Unlock selected tables for editing" disabled={disabled || !onUnpin} onClick={onUnpin}>Unlock positions</button> : null}
         <button type="button" aria-label="Auto layout selected" title={`Arrange ${movableCount} movable selected tables; skip ${pinnedCount} fixed tables`} disabled={disabled || !movableCount || !onAutoLayoutSelected} onClick={onAutoLayoutSelected}>Layout selected</button>
-      <DiagramToolbarMenu label="Align / distribute" title={`${pinnedCount} fixed · ${movableCount} movable selected. ${persistence}`}>
+      <DiagramToolbarMenu inline label="Align / distribute" title={`${pinnedCount} fixed · ${movableCount} movable selected. ${persistence}`}>
         {actions.map(([action, label]) => <button key={action} type="button" disabled={disabled || movableCount < (action.startsWith("distribute-") ? 3 : 2)} title={action.startsWith("distribute-") ? "Equal gaps between table edges; keep the outer tables fixed. Requires 3 movable tables." : "Align selected table bounds. Requires 2 movable tables."} onClick={() => onArrange(action)}>{label}</button>)}
       </DiagramToolbarMenu>
     </> : null}

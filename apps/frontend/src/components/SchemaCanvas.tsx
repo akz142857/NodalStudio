@@ -224,6 +224,7 @@ function SchemaCanvasInner({
   const [relationshipPickSource, setRelationshipPickSource] = useState<RelationshipEndpoint>();
   const [relationshipPickExisting, setRelationshipPickExisting] = useState<LogicalRelationship>();
   const [relationshipRebindSourceSelection, setRelationshipRebindSourceSelection] = useState<LogicalRelationship>();
+  const [showMiniMap, setShowMiniMap] = useState(true);
   const [relationshipManagerOpen, setRelationshipManagerOpen] = useState(false);
   const [relationshipToDelete, setRelationshipToDelete] = useState<{ relationship: LogicalRelationship; sourceId: string; snapshotId: string }>();
   if (relationshipToDelete && (relationshipToDelete.sourceId !== snapshot.sourceId || relationshipToDelete.snapshotId !== snapshot.id)) setRelationshipToDelete(undefined);
@@ -854,20 +855,6 @@ function SchemaCanvasInner({
   const selectedNodes = nodes.filter((node) => node.selected && visibleNodeIds.has(node.id));
   const selectedTableKeys = selectedCurrentTableKeys(selectedNodes, snapshot);
 
-  // Keep contextual actions above the existing dock, including search/focus
-  // labels and wrapped controls, without changing or saving the viewport.
-  useLayoutEffect(() => {
-    const workspace = workspaceRef.current;
-    const dock = workspace?.querySelector<HTMLElement>(".canvas-command-dock");
-    const status = workspace?.querySelector<HTMLElement>(".workspace-layout-status");
-    if (!workspace || !dock || !status) return;
-    const position = () => workspace.style.setProperty("--workspace-selection-bottom", `${Math.max(80, dock.offsetHeight + status.offsetHeight + 24)}px`);
-    position();
-    const observer = new ResizeObserver(position);
-    observer.observe(dock); observer.observe(status);
-    return () => observer.disconnect();
-  }, [selectedNodes.length]);
-
   const layoutActions = (part: "history" | "selection" | "status") => <DiagramLayoutActions part={part} selectedCount={selectedNodes.length}
           pinnedCount={selectedNodes.filter((node) => node.data.layoutPinned).length} movableCount={selectedNodes.filter((node) => !node.data.layoutPinned).length}
           onPin={() => fixSelectedTables(true)} onUnpin={() => fixSelectedTables(false)} onAutoLayoutSelected={() => autoLayoutTables(true)} disabled={layoutActionsDisabled} waitingForLayout={!temporaryReason && !layoutLoaded}
@@ -887,14 +874,42 @@ function SchemaCanvasInner({
       tableCount={graph.nodes.length} viewActions={controls?.menu}
       tools={<>{layoutActions("history")}<button className="workspace-select-button" type="button" aria-label="Box select" title={boxSelectMode ? "Drag empty canvas to select tables. Hold Space to pan." : "Box select · Shift-drag, or Shift / ⌘ / Ctrl-click to add tables to selection"} aria-pressed={boxSelectMode} disabled={!layoutReady || exportRendering} onClick={() => setBoxSelectMode((value) => !value)}><ActionIcon name="select" /><span>Select</span></button></>} />
     {controls?.notice}
-    {selectedNodes.length ? <div className="workspace-selection-bar">
-      <DiagramSelectionActions key={selectionScope} snapshot={snapshot} selectedCount={selectedNodes.length} selectedTableKeys={selectedTableKeys}
+      <CanvasToolbar key={selectionScope}
+        minimapVisible={showMiniMap} onToggleMinimap={() => setShowMiniMap((value) => !value)}
+        selectedCount={selectedNodes.length}
+        createViewAction={controls?.createAction}
+        selectionActions={selectedNodes.length ? <>
+      <DiagramSelectionActions inline key={selectionScope} snapshot={snapshot} selectedCount={selectedNodes.length} selectedTableKeys={selectedTableKeys}
         domainGroups={semantics?.domainGroups ?? emptyDomainGroups} disabled={!layoutReady || exportRendering}
         readOnlyReason={readOnlyPreview ? "DDL previews cannot edit business semantics or become database sources." : changeSet ? "Comparison diagrams are read only. Open Database to edit business domains." : runtimeKind === "web" ? "Shared diagrams are read only." : temporaryViewLabel ? "Temporary diagrams cannot edit business domains." : undefined}
         onAddTablesToDomain={readOnlyPreview || changeSet || runtimeKind === "web" || temporaryViewLabel ? undefined : onAddTablesToDomain}
-        layoutActions={layoutActions("selection")} createViewAction={controls?.createAction}
+        layoutActions={layoutActions("selection")}
         onClear={() => setNodes((current) => current.map((node) => node.selected ? { ...node, selected: false } : node))} />
-    </div> : null}
+    </> : undefined}
+        navigationControls={<div inert={exportRendering} onClickCapture={(event) => {
+          guardExportInput(event, exportRendering);
+          if (!exportRendering && event.target instanceof Element && event.target.closest(".react-flow__controls-zoomin, .react-flow__controls-zoomout, .react-flow__controls-fitview")) viewportGestureScope.current = layoutScope;
+        }}><Controls orientation="horizontal" /></div>}
+        tableCount={nodes.length}
+        comparisonLabel={changeSet ? beforeSnapshot ? "Before + After" : "After" : undefined}
+        disabled={exportRendering}
+        layoutDisabled={layoutActionsDisabled || edgesRendering || nodes.every((node) => node.data.layoutPinned)}
+        onViewAll={() => window.dispatchEvent(new Event("nodalstudio:view-all-tables"))}
+        onAutoLayout={() => autoLayoutTables(false)}
+        onManageRelationships={relationshipsEditable ? () => setRelationshipManagerOpen(true) : undefined}
+        status={denseGesture ? "Moving tables · Showing connected relationships" : edgesRendering && layoutReady ? "Drawing relationships…" : undefined}
+        filters={[
+          { id: "physical", label: readOnlyPreview ? "Declared foreign keys" : "Physical relationships", count: graph.physicalRelationshipCount, description: changeSet ? "Declared constraints · Before and after versions" : "Foreign keys declared in the database", checked: showPhysicalRelationships, onChange: () => setPhysicalRelationshipOverride(!showPhysicalRelationships) },
+          { id: "logical", label: "Logical relationships", count: graph.logicalRelationshipCount, description: "Relationships defined in your model", checked: showLogicalRelationships, onChange: () => setShowLogicalRelationships((value) => !value) },
+          ...(graph.inferredRelationshipCount > 0 ? [{ id: "inferred", label: "Inferred relationships", count: graph.inferredRelationshipCount, description: "Naming suggestions, not database constraints", checked: showInferredRelationships, onChange: () => setInferredRelationshipOverride(!showInferredRelationships) }] : []),
+          ...(semantics?.logicalRelationships.some((relationship) => relationship.status !== "active") ? [{ id: "inactive", label: "Include inactive", description: "Disabled, conflicted or missing endpoints", checked: showInvalidRelationships, onChange: () => setShowInvalidRelationships((value) => !value) }] : []),
+        ]}
+        context={selectedEdge || query || focusNodeId ? <>
+          {selectedEdge ? <><span className="selected-relation-summary" title={`${selectedEdge.source}.${selectedEdge.data?.sourceColumn} → ${selectedEdge.target}.${selectedEdge.data?.targetColumn}`}>{selectedEdge.data?.constraintName ?? selectedEdge.data?.relationshipKind}: {selectedEdge.source}.{selectedEdge.data?.sourceColumn} → {selectedEdge.target}.{selectedEdge.data?.targetColumn}</span><button type="button" onClick={() => setSelectedEdgeId(undefined)}>Clear relation</button></> : null}
+          {query ? <span title={`Filtered by “${query}”`}>Filtered by “{query}”</span> : null}
+          {focusNodeId ? <button type="button" onClick={() => setFocusNodeId(undefined)}>Show all relations</button> : null}
+        </> : undefined}
+      />
     {layoutActions("status")}
   </>;
 
@@ -1090,8 +1105,7 @@ function SchemaCanvasInner({
         colorMode={theme}
       >
         <Background gap={20} size={1} />
-        <DiagramMiniMap dense={graph.nodes.length >= 500} />
-        <Controls />
+        {showMiniMap ? <DiagramMiniMap dense={graph.nodes.length >= 500} /> : null}
       </ReactFlow>
       </SharedEdgeLayer>
       </CanvasInteractionProvider>
@@ -1225,27 +1239,6 @@ function SchemaCanvasInner({
         }}
       /> : null}
       {relationshipActionError ? <div className="relationship-action-error" role="alert">{relationshipActionError}<button type="button" onClick={() => setRelationshipActionError("")}>Dismiss</button></div> : null}
-      <CanvasToolbar
-        tableCount={nodes.length}
-        comparisonLabel={changeSet ? beforeSnapshot ? "Before + After" : "After" : undefined}
-        disabled={exportRendering}
-        layoutDisabled={layoutActionsDisabled || edgesRendering || nodes.every((node) => node.data.layoutPinned)}
-        onViewAll={() => window.dispatchEvent(new Event("nodalstudio:view-all-tables"))}
-        onAutoLayout={() => autoLayoutTables(false)}
-        onManageRelationships={relationshipsEditable ? () => setRelationshipManagerOpen(true) : undefined}
-        status={denseGesture ? "Moving tables · Showing connected relationships" : edgesRendering && layoutReady ? "Drawing relationships…" : undefined}
-        filters={[
-          { id: "physical", label: readOnlyPreview ? "Declared foreign keys" : "Physical relationships", count: graph.physicalRelationshipCount, description: changeSet ? "Declared constraints · Before and after versions" : "Foreign keys declared in the database", checked: showPhysicalRelationships, onChange: () => setPhysicalRelationshipOverride(!showPhysicalRelationships) },
-          { id: "logical", label: "Logical relationships", count: graph.logicalRelationshipCount, description: "Relationships defined in your model", checked: showLogicalRelationships, onChange: () => setShowLogicalRelationships((value) => !value) },
-          ...(graph.inferredRelationshipCount > 0 ? [{ id: "inferred", label: "Inferred relationships", count: graph.inferredRelationshipCount, description: "Naming suggestions, not database constraints", checked: showInferredRelationships, onChange: () => setInferredRelationshipOverride(!showInferredRelationships) }] : []),
-          ...(semantics?.logicalRelationships.some((relationship) => relationship.status !== "active") ? [{ id: "inactive", label: "Include inactive", description: "Disabled, conflicted or missing endpoints", checked: showInvalidRelationships, onChange: () => setShowInvalidRelationships((value) => !value) }] : []),
-        ]}
-        context={selectedEdge || query || focusNodeId ? <>
-          {selectedEdge ? <><span className="selected-relation-summary" title={`${selectedEdge.source}.${selectedEdge.data?.sourceColumn} → ${selectedEdge.target}.${selectedEdge.data?.targetColumn}`}>{selectedEdge.data?.constraintName ?? selectedEdge.data?.relationshipKind}: {selectedEdge.source}.{selectedEdge.data?.sourceColumn} → {selectedEdge.target}.{selectedEdge.data?.targetColumn}</span><button type="button" onClick={() => setSelectedEdgeId(undefined)}>Clear relation</button></> : null}
-          {query ? <span title={`Filtered by “${query}”`}>Filtered by “{query}”</span> : null}
-          {focusNodeId ? <button type="button" onClick={() => setFocusNodeId(undefined)}>Show all relations</button> : null}
-        </> : undefined}
-      />
       {!readOnlyPreview ? <DiagramExportActions scope={layoutScope}
         platform={platform}
         disabled={!layoutReady || !nodes.length || edgesRendering || geometryGestureActive}

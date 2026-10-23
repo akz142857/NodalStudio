@@ -5,8 +5,9 @@ import { App } from "./App";
 import "./styles.css";
 import "./components/inspector.css";
 
-// Native WebView menus (including Reload) are not application commands.
-document.addEventListener("contextmenu", (event) => { event.preventDefault(); event.stopImmediatePropagation(); }, true);
+// Suppress WebView commands (including Reload), but let application context
+// menus receive the event through React.
+document.addEventListener("contextmenu", (event) => { event.preventDefault(); }, true);
 
 const queryClient = new QueryClient({
   defaultOptions: {
