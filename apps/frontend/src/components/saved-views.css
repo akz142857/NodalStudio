@@ -1,0 +1,14 @@
+.saved-views-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--ds-border); font-size: 12px; position: relative; z-index: 30; flex: 0 0 auto; background: var(--ds-sidebar); color: var(--ds-text); }
+.saved-views-toolbar select { max-width: 240px; }
+.saved-views-toolbar > span { opacity: .8; }
+.saved-view-editor { position: absolute; top: 100%; left: 12px; width: min(420px, calc(100% - 24px)); padding: 16px; background: var(--ds-surface); border: 1px solid var(--ds-border); border-radius: 10px; box-shadow: 0 12px 32px #0004; z-index: 12; }
+.saved-view-editor > label { display: flex; align-items: center; gap: 8px; }
+.saved-view-editor > button { margin: 8px 8px 0 0; }
+.saved-view-members { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow: auto; }
+.saved-view-members label { display: flex; align-items: center; gap: 8px; }
+.saved-view-members input { width: auto; }
+
+.saved-views-toolbar button, .saved-views-toolbar select, .saved-views-toolbar input:not([type="checkbox"]) { padding: 5px 8px; border: 1px solid var(--ds-border); border-radius: 5px; color: inherit; background: var(--ds-field); font: inherit; }
+.saved-views-toolbar button:disabled, .saved-views-toolbar select:disabled { opacity: .45; cursor: default; }
+.saved-views-toolbar :focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
+.saved-view-editor { max-height: min(540px, 65vh); overflow-y: auto; }

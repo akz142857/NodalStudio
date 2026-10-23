@@ -86,7 +86,16 @@ pub struct CanvasLayout {
     pub source_id: Uuid,
     pub view_id: Option<Uuid>,
     pub positions: BTreeMap<String, CanvasPosition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewport: Option<CanvasViewport>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CanvasViewport {
+    pub x: f64,
+    pub y: f64,
+    pub zoom: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

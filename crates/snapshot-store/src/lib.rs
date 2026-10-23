@@ -1129,6 +1129,68 @@ impl LocalSnapshotStore {
         Ok(())
     }
 
+    /// Saves a view and its initial layout atomically, or updates its definition.
+    /// # Errors
+    /// Returns an error on invalid ownership or database access.
+    pub async fn save_view_workspace(
+        &self,
+        view: &SavedView,
+        layout: Option<&CanvasLayout>,
+    ) -> Result<(), SnapshotStoreError> {
+        let mut tx = self.pool.begin().await?;
+        let result = sqlx::query("INSERT INTO saved_views (id, source_id, updated_at, payload_json) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, payload_json = excluded.payload_json WHERE saved_views.source_id = excluded.source_id")
+            .bind(view.id.to_string()).bind(view.source_id.to_string()).bind(view.updated_at.to_rfc3339()).bind(serde_json::to_string(view)?).execute(&mut *tx).await?;
+        if result.rows_affected() == 0 {
+            return Err(sqlx::Error::RowNotFound.into());
+        }
+        if let Some(layout) = layout {
+            if layout.source_id != view.source_id || layout.view_id != Some(view.id) {
+                return Err(sqlx::Error::RowNotFound.into());
+            }
+            sqlx::query("INSERT INTO canvas_layouts (source_id, layout_key, updated_at, payload_json) VALUES (?, ?, ?, ?) ON CONFLICT(source_id, layout_key) DO UPDATE SET updated_at = excluded.updated_at, payload_json = excluded.payload_json")
+                .bind(view.source_id.to_string()).bind(view.id.to_string()).bind(layout.updated_at.to_rfc3339()).bind(serde_json::to_string(layout)?).execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Deletes only this source's view and its local layout, preserving semantics.
+    /// # Errors
+    /// Returns an error on database access.
+    pub async fn delete_view(
+        &self,
+        source_id: Uuid,
+        view_id: Uuid,
+    ) -> Result<bool, SnapshotStoreError> {
+        let mut tx = self.pool.begin().await?;
+        let result = sqlx::query("DELETE FROM saved_views WHERE source_id = ? AND id = ?")
+            .bind(source_id.to_string())
+            .bind(view_id.to_string())
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM canvas_layouts WHERE source_id = ? AND layout_key = ?")
+            .bind(source_id.to_string())
+            .bind(view_id.to_string())
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Lists local layouts, including independent saved-view layouts.
+    /// # Errors
+    /// Returns an error on invalid stored data or database access.
+    pub async fn list_layouts(
+        &self,
+        source_id: Uuid,
+    ) -> Result<Vec<CanvasLayout>, SnapshotStoreError> {
+        let rows = sqlx::query("SELECT payload_json FROM canvas_layouts WHERE source_id = ?")
+            .bind(source_id.to_string())
+            .fetch_all(&self.pool)
+            .await?;
+        deserialize_payloads(rows)
+    }
+
     /// Lists saved relationship views for one data source.
     ///
     /// # Errors
@@ -2597,6 +2659,7 @@ mod tests {
             updated_at: now,
         };
         let layout = CanvasLayout {
+            viewport: None,
             source_id,
             view_id: None,
             positions: BTreeMap::from([(
@@ -2625,6 +2688,125 @@ mod tests {
             store.get_layout(source_id, None).await.unwrap(),
             Some(layout)
         );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)] // One transaction/reopen/delete lifecycle on a real SQLite file.
+    async fn saved_view_workspaces_are_atomic_scoped_and_survive_reopen() {
+        let dir = std::env::temp_dir().join(format!("nodal-views-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let url = format!("sqlite://{}?mode=rwc", dir.join("views.sqlite3").display());
+        let store = LocalSnapshotStore::open(&url).await.unwrap();
+        let source_id = Uuid::new_v4();
+        let other_source = Uuid::new_v4();
+        let view = SavedView {
+            id: Uuid::new_v4(),
+            source_id,
+            name: "Orders".into(),
+            root_table_keys: vec![
+                ObjectKey::table("public", "orders"),
+                ObjectKey::table("public", "payments"),
+            ],
+            relationship_depth: 0,
+            updated_at: Utc::now(),
+        };
+        let layout = CanvasLayout {
+            source_id,
+            view_id: Some(view.id),
+            positions: BTreeMap::from([(
+                "public.orders".into(),
+                CanvasPosition {
+                    x: 12.0,
+                    y: 34.0,
+                    width: Some(320.0),
+                    height: Some(200.0),
+                    pinned: false,
+                },
+            )]),
+            viewport: Some(semantic_model::CanvasViewport {
+                x: 3.0,
+                y: 4.0,
+                zoom: 0.6,
+            }),
+            updated_at: Utc::now(),
+        };
+        let bad_layout = CanvasLayout {
+            source_id: other_source,
+            ..layout.clone()
+        };
+        assert!(
+            store
+                .save_view_workspace(&view, Some(&bad_layout))
+                .await
+                .is_err()
+        );
+        assert!(store.list_views(source_id).await.unwrap().is_empty());
+        store
+            .save_view_workspace(&view, Some(&layout))
+            .await
+            .unwrap();
+        let copy = SavedView {
+            id: Uuid::new_v4(),
+            name: "Copy".into(),
+            ..view.clone()
+        };
+        let copy_layout = CanvasLayout {
+            view_id: Some(copy.id),
+            ..layout.clone()
+        };
+        store
+            .save_view_workspace(&copy, Some(&copy_layout))
+            .await
+            .unwrap();
+        let full = CanvasLayout {
+            view_id: None,
+            ..layout.clone()
+        };
+        store.save_layout(&full).await.unwrap();
+        assert!(
+            store
+                .save_view_workspace(
+                    &SavedView {
+                        source_id: other_source,
+                        ..view.clone()
+                    },
+                    None
+                )
+                .await
+                .is_err()
+        );
+        assert!(!store.delete_view(other_source, view.id).await.unwrap());
+        store.close().await;
+        let reopened = LocalSnapshotStore::open(&url).await.unwrap();
+        assert_eq!(
+            reopened.get_layout(source_id, Some(view.id)).await.unwrap(),
+            Some(layout)
+        );
+        assert_eq!(reopened.list_views(source_id).await.unwrap().len(), 2);
+        assert!(reopened.delete_view(source_id, view.id).await.unwrap());
+        assert_eq!(
+            reopened.get_layout(source_id, Some(view.id)).await.unwrap(),
+            None
+        );
+        assert_eq!(
+            reopened.get_layout(source_id, Some(copy.id)).await.unwrap(),
+            Some(copy_layout)
+        );
+        assert_eq!(
+            reopened.get_layout(source_id, None).await.unwrap(),
+            Some(full)
+        );
+        assert_eq!(reopened.list_views(source_id).await.unwrap(), vec![copy]);
+        reopened.close().await;
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn legacy_canvas_layout_has_no_viewport() {
+        let json = serde_json::json!({ "sourceId": Uuid::new_v4(), "viewId": null, "positions": { "public.orders": { "x": 10, "y": 20 } }, "updatedAt": Utc::now() });
+        let layout: CanvasLayout = serde_json::from_value(json).unwrap();
+        assert!(layout.viewport.is_none());
+        assert!(!layout.positions["public.orders"].pinned);
     }
 
     #[test]

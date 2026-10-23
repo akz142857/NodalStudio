@@ -274,6 +274,10 @@ export class WebPlatform implements NodalStudioPlatform {
     return Promise.reject(new Error("Saved views require the desktop app."));
   }
 
+  deleteView(): Promise<boolean> {
+    return Promise.reject(new Error("Shared diagrams are read only."));
+  }
+
   saveLayout(): Promise<void> {
     return Promise.reject(new Error("Layout persistence requires the desktop app."));
   }

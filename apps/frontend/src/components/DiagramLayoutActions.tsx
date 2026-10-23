@@ -24,7 +24,7 @@ export function DiagramLayoutActions({ selectedCount, movableCount = selectedCou
   onRedo?: () => void;
   onDismissFeedback?: () => void;
 }) {
-  const persistence = temporaryReason ? `${temporaryReason} Layout changes are temporary.` : waitingForLayout ? "Waiting for the saved layout to load." : "Positions, fixed states and table sizes save automatically on this device. Pan, zoom and selection are not saved.";
+  const persistence = temporaryReason ? `${temporaryReason} Layout changes are temporary.` : waitingForLayout ? "Waiting for the saved layout to load." : "Positions, fixed states, table sizes and your view save automatically on this device. Selection is temporary.";
   return <div className="diagram-layout-tools" role="group" aria-label="Diagram layout" title={persistence}>
       <button type="button" aria-label="Undo layout" disabled={disabled || !undoLabel || !onUndo} onClick={onUndo} title={undoLabel ? `Undo ${undoLabel} · ⌘/Ctrl+Z` : "No layout changes to undo"}>↶</button>
       <button type="button" aria-label="Redo layout" disabled={disabled || !redoLabel || !onRedo} onClick={onRedo} title={redoLabel ? `Redo ${redoLabel} · ⌘/Ctrl+Shift+Z / Ctrl+Y` : "No layout changes to redo"}>↷</button>

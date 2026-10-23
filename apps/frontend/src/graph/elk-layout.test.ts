@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setTablePinned } from "./table-position";
 import type { TableNode } from "./schema-graph";
-import { applyStoredPositions, layoutSchemaGraph, layoutSelectedSchemaGraph, persistLayout, restoreLayout, serializeCanvasLayout } from "./elk-layout";
+import { restoreOrExtendLayout, applyStoredPositions, layoutSchemaGraph, layoutSelectedSchemaGraph, persistLayout, restoreLayout, serializeCanvasLayout } from "./elk-layout";
 
 function node(id: string, x: number, y: number): TableNode {
   return {
@@ -89,6 +89,16 @@ describe("layout persistence", () => {
 
 
 describe("scoped automatic layout", () => {
+  it("extends an old layout without moving or pinning its unpinned nodes", async () => {
+    const positions = { old: { x: 812, y: 217, width: 320, height: 200 }, fixed: { x: 100, y: 50, pinned: true } };
+    const result = await restoreOrExtendLayout([node("old", 0, 0), node("fixed", 0, 0), node("new", 0, 0)], [], positions);
+    expect(result[0]).toMatchObject({ position: { x: 812, y: 217 }, style: { width: 320, height: 200 } });
+    expect(result[0].data.layoutPinned).toBeUndefined();
+    expect(result[1]).toMatchObject({ position: { x: 100, y: 50 }, data: { layoutPinned: true } });
+    expect(requests[0].nodes.map((item) => item.id)).toEqual(["new"]);
+    expect(result[2].position.x).toBeGreaterThanOrEqual(450);
+  });
+
   const requests: { nodes: { id: string; width: number; height: number }[]; edges: { id: string; source: string; target: string }[] }[] = [];
   const terminate = vi.fn();
   beforeEach(() => {

@@ -45,6 +45,7 @@ interface InspectorPanelProps {
   onRefreshSemantics: () => Promise<void>;
   onSemanticsChange: (semantics: SemanticBundle) => void;
   onApplyView: (view: SavedView | undefined) => void;
+  historyPreview?: boolean;
   onOpenQuery?: (table: TableDefinition) => void;
   onOpenSettings: (category: "ai" | "cloud" | "git") => void;
   onSelectSnapshot: (snapshot: DatabaseSnapshot) => void;
@@ -87,6 +88,7 @@ export function InspectorPanel({
   onSemanticsChange,
   onRefreshSemantics,
   onApplyView,
+  historyPreview,
   onOpenQuery,
   onOpenSettings,
   onSelectSnapshot,
@@ -191,6 +193,8 @@ export function InspectorPanel({
           <KnowledgeReview platform={platform} snapshot={snapshot} semantics={semantics} table={selectedTable} desktop={runtime?.kind === "desktop"} onRefresh={onRefreshSemantics} />
           <KnowledgePanel
             sourceId={snapshot.sourceId}
+            snapshotId={snapshot.id}
+            readOnly={historyPreview}
             selectedTable={selectedTable}
             semantics={semantics}
             platform={platform}

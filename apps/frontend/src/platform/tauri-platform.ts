@@ -246,12 +246,18 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke<SavedView>("save_view", { input });
   }
 
+  deleteView(sourceId: string, viewId: string, snapshotId: string): Promise<boolean> {
+    return invoke<boolean>("delete_view", { input: { sourceId, viewId, snapshotId } });
+  }
+
   saveLayout(
     sourceId: string,
     viewId: string | null,
     positions: Record<string, import("./types").CanvasNodeLayout>,
+    viewport?: import("./types").CanvasLayout["viewport"],
+    snapshotId?: string,
   ): Promise<void> {
-    return invoke<void>("save_layout", { input: { sourceId, viewId, positions } });
+    return invoke<void>("save_layout", { input: { sourceId, viewId, positions, viewport, snapshotId } });
   }
 
   explainSchema(input: ExplainSchemaInput): Promise<AiExplanation> {

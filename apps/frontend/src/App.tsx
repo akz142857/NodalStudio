@@ -78,6 +78,8 @@ const emptySemantics: SemanticBundle = {
 
 export function App() {
   const [snapshot, setSnapshot] = useState<DatabaseSnapshot>();
+  const [historyPreview, setHistoryPreview] = useState(false);
+  const latestWorkspace = useRef<{ snapshot: DatabaseSnapshot; view?: SavedView } | undefined>(undefined);
   const [changeSet, setChangeSet] = useState<SchemaChangeSet>();
   const [mode, setMode] = useState<ViewMode>("explore");
   const [preflightOpen, setPreflightOpen] = useState(false);
@@ -111,6 +113,11 @@ export function App() {
     }
   }, [semanticSession]);
   const [savedView, setSavedView] = useState<SavedView>();
+  const applyView = useCallback((view: SavedView | undefined) => {
+    if (activeSemanticSession.current !== semanticSession || (view && view.sourceId !== snapshot?.sourceId)) return;
+    setSavedView(view); setQuery(""); setLocateRequest(undefined);
+    if (snapshot) { try { if (view && !view.id.startsWith("domain:")) localStorage.setItem(`nodalstudio:last-view:${snapshot.sourceId}`, view.id); else localStorage.removeItem(`nodalstudio:last-view:${snapshot.sourceId}`); } catch { /* Optional navigation preference; layout persistence is authoritative. */ } }
+  }, [semanticSession, snapshot]);
   const refreshOperation = useOperation(snapshot?.sourceId ?? "no-source");
   const runRefresh = refreshOperation.run;
   const refreshState = refreshOperation.busy ? "refreshing" : refreshOperation.state?.phase === "error" ? "error" : "idle";
@@ -224,6 +231,12 @@ export function App() {
     return platform.getSemantics(snapshot.sourceId).then((bundle) => {
       if (!current()) return;
       setSemantics(bundle);
+      if (!historyPreview) setSavedView((currentView) => {
+        if (currentView?.sourceId === snapshot.sourceId && currentView.id.startsWith("domain:")) return currentView;
+        let preferred: string | undefined = currentView?.sourceId === snapshot.sourceId ? currentView.id : undefined;
+        try { preferred ??= localStorage.getItem(`nodalstudio:last-view:${snapshot.sourceId}`) ?? undefined; } catch { /* Preference unavailable. */ }
+        return bundle.savedViews.find((view) => view.sourceId === snapshot.sourceId && view.id === preferred);
+      });
       setSemanticsSnapshot(snapshot);
       setSemanticsSettledSnapshot(snapshot);
     }).catch((reason: unknown) => {
@@ -239,7 +252,7 @@ export function App() {
       });
       throw reason;
     });
-  }, [snapshot, semanticSession]);
+  }, [snapshot, semanticSession, historyPreview]);
   const currentSemanticLoader = useRef<{ sourceId: string; load: () => Promise<void> } | undefined>(undefined);
   useLayoutEffect(() => {
     currentSemanticLoader.current = snapshot ? { sourceId: snapshot.sourceId, load: loadSemantics } : undefined;
@@ -256,13 +269,17 @@ export function App() {
   const healthCheckFailing = useRef(false);
 
   const handleCapture = useCallback((result: CaptureSnapshotResult) => {
+    const sameSource = snapshot?.sourceId === result.snapshot.sourceId;
+    setHistoryPreview(false);
     setSnapshot(result.snapshot);
     setChangeSet(result.changeSet ?? undefined);
     setChangesView("list");
-    setMode(result.changeSet ? "changes" : "explore");
+    setMode(sameSource ? "explore" : result.changeSet ? "changes" : "explore");
     setSelectedTable(undefined);
     setLocateRequest(undefined);
-    setSavedView(undefined);
+    if (!sameSource) setSavedView(undefined);
+    else if (historyPreview) setSavedView(latestWorkspace.current?.view);
+    latestWorkspace.current = { snapshot: result.snapshot, view: sameSource ? (historyPreview ? latestWorkspace.current?.view : savedView) : undefined };
     const notificationSettings = settings.app.notifications;
     const schemaNotificationLevel =
       settings.source?.refresh.changeNotifications ?? notificationSettings.schemaChanges;
@@ -278,7 +295,7 @@ export function App() {
         createdAt: new Date().toISOString(),
       });
     }
-  }, [publishNotice, settings.app.notifications, settings.source?.refresh.changeNotifications]);
+  }, [publishNotice, settings.app.notifications, settings.source?.refresh.changeNotifications, snapshot?.sourceId, savedView, historyPreview]);
 
   const refreshActive = useCallback(async (trigger: "manual" | "background" = "manual") => {
     if (!snapshot) return;
@@ -689,12 +706,50 @@ export function App() {
     }));
   }, [snapshot]);
 
-  const saveCanvasLayout = useCallback((positions: Record<string, import("./platform/types").CanvasNodeLayout>) => {
+  const saveCanvasLayout = useCallback(async (positions: Record<string, import("./platform/types").CanvasNodeLayout>, viewport?: import("./platform/types").CanvasLayout["viewport"]) => {
+    if (!snapshot || historyPreview || mode !== "explore") throw new Error("Historical layouts are temporary. Return to the latest model to save.");
+    const viewId = savedView && !savedView.id.startsWith("domain:") ? savedView.id : null;
+    await platform.saveLayout(snapshot.sourceId, viewId, positions, viewport, snapshot.id);
+    if (activeSemanticSession.current !== semanticSession) return;
+    const layout = { sourceId: snapshot.sourceId, viewId, positions, viewport, updatedAt: new Date().toISOString() };
+    setSemantics((current) => ({ ...current, ...(viewId ? {} : { layout }), viewLayouts: [...(current.viewLayouts ?? []).filter((item) => item.viewId !== viewId), layout] }));
+  }, [snapshot, savedView, historyPreview, mode, semanticSession]);
+
+  const saveModelView = useCallback(async (input: import("./platform/types").SaveViewInput) => {
+    if (!snapshot || historyPreview || mode !== "explore" || input.sourceId !== snapshot.sourceId || input.snapshotId !== snapshot.id) throw new Error("Return to the latest model to save views.");
+    const view = await platform.saveView(input);
+    if (activeSemanticSession.current === semanticSession) {
+      setSemantics((current) => ({ ...current, savedViews: [...current.savedViews.filter((item) => item.id !== view.id), view],
+        viewLayouts: input.positions ? [...(current.viewLayouts ?? []).filter((item) => item.viewId !== view.id), { sourceId: view.sourceId, viewId: view.id, positions: input.positions, viewport: input.viewport, updatedAt: view.updatedAt }] : current.viewLayouts }));
+    }
+    return view;
+  }, [snapshot, historyPreview, mode, semanticSession]);
+
+  const deleteModelView = useCallback(async (id: string) => {
+    if (!snapshot || historyPreview || mode !== "explore") throw new Error("Return to the latest model to delete views.");
+    await platform.deleteView(snapshot.sourceId, id, snapshot.id);
+    if (activeSemanticSession.current === semanticSession) setSemantics((current) => ({ ...current, savedViews: current.savedViews.filter((item) => item.id !== id), viewLayouts: current.viewLayouts?.filter((item) => item.viewId !== id) }));
+  }, [snapshot, historyPreview, mode, semanticSession]);
+
+  function rememberLatestWorkspace() {
+    if (snapshot && !historyPreview) latestWorkspace.current = { snapshot, view: savedView };
+  }
+
+  async function returnToLatestModel() {
     if (!snapshot) return;
-    return platform.saveLayout(snapshot.sourceId, null, positions);
-  }, [snapshot]);
+    const session = semanticSession;
+    const summaries = await platform.listSnapshots(snapshot.sourceId);
+    if (!summaries[0]) return;
+    const latest = await platform.getSnapshot(summaries[0].id);
+    if (activeSemanticSession.current !== session) return;
+    setSnapshot(latest); setHistoryPreview(false); setChangeSet(undefined); setMode("explore");
+    setSavedView(latestWorkspace.current?.snapshot.sourceId === latest.sourceId ? latestWorkspace.current.view : undefined);
+    setQuery(""); setSelectedTable(undefined); setLocateRequest(undefined);
+  }
 
   function handleHistorySnapshot(historySnapshot: DatabaseSnapshot) {
+    rememberLatestWorkspace();
+    setHistoryPreview(true);
     setSnapshot(historySnapshot);
     setChangeSet(undefined);
     // Viewing an older snapshot is the ordinary canvas with different data, not
@@ -706,6 +761,8 @@ export function App() {
   }
 
   function handleComparison(afterSnapshot: DatabaseSnapshot, comparison: SchemaChangeSet) {
+    rememberLatestWorkspace();
+    setHistoryPreview(true);
     setSnapshot(afterSnapshot);
     setChangeSet(comparison);
     setChangesView("list");
@@ -904,6 +961,7 @@ export function App() {
             setRightPanel((panel) => ({ ...panel, expanded: true }));
             window.dispatchEvent(new Event("nodalstudio:inspect-history"));
           }} /> : null}
+          {historyPreview && snapshot ? <div className="saved-views-toolbar" role="status"><span>Historical workspace · layout changes are temporary.</span><button type="button" onClick={() => { void returnToLatestModel().catch((reason: unknown) => publishNotice({ id: "return-latest-failed", title: "Unable to open latest model", message: noticeReason(reason), createdAt: new Date().toISOString() })); }}>Return to latest model</button></div> : null}
           {!preflightOpen && mode === "changes" && changeSet ? (
             <div className="changes-view-toolbar">
               <Segmented
@@ -958,6 +1016,10 @@ export function App() {
               semantics={semantics}
               onAddTablesToDomain={runtime.data?.kind === "desktop" && mode === "explore" && semanticsSnapshot === snapshot ? addTablesToDomain : undefined}
               savedView={savedView}
+              temporaryViewLabel={historyPreview ? "Historical snapshot." : undefined}
+              onApplyView={!historyPreview ? applyView : undefined}
+              onSaveView={!historyPreview ? saveModelView : undefined}
+              onDeleteView={!historyPreview ? deleteModelView : undefined}
               onSaveLayout={saveCanvasLayout}
               layoutLoaded={semanticsSnapshot === snapshot}
               canvasSettings={settings.app.canvas}
@@ -1028,7 +1090,8 @@ export function App() {
             onSaveAnnotation={saveAnnotation}
             onSemanticsChange={changeSemantics}
             onRefreshSemantics={refreshSemantics}
-            onApplyView={setSavedView}
+            onApplyView={applyView}
+            historyPreview={historyPreview}
             onOpenQuery={querySupported && !historicalSelection ? openTableInQuery : undefined}
             onOpenSettings={openSettings}
             onSelectSnapshot={handleHistorySnapshot}

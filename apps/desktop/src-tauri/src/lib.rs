@@ -496,6 +496,9 @@ struct SaveViewInput {
     name: String,
     root_table_keys: Vec<schema_model::ObjectKey>,
     relationship_depth: u8,
+    positions: Option<std::collections::BTreeMap<String, CanvasPosition>>,
+    viewport: Option<semantic_model::CanvasViewport>,
+    snapshot_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -504,6 +507,8 @@ struct SaveLayoutInput {
     source_id: Uuid,
     view_id: Option<Uuid>,
     positions: std::collections::BTreeMap<String, CanvasPosition>,
+    viewport: Option<semantic_model::CanvasViewport>,
+    snapshot_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -718,6 +723,7 @@ struct SemanticBundle {
     knowledge: Vec<semantic_model::knowledge::KnowledgeState>,
     annotations: Vec<ObjectAnnotation>,
     orphaned_annotations: Vec<ObjectAnnotation>,
+    view_layouts: Vec<CanvasLayout>,
     domain_groups: Vec<DomainGroup>,
     saved_views: Vec<SavedView>,
     layout: Option<CanvasLayout>,
@@ -1850,6 +1856,11 @@ async fn get_semantics(
         (Vec::new(), annotations, groups)
     };
     Ok(SemanticBundle {
+        view_layouts: state
+            .store
+            .list_layouts(input.source_id)
+            .await
+            .map_err(safe_store_error)?,
         knowledge,
         annotations,
         orphaned_annotations,
@@ -3439,6 +3450,7 @@ async fn save_view(input: SaveViewInput, state: State<'_, AppState>) -> Result<S
     if input.name.trim().is_empty() || input.root_table_keys.is_empty() {
         return Err("A saved view requires a name and at least one root table.".into());
     }
+    ensure_current_layout_snapshot(&state.store, input.source_id, input.snapshot_id).await?;
     let mut view = SavedView {
         id: input.id.unwrap_or_else(Uuid::new_v4),
         source_id: input.source_id,
@@ -3448,9 +3460,19 @@ async fn save_view(input: SaveViewInput, state: State<'_, AppState>) -> Result<S
         updated_at: Utc::now(),
     };
     view.canonicalize();
+    let initial_layout = input.positions.map(|positions| CanvasLayout {
+        source_id: view.source_id,
+        view_id: Some(view.id),
+        positions,
+        viewport: input.viewport,
+        updated_at: Utc::now(),
+    });
+    if let Some(layout) = &initial_layout {
+        validate_canvas_layout(layout)?;
+    }
     state
         .store
-        .save_view(&view)
+        .save_view_workspace(&view, initial_layout.as_ref())
         .await
         .map_err(safe_store_error)?;
     enqueue_sync_event(
@@ -3464,20 +3486,97 @@ async fn save_view(input: SaveViewInput, state: State<'_, AppState>) -> Result<S
     Ok(view)
 }
 
+async fn ensure_current_layout_snapshot(
+    store: &LocalSnapshotStore,
+    source_id: Uuid,
+    snapshot_id: Option<Uuid>,
+) -> Result<(), String> {
+    if let Some(id) = snapshot_id
+        && store
+            .latest_snapshot(source_id)
+            .await
+            .map_err(safe_store_error)?
+            .is_none_or(|snapshot| snapshot.id != id)
+    {
+        return Err(
+            "The model changed. Return to the latest snapshot before saving this workspace.".into(),
+        );
+    }
+    Ok(())
+}
+
+fn validate_canvas_layout(layout: &CanvasLayout) -> Result<(), String> {
+    if layout.positions.values().any(|p| {
+        !p.x.is_finite()
+            || !p.y.is_finite()
+            || p.width.is_some_and(|v| !v.is_finite() || v <= 0.0)
+            || p.height.is_some_and(|v| !v.is_finite() || v <= 0.0)
+    }) || layout.viewport.is_some_and(|v| {
+        !v.x.is_finite()
+            || !v.y.is_finite()
+            || !v.zoom.is_finite()
+            || !(0.1..=1.8).contains(&v.zoom)
+    }) {
+        return Err("The layout contains invalid coordinates or zoom.".into());
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(clippy::struct_field_names)] // Match the existing source/view/snapshot IPC contract.
+struct DeleteViewInput {
+    source_id: Uuid,
+    view_id: Uuid,
+    snapshot_id: Uuid,
+}
+
+#[tauri::command]
+async fn delete_view(input: DeleteViewInput, state: State<'_, AppState>) -> Result<bool, String> {
+    let _operation = acquire_cloud_operation(&state, input.source_id).await?;
+    ensure_current_layout_snapshot(&state.store, input.source_id, Some(input.snapshot_id)).await?;
+    state
+        .store
+        .delete_view(input.source_id, input.view_id)
+        .await
+        .map_err(safe_store_error)
+}
+
 #[tauri::command]
 async fn save_layout(input: SaveLayoutInput, state: State<'_, AppState>) -> Result<(), String> {
     let _operation = acquire_cloud_operation(&state, input.source_id).await?;
+    ensure_current_layout_snapshot(&state.store, input.source_id, input.snapshot_id).await?;
+    if let Some(id) = input.view_id
+        && !state
+            .store
+            .list_views(input.source_id)
+            .await
+            .map_err(safe_store_error)?
+            .iter()
+            .any(|view| view.id == id)
+    {
+        return Err("This saved view no longer exists.".into());
+    }
     let layout = CanvasLayout {
+        viewport: input.viewport,
         source_id: input.source_id,
         view_id: input.view_id,
         positions: input.positions,
         updated_at: Utc::now(),
     };
+    validate_canvas_layout(&layout)?;
     state
         .store
         .save_layout(&layout)
         .await
         .map_err(safe_store_error)?;
+    if layout.view_id.is_some() {
+        return Ok(());
+    }
+    let layout = CanvasLayout {
+        viewport: None,
+        ..layout
+    };
     enqueue_sync_event(
         &state.store,
         layout.source_id,
@@ -4520,6 +4619,10 @@ async fn build_cloud_bundle(
                 .get_layout(input.source_id, None)
                 .await
                 .map_err(safe_store_error)?
+                .map(|layout| CanvasLayout {
+                    viewport: None,
+                    ..layout
+                })
         } else {
             None
         },
@@ -4858,6 +4961,7 @@ pub fn run() {
                 save_annotation,
                 save_domain_group,
                 save_view,
+                delete_view,
                 save_layout,
                 explain_schema,
                 table_understanding::prepare_table_explanation,
@@ -4878,6 +4982,85 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn layout_snapshot_guard_rejects_history_and_other_sources() {
+        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
+        let source = Uuid::new_v4();
+        let mut before = DatabaseSnapshot::new(
+            source,
+            schema_model::DatabaseInfo {
+                name: "layout-fixture".into(),
+                database_type: DatabaseType::PostgreSql,
+                version: "17".into(),
+            },
+            vec![],
+        );
+        before.canonicalize().unwrap();
+        store.save_captured_snapshot(&before).await.unwrap();
+        assert!(
+            ensure_current_layout_snapshot(&store, source, Some(before.id))
+                .await
+                .is_ok()
+        );
+        let mut after = DatabaseSnapshot::new(
+            source,
+            before.database.clone(),
+            vec![schema_model::SchemaDefinition {
+                name: "public".into(),
+                tables: vec![schema_model::TableDefinition::empty("public", "orders")],
+                views: vec![],
+                enums: vec![],
+            }],
+        );
+        after.canonicalize().unwrap();
+        store.save_captured_snapshot(&after).await.unwrap();
+        assert!(
+            ensure_current_layout_snapshot(&store, source, Some(before.id))
+                .await
+                .is_err()
+        );
+        assert!(
+            ensure_current_layout_snapshot(&store, source, Some(after.id))
+                .await
+                .is_ok()
+        );
+        assert!(
+            ensure_current_layout_snapshot(&store, Uuid::new_v4(), Some(after.id))
+                .await
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn validates_workspace_geometry() {
+        let mut layout = CanvasLayout {
+            source_id: Uuid::new_v4(),
+            view_id: None,
+            positions: std::collections::BTreeMap::new(),
+            viewport: Some(semantic_model::CanvasViewport {
+                x: 0.0,
+                y: 1.0,
+                zoom: 0.5,
+            }),
+            updated_at: Utc::now(),
+        };
+        assert!(validate_canvas_layout(&layout).is_ok());
+        layout.viewport.as_mut().unwrap().zoom = 0.0;
+        assert!(validate_canvas_layout(&layout).is_err());
+        layout.viewport = None;
+        layout.positions.insert(
+            "public.orders".into(),
+            CanvasPosition {
+                x: f64::NAN,
+                y: 0.0,
+                width: None,
+                height: None,
+                pinned: false,
+            },
+        );
+        assert!(validate_canvas_layout(&layout).is_err());
+    }
 
     #[test]
     fn rejects_incomplete_connection_input() {

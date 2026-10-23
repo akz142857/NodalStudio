@@ -142,6 +142,18 @@ export function applyStoredPositions(
   return nodes.map((node) => applyStoredNodeLayout(node, positions[node.id]));
 }
 
+/** Restore existing nodes exactly and place only missing nodes around them. */
+export async function restoreOrExtendLayout(nodes: TableNode[], edges: Edge[], positions: Record<string, CanvasNodeLayout> | undefined, options: Partial<LayoutOptions> = {}): Promise<TableNode[]> {
+  const restored = new Map(nodes.flatMap((node) => {
+    const saved = applyStoredPositions([node], positions);
+    return saved ? [[node.id, saved[0]] as const] : [];
+  }));
+  if (restored.size === nodes.length) return nodes.map((node) => restored.get(node.id)!);
+  const prepared = nodes.map((node) => restored.has(node.id) ? setTablePinned(restored.get(node.id)!, true) : node);
+  const arranged = await layoutSchemaGraph(prepared, edges, options);
+  return arranged.map((node) => restored.get(node.id) ?? node);
+}
+
 export function persistLayout(snapshotFingerprint: string, nodes: TableNode[]): void {
   localStorage.setItem(layoutStorageKey(snapshotFingerprint), JSON.stringify(serializeCanvasLayout(nodes)));
   localStorage.removeItem(legacyLayoutStorageKey(snapshotFingerprint));

@@ -212,6 +212,7 @@ export interface CanvasLayout {
   sourceId: string;
   viewId: string | null;
   positions: Record<string, CanvasNodeLayout>;
+  viewport?: { x: number; y: number; zoom: number };
   updatedAt: string;
 }
 
@@ -294,6 +295,7 @@ export interface SemanticBundle {
   knowledge?: import("./knowledge-types").KnowledgeState[];
   annotations: ObjectAnnotation[];
   orphanedAnnotations: ObjectAnnotation[];
+  viewLayouts?: CanvasLayout[];
   domainGroups: DomainGroup[];
   savedViews: SavedView[];
   layout: CanvasLayout | null;
@@ -421,6 +423,9 @@ export interface SaveDomainGroupInput {
 }
 
 export interface SaveViewInput {
+  positions?: Record<string, CanvasNodeLayout>;
+  viewport?: CanvasLayout["viewport"];
+  snapshotId?: string;
   id?: string;
   sourceId: string;
   name: string;
@@ -586,10 +591,13 @@ export interface NodalStudioPlatform {
   saveAnnotation(input: SaveAnnotationInput): Promise<ObjectAnnotation>;
   saveDomainGroup(input: SaveDomainGroupInput): Promise<DomainGroup>;
   saveView(input: SaveViewInput): Promise<SavedView>;
+  deleteView(sourceId: string, viewId: string, snapshotId: string): Promise<boolean>;
   saveLayout(
     sourceId: string,
     viewId: string | null,
     positions: Record<string, CanvasNodeLayout>,
+    viewport?: CanvasLayout["viewport"],
+    snapshotId?: string,
   ): Promise<void>;
   explainSchema(input: ExplainSchemaInput): Promise<AiExplanation>;
   testAiProvider(sourceId: string): Promise<import("./settings-types").AiProviderTestResult>;

@@ -1,0 +1,15 @@
+CREATE SCHEMA synthetic_shop;
+CREATE TABLE synthetic_shop.customers (id bigint PRIMARY KEY, email text NOT NULL);
+CREATE TABLE synthetic_shop.products (id bigint PRIMARY KEY, sku text NOT NULL);
+CREATE TABLE synthetic_shop.orders (id bigint PRIMARY KEY, customer_id bigint REFERENCES synthetic_shop.customers(id), order_number text, status bigint, total numeric);
+CREATE TABLE synthetic_shop.order_items (id bigint PRIMARY KEY, order_id bigint REFERENCES synthetic_shop.orders(id), product_id bigint REFERENCES synthetic_shop.products(id), quantity bigint, unit_price numeric);
+CREATE TABLE synthetic_shop.payments (id bigint PRIMARY KEY, order_id bigint REFERENCES synthetic_shop.orders(id), attempt_number bigint, status bigint, amount numeric, provider_reference text);
+CREATE TABLE synthetic_shop.shipments (id bigint PRIMARY KEY, order_id bigint REFERENCES synthetic_shop.orders(id), status bigint);
+CREATE TABLE synthetic_shop.audit_events (id bigint PRIMARY KEY, entity_id bigint, event_type text);
+DO $$ BEGIN FOR i IN 1..23 LOOP EXECUTE format('CREATE TABLE synthetic_shop.aux_%s (id bigint PRIMARY KEY, note text)', i); END LOOP; END $$;
+CREATE ROLE nodal_model_reader LOGIN PASSWORD 'synthetic-stage1-only';
+GRANT CONNECT ON DATABASE nodal_model_fixture TO nodal_model_reader;
+GRANT USAGE ON SCHEMA synthetic_shop TO nodal_model_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA synthetic_shop TO nodal_model_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA synthetic_shop GRANT SELECT ON TABLES TO nodal_model_reader;
+ALTER ROLE nodal_model_reader SET default_transaction_read_only = on;

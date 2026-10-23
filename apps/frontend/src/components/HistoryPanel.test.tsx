@@ -49,6 +49,7 @@ const changeSet: SchemaChangeSet = {
 
 function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"]): NodalStudioPlatform {
   return {
+    deleteView: vi.fn(),
     pickConnectionFile: vi.fn(),
     exportQueryResult: vi.fn(),
     prepareKnowledgeDraft: vi.fn(),

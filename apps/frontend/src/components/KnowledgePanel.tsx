@@ -9,6 +9,8 @@ import type {
 
 interface KnowledgePanelProps {
   sourceId: string;
+  snapshotId?: string;
+  readOnly?: boolean;
   selectedTable?: TableDefinition;
   semantics: SemanticBundle;
   platform: NodalStudioPlatform;
@@ -18,6 +20,8 @@ interface KnowledgePanelProps {
 
 export function KnowledgePanel({
   sourceId,
+  snapshotId,
+  readOnly,
   selectedTable,
   semantics,
   platform,
@@ -56,12 +60,13 @@ export function KnowledgePanel({
   }
 
   async function createView() {
-    if (!selectedTable || !viewName.trim()) return;
+    if (readOnly || !selectedTable || !viewName.trim()) return;
     setPending(true);
     setError(undefined);
     try {
       const view = await platform.saveView({
         sourceId,
+        snapshotId,
         name: viewName,
         rootTableKeys: [selectedTable.key],
         relationshipDepth: depth,
@@ -181,7 +186,7 @@ export function KnowledgePanel({
           </select></label>
           <button
             type="button"
-            disabled={!selectedTable || !viewName.trim() || pending}
+            disabled={readOnly || !selectedTable || !viewName.trim() || pending}
             onClick={() => void createView()}
           >
             Save view
