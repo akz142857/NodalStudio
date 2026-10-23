@@ -14,14 +14,18 @@ export function DatabaseSnapshotHeader({ snapshot, latestSnapshotId, refreshStat
   viewActions?: ReactNode;
 }) {
   const historical = Boolean(latestSnapshotId && latestSnapshotId !== snapshot.id);
-  const captured = `Schema captured ${formatSnapshotTime(snapshot.capturedAt)}`;
+  // File/DDL previews deliberately have no database capture timestamp.
+  const hasCaptureTime = Number.isFinite(Date.parse(snapshot.capturedAt));
+  const captured = hasCaptureTime ? `Schema captured ${formatSnapshotTime(snapshot.capturedAt)}` : "Capture time unavailable";
   return <header className="model-workspace-header" aria-label="Database snapshot context">
     <div className="model-workspace-title">
       {title ?? <h2>{historical ? "Historical model" : "Full model"}</h2>}
       <div className="model-workspace-subtitle"><span title={snapshot.database.name}>{snapshot.database.name}</span>
         {tableCount !== undefined ? <span> · {tableCount} tables</span> : null}
         {historical ? <span className="snapshot-version-badge">Historical snapshot</span> : null}
-        <time className="visually-hidden" dateTime={snapshot.capturedAt}>{captured}</time>
+        {hasCaptureTime
+          ? <time className="visually-hidden" dateTime={snapshot.capturedAt}>{captured}</time>
+          : <span className="visually-hidden">{captured}</span>}
       </div>
       {refreshState !== "idle" ? <span className="workspace-refresh-status" role={refreshState === "error" ? "alert" : "status"}>{refreshState === "refreshing" ? "Refreshing schema…" : "Refresh failed · showing captured model"}</span> : null}
     </div>

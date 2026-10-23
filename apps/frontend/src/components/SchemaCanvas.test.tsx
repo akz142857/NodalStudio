@@ -330,6 +330,7 @@ describe("SchemaCanvas table selection", () => {
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0][0]["public.orders"].x).toBe(4000);
     expect(save.mock.calls[0][0]["public.orders"].pinned).toBeUndefined();
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 
   it("also keeps focus layouts temporary, including automatic layout", async () => {

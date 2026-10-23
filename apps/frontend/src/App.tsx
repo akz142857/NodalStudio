@@ -1047,10 +1047,11 @@ export function App() {
               <div className="canvas-grid" />
               <div className="hero-card">
                 <p className="eyebrow">EXPLORE · CHANGES · HISTORY</p>
-                <h2>Your database model, kept visible.</h2>
+                <h2>{dataSources.length ? "Select a database to explore." : "Your database model, kept visible."}</h2>
                 <p>
-                  Connect a read-only PostgreSQL source to generate an ER map and track
-                  every schema change over time.
+                  {dataSources.length
+                    ? "Choose a saved connection from the database picker to open its local model."
+                    : "Connect a database to generate an ER map and track every schema change over time."}
                 </p>
               </div>
             </>

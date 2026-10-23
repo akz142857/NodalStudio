@@ -41,6 +41,10 @@ export function layoutQualityOptions(totalNodes: number) {
   } : {
     "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
     "elk.layered.thoroughness": "7",
-    "elk.layered.compaction.postCompaction.strategy": "EDGE_LENGTH",
+    // EDGE_LENGTH can reject valid unequal card bounds with "Invalid hitboxes
+    // for scanline constraint calculation" (see the real-ELK regression).
+    // Keep layered placement/crossing reduction, but use ELK's default of no
+    // optional post-compaction. We render our own field edges after placement.
+    "elk.layered.compaction.postCompaction.strategy": "NONE",
   };
 }

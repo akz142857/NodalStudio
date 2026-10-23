@@ -4,7 +4,7 @@ import { connectionFailure, type ConnectionTestState } from "./connection-test-s
 import { ConnectionSecurityFields } from "./ConnectionSecurityFields";
 import { ConnectionManager } from "./ConnectionManager";
 import { SchemaObjectMenu } from "./SchemaObjectMenu";
-import { ActionIcon } from "./ActionIcon";
+import { DataSourcePicker } from "./DataSourcePicker";
 import "./model-navigation.css";
 import { TreeDisclosureIcon } from "./TreeDisclosureIcon";
 import type {
@@ -20,7 +20,7 @@ interface ConnectionPanelProps {
   enabled: boolean;
   /** The source whose snapshot is on the canvas; its objects nest beneath it. */
   activeSourceId?: string;
-  /** The schema tree for the active source, rendered as that row's children. */
+  /** The schema tree rendered below the active source's picker. */
   children?: ReactNode;
   platform: NodalStudioPlatform;
   onSnapshot: (result: CaptureSnapshotResult) => void;
@@ -247,18 +247,22 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
     }
   }
 
+  async function openSavedSnapshot(profile: DataSourceProfile) {
+    const snapshots = await platform.listSnapshots(profile.id);
+    const latest = snapshots[0];
+    if (!latest) {
+      throw new Error("This data source has no saved schema snapshot. Edit the connection to create one.");
+    }
+    const snapshot = await platform.getSnapshot(latest.id);
+    onSnapshot({ snapshot, stored: false, changeSet: null });
+  }
+
   async function handleExistingOpen(profile: DataSourceProfile) {
     setPending(true);
     setError(undefined);
     setConnectionResult(undefined);
     try {
-      const snapshots = await platform.listSnapshots(profile.id);
-      const latest = snapshots[0];
-      if (!latest) {
-        throw new Error("This data source has no saved schema snapshot. Edit the connection to create one.");
-      }
-      const snapshot = await platform.getSnapshot(latest.id);
-      onSnapshot({ snapshot, stored: false, changeSet: null });
+      await openSavedSnapshot(profile);
     } catch (reason) {
       setError(connectionFailure(reason).message);
     } finally {
@@ -309,9 +313,17 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
         deleteSemantics: true,
         removeDatabaseCredential: false,
       });
-      setProfiles((current) => current.filter((profile) => profile.id !== editingProfile.id));
+      const remaining = profiles.filter((profile) => profile.id !== editingProfile.id);
+      setProfiles(remaining);
       setDialogOpen(false);
+      setEditingProfile(undefined);
+      setConnectionResult(undefined);
       onSourceDeleted?.(editingProfile.id);
+      // Removing the current source should keep the workspace useful. Opening
+      // the next saved model uses local snapshots and needs no live connection.
+      if (editingProfile.id === activeSourceId && remaining[0]) {
+        await openSavedSnapshot(remaining[0]);
+      }
     } catch (reason) {
       setError(connectionFailure(reason).message);
     } finally {
@@ -340,25 +352,15 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
         <h2 id="data-sources-title">Databases</h2>
         <button type="button" className="create-connection-button" aria-label="Add database" onClick={openCreateDialog} disabled={!enabled || pending}><span aria-hidden="true">＋</span> Add</button>
       </header>
-      {activeProfile ? <div className="source-navigation-current">
-        <div className="source-navigation-picker">
-          <div className="source-navigation-summary" aria-hidden="true">
-            <ActionIcon name="database" />
-            <div><strong>{activeProfile.displayName}</strong><span>{activeProfile.database}</span></div>
-            <ActionIcon name="chevronDown" />
-          </div>
-          <select id="active-data-source" aria-label="Data source" value={activeProfile.id} disabled={pending} title={`Switch database: ${activeProfile.displayName} — ${activeProfile.database}`} onChange={(event) => {
-            const profile = profiles.find((item) => item.id === event.target.value);
-            if (profile && profile.id !== activeSourceId) void handleExistingOpen(profile);
-          }}>
-            {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}</option>)}
-          </select>
-        </div>
+      {profiles.length > 0 ? <div className="source-navigation-current">
+        <DataSourcePicker profiles={profiles} activeProfile={activeProfile} disabled={!enabled || pending}
+          onSelect={(profile) => { void handleExistingOpen(profile); }} />
         <div className="source-navigation-details">
-          <span>{activeProfile.databaseType === "mySql" ? "MySQL" : "PostgreSQL"}</span>
-          <button type="button" aria-label={`Edit ${activeProfile.displayName}`} title="Edit connection" disabled={pending} onClick={() => openEditDialog(activeProfile)}>Edit connection…</button>
+          {activeProfile
+            ? <button type="button" aria-label={`Edit ${activeProfile.displayName}`} title="Edit connection" disabled={pending} onClick={() => openEditDialog(activeProfile)}>Edit connection…</button>
+            : <button type="button" disabled={!enabled || pending} onClick={() => setManagerOpen(true)}>Manage connections…</button>}
         </div>
-        <button className="source-disclosure" type="button" aria-label={`${expanded ? "Collapse" : "Expand"} ${activeProfile.displayName}`} aria-expanded={expanded} onClick={() => setDisclosure({ sourceId: activeSourceId, collapsed: expanded })}><TreeDisclosureIcon open={expanded} /><span>Model navigation</span></button>
+        {activeProfile ? <button className="source-disclosure" type="button" aria-label={`${expanded ? "Collapse" : "Expand"} ${activeProfile.displayName}`} aria-expanded={expanded} onClick={() => setDisclosure({ sourceId: activeSourceId, collapsed: expanded })}><TreeDisclosureIcon open={expanded} /><span>Model navigation</span></button> : null}
       </div> : null}
       {menu ? <SchemaObjectMenu {...menu} name="Databases" actions={[
         { label: "New connection…", disabled: !enabled || pending, run: openCreateDialog },
@@ -371,42 +373,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
         onOpen={(profile) => { setManagerOpen(false); if (profile.id !== activeSourceId) void handleExistingOpen(profile); }} /> : null}
       {profiles.length > 0 ? (
         <div className="saved-sources">
-          {profiles.filter((profile) => !activeProfile || profile.id === activeSourceId).map((profile) => {
-            const active = profile.id === activeSourceId;
-            const expanded = active && !(disclosure.sourceId === profile.id && disclosure.collapsed);
-            return (
-              <div className="tree-node" key={profile.id}>
-                <div className="tree-row tree-row-source" data-active={active || undefined} hidden={active}>
-                  <button
-                    type="button"
-                    className="tree-row-main"
-                    aria-label={active ? `${expanded ? "Collapse" : "Expand"} ${profile.displayName}` : `Open local snapshot for ${profile.displayName}`}
-                    aria-expanded={expanded}
-                    title={`${profile.host}:${profile.port}/${profile.database}`}
-                    disabled={pending}
-                    onClick={() => {
-                      if (active) setDisclosure({ sourceId: profile.id, collapsed: expanded });
-                      else void handleExistingOpen(profile);
-                    }}
-                  >
-                    <TreeDisclosureIcon open={expanded} />
-                    <span className="tree-label">{profile.displayName}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="tree-row-action"
-                    aria-label={`Edit ${profile.displayName}`}
-                    title="Edit connection"
-                    disabled={pending}
-                    onClick={() => openEditDialog(profile)}
-                  >
-                    <span aria-hidden="true">✎</span>
-                  </button>
-                </div>
-                {active ? <div hidden={!expanded}>{children}</div> : null}
-              </div>
-            );
-          })}
+          {activeProfile ? <div key={activeProfile.id} hidden={!expanded}>{children}</div> : null}
         </div>
       ) : (
         <button type="button" className="empty-data-source" onClick={openCreateDialog} disabled={!enabled}>

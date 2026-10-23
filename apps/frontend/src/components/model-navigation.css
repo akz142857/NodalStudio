@@ -8,23 +8,16 @@
 .source-navigation-heading button > span { font-size: 14px; line-height: 16px; color: var(--ds-secondary); }
 .source-navigation-heading button:hover:not(:disabled), .source-navigation-details button:hover:not(:disabled), .source-disclosure:hover { background: var(--ds-hover); }
 .source-navigation-current { min-width: 0; }
-.source-navigation-picker { position: relative; min-width: 0; border: 1px solid var(--ds-border); border-radius: 8px; background: var(--ds-subtle); transition: background-color 120ms; }
-.source-navigation-picker:hover { background: var(--ds-hover); }
-.source-navigation-summary { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 10px; pointer-events: none; }
-.source-navigation-summary > svg { flex: none; width: 18px; height: 18px; color: var(--ds-secondary); }
-.source-navigation-summary > svg:last-child { width: 12px; height: 12px; margin-left: 2px; }
-.source-navigation-summary > div { flex: 1; min-width: 0; }
-.source-navigation-summary strong, .source-navigation-summary span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.source-navigation-summary strong { color: var(--ds-text); font: 500 13px/18px var(--ds-font-ui); }
-.source-navigation-summary span { margin-top: 2px; color: var(--ds-secondary); font: 400 11px/15px var(--ds-font-ui); }
-/* Keep the native pop-up, keyboard navigation and accessibility semantics while
-   rendering a two-line label with reliable WebKit ellipsis. */
-.source-navigation-picker select { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.source-navigation-picker:has(select:focus-visible) { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
-.source-navigation-picker:has(select:disabled) { opacity: .5; }
-.source-navigation-picker option { background: var(--ds-surface); }
-.source-navigation-details { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 5px 2px 12px; }
-.source-navigation-details > span { flex: 1; min-width: 0; color: var(--ds-tertiary); font: 400 10px/15px var(--ds-font-ui); }
+.source-navigation-picker { display: flex; align-items: center; gap: 9px; width: 100%; min-width: 0; padding: 10px; text-align: left; color: var(--ds-text); border: 1px solid var(--ds-border); border-radius: 8px; background: var(--ds-subtle); cursor: pointer; transition: background-color 120ms; }
+.source-navigation-picker:hover:not([aria-disabled="true"]), .source-navigation-picker[aria-expanded="true"] { background: var(--ds-hover); }
+.source-navigation-picker[aria-disabled="true"] { opacity: .45; cursor: default; }
+.source-navigation-picker > svg { flex: none; width: 18px; height: 18px; color: var(--ds-secondary); }
+.source-navigation-picker > svg:last-child { width: 12px; height: 12px; margin-left: 2px; }
+.source-navigation-label { flex: 1; min-width: 0; }
+.source-navigation-label strong, .source-navigation-label > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-navigation-label strong { color: var(--ds-text); font: 500 13px/18px var(--ds-font-ui); }
+.source-navigation-label > span { margin-top: 2px; color: var(--ds-secondary); font: 400 11px/15px var(--ds-font-ui); }
+.source-navigation-details { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; margin: 5px 2px 12px; }
 .source-navigation-details button { flex: none; min-height: 26px; padding: 3px 5px; border: 0; border-radius: 5px; background: transparent; color: var(--ds-secondary); font: 400 11px/16px var(--ds-font-ui); cursor: pointer; }
 .source-disclosure { display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 3px; border: 0; border-radius: 5px; color: var(--ds-secondary); background: transparent; font: 11px var(--ds-font-ui); text-align: left; cursor: pointer; }
 .source-disclosure svg { width: 12px; height: 12px; flex: none; }
@@ -40,6 +33,20 @@
 .model-navigation .tree-node-type { margin-left: 10px; }
 .model-navigation .tree-row-object { margin-left: 22px; }
 .model-navigation .tree-row small { padding-right: 3px; font-size: 10px; }
+.data-source-menu { position: fixed; z-index: 2000; box-sizing: border-box; width: 300px; padding: 6px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--ds-border); border-radius: 9px; color: var(--ds-text); background: var(--ds-surface); box-shadow: 0 12px 32px #0005; font-family: var(--ds-font-ui); }
+.data-source-menu-heading { padding: 4px 8px 8px; color: var(--ds-secondary); font: 500 11px/16px var(--ds-font-ui); }
+.data-source-menu > button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 0; border-radius: 6px; background: transparent; color: var(--ds-text); text-align: left; cursor: pointer; }
+.data-source-menu > button + button { margin-top: 3px; }
+.data-source-menu > button:hover { background: var(--ds-hover); }
+.data-source-menu > button[aria-checked="true"] { background: var(--ds-selection); color: var(--ds-selection-text); }
+.data-source-menu > button:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: -2px; }
+.data-source-menu > button > svg { flex: none; width: 17px; height: 17px; color: var(--ds-secondary); }
+.data-source-menu-label { flex: 1; min-width: 0; }
+.data-source-menu-label strong, .data-source-menu-label > span, .data-source-menu-label small { display: block; overflow-wrap: anywhere; }
+.data-source-menu-label strong { font: 500 13px/18px var(--ds-font-ui); }
+.data-source-menu-label > span, .data-source-menu-label small { margin-top: 3px; color: var(--ds-secondary); font: 400 11px/15px var(--ds-font-ui); }
+.data-source-menu-check { flex: none; width: 14px; visibility: hidden; font-size: 14px; }
+.data-source-menu > button[aria-checked="true"] .data-source-menu-check { visibility: visible; }
 .model-navigation .schema-object-search { margin: 4px 0 10px; }
 .model-navigation .schema-object-search input { box-sizing: border-box; height: 29px; border-color: transparent; background: var(--ds-subtle); padding-left: 28px; font-size: 11px; }
 .model-navigation .schema-object-search > svg { top: 8px; left: 8px; }
