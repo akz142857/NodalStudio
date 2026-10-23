@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DatabaseSnapshot, KnowledgeDraft, KnowledgeDraftInput, NodalStudioPlatform, SemanticBundle, TableDefinition } from "../platform";
 import { objectId, objectLabel } from "../graph/business-discovery";
 import "./knowledge-review.css";
-interface EditorProps { platform: NodalStudioPlatform; input: KnowledgeDraftInput; sourceId: string; label?: string; onSaved: () => Promise<void> }
+interface EditorProps { platform: NodalStudioPlatform; input: KnowledgeDraftInput; sourceId: string; label?: string; chinese?: boolean; onSaved: () => Promise<void> }
 export function KnowledgeEditor(props: EditorProps) { return <EditorSession key={JSON.stringify([props.input, props.sourceId])} {...props} />; }
-function EditorSession({ platform, input, sourceId, label = "Review and confirm description", onSaved }: EditorProps) {
+function EditorSession({ platform, input, sourceId, label = "Review and confirm description", chinese = false, onSaved }: EditorProps) {
+  const t = (en: string, zh: string) => chinese ? zh : en;
   const [draft, setDraft] = useState<KnowledgeDraft>(); const [text, setText] = useState("");
   const [phase, setPhase] = useState("idle"); const [error, setError] = useState("");
   const version = useRef(0); const currentId = useRef<string | undefined>(undefined); const busy = useRef(false);
@@ -42,16 +43,16 @@ function EditorSession({ platform, input, sourceId, label = "Review and confirm 
     finally { if (epoch === version.current) busy.current = false; }
   }
   return <section className="knowledge-review" aria-label="Knowledge confirmation">
-    <button type="button" onClick={() => void prepare()} disabled={phase === "preparing" || phase === "saving"}>{draft ? "Prepare a fresh comparison" : label}</button>
-    {phase === "preparing" || (draft && phase !== "saved") ? <button type="button" onClick={() => cancel("cancelled")} disabled={phase === "saving"}>Cancel draft</button> : null}
-    {draft ? <><h4>{objectLabel(draft.target)} · {draft.target.kind}</h4><p className="ai-policy">Confirming records a team statement on this device, not a database fact. Keep uncertainty and unresolved business questions. Tags, owner and core-table flag are preserved.</p>
-      <div className="knowledge-comparison"><div><strong>Current description</strong><p>{draft.oldDescription || "No saved description"}</p></div><label>Proposed description<textarea rows={5} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} disabled={phase === "saving" || phase === "saved"} /></label></div>
-      <details><summary>Current review evidence and origin</summary><p>{draft.origin.kind} · {draft.origin.provider ?? "Local review"} {draft.origin.model ?? ""}</p><pre>{JSON.stringify(draft.origin.evidence, null, 2)}</pre></details>
-      <p>Review expires {new Date(draft.expiresAt).toLocaleTimeString()}. This draft stays local until you confirm.</p>
-      {phase !== "saved" ? <button type="button" onClick={() => void confirm()} disabled={phase === "preparing" || phase === "saving" || !text.trim()}>{phase === "saving" ? "Saving…" : "Confirm this description"}</button> : null}
+    <button type="button" onClick={() => void prepare()} disabled={phase === "preparing" || phase === "saving"}>{draft ? t("Prepare a fresh comparison", "重新核对改动") : label}</button>
+    {phase === "preparing" || (draft && phase !== "saved") ? <button type="button" onClick={() => cancel("cancelled")} disabled={phase === "saving"}>{t("Cancel draft", "取消草稿")}</button> : null}
+    {draft ? <><h4>{objectLabel(draft.target)} · {draft.target.kind}</h4><p className="ai-policy">{t("Confirming records a team statement on this device, not a database fact. Keep uncertainty and unresolved business questions. Tags, owner and core-table flag are preserved.", "保存为本机确认的团队说明。请保留推测与待确认事项；不会修改数据库结构、标签或负责人。")}</p>
+      <div className="knowledge-comparison"><div><strong>{t("Current description", "当前说明")}</strong><p>{draft.oldDescription || t("No saved description", "暂无已保存说明")}</p></div><label>{t("Proposed description", "拟保存的说明")}<textarea rows={5} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} disabled={phase === "saving" || phase === "saved"} /></label></div>
+      <details><summary>{t("Current review evidence and origin", "本次依据与来源")}</summary><p>{draft.origin.kind} · {draft.origin.provider ?? "Local review"} {draft.origin.model ?? ""}</p><pre>{JSON.stringify(draft.origin.evidence, null, 2)}</pre></details>
+      <p className="ai-policy">{t("Local draft; confirm before saving. Review expires", "草稿仅在本地；确认后才保存。本次核对有效至")} {new Date(draft.expiresAt).toLocaleTimeString()}</p>
+      {phase !== "saved" ? <button type="button" onClick={() => void confirm()} disabled={phase === "preparing" || phase === "saving" || !text.trim()}>{phase === "saving" ? t("Saving…", "正在保存…") : t("Confirm this description", "确认保存说明")}</button> : null}
     </> : null}
-    {error ? <p role="alert">{error} Your edited draft is retained. Retry, or prepare a fresh comparison if the evidence changed.</p> : null}
-    <p role="status">{phase === "saved" ? "Description confirmed on this device." : phase === "expired" ? "Draft expired. Review current evidence again." : phase === "cancelled" ? "Draft cancelled." : ""}</p>
+    {error ? <p role="alert">{error} {t("Your edited draft is retained. Retry, or prepare a fresh comparison if the evidence changed.", "已保留你编辑的草稿。可重试；依据变化后请重新核对。")}</p> : null}
+    <p role="status">{phase === "saved" ? t("Description confirmed on this device.", "说明已在本机确认。") : phase === "expired" ? t("Draft expired. Review current evidence again.", "草稿已过期，请重新核对。") : phase === "cancelled" ? t("Draft cancelled.", "已取消草稿。") : ""}</p>
   </section>;
 }
 export function KnowledgeReview({ platform, snapshot, semantics, table, desktop, onRefresh }: { platform: NodalStudioPlatform; snapshot: DatabaseSnapshot; semantics: SemanticBundle; table?: TableDefinition; desktop: boolean; onRefresh: () => Promise<void> }) {

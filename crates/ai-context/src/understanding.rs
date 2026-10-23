@@ -58,6 +58,8 @@ pub struct Interpretation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelUnderstanding {
+    pub schema_version: u8,
+    pub summary: Option<Interpretation>,
     pub interpretations: Vec<Interpretation>,
     pub unknowns: Vec<String>,
 }
@@ -430,23 +432,32 @@ pub fn validate_model_output(
     }
     let result: ModelUnderstanding = serde_json::from_str(text).map_err(|_| "The model returned invalid structured output. Retry with a model that follows the displayed JSON contract.".to_owned())?;
     let known: BTreeSet<_> = context.evidence.iter().map(|e| e.id.as_str()).collect();
-    if result.interpretations.len() > 12
-        || result.unknowns.len() > 12
-        || result.interpretations.iter().any(|claim| {
-            claim.text.trim().is_empty()
-                || claim.text.chars().count() > 2_000
-                || claim.evidence_ids.is_empty()
-                || claim.evidence_ids.len() > 20
-                || claim
-                    .evidence_ids
-                    .iter()
-                    .any(|id| !known.contains(id.as_str()))
-        })
+    if result.schema_version != 2
+        || result.summary.is_none()
+        || result.interpretations.len() > 3
+        || result.unknowns.len() > 3
+        || result
+            .summary
+            .iter()
+            .chain(&result.interpretations)
+            .any(|claim| {
+                claim.text.trim().is_empty()
+                    || claim.text.chars().count() > 600
+                    || claim.evidence_ids.is_empty()
+                    || claim.evidence_ids.len() > 20
+                    || claim
+                        .evidence_ids
+                        .iter()
+                        .any(|id| !known.contains(id.as_str()))
+            })
         || result
             .unknowns
             .iter()
-            .any(|s| s.trim().is_empty() || s.chars().count() > 2_000)
-        || (result.interpretations.is_empty() && result.unknowns.is_empty())
+            .any(|s| s.trim().is_empty() || s.chars().count() > 150)
+        || result
+            .interpretations
+            .iter()
+            .any(|claim| claim.text.chars().count() > 250)
     {
         return Err("The model returned unsupported evidence or exceeded the answer limits. No claims were accepted.".into());
     }
@@ -454,11 +465,12 @@ pub fn validate_model_output(
 }
 
 pub fn offline_understanding() -> ModelUnderstanding {
-    ModelUnderstanding { interpretations: Vec::new(), unknowns: vec![
-        "What does one row represent? Keys identify records, but metadata alone cannot confirm the business grain.".into(),
-        "Status meanings, amount units, retry behavior and workflow order require business or code evidence.".into(),
-        "Offline mode shows deterministic structural evidence, not language-model inference.".into(),
-    ] }
+    ModelUnderstanding {
+        schema_version: 2,
+        summary: None,
+        interpretations: Vec::new(),
+        unknowns: Vec::new(),
+    }
 }
 
 /// Append only locally verified team statements whose complete basis fits the send scope.

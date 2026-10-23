@@ -236,7 +236,7 @@ export function InspectorPanel({
       {selectedTable && !historicalSelection ? <div hidden={segment !== "ai"}>
         <TableAiAssistant
           key={evidenceScope}
-          platform={platform} snapshot={snapshot} table={selectedTable} settings={settings}
+          platform={platform} snapshot={snapshot} table={selectedTable} settings={settings} active={segment === "ai"}
           onKnowledgeSaved={onRefreshSemantics}
           domains={semantics.domainGroups} desktop={runtime?.kind === "desktop"}
           onOpenSettings={() => onOpenSettings("ai")}

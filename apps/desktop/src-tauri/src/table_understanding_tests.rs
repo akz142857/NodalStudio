@@ -111,7 +111,7 @@ async fn server() -> (
 }
 
 fn answer() -> String {
-    serde_json::json!({"choices":[{"message":{"content":r#"{"interpretations":[{"text":"Possibly an order record; grain needs confirmation.","evidenceIds":["e1"]}],"unknowns":["What identifies one order?"]}"#}}]}).to_string()
+    serde_json::json!({"choices":[{"message":{"content":r#"{"schemaVersion":2,"summary":{"text":"Possibly an order record; grain needs confirmation.","evidenceIds":["e1"]},"interpretations":[{"text":"Possibly an order record; grain needs confirmation.","evidenceIds":["e1"]}],"unknowns":["What identifies one order?"]}"#}}]}).to_string()
 }
 
 fn completed_result(task: &Task) -> TableResult {
@@ -125,6 +125,11 @@ fn completed_result(task: &Task) -> TableResult {
         model: preview.model.clone(),
         generated_at: "2026-10-18T10:00:00Z".into(),
         answer: ModelUnderstanding {
+            schema_version: 2,
+            summary: Some(understanding::Interpretation {
+                text: "Possibly an order record; grain needs confirmation.".into(),
+                evidence_ids: vec!["e1".into()],
+            }),
             interpretations: vec![understanding::Interpretation {
                 text: "Possibly an order record; grain needs confirmation.".into(),
                 evidence_ids: vec!["e1".into()],
@@ -143,7 +148,7 @@ async fn knowledge_draft_uses_one_current_claim_and_cancel_prevents_late_answer_
     tasks.tasks.lock().await.insert(id, request.clone());
     let result = completed_result(&request);
     tasks.finish(id, request, Ok(result)).await.unwrap();
-    let (preview, draft, origin) = tasks.draft_source(&app, id, 0).await.unwrap();
+    let (preview, draft, origin) = tasks.draft_source(&app, id, Some(0)).await.unwrap();
     assert_eq!(preview.request_id, id);
     assert_eq!(draft, "Possibly an order record; grain needs confirmation.");
     assert_eq!(origin.generated_at.as_deref(), Some("2026-10-18T10:00:00Z"));
@@ -152,13 +157,21 @@ async fn knowledge_draft_uses_one_current_claim_and_cancel_prevents_late_answer_
         origin.evidence["evidence"],
         serde_json::to_value(&preview.context.evidence).unwrap()
     );
-    assert!(tasks.draft_source(&app, id, 1).await.is_err());
+    assert!(tasks.draft_source(&app, id, Some(1)).await.is_err());
+    let (_, complete_draft, complete_origin) = tasks.draft_source(&app, id, None).await.unwrap();
+    assert!(complete_draft.starts_with("Possibly an order record; grain needs confirmation."));
+    assert!(complete_draft.ends_with("What identifies one order?"));
+    assert_eq!(complete_origin.evidence["answer"]["schemaVersion"], 2);
+    assert_eq!(
+        complete_origin.evidence["answer"]["summary"]["evidenceIds"][0],
+        "e1"
+    );
     settings.ai.include_comments = !settings.ai.include_comments;
     app.store
         .save_data_source_settings(&settings)
         .await
         .unwrap();
-    assert!(tasks.draft_source(&app, id, 0).await.is_err());
+    assert!(tasks.draft_source(&app, id, Some(0)).await.is_err());
     tasks.cancel(id).await;
     assert!(tasks.completed.lock().await.is_empty());
 
@@ -169,7 +182,7 @@ async fn knowledge_draft_uses_one_current_claim_and_cancel_prevents_late_answer_
     tasks.tasks.lock().await.insert(id, request.clone());
     tasks.cancel(id).await;
     assert!(tasks.finish(id, request, Ok(result)).await.is_err());
-    assert!(tasks.draft_source(&app, id, 0).await.is_err());
+    assert!(tasks.draft_source(&app, id, Some(0)).await.is_err());
 
     let mut expired = task(prepare(&app, input).await.unwrap());
     expired.created = Instant::now().checked_sub(PREVIEW_LIFETIME).unwrap();
@@ -182,7 +195,7 @@ async fn knowledge_draft_uses_one_current_claim_and_cancel_prevents_late_answer_
         .insert(id, (Arc::new(expired), result.answer, result.generated_at));
     assert!(
         tasks
-            .draft_source(&app, id, 0)
+            .draft_source(&app, id, Some(0))
             .await
             .err()
             .unwrap()
@@ -358,7 +371,8 @@ async fn offline_provider_and_offline_mode_never_send_remote_requests() {
     assert!(task.prepared.preview.request_body.is_null());
     let result = execute(&app, &task, None).await.unwrap();
     assert!(result.answer.interpretations.is_empty());
-    assert!(!result.answer.unknowns.is_empty());
+    assert!(result.answer.summary.is_none());
+    assert_eq!(result.answer.schema_version, 2);
 }
 
 #[tokio::test]

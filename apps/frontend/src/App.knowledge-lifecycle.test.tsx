@@ -28,9 +28,9 @@ it.each(['manual', 'model', 'return-to-a', 'reload-order'] as const)('isolates l
  await screen.findByText('Review runtime');fireEvent.click(screen.getByRole('button',{name:'Load source A'}));
  await waitFor(()=>expect(semantics).toHaveBeenCalledWith('source-a'));fireEvent.click(await screen.findByRole('button',{name:'Select current table'}));if(entry==='model') {
    fireEvent.click(screen.getByRole('button',{name:'AI'}));
-   fireEvent.click(await screen.findByRole('button',{name:'Prepare request preview'}));
-   fireEvent.click(await screen.findByRole('button',{name:'Send this request'}));
-   fireEvent.click(await screen.findByRole('button',{name:'Generate annotation draft'}));
+   await waitFor(()=>expect(screen.getByRole('button',{name:'Send and answer'})).toBeEnabled());
+   fireEvent.click(await screen.findByRole('button',{name:'Send and answer'}));
+   fireEvent.click(await screen.findByRole('button',{name:'Draft a table description'}));
  } else {
    fireEvent.click(screen.getByRole('button',{name:'Semantics'}));
    fireEvent.click(await screen.findByRole('button',{name:'Review and confirm description'}));

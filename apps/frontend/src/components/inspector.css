@@ -129,3 +129,25 @@
   .inspector-view .risk-grid span { font-size: .769rem; }
   .inspector-view .annotation-heading { flex-wrap: wrap; }
 }
+
+/* Task-first table AI: answer, composer, then optional evidence/diagnostics. */
+.inspector-view .ai-task-panel { font-size: var(--ds-text-body); gap: 16px; }
+.inspector-view .ai-task-panel :is(.ai-composer, .ai-answer) { display: grid; min-width: 0; gap: 10px; }
+.inspector-view .ai-task-panel .ai-answer { padding-bottom: 16px; border-bottom: 1px solid var(--ds-separator); }
+.inspector-view .ai-task-panel .ai-asked-question { padding: 8px 10px; color: var(--ds-secondary); background: var(--ds-field); border-radius: 6px; }
+.inspector-view .ai-task-panel .ai-answer-summary { color: var(--ds-text); font-size: var(--ds-text-heading); line-height: 1.65; white-space: pre-wrap; }
+.inspector-view .ai-task-panel :is(.ai-supporting-points, .ai-answer-gaps ul) { margin: 0; padding-left: 18px; color: var(--ds-secondary); }
+.inspector-view .ai-task-panel li + li { margin-top: 6px; }
+.inspector-view .ai-task-panel .ai-answer-gaps { display: grid; gap: 6px; }
+.inspector-view .ai-task-panel .ai-compact-suggestions { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.inspector-view .ai-task-panel .ai-compact-suggestions button { padding: 2px 0; min-height: 26px; border: 0; background: transparent; color: var(--ds-accent); font-size: var(--ds-text-caption); }
+.inspector-view .ai-task-panel :is(textarea, select) { font-size: var(--ds-text-body); }
+.inspector-view .ai-task-panel .ai-send-summary { color: var(--ds-secondary); font-size: var(--ds-text-caption); line-height: 1.5; }
+.inspector-view .ai-task-panel .ai-scope-options[open] { display: grid; gap: 10px; }
+.inspector-view .ai-task-panel details { margin: 0; }
+.inspector-view .ai-task-panel .ai-request-details { padding-top: 12px; border-top: 1px solid var(--ds-separator); }
+.inspector-view .ai-task-panel .ai-request-details > :not(summary) { margin-top: 10px; }
+.inspector-view .ai-task-panel .ai-readable-evidence { list-style: none; margin: 0; padding: 0; }
+.inspector-view .ai-task-panel .ai-readable-evidence li { display: grid; gap: 5px; padding: 8px 0; }
+.inspector-view .ai-task-panel .ai-readable-evidence button { justify-self: start; }
+.inspector-view .ai-task-panel .knowledge-review { font-size: var(--ds-text-control); }

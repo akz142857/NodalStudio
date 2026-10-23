@@ -22,5 +22,5 @@ export const tableAiPreview: TableAiPreview = {
 export const tableAiResult: TableAiResult = {
   requestId: tableAiPreview.requestId, sourceId: reportSnapshot.sourceId, snapshotId: reportSnapshot.id,
   target: aiTable.key, provider: tableAiPreview.provider, model: tableAiPreview.model, generatedAt: "2026-10-18T01:00:00Z",
-  answer: { interpretations: [{ text: "customer_id may identify the customer associated with this record. The business grain still needs confirmation.", evidenceIds: ["e1", "e2"] }], unknowns: ["Does one row represent an entire order or an order version?", "What currency is used for total?"] },
+  answer: { schemaVersion: 2, summary: { text: "This may be an order record; whether versions share an order number needs confirmation.", evidenceIds: ["e1"] }, interpretations: [{ text: "customer_id may identify the customer associated with this record. The business grain still needs confirmation.", evidenceIds: ["e1", "e2"] }], unknowns: ["Does one row represent an entire order or an order version?", "What currency is used for total?"] },
 };

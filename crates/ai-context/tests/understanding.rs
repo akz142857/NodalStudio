@@ -345,15 +345,41 @@ fn model_cannot_author_facts_actions_or_invent_evidence_ids() {
     )
     .unwrap();
     for invalid in [
-        r#"{"interpretations":[{"text":"guess","evidenceIds":["e999"]}],"unknowns":[]}"#,
-        r#"{"interpretations":[{"text":"guess","evidenceIds":[]}],"unknowns":[]}"#,
-        r#"{"interpretations":[],"unknowns":["unsure"],"facts":["invented"]}"#,
-        r#"{"interpretations":[],"unknowns":["unsure"],"actions":["query"]}"#,
+        r#"{"schemaVersion":2,"summary":{"text":"A tentative record.","evidenceIds":["e1"]},"interpretations":[{"text":"guess","evidenceIds":["e999"]}],"unknowns":[]}"#,
+        r#"{"schemaVersion":2,"summary":{"text":"A tentative record.","evidenceIds":["e1"]},"interpretations":[{"text":"guess","evidenceIds":[]}],"unknowns":[]}"#,
+        r#"{"schemaVersion":2,"summary":{"text":"A tentative record.","evidenceIds":["e1"]},"interpretations":[],"unknowns":["unsure"],"facts":["invented"]}"#,
+        r#"{"schemaVersion":2,"summary":{"text":"A tentative record.","evidenceIds":["e1"]},"interpretations":[],"unknowns":["unsure"],"actions":["query"]}"#,
     ] {
         assert!(validate_model_output(invalid, &context).is_err());
     }
-    let valid = r#"{"interpretations":[{"text":"Could be a record; business grain unknown.","evidenceIds":["e1"]}],"unknowns":["What is the business grain?"]}"#;
+    let valid = r#"{"schemaVersion":2,"summary":{"text":"A tentative record.","evidenceIds":["e1"]},"interpretations":[{"text":"Could be a record; business grain unknown.","evidenceIds":["e1"]}],"unknowns":["What is the business grain?"]}"#;
     assert!(validate_model_output(valid, &context).is_ok());
+    let base: serde_json::Value = serde_json::from_str(valid).unwrap();
+    for (pointer, replacement) in [
+        ("/schemaVersion", serde_json::json!(1)),
+        ("/summary", serde_json::Value::Null),
+        ("/summary/evidenceIds", serde_json::json!("e1")),
+        ("/summary/evidenceIds", serde_json::json!([])),
+        ("/summary/evidenceIds", serde_json::json!(["e999"])),
+        ("/summary/text", serde_json::json!("x".repeat(601))),
+        (
+            "/interpretations",
+            serde_json::json!(vec![base["interpretations"][0].clone(); 4]),
+        ),
+        ("/unknowns", serde_json::json!(["x".repeat(151)])),
+    ] {
+        let mut invalid = base.clone();
+        *invalid.pointer_mut(pointer).unwrap() = replacement;
+        assert!(
+            validate_model_output(&invalid.to_string(), &context).is_err(),
+            "{pointer}"
+        );
+    }
+    // A focused answer need not invent supporting points or a checklist of unknowns.
+    let mut concise = base;
+    concise["interpretations"] = serde_json::json!([]);
+    concise["unknowns"] = serde_json::json!([]);
+    assert!(validate_model_output(&concise.to_string(), &context).is_ok());
 }
 
 #[test]

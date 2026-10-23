@@ -107,13 +107,7 @@ async fn prepare(
         .map_err(safe_store_error)?;
     let (text, mut basis, origin, expires_at) = if let Some(request) = input.request_id {
         let (preview, text, origin) = answers
-            .draft_source(
-                app,
-                request,
-                input
-                    .interpretation_index
-                    .ok_or("Choose an interpretation.")?,
-            )
+            .draft_source(app, request, input.interpretation_index)
             .await?;
         if preview.snapshot_id != snapshot.id
             || preview.source_id != snapshot.source_id
@@ -234,7 +228,7 @@ pub async fn confirm_knowledge_draft(
         }
         if let Some(request) = draft.input.request_id {
             answers
-                .draft_source(&app, request, draft.input.interpretation_index.unwrap_or(0))
+                .draft_source(&app, request, draft.input.interpretation_index)
                 .await?;
         }
         let saved = app

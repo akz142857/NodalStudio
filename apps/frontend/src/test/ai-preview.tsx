@@ -40,7 +40,7 @@ export function Preview() {
   return <main style={{ height: "100vh", overflow: "auto", display: "flex", gap: 40, padding: 40, justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap" }}>
     <section style={{ width: 340, lineHeight: 1.8 }}><p>NODAL STUDIO / 阶段一</p><h1>从解释回到证据</h1>
       <p>这是使用真实界面组件的合成数据预览。回答是固定测试样例，不调用模型、不读取本机数据库。</p>
-      <ol><li>选择右侧 AI。</li><li>点击 Prepare request preview 查看发送内容。</li><li>点击 Send this request 查看样例解释。</li><li>点击 e1 定位字段、e2 定位索引，或在 Structural evidence 中点击 e3 定位逻辑关系的源字段。</li></ol>
+      <ol><li>选择右侧 AI。</li><li>等待本地准备完成，核对发送摘要；此时尚未外发。</li><li>点击 Send and answer 查看简短主答案。</li><li>展开 View supporting evidence，点击字段名定位；完整依据与请求正文在 Request details 中。</li></ol>
       <label><input type="checkbox" checked={historical} onChange={(event) => setHistorical(event.target.checked)} />显示历史表（切换后再返回，旧定位应清除）</label>
       <p>正式功能在桌面应用中：设置 AI 提供方后，选中当前快照中的表 → AI。</p><p role="status">{message}</p>
     </section>

@@ -51,6 +51,8 @@ export interface TableAiResult {
   model: string | null;
   generatedAt: string;
   answer: {
+    schemaVersion: 2;
+    summary: { text: string; evidenceIds: string[] } | null;
     interpretations: { text: string; evidenceIds: string[] }[];
     unknowns: string[];
   };

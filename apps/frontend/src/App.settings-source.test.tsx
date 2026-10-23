@@ -65,7 +65,7 @@ async function loadSource(name: "A" | "B") {
   fireEvent.click(screen.getByRole("button", { name: `Load source ${name}` }));
   fireEvent.click(await screen.findByRole("button", { name: "Select current table" }));
   fireEvent.click(screen.getByRole("button", { name: "AI" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Prepare request preview" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "Question" })).toBeEnabled());
 }
 
 async function finishSave(save: PendingSave) {
@@ -98,7 +98,7 @@ describe("source settings during recent workspace persistence", () => {
     expect(pending[0].app.general.lastSourceId).toBe("source-a");
     await finishSave(pending[0]);
 
-    expect(screen.getByRole("button", { name: "Prepare request preview" })).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: "Question" })).toBeEnabled();
     const settings = await openAiSettings();
     expect(settings.getByLabelText("Model")).toHaveValue("source-a-model");
     expect(settings.getByRole("checkbox", { name: /Enable AI explanations/ })).toBeChecked();
@@ -119,7 +119,7 @@ describe("source settings during recent workspace persistence", () => {
     await finishSave(pending[0]);
 
     expect(document.documentElement.dataset.theme).toBe("light");
-    expect(screen.getByRole("button", { name: "Prepare request preview" })).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: "Question" })).toBeEnabled();
     const settings = await openAiSettings();
     expect(settings.getByLabelText("Model")).toHaveValue("source-b-model");
     expect(settings.getByRole("checkbox", { name: /Enable AI explanations/ })).toBeDisabled();
@@ -135,7 +135,7 @@ describe("source settings during recent workspace persistence", () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByRole("button", { name: "Prepare request preview" })).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: "Question" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: /Open notifications/ }));
     expect(await screen.findByText("Recent workspace could not be saved")).toBeVisible();
     expect(screen.getByText("Fixture disk write failed")).toBeVisible();

@@ -21,7 +21,7 @@ export function Preview() {
       runDiscovery: (id: string) => { const preview = previews.get(id); if (!preview) return Promise.reject(new Error("Preview cancelled.")); return new Promise((resolve) => window.setTimeout(() => resolve(discoveryResult(preview)), 650)); },
       cancelDiscovery: (id: string) => { previews.delete(id); return Promise.resolve(); },
       prepareTableExplanation: () => Promise.resolve({ ...tableAiPreview, context: { ...tableAiPreview.context, scope, target: selected!.key, tables: [selected!.key], evidence: [{ id: "e1", tableKey: selected!.key, objectKey: selected!.key, kind: "table", label: `${selected!.key.schema}.${selected!.key.name}`, detail: JSON.stringify({ columnCount: selected!.columns.length }), columns: [] }] }, expiresAt: new Date(Date.now() + 300_000).toISOString(), requestBody: { model: "fixture-model", messages: [{ role: "user", content: "Synthetic table explanation fixture" }] } }),
-      runTableExplanation: () => Promise.resolve({ ...tableAiResult, target: selected!.key, answer: { interpretations: [], unknowns: ["This is a synthetic preview. Confirm the business grain of the selected table with the team."] } }), cancelTableExplanation: () => Promise.resolve(),
+      runTableExplanation: () => Promise.resolve({ ...tableAiResult, target: selected!.key, answer: { schemaVersion: 2, summary: null, interpretations: [], unknowns: ["This is a synthetic preview. Confirm the business grain of the selected table with the team."] } }), cancelTableExplanation: () => Promise.resolve(),
     } as unknown as NodalStudioPlatform;
   }, [scope, settings, selected]);
   return <main style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
