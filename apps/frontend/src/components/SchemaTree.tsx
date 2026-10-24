@@ -4,7 +4,7 @@ import { useI18n } from "../i18n";
 import { useCallback, useState, type MouseEvent, type KeyboardEvent, type ReactNode } from "react";
 import type { DatabaseSnapshot, ObjectKey, TableDefinition } from "../platform";
 import type { EnumDefinition, ViewDefinition, ProgramDefinition } from "../platform/types";
-import { ActionIcon } from "./ActionIcon";
+import { ActionIcon, type ActionIconName } from "./ActionIcon";
 import { OperationFeedback } from "./OperationFeedback";
 import { SchemaObjectMenu, type SchemaObjectMenuAction } from "./SchemaObjectMenu";
 import { useOperation } from "./use-operation";
@@ -26,6 +26,10 @@ interface SchemaTreeProps {
 type OpenState = Record<string, boolean>;
 
 type ObjectType = "tables" | "views" | "enums" | "functions" | "procedures" | "triggers";
+const OBJECT_TYPE_ICONS: Record<ObjectType, ActionIconName> = {
+  tables: "table", views: "copy", enums: "list",
+  functions: "function", procedures: "procedure", triggers: "trigger",
+};
 type MenuObject = TableDefinition | ViewDefinition | EnumDefinition | ProgramDefinition;
 type MenuTarget = { object: MenuObject; trigger: HTMLButtonElement; x: number; y: number; scope: string };
 
@@ -145,7 +149,7 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
           const key = `${schema.name}:${type}`; const typeOpen = expanded(key); const count = counts[type];
           return <div className="tree-node tree-node-type" key={key}>
             <button type="button" className="tree-row tree-row-type" aria-expanded={typeOpen} disabled={count === 0} onClick={() => toggle(key)}>
-              <TreeDisclosureIcon open={typeOpen} /><ActionIcon name={type === "tables" ? "table" : type === "views" ? "copy" : "list"} /><span className="tree-label">{TYPE_LABEL[type]}</span><small>{count}</small>
+              <TreeDisclosureIcon open={typeOpen} /><ActionIcon name={OBJECT_TYPE_ICONS[type]} /><span className="tree-label">{TYPE_LABEL[type]}</span><small>{count}</small>
             </button>
             {typeOpen && ["functions", "procedures", "triggers"].includes(type) ? schema.programs.filter(p => `${p.key.kind}s` === type).map(program => <div className="tree-object-row" key={program.key.name}><button type="button" className="tree-row tree-row-object" title={program.key.name} aria-current={program === programPreview ? "true" : undefined} onClick={() => openObject(program.key)}><span className="tree-label">{program.key.name}</span></button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", {value0:program.key.schema,value1:program.key.name})} aria-haspopup="menu" aria-expanded={activeMenu?.object === program} onClick={event => showMenu(event,program)}><ActionIcon name="more" /></button></div>) : null}
             {typeOpen && type === "tables" ? schema.tables.map((table) => <div className="tree-object-row" key={table.key.name}><button type="button" key={table.key.name} className="tree-row tree-row-object" title={table.key.name}
