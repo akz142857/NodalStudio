@@ -108,3 +108,12 @@
 - Evidence (ignored local files): `.private-docs/object-documents-2026-10-24/long-definition-zh.png`, `function-en.png`.
 - Validation: existing full frontend suite 137 files / 873 tests passed; new reader tests 2 passed separately. App navigation regression verifies canvas DOM identity/inert state, preserved sidebar search and no layout save on document open/close. TypeScript, lint and frontend production build passed (existing large-chunk warning remains).
 - Scope: single reusable central document; pinned/multiple document tabs and document navigation history are deferred. No new installer was built in this change.
+
+## 2026-10-24 — Packaged object icons at 110%
+
+- Ran the unmodified app from the mounted latest `macos-0.2.3-object-icons-test/Nodal-Studio_0.2.3_universal.dmg`, not the Vite development wrapper. Desktop settings reported 0.2.3; artifact source commit `ce87324`.
+- Added local fixture connection `Icon Acceptance PostgreSQL` to PostgreSQL 17.10 on 127.0.0.1:32773, database `nodalstudio_test`. Only catalog collection and object viewing were performed; no database objects were changed. The saved fixture connection remains available for reproduction.
+- Explicitly verified the UI scale control showed 110%. Light and dark themes were inspected in the native 2880×1840 screenshot: function ƒx, procedure flow, and trigger lightning icons were clear, unclipped, and vertically aligned with labels. Category expansion, row spacing, and ellipsis alignment remained stable.
+- Opened function `account_count()`, procedure `read_accounts()`, and trigger `accounts.account_guard`; central documents and selection highlighting worked. Rechecked function/procedure switching in dark mode. No visual defect requiring a code change was found.
+- Evidence: `.private-docs/object-icons-2026-10-24/nodal-icons-light-110.png`, `nodal-icons-dark-110.png`, and `comparison.png` (local ignored artifacts).
+- Restored the original system-following theme and retained the requested 110% scale. The application was run from the mounted image; the installed app was not overwritten.
