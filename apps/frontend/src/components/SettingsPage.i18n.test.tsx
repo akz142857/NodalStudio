@@ -10,14 +10,19 @@ const props = {
   onUpdateApp: noop, onUpdateSource: noop, onResetApp: noop, onResetSource: noop,
   onReload: noop, onDataSourcesChanged: noop, onFactoryReset: noop,
 };
-it("translates all 14 categories and searches Chinese aliases and English names", () => {
+const categories = ["通用", "外观", "画布与 ER", "数据源", "历史与存储", "Git", "AI", "云同步", "隐私与安全", "通知", "键盘快捷键", "更新与关于", "功能支持", "高级"];
+// Keep category rendering independent so slower CI runners do not have to render
+// every settings panel within a single test's timeout budget.
+it.each(categories)("opens the translated %s category", (category) => {
   const settings = defaultEffectiveSettings("source"); settings.app.general.language = "zhCn";
   render(<SettingsPage {...props} settings={settings} />);
-  const categories = ["通用", "外观", "画布与 ER", "数据源", "历史与存储", "Git", "AI", "云同步", "隐私与安全", "通知", "键盘快捷键", "更新与关于", "功能支持", "高级"];
-  for (const category of categories) {
-    fireEvent.click(screen.getByRole("button", { name: category }));
-    expect(screen.getByRole("button", { name: category })).toHaveAttribute("aria-current", "page");
-  }
+  const button = screen.getByRole("button", { name: category, exact: true });
+  fireEvent.click(button);
+  expect(button).toHaveAttribute("aria-current", "page");
+});
+it("searches Chinese aliases and English category names", () => {
+  const settings = defaultEffectiveSettings("source"); settings.app.general.language = "zhCn";
+  render(<SettingsPage {...props} settings={settings} />);
   const search = screen.getByRole("searchbox", { name: "搜索设置" });
   fireEvent.change(search, { target: { value: "语言" } });
   expect(screen.getByRole("combobox", { name: "语言" })).toHaveValue("zhCn");
