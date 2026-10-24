@@ -1,0 +1,17 @@
+{
+  "status": "passed",
+  "runtime": {
+    "kind": "desktop",
+    "label": "Tauri desktop runtime",
+    "version": "0.2.4"
+  },
+  "checks": [
+    "installed WebView2 UI rendered",
+    "native IPC works",
+    "Windows runtime detected",
+    "settings/source survive restart",
+    "credential survives restart",
+    "automatic updates disabled",
+    "source and disposable credential removed"
+  ]
+}

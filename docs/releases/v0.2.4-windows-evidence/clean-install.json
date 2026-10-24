@@ -1,0 +1,26 @@
+{
+  "status": "passed",
+  "upgradeFrom": "",
+  "upgradeTo": "0.2.4",
+  "installerSha256": "9324954c6f5d0525536ca67afda2c38453c2b026b517f43c29951c356a9f63ad",
+  "installedApplicationSha256": "59b263f56d0a0679f2dec24430cb364423b4a7a9a5de45a401f06ae29856d794",
+  "applicationBuildSha256": "be50840365e46de1658c4f192410d98303d180e6fe3557bac74f07f400068930",
+  "os": "Microsoft Windows NT 10.0.20348.0",
+  "architecture": "X64",
+  "checks": [
+    "silent current-user installation",
+    "Unicode and spaces in install path",
+    "installed binary hash",
+    "unsigned signature status",
+    "WebView2 and IPC",
+    "SQLite and credential persistence after restart",
+    "silent uninstall"
+  ],
+  "notTested": [
+    "physical Windows 10/11 desktop",
+    "SmartScreen UX",
+    "missing WebView2 installation",
+    "live PostgreSQL/MySQL connection",
+    "signed update"
+  ]
+}

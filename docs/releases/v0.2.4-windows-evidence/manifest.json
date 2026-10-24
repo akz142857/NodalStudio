@@ -1,0 +1,14 @@
+{
+  "version": "0.2.4",
+  "target": "x86_64-pc-windows-msvc",
+  "sourceCommit": "c8c2f36cf7649ff4a5df8e4fbb2d544c1b26e62c",
+  "sourceDirty": false,
+  "builtAt": "2026-10-24T13:56:28.0783533Z",
+  "installer": "Nodal-Studio_0.2.4_windows-x64-unsigned-setup.exe",
+  "sha256": "9324954c6f5d0525536ca67afda2c38453c2b026b517f43c29951c356a9f63ad",
+  "applicationSha256": "be50840365e46de1658c4f192410d98303d180e6fe3557bac74f07f400068930",
+  "signature": "NotSigned",
+  "distribution": "test",
+  "automaticUpdates": false,
+  "webview2": "Evergreen; installer downloads runtime if missing (network required)"
+}
