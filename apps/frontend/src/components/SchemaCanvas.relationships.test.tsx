@@ -1,5 +1,5 @@
 import { canvasToolButton } from "../test/canvas-tools";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { ReactFlowProps } from "@xyflow/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,7 +41,7 @@ describe("Model relationship deletion", () => {
     vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(700);
     localStorage.clear();
   });
-  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal"); Reflect.deleteProperty(HTMLDialogElement.prototype, "close"); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal"); Reflect.deleteProperty(HTMLDialogElement.prototype, "close"); });
   const relationshipActions = {
     onValidateLogicalRelationship: vi.fn(),
     onCreateLogicalRelationship: vi.fn(),
@@ -97,8 +97,9 @@ describe("Model relationship deletion", () => {
   it("confirms manager deletion and drops the pending request when the source changes", () => {
     const remove = vi.fn();
     const { rerender } = render(<CanvasHarness {...relationshipActions} onDeleteLogicalRelationship={remove} />);
-    fireEvent.click(canvasToolButton("Manage relationships"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(canvasToolButton("Manage logical relationships"));
+    fireEvent.click(screen.getByLabelText("More relationship actions"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete relationship…" }));
     expect(screen.getByRole("dialog", { name: "Delete model relationship?" })).toBeVisible();
     rerender(<CanvasHarness {...relationshipActions} snapshot={{ ...reportSnapshot, sourceId: "other-source" }} onDeleteLogicalRelationship={remove} />);
     expect(screen.queryByRole("dialog", { name: "Delete model relationship?" })).not.toBeInTheDocument();

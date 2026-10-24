@@ -1,0 +1,101 @@
+/* A stable list and an independent detail pane keep editing in context. */
+.relationship-manager { width: min(1000px, calc(100vw - 40px)); height: min(760px, calc(100vh - 40px)); max-width: none; max-height: none; padding: 0; margin: auto; overflow: hidden; border: 1px solid var(--ds-border); border-radius: 14px; color: var(--ds-text); background: var(--ds-sidebar); box-shadow: 0 24px 80px #0006; font: var(--ds-text-control)/var(--ds-leading) var(--ds-font-ui); }
+.relationship-manager[open] { display: flex; flex-direction: column; }
+.relationship-manager::backdrop { background: #070a0f94; backdrop-filter: blur(3px); }
+.relationship-manager * { box-sizing: border-box; }
+.relationship-manager button, .relationship-manager select, .relationship-manager input:not([type="checkbox"]), .relationship-manager textarea { min-width: 0; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); padding: 7px 10px; color: var(--ds-text); background: var(--ds-field); font: inherit; }
+.relationship-manager button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; background: var(--ds-control); }
+.relationship-manager button:hover:not(:disabled) { background: var(--ds-hover); }
+.relationship-manager button:disabled, .relationship-manager select:disabled { opacity: .5; cursor: default; }
+.relationship-manager button.ds-primary { border-color: var(--ds-accent-fill); color: var(--ds-on-accent); background: var(--ds-accent-fill); }
+.relationship-manager button.ds-primary:hover:not(:disabled) { background: var(--ds-accent-hover); }
+.relationship-manager :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
+.relationship-manager svg { flex: 0 0 16px; width: 16px; height: 16px; }
+.relationship-manager h2, .relationship-manager h3 { color: var(--ds-text); margin: 0; font-weight: var(--ds-weight-emphasis); overflow-wrap: anywhere; }
+.relationship-manager h2 { font-size: var(--ds-text-title); }
+.relationship-manager h3 { font-size: var(--ds-text-heading); }
+.relationship-manager-header { display: flex; align-items: center; gap: 12px; padding: 20px 24px; border-bottom: 1px solid var(--ds-separator); }
+.relationship-manager-header > div { flex: 1; min-width: 0; }
+.relationship-manager-header p { margin: 4px 0 0; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.relationship-manager .relationship-icon-button { flex: 0 0 30px; width: 30px; height: 30px; padding: 0; border-color: transparent; background: transparent; color: var(--ds-secondary); }
+.relationship-manager-tools { display: flex; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--ds-separator); }
+.relationship-manager-search { flex: 1; min-width: 0; position: relative; }
+.relationship-manager-search > svg { position: absolute; top: 10px; left: 10px; color: var(--ds-secondary); }
+.relationship-manager-search input { width: 100%; padding-left: 34px !important; }
+.relationship-manager-body { display: grid; grid-template-columns: minmax(250px, .8fr) minmax(0, 1.4fr); flex: 1; min-height: 0; }
+.relationship-manager-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; min-width: 0; min-height: 0; padding: 10px; border-right: 1px solid var(--ds-separator); }
+.relationship-manager button.relationship-manager-row { display: grid; flex-shrink: 0; gap: 4px; width: 100%; padding: 13px 12px; border: 1px solid transparent; border-radius: 8px; background: transparent; text-align: left; justify-content: stretch; }
+.relationship-manager button.relationship-manager-row:hover:not(:disabled) { background: var(--ds-hover); }
+.relationship-manager button.relationship-manager-row[aria-pressed="true"] { color: var(--ds-selection-text); background: var(--ds-selection); border-color: var(--ds-border); }
+.relationship-manager-row strong { font-weight: var(--ds-weight-medium); overflow-wrap: anywhere; }
+.relationship-manager-row code, .relationship-row-schema { color: var(--ds-secondary); font-size: var(--ds-text-caption); overflow-wrap: anywhere; }
+.relationship-row-meta { display: flex; align-items: center; gap: 12px; margin-top: 5px; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.relationship-row-meta > span:last-child { margin-left: auto; }
+.relationship-manager .relationship-status-badge { font: inherit; color: var(--ds-secondary); }
+.relationship-manager-row[data-status="orphaned"] .relationship-status-badge, .relationship-manager-row[data-status="conflicted"] .relationship-status-badge { color: var(--ds-warning); }
+.relationship-manager-detail { min-width: 0; overflow-y: auto; padding: 24px; background: var(--ds-surface); }
+.relationship-detail-heading { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; }
+.relationship-detail-heading > div { flex: 1; min-width: 0; }
+.relationship-detail-heading > button { flex-shrink: 0; }
+.relationship-detail-heading p { margin: 4px 0 0; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.relationship-manager-endpoint { display: grid; gap: 3px; min-width: 0; padding: 14px; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-window); overflow-wrap: anywhere; }
+.relationship-manager-endpoint > span { color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.relationship-manager-endpoint strong { font-weight: var(--ds-weight-medium); }
+.relationship-manager-endpoint code { color: var(--ds-accent); font: inherit; font-family: var(--ds-font-mono); }
+.relationship-manager-arrow { display: flex; align-items: center; gap: 12px; padding: 7px 15px; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.relationship-detail-note { white-space: pre-wrap; overflow-wrap: anywhere; margin: 18px 0; color: var(--ds-secondary); }
+.relationship-attention { padding: 12px; margin: 0 0 16px; color: var(--ds-warning); background: var(--ds-warning-soft); border-radius: 6px; }
+.relationship-manager .relationship-check { display: flex; align-items: flex-start; gap: 8px; margin: 18px 0; }
+.relationship-manager input[type="checkbox"] { width: 16px; height: 16px; min-height: 16px; margin: 1px 0 0; accent-color: var(--ds-accent-fill); }
+.relationship-metadata { border-top: 1px solid var(--ds-separator); padding-top: 14px; margin-top: 18px; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.relationship-metadata summary { cursor: pointer; }
+.relationship-metadata code { display: block; overflow-wrap: anywhere; margin: 12px 0 6px; }
+.relationship-metadata ul { padding-left: 18px; overflow-wrap: anywhere; }
+.relationship-pair-summary { display: grid; gap: 4px; margin-top: 12px; color: var(--ds-secondary); overflow-wrap: anywhere; }
+.relationship-detail-actions { display: flex; align-items: center; gap: 10px; margin-top: 24px; }
+.relationship-more { position: relative; margin-left: auto; }
+.relationship-more summary { list-style: none; display: grid; place-items: center; min-width: 32px; min-height: 32px; border: 1px solid var(--ds-border); border-radius: 6px; cursor: pointer; }
+.relationship-more summary::-webkit-details-marker { display: none; }
+.relationship-more > div { position: absolute; bottom: calc(100% + 5px); right: 0; white-space: nowrap; padding: 5px; border: 1px solid var(--ds-border); border-radius: 7px; background: var(--ds-surface); box-shadow: 0 4px 16px #0003; }
+.relationship-manager .danger, .relationship-manager .relationship-error { color: var(--ds-danger); }
+.relationship-manager-message { color: var(--ds-secondary); margin: 16px 0 0; }
+.relationship-manager-empty { display: grid; align-content: center; justify-items: start; gap: 10px; min-height: 180px; padding: 16px; color: var(--ds-secondary); }
+.relationship-manager-empty p { margin: 0; }
+.relationship-manager-empty strong { color: var(--ds-text); font-weight: var(--ds-weight-medium); }
+.relationship-discard { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 24px; background: var(--ds-warning-soft); color: var(--ds-warning); }
+.relationship-discard > span { flex: 1; }
+.relationship-editor { min-width: 0; }
+.relationship-editor fieldset { display: grid; gap: 18px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.relationship-editor label { display: grid; gap: 6px; min-width: 0; }
+.relationship-editor input:not([type="checkbox"]), .relationship-editor select, .relationship-editor textarea { width: 100%; }
+.relationship-editor textarea { resize: none; min-height: 72px; }
+.relationship-table-pickers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.relationship-field-mappings { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid var(--ds-separator); }
+.relationship-section-label { font-weight: var(--ds-weight-medium); }
+.relationship-field-pair { display: grid; grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr) 24px; gap: 7px; align-items: end; }
+.relationship-field-pair > span { align-self: center; padding-top: 20px; color: var(--ds-secondary); }
+.relationship-field-pair > .relationship-icon-button { width: 24px; margin-bottom: 3px; }
+.relationship-field-pair label { font-size: var(--ds-text-caption); }
+.relationship-search-select { position: relative; display: grid; gap: 6px; min-width: 0; }
+.relationship-search-results { position: absolute; z-index: 5; top: 100%; left: 0; width: 100%; min-width: 180px; max-height: 200px; overflow-y: auto; margin-top: 4px; padding: 4px; border: 1px solid var(--ds-border); border-radius: 6px; background: var(--ds-surface); box-shadow: 0 8px 25px #0004; }
+.relationship-manager .relationship-search-results button { display: grid; justify-content: stretch; gap: 2px; width: 100%; border: 0; background: transparent; text-align: left; overflow-wrap: anywhere; }
+.relationship-manager .relationship-search-results button[aria-selected="true"] { background: var(--ds-selection); }
+.relationship-search-results small, .relationship-search-results p { font-size: var(--ds-text-caption); color: var(--ds-secondary); margin: 0; }
+.relationship-search-results p { padding: 8px; }
+.relationship-manager .relationship-text-button { justify-self: start; background: transparent; border-color: transparent; padding-left: 0; color: var(--ds-accent); }
+.relationship-editor .relationship-metadata { margin: 0; }
+.relationship-editor .relationship-metadata label { margin-top: 12px; }
+.relationship-editor-validation { font-size: var(--ds-text-caption); color: var(--ds-secondary); }
+.relationship-editor-validation ul { padding-left: 18px; }
+.relationship-editor-validation [role="alert"] { color: var(--ds-warning); }
+.relationship-editor-footer { display: flex; justify-content: flex-end; gap: 10px; position: sticky; bottom: -24px; margin: 20px -24px -24px; padding: 14px 24px; border-top: 1px solid var(--ds-separator); background: var(--ds-surface); z-index: 6; }
+@media (max-width: 760px) {
+  .relationship-manager { width: calc(100vw - 20px); height: calc(100vh - 20px); }
+  .relationship-manager-header { padding: 14px; flex-wrap: wrap; }
+  .relationship-manager-header > div { flex-basis: 50%; }
+  .relationship-manager-tools { padding: 12px 14px; flex-wrap: wrap; }
+  .relationship-manager-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(100px, .4fr) minmax(0, 1fr); }
+  .relationship-manager-list { border-right: 0; border-bottom: 1px solid var(--ds-separator); }
+  .relationship-manager-detail { padding: 18px; }
+  .relationship-editor-footer { bottom: -18px; margin-inline: -18px; margin-bottom: -18px; padding: 14px 18px; }
+}

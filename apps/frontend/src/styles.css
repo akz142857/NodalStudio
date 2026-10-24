@@ -2304,88 +2304,6 @@ textarea {
 .relationship-target-picker > p,
 .relationship-target-picker div[role="listbox"] p { margin: 0; padding: 5px 2px; color: var(--ds-tertiary); font-size: 9px; }
 
-.relationship-manager-backdrop {
-  position: fixed;
-  z-index: 90;
-  inset: 0;
-  display: grid;
-  padding: 16px;
-  place-items: center;
-  background: rgb(7 10 15 / 58%);
-  backdrop-filter: blur(3px);
-}
-
-.relationship-manager {
-  display: grid;
-  width: min(820px, calc(100vw - 32px));
-  height: min(760px, calc(100vh - 32px));
-  min-width: 0;
-  min-height: 0;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid var(--ds-border);
-  border-radius: 14px;
-  color: var(--ds-text);
-  background: var(--ds-sidebar);
-  box-shadow: 0 24px 80px rgb(0 0 0 / 52%);
-}
-
-.relationship-manager > header { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 22px 16px; border-bottom: 1px solid var(--ds-border); }
-.relationship-manager > header > div { min-width: 0; }
-.relationship-manager > header p { margin: 0 0 5px; color: var(--ds-logical); font-size: 9px; font-weight: 700; letter-spacing: .12em; }
-.relationship-manager h2 { margin: 0; font-size: 21px; letter-spacing: -.02em; }
-.relationship-manager > header span { display: block; margin-top: 6px; color: var(--ds-tertiary); font-size: 10px; }
-.relationship-manager > header button { display: grid; flex: 0 0 32px; width: 32px; height: 32px; padding: 0; place-items: center; border: 0; border-radius: 7px; color: var(--ds-secondary); background: transparent; font-size: 22px; line-height: 1; }
-.relationship-manager > header button:hover { color: var(--ds-text); background: var(--ds-hover); }
-
-.relationship-manager-tools { display: grid; gap: 12px; padding: 14px 22px; border-bottom: 1px solid var(--ds-border); background: var(--ds-sidebar); }
-.relationship-manager-tools label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
-.relationship-manager-tools label > span { color: var(--ds-tertiary); font-size: 9px; font-weight: 650; text-transform: uppercase; }
-.relationship-manager-tools input { width: 100%; min-width: 0; padding: 9px 11px; border: 1px solid var(--ds-border); border-radius: 7px; outline: none; color: var(--ds-text); background: var(--ds-field); font-size: 10px; }
-.relationship-manager-tools input:focus { border-color: var(--ds-logical); box-shadow: 0 0 0 2px rgb(139 92 246 / 16%); }
-.relationship-manager-filters { display: flex; min-width: 0; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-.relationship-manager-filters::-webkit-scrollbar { display: none; }
-.relationship-manager-filters button { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid var(--ds-border); border-radius: 999px; color: var(--ds-secondary); background: transparent; font-size: 9px; }
-.relationship-manager-filters button[data-active="true"] { border-color: var(--ds-logical); color: var(--ds-text); background: var(--ds-logical-soft); }
-.relationship-manager-filters button span { min-width: 16px; padding: 1px 4px; border-radius: 999px; color: var(--ds-text); background: var(--ds-control); font-size: 8px; text-align: center; }
-
-.relationship-manager-list { display: grid; min-width: 0; min-height: 0; align-content: start; gap: 10px; overflow-x: hidden; overflow-y: auto; padding: 14px 22px 22px; }
-.relationship-manager-list article { display: grid; min-width: 0; gap: 11px; padding: 13px 14px; border: 1px solid var(--ds-border); border-radius: 9px; background: var(--ds-surface); box-shadow: 0 5px 16px rgb(0 0 0 / 9%); }
-.relationship-manager-list article[data-status="orphaned"],
-.relationship-manager-list article[data-status="conflicted"],
-.relationship-manager-list article[data-status="supersededByPhysical"] { border-color: var(--ds-warning); background: var(--ds-warning-soft); }
-.relationship-manager-list article[data-status="disabled"] { opacity: .72; }
-.relationship-manager-list article > header { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; }
-.relationship-manager-list article > header strong { min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.relationship-status-badge { flex: 0 0 auto; padding: 3px 7px; border-radius: 999px; color: var(--ds-positive); background: var(--ds-positive-soft); font-size: 8px; font-weight: 700; }
-.relationship-manager-list article[data-status="orphaned"] .relationship-status-badge,
-.relationship-manager-list article[data-status="conflicted"] .relationship-status-badge,
-.relationship-manager-list article[data-status="supersededByPhysical"] .relationship-status-badge { color: var(--ds-warning); background: var(--ds-warning-soft); }
-.relationship-manager-list article[data-status="disabled"] .relationship-status-badge { color: var(--ds-secondary); background: var(--ds-control); }
-.relationship-manager-endpoints { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr); align-items: center; gap: 8px; }
-.relationship-manager-endpoint { display: grid; min-width: 0; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 8px; padding: 8px 9px; border: 1px solid var(--ds-border); border-radius: 7px; background: var(--ds-sidebar); }
-.relationship-manager-endpoint > span { color: var(--ds-tertiary); font-size: 8px; font-weight: 700; text-transform: uppercase; }
-.relationship-manager-endpoint > div { display: grid; min-width: 0; gap: 2px; }
-.relationship-manager-endpoint strong,
-.relationship-manager-endpoint code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.relationship-manager-endpoint strong { color: var(--ds-text); font-size: 9px; }
-.relationship-manager-endpoint code { color: var(--ds-secondary); font-size: 9px; }
-.relationship-manager-arrow { color: var(--ds-logical); font-size: 16px; text-align: center; }
-.relationship-manager-meta { display: flex; flex-wrap: wrap; gap: 6px; }
-.relationship-manager-meta span { padding: 3px 7px; border-radius: 5px; color: var(--ds-secondary); background: var(--ds-control); font-size: 8px; }
-.relationship-manager-note { margin: 0; overflow-wrap: anywhere; color: var(--ds-secondary); font-size: 9px; line-height: 1.45; }
-.relationship-manager-list footer { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; }
-.relationship-manager-list footer > div { display: flex; min-width: 0; flex-wrap: wrap; gap: 6px; }
-.relationship-manager-list button { padding: 6px 8px; border: 1px solid var(--ds-border); border-radius: 6px; color: var(--ds-text); background: var(--ds-control); font-size: 9px; }
-.relationship-manager-list button:hover { border-color: var(--ds-border); background: var(--ds-hover); }
-.relationship-manager-list button.primary { border-color: var(--ds-logical); color: var(--ds-on-accent); background: var(--ds-logical-fill); }
-.relationship-manager-list button.primary:hover { background: var(--ds-logical-fill); }
-.relationship-manager-list .danger { flex: 0 0 auto; border-color: transparent; color: var(--ds-danger); background: transparent; }
-.relationship-manager-list .danger:hover { border-color: var(--ds-danger); background: var(--ds-danger-soft); }
-.relationship-manager-empty { display: grid; min-height: 260px; place-content: center; justify-items: center; gap: 7px; padding: 28px; color: var(--ds-tertiary); text-align: center; }
-.relationship-manager-empty strong { color: var(--ds-text); font-size: 12px; }
-.relationship-manager-empty p { margin: 0; font-size: 9px; }
-
 @media (max-width: 640px) {
   .connection-dialog-backdrop { padding: 8px; }
   .connection-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 16px; }
@@ -2400,14 +2318,7 @@ textarea {
   .connection-live-action > button { width: 100%; }
   .connection-dialog footer { align-items: stretch; flex-direction: column-reverse; }
   .connection-footer-actions { justify-content: flex-end; }
-  .relationship-manager-backdrop { padding: 8px; }
-  .relationship-manager { width: calc(100vw - 16px); height: calc(100vh - 16px); }
-  .relationship-manager > header,
-  .relationship-manager-tools,
-  .relationship-manager-list { padding-inline: 14px; }
-  .relationship-manager-endpoints { grid-template-columns: minmax(0, 1fr); }
-  .relationship-manager-arrow { transform: rotate(90deg); }
-  .relationship-manager-list footer { align-items: flex-start; }
+
 }
 
 .relationship-action-error {

@@ -226,6 +226,8 @@ function SchemaCanvasInner({
   const [relationshipRebindSourceSelection, setRelationshipRebindSourceSelection] = useState<LogicalRelationship>();
   const [showMiniMap, setShowMiniMap] = useState(true);
   const [relationshipManagerOpen, setRelationshipManagerOpen] = useState(false);
+  const [relationshipManagerSource, setRelationshipManagerSource] = useState(snapshot.sourceId);
+  if (relationshipManagerSource !== snapshot.sourceId) { setRelationshipManagerSource(snapshot.sourceId); setRelationshipManagerOpen(false); }
   const [relationshipToDelete, setRelationshipToDelete] = useState<{ relationship: LogicalRelationship; sourceId: string; snapshotId: string }>();
   if (relationshipToDelete && (relationshipToDelete.sourceId !== snapshot.sourceId || relationshipToDelete.snapshotId !== snapshot.id)) setRelationshipToDelete(undefined);
   const [relationshipActionError, setRelationshipActionError] = useState("");
@@ -1185,48 +1187,45 @@ function SchemaCanvasInner({
           }}
         />
       ) : null}
-      {relationshipManagerOpen ? <RelationshipManager
+      {relationshipsEditable && onValidateLogicalRelationship && onCreateLogicalRelationship ? <RelationshipManager
+        key={snapshot.sourceId}
+        open={relationshipManagerOpen}
+        snapshot={snapshot}
         relationships={semantics?.logicalRelationships ?? []}
+        onValidate={onValidateLogicalRelationship}
+        canEdit={Boolean(onUpdateLogicalRelationship)}
+        onSave={async (input) => {
+          if (input.id) {
+            if (!onUpdateLogicalRelationship) throw new Error("Logical relationship editing is unavailable.");
+            return onUpdateLogicalRelationship(input);
+          }
+          return onCreateLogicalRelationship(input);
+        }}
         onClose={() => setRelationshipManagerOpen(false)}
         onSelect={(relationship) => {
           setRelationshipManagerOpen(false);
+          onClearSearch?.();
+          setFocusNodeId(undefined);
           setShowLogicalRelationships(true);
           if (relationship.status !== "active") setShowInvalidRelationships(true);
           setSelectedEdgeId(`logical.${relationship.id}.0`);
+          const ids = [relationship.source, relationship.target].map((endpoint) => `${endpoint.schema}.${endpoint.table}`);
+          void fitView({ nodes: ids.map((id) => ({ id })), padding: 0.3, duration: 250, maxZoom: 1 });
         }}
-        onEdit={(relationship) => {
-          setRelationshipManagerOpen(false);
-          setRelationshipDraft({ source: relationship.source, target: relationship.target, relationship });
-        }}
-        onRebindTarget={(relationship) => {
-          setRelationshipManagerOpen(false);
-          onClearSearch?.();
-          const sourceTable = snapshot.schemas.find((schema) => schema.name === relationship.source.schema)?.tables.find((table) => table.key.name === relationship.source.table);
-          const sourceExists = relationship.source.columns.every((name) => sourceTable?.columns.some((column) => column.name === name));
-          if (sourceExists) {
-            setRelationshipPickSource(relationship.source);
-            setRelationshipPickExisting(relationship);
-          } else {
-            setRelationshipRebindSourceSelection(relationship);
-          }
-        }}
-        onDelete={requestRelationshipDeletion}
-        onToggle={(relationship) => {
-          if (!onUpdateLogicalRelationship) return;
-          void onUpdateLogicalRelationship({
-            id: relationship.id,
-            sourceId: snapshot.sourceId,
-            name: relationship.name,
-            source: relationship.source,
-            target: relationship.target,
-            cardinality: relationship.cardinality,
-            origin: relationship.origin,
-            note: relationship.note,
-            evidence: relationship.evidence,
-            disabled: relationship.status !== "disabled",
-            allowTypeMismatch: relationship.status === "conflicted",
-          }).catch(reportRelationshipError);
-        }}
+        onDelete={onDeleteLogicalRelationship ? requestRelationshipDeletion : undefined}
+        onToggle={onUpdateLogicalRelationship ? (relationship) => onUpdateLogicalRelationship({
+          id: relationship.id,
+          sourceId: snapshot.sourceId,
+          name: relationship.name,
+          source: relationship.source,
+          target: relationship.target,
+          cardinality: relationship.cardinality,
+          origin: relationship.origin,
+          note: relationship.note,
+          evidence: relationship.evidence,
+          disabled: relationship.status !== "disabled",
+          allowTypeMismatch: relationship.status === "conflicted",
+        }) : undefined}
       /> : null}
       {relationshipToDelete && relationshipsEditable && onDeleteLogicalRelationship ? <RelationshipDeleteDialog
         key={`${relationshipToDelete.sourceId}:${relationshipToDelete.relationship.id}`}

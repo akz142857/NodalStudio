@@ -103,7 +103,7 @@ export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, 
           <span><strong>{filter.label}</strong><small id={`${id}-${filter.id}`}>{filter.description}</small></span>
           {filter.count !== undefined ? <span className="canvas-command-badge">{filter.count}</span> : null}
         </label>)}</div>
-        {onManageRelationships ? <button type="button" className="canvas-command-manage" onClick={() => { close(); onManageRelationships(); }}><ActionIcon name="sliders" />Manage relationships<ActionIcon name="chevronRight" /></button> : null}
+        {onManageRelationships ? <button type="button" className="canvas-command-manage" onClick={() => { close(); onManageRelationships(); }}><ActionIcon name="sliders" />Manage logical relationships<ActionIcon name="chevronRight" /></button> : null}
       </div>
     </div>
     <button ref={restore} type="button" className="canvas-command-restore" hidden={!collapsed} disabled={disabled} aria-label="Expand canvas toolbar" title="Expand toolbar; selection is preserved" onClick={() => { setCollapsed(false); requestAnimationFrame(() => trigger.current?.focus()); }}><ActionIcon name="sliders" />Tools{selectedCount > 0 ? <span className="canvas-command-badge">{selectedCount}</span> : null}</button>
