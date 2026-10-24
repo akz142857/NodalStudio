@@ -16,7 +16,7 @@ preferences and quiet hours apply to both the banner and notification. Download
 and Install and Restart remain separate user actions, including the final install
 confirmation. Workspace restoration does not cancel a pending startup reminder.
 
-Startup-reminder validation (2026-10-24, local changes after v0.2.0)
+Startup-reminder validation (2026-10-24, delivered in v0.2.1)
 - All 827 frontend tests, TypeScript, ESLint, six settings-model tests, Rust
   formatting and native debug builds passed. Regression coverage includes
   delayed workspace restoration, StrictMode, failed settings reads, offline and
@@ -31,8 +31,16 @@ Startup-reminder validation (2026-10-24, local changes after v0.2.0)
   external-access logs. The published release and /Applications bundle were not
   replaced by these development builds.
 - Local screenshots, preview configuration and verification report are under
-  target/update-notice-acceptance/ (ignored by Git). These changes are not yet a
-  published release.
+  target/update-notice-acceptance/ (ignored by Git). These feature checks preceded
+  final release packaging.
+- v0.2.1 was published on 2026-10-24 at 16:37:11 (Asia/Singapore) from clean
+  commit 11fab6f5b78c99ce867ce2df382bc53d8a8db8c3. All nine final-source CI jobs
+  passed. The Universal app and DMG passed signing, notarization and Gatekeeper.
+  All five draft and public downloads matched local bytes and passed checksum,
+  updater-signature and archive validation. The public latest endpoint resolves
+  to 0.2.1; the final signed app successfully checked that feed at 16:37:49.
+  See docs/releases/v0.2.1-validation.md and the published release:
+  https://github.com/akz142857/NodalStudio/releases/tag/v0.2.1
 
 GitHub source (2026-10-22)
 The official public repository is https://github.com/akz142857/NodalStudio.
