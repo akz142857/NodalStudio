@@ -4,7 +4,7 @@ export function defaultAppSettings(): AppSettings {
   return {
     schemaVersion: 1,
     legacyStorageMigrationVersion: 0,
-    general: { language: "system", theme: "system", uiScalePercent: 100, startPage: "lastDataSource", reopenLastWorkspace: true, confirmBeforeQuit: true, dateTimeFormat: "local", lastSourceId: null, lastViewMode: "explore" },
+    general: { language: "system", theme: "system", uiScalePercent: 110, startPage: "lastDataSource", reopenLastWorkspace: true, confirmBeforeQuit: true, dateTimeFormat: "local", lastSourceId: null, lastViewMode: "explore" },
     appearance: { density: "comfortable", uiFontSize: 13, nodeFontSize: 12, monospaceFontSize: 11, reduceMotion: false, highContrastRelations: false, colorBlindPalette: false, leftSidebarExpanded: true, leftSidebarWidth: 272, rightSidebarExpanded: false, rightSidebarWidth: 300, restoreSidebarState: true },
     canvas: { showSchema: true, showTableComments: true, showColumnTypes: true, showColumnNullable: true, showColumnDefaults: false, showColumnComments: true, showKeyBadges: true, indexes: "expanded", maxInitialColumns: 60, showDeclaredRelationships: true, showInferredRelationships: true, fieldLevelEdges: true, showRelationNames: false, showCardinality: false, showReferentialActions: false, relationshipHighlightDepth: 1, edgeStyle: "orthogonal", layoutDirection: "leftToRight", nodeSpacing: 70, layerSpacing: 110, edgeSpacing: 24, restorePersonalLayout: true, largeModelThreshold: 500 },
     connectionDefaults: { databaseEngine: "postgreSql", sslMode: "prefer" },

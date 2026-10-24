@@ -66,11 +66,15 @@
 
 /* The comparison retains a deliberate, keyboard-accessible horizontal scroll area. */
 .capabilities-matrix { min-width: 0; display: grid; gap: var(--ds-space-4); font-size: var(--ds-text-control); }
-.capabilities-current { padding: var(--ds-space-3); border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-control); background: var(--ds-surface); }
-.capabilities-filters { display: flex; flex-wrap: wrap; gap: var(--ds-space-3); }
-.capabilities-filters label { display: grid; gap: var(--ds-space-1); }
+.capabilities-overview { display: grid; gap: var(--ds-space-3); line-height: var(--ds-leading); }
+.capabilities-current { padding: var(--ds-space-3) var(--ds-space-4); border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-control); background: var(--ds-surface); }
+.capabilities-legend, .capabilities-results { color: var(--ds-secondary); font-size: var(--ds-text-caption); line-height: var(--ds-leading); }
+.capabilities-toolbar { display: grid; gap: var(--ds-space-3); padding: var(--ds-space-4); border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-group); background: var(--ds-surface); }
+.capabilities-filters { align-items: end; display: flex; flex-wrap: wrap; gap: var(--ds-space-3); }
+.capabilities-filters label { min-width: 0; display: grid; gap: var(--ds-space-2); }
+.capabilities-filters :is(input, select) { width: 100%; min-width: 0; }
 .capabilities-filters label:first-child { flex: 1; min-width: 160px; }
-.capabilities-table-scroll { max-height: 460px; overflow: auto; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-group); }
+.capabilities-table-scroll { background: var(--ds-surface); max-height: 460px; overflow: auto; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-group); }
 .capabilities-table-scroll table { width: 100%; min-width: 640px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: var(--ds-text-control); }
 .capabilities-table-scroll caption { padding: var(--ds-space-3); text-align: left; color: var(--ds-secondary); }
 .capabilities-table-scroll :is(th, td) { padding: var(--ds-space-3); text-align: left; border-bottom: 1px solid var(--ds-separator); vertical-align: middle; }
@@ -78,12 +82,17 @@
 .capabilities-table-scroll th:first-child { width: 30%; }
 .capabilities-table-scroll small { display: block; margin-top: var(--ds-space-1); color: var(--ds-secondary); font-weight: var(--ds-weight-normal); }
 .capabilities-table-scroll button { padding: 3px 0; border: 0; background: transparent; text-align: left; font-size: inherit; }
-.capabilities-table-scroll button[aria-pressed="true"] { color: var(--ds-accent); text-decoration: underline; text-underline-offset: 4px; }
+.capabilities-table-scroll button[aria-pressed="true"] { color: var(--ds-accent); font-weight: var(--ds-weight-emphasis); }
+.capabilities-table-scroll tr[data-selected="true"] > th { background: var(--ds-selection); box-shadow: inset 3px 0 var(--ds-accent); }
+.capabilities-table-scroll tbody tr:last-child > * { border-bottom: 0; }
 .capabilities-matrix [data-current="true"] { background: var(--ds-selection); }
 .capability-status { display: inline-block; padding: 2px 5px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); white-space: nowrap; font-size: var(--ds-text-caption); }
 .capability-status[data-status="supported"] { color: var(--ds-positive); }
 .capability-status[data-status="partial"] { color: var(--ds-warning); }
 .capability-status[data-status="unavailable"] { color: var(--ds-secondary); }
+.capability-detail { min-width: 0; padding-top: var(--ds-space-2); }
+.capability-detail article { align-content: start; }
+.capability-detail article :is(h4, p) { margin: 0; line-height: var(--ds-leading); overflow-wrap: anywhere; }
 .capability-detail > h3 { margin-bottom: var(--ds-space-3); }
 .capability-detail > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-space-3); }
 .capability-detail article { min-width: 0; display: grid; gap: var(--ds-space-2); justify-items: start; padding: var(--ds-space-4); border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-group); background: var(--ds-surface); }
@@ -123,3 +132,6 @@
 .settings-group-content > .project-policy { border: 0; border-radius: 0; border-top: 1px solid var(--ds-separator); }
 
 .settings-navigation-group > button.ds-button { justify-content: flex-start; }
+
+/* Nested disclosures retain the same inset as other grouped settings. */
+.settings-group-content > .settings-disclosure { margin: var(--ds-space-4); }

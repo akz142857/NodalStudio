@@ -8,6 +8,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { ObjectAnnotation, SaveAnnotationInput, TableAiEvidence, TableDefinition } from "../platform";
 
 interface TableStructureProps {
+  onOpenObject?: (key: import("../platform").ObjectKey) => void;
   table: TableDefinition;
   snapshot?: DatabaseSnapshot;
   onOpenQuery?: (table: TableDefinition) => void;
@@ -27,7 +28,7 @@ interface TableKnowledgeFormProps {
  * Split from the knowledge form because the inspector shows one or the other —
  * structure is read-only and comes from the snapshot, the form is authored.
  */
-export function TableStructure({ table, snapshot, onOpenQuery, focusedEvidence }: TableStructureProps) {
+export function TableStructure({ table, snapshot, onOpenQuery, focusedEvidence, onOpenObject }: TableStructureProps) {
   const { t: bt } = useI18n();
   const structure = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -114,7 +115,7 @@ export function TableStructure({ table, snapshot, onOpenQuery, focusedEvidence }
           </ul>
         </section>
       ) : null}
-      {snapshot ? <TableCatalogDetails snapshot={snapshot} table={table} /> : null}
+      {snapshot ? <TableCatalogDetails snapshot={snapshot} table={table} onOpenObject={onOpenObject} /> : null}
     </div>
   );
 }

@@ -16,3 +16,12 @@
 .update-confirmation p { color:var(--ds-secondary); font-size:var(--ds-text-body); line-height:var(--ds-leading); }
 .update-confirmation .update-error { color:var(--ds-danger); padding:0; }
 .update-confirmation footer { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:var(--ds-space-2); margin-top:var(--ds-space-5); }
+
+.settings-disclosure.update-advanced-settings { padding: 0; }
+.update-advanced-settings > summary { padding: var(--ds-space-3) var(--ds-space-4); border-radius: var(--ds-radius-group); }
+.update-advanced-settings[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.update-advanced-settings > summary:focus-visible { outline-offset: -3px; border-radius: var(--ds-radius-group); }
+.update-advanced-fields { min-width: 0; margin: 0; padding: 0 var(--ds-space-4) var(--ds-space-4); border: 0; }
+.update-advanced-fields > .setting-row { padding-inline: 0; }
+.update-advanced-fields > .setting-row:first-child { border-top: 1px solid var(--ds-separator); }
+.update-advanced-fields > .update-advanced-help { margin: var(--ds-space-2) 0 0; color: var(--ds-secondary); font-size: var(--ds-text-caption); line-height: var(--ds-leading); overflow-wrap: anywhere; }

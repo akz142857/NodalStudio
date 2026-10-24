@@ -28,6 +28,7 @@ type InspectorSegment = "structure" | "semantics" | "history" | "ai";
 
 
 interface InspectorPanelProps {
+  onOpenObject?: (key: import("../platform").ObjectKey) => void;
   explainRequest?: number;
   snapshot?: DatabaseSnapshot;
   selectedTable?: TableDefinition;
@@ -71,6 +72,7 @@ function findAnnotation(
  * so the segments never disappear and their positions stay learnable.
  */
 export function InspectorPanel({
+  onOpenObject,
   explainRequest,
   snapshot,
   selectedTable,
@@ -161,7 +163,7 @@ export function InspectorPanel({
               <pre>{focusedEvidence.detail}</pre>
               <button type="button" onClick={() => setSegment("ai")}>{bt("business.backToAIExplanation")}</button>
             </section> : null}
-            <TableStructure snapshot={snapshot} table={evidenceTable || selectedTable} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
+            <TableStructure onOpenObject={onOpenObject} snapshot={snapshot} table={evidenceTable || selectedTable} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
           </>
         ) : (
           <dl className="snapshot-summary">

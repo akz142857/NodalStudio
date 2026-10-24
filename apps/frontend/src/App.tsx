@@ -1,3 +1,5 @@
+import { findDocumentObject } from "./components/object-document-model";
+import { ObjectDocument, ObjectDocumentProperties } from "./components/ObjectDocument";
 import { capabilityMessages } from "./i18n/capabilities";
 import { I18nProvider, useI18n, useEventTranslator } from "./i18n";
 import { useQuery } from "@tanstack/react-query";
@@ -95,6 +97,7 @@ export function App() {
   const [discoverySnapshot, setDiscoverySnapshot] = useState<DatabaseSnapshot>();
   const [explainRequest, setExplainRequest] = useState(0);
   const [activeSearchResult, setActiveSearchResult] = useState(0);
+  const [objectDocument, setObjectDocument] = useState<{ snapshot: DatabaseSnapshot; key: ObjectKey }>();
   const [selectedTable, setSelectedTable] = useState<TableDefinition>();
   const [semanticsSettledSnapshot, setSemanticsSettledSnapshot] = useState<DatabaseSnapshot>();
   const [locateRequest, setLocateRequest] = useState<CanvasLocateRequest>();
@@ -221,6 +224,7 @@ export function App() {
 
   const locateTable = useCallback((table: TableDefinition) => {
     if (!snapshot) return;
+    setObjectDocument(undefined);
     setMode("explore");
     setDiscoverySnapshot(undefined);
     setPreflightOpen(false);
@@ -839,6 +843,13 @@ export function App() {
     setMode("query");
   }, [querySupported, snapshot?.database.databaseType]);
 
+  const documentObject = objectDocument && objectDocument.snapshot === snapshot ? findDocumentObject(snapshot, objectDocument.key) : undefined;
+  const documentVisible = Boolean(documentObject && mode === "explore" && !preflightOpen);
+  const openObjectDocument = (key: ObjectKey) => {
+    if (!snapshot) return;
+    setObjectDocument({ snapshot, key }); setMode("explore"); setPreflightOpen(false); setDiscoverySnapshot(undefined);
+  };
+
   return (
     <I18nProvider value={i18n}>
     <main inert={ddlPreviewOpen || undefined} aria-hidden={ddlPreviewOpen || undefined} className={`app-shell${showUpdateBanner ? " has-update-banner" : ""}`}>
@@ -1000,9 +1011,12 @@ export function App() {
               <SchemaTree
                 navigation={runtime.data?.kind === "desktop" ? <ModelViewNavigation sourceId={snapshot.sourceId} views={semantics.savedViews} activeView={savedView}
                   disabled={historyPreview || semanticsSnapshot !== snapshot}
-                  onApply={(view) => { setMode("explore"); setPreflightOpen(false); setDiscoverySnapshot(undefined); setSearchOpen(false); applyView(view); }} /> : undefined}
+                  onApply={(view) => { setObjectDocument(undefined); setMode("explore"); setPreflightOpen(false); setDiscoverySnapshot(undefined); setSearchOpen(false); applyView(view); }} /> : undefined}
                 snapshot={snapshot}
                 selectedTable={selectedTable}
+                selectedObject={documentVisible ? documentObject?.key : undefined}
+                onOpenObject={openObjectDocument}
+                onCloseObject={() => setObjectDocument(undefined)}
                 onSelectTable={locateTable}
                 onOpenQuery={querySupported ? openTableInQuery : undefined}
               />
@@ -1072,6 +1086,7 @@ export function App() {
               runtimeKind={runtime.data?.kind}
             />
           ) : snapshot ? (
+            <div className="object-canvas-host" style={documentVisible ? { visibility: "hidden" } : undefined} inert={documentVisible}>
             <WorkspaceCanvas
               onOpenHistory={mode === "explore" ? () => {
                 setRightPanel((panel) => ({ ...panel, expanded: true }));
@@ -1079,7 +1094,7 @@ export function App() {
               } : undefined}
               latestSnapshotId={discoveryLatest.data?.[0]?.id}
               refreshState={refreshState}
-              interactionPaused={discoverySnapshot === snapshot && mode === "explore" && !preflightOpen}
+              interactionPaused={documentVisible || (discoverySnapshot === snapshot && mode === "explore" && !preflightOpen)}
               platform={platform}
               runtimeKind={runtime.data?.kind}
               snapshot={snapshot}
@@ -1115,6 +1130,7 @@ export function App() {
               relationshipBatchApi={runtime.data?.kind === "desktop" ? relationshipBatchApi : undefined}
               onClearSearch={() => setQuery("")}
             />
+            </div>
           ) : (
             <>
               <div className="canvas-grid" />
@@ -1129,6 +1145,7 @@ export function App() {
               </div>
             </>
           )}
+          {documentVisible && snapshot && documentObject ? <ObjectDocument key={JSON.stringify([snapshot.id, documentObject.key])} snapshot={snapshot} object={documentObject} onClose={() => setObjectDocument(undefined)} onSelect={openObjectDocument} onSelectTable={locateTable} /> : null}
           {snapshot && discoverySnapshot === snapshot && mode === "explore" && !preflightOpen && runtime.data?.kind === "desktop" ? <BusinessExplorer
             snapshot={snapshot} semantics={semantics} settings={settings} platform={platform} desktop
             initialTable={historicalSelection ? undefined : selectedTable}
@@ -1157,7 +1174,10 @@ export function App() {
           {/* changeSet is not gated on the view mode here: the canvas overlay is
               a rendering mode, while the History segment owns time whatever the
               main area happens to be showing. */}
+          {documentVisible && documentObject ? <ObjectDocumentProperties object={documentObject} /> : null}
+          <div hidden={documentVisible}>
           <InspectorPanel
+            onOpenObject={openObjectDocument}
             explainRequest={explainRequest}
             snapshot={snapshot}
             selectedTable={selectedTable}
@@ -1179,6 +1199,7 @@ export function App() {
             onCompareSnapshots={handleComparison}
             onReviewChanges={() => { setMode("changes"); setChangesView("list"); }}
           />
+          </div>
         </aside>
       </section>
       {settingsOpen ? (

@@ -97,7 +97,14 @@ export function UpdatePanel({ platform, runtime, app, managed, onSave }: {
       </div>
       {status?.checkedAt ? <p className="update-help">{t("updates.lastChecked")}{" "}{formatDate(status.checkedAt, app.general.dateTimeFormat)}</p> : null}
       <ToggleRow label={t("updates.automaticallyCheckForUpdates")} description={t("updates.checkWhenTheAppStartsDownloadsAndInstallation")} checked={app.updates.automaticChecks} managed={managed} onChange={(automaticChecks) => void onSave({ ...app, updates: { ...app.updates, automaticChecks } })} />
-      <details className="settings-disclosure"><summary>{t("updates.advancedUpdateSettings")}</summary><fieldset disabled={busy || Boolean(managed)}><SelectRow label={t("updates.updateChannel")} value={app.updates.channel} options={[["stable", t("settings.stable")], ["beta", t("updates.beta")]]} onChange={(channel) => void run(() => onSave({ ...app, updates: { ...app.updates, channel: channel as AppSettings["updates"]["channel"] } }))} /><TextRow label={t("updates.updateFeed")} value={app.updates.customFeedUrl ?? ""} placeholder={t("updates.useGitHubReleases")} onChange={(customFeedUrl) => void onSave({ ...app, updates: { ...app.updates, customFeedUrl: customFeedUrl || null } }).catch((e: unknown) => setError(reason(e)))} /><p>{t("updates.customFeedsMustUseTheSigningKeyTrusted")}</p></fieldset></details>
+      <details className="settings-disclosure update-advanced-settings">
+        <summary>{t("updates.advancedUpdateSettings")}</summary>
+        <fieldset className="update-advanced-fields" aria-label={t("updates.advancedUpdateSettings")} disabled={busy || Boolean(managed)}>
+          <SelectRow label={t("updates.updateChannel")} value={app.updates.channel} options={[["stable", t("settings.stable")], ["beta", t("updates.beta")]]} onChange={(channel) => void run(() => onSave({ ...app, updates: { ...app.updates, channel: channel as AppSettings["updates"]["channel"] } }))} />
+          <TextRow label={t("updates.updateFeed")} value={app.updates.customFeedUrl ?? ""} placeholder={t("updates.useGitHubReleases")} onChange={(customFeedUrl) => void onSave({ ...app, updates: { ...app.updates, customFeedUrl: customFeedUrl || null } }).catch((e: unknown) => setError(reason(e)))} />
+          <p className="update-advanced-help">{t("updates.customFeedsMustUseTheSigningKeyTrusted")}</p>
+        </fieldset>
+      </details>
     </SettingsGroup>
     {confirm ? <InstallConfirmation version={status?.availableVersion ?? ""} onCancel={() => setConfirm(false)} onInstall={async () => { assertUpdateCanRestart(); await platform.installUpdate(); }} /> : null}
   </>;

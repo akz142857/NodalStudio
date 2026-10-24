@@ -95,3 +95,16 @@
 - 本轮没有发布安装包或改动正式用户数据；上一轮测试 DMG 不包含本轮扩展。
 
 最终追加回归：对象详情/历史 2 个文件、13 项测试通过；ESLint、TypeScript/生产构建、桌面 Clippy 和格式/差异检查通过。保留已有大分块警告。
+
+## Central object documents — 2026-10-24
+
+- Functions, views/materialized views, procedures and triggers now open in a central read-only object document. Tree selection and disclosure state remain in the sidebar. Table inspector trigger/dependency links use the same navigation.
+- Definition, properties and dependency sections use shared tokens and segmented controls. The read-only CodeMirror viewer provides syntax highlighting, line numbers, wrap control, copy and document search. Missing definitions retain an explicit permission/availability message.
+- The canvas remains mounted at the same dimensions, invisible and inert while an object document is open. Its interactions are paused. Returning to the diagram does not issue a locate request or reset its saved view. Following a table dependency deliberately locates that table.
+- Native validation used `/tmp/Nodal Locale Acceptance.app` (existing isolated Tauri development wrapper, backend reports 0.2.2-beta.1; current frontend served by Vite). This is not validation of a newly packaged release.
+- At 125% UI scale, verified MySQL functions, procedures, triggers, views, view-to-table dependency navigation, and table-inspector-to-trigger navigation. Verified PostgreSQL materialized-view definition/indexes and overloaded function identity. Verified Chinese and English native UI.
+- A temporary MySQL function `catalog_document_long_acceptance` with 800 comment lines was created only in the dedicated `nodal-locale-acceptance-mysql-1` fixture container. Native search reached the final `RETURN value_in` statement; the tree and document header stayed in place. The temporary function was dropped and the model refreshed afterward. Acceptance snapshot history can retain this synthetic fixture.
+- Compared native screenshots before/after opening and closing a function: central canvas crop `(1250,400,3000,1780)` in 3840×1996 screenshots was pixel-identical. This verifies the sampled viewport, not every possible sidebar size or window configuration.
+- Evidence (ignored local files): `.private-docs/object-documents-2026-10-24/long-definition-zh.png`, `function-en.png`.
+- Validation: existing full frontend suite 137 files / 873 tests passed; new reader tests 2 passed separately. App navigation regression verifies canvas DOM identity/inert state, preserved sidebar search and no layout save on document open/close. TypeScript, lint and frontend production build passed (existing large-chunk warning remains).
+- Scope: single reusable central document; pinned/multiple document tabs and document navigation history are deferred. No new installer was built in this change.

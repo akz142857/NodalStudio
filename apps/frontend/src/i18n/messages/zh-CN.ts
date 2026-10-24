@@ -1,6 +1,22 @@
 import type { en } from "./en";
 
 export const zhCN = {
+  "document.definition": "定义（只读）",
+  "document.label": "对象文档",
+  "document.diagram": "返回关系图",
+  "document.sections": "文档内容",
+  "document.properties": "属性",
+  "document.wrap": "自动换行",
+  "document.copy": "复制定义",
+  "document.copied": "已复制定义",
+  "document.copyFailed": "无法复制定义",
+  "document.type": "对象类型",
+  "document.name": "完整名称",
+  "document.reader": "只读对象定义",
+  "document.search": "在定义中查找",
+  "document.findNext": "查找下一个",
+  "document.noMatch": "没有匹配项",
+
   "objects.showDetails": "查看对象详情",
   "objects.arguments": "参数",
   "objects.functions": "函数",

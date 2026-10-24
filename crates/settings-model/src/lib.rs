@@ -87,7 +87,7 @@ impl Default for GeneralSettings {
         Self {
             language: Language::System,
             theme: Theme::System,
-            ui_scale_percent: 100,
+            ui_scale_percent: 110,
             start_page: StartPage::LastDataSource,
             reopen_last_workspace: true,
             confirm_before_quit: true,

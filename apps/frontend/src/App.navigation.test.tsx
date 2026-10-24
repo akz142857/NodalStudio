@@ -37,6 +37,28 @@ const pickOrders = () => {
 };
 describe("App sidebar object navigation", () => {
   beforeEach(() => localStorage.clear()); afterEach(() => vi.restoreAllMocks());
+  it("opens a central document without remounting the canvas or changing tree search", async () => {
+    const platform = await mount();
+    const save = vi.spyOn(platform, "saveLayout");
+    fireEvent.click(screen.getByRole("button", { name: "Load navigation fixture" }));
+    const canvas = await screen.findByRole("region", { name: "Navigation canvas" });
+    const tree = screen.getByRole("region", { name: "Database structure" });
+    const search = within(tree).getByRole("searchbox");
+    fireEvent.change(search, { target: { value: "order_totals" } });
+    fireEvent.click(within(tree).getByRole("button", { name: /^order_totals/ }));
+    expect(screen.getByRole("region", { name: "Object document" })).toBeVisible();
+    expect(tree.querySelector(".schema-object-preview")).toBeNull();
+    expect(canvas.isConnected).toBe(true);
+    expect(canvas.closest(".object-canvas-host")).toHaveAttribute("inert");
+    fireEvent.click(screen.getByRole("button", { name: /Back to diagram/ }));
+    expect(screen.getByRole("region", { name: "Navigation canvas" })).toBe(canvas);
+    expect(canvas).toBeVisible();
+    expect(search).toHaveValue("order_totals");
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(within(tree).getByRole("button", { name: /^order_totals/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Load enum fixture" }));
+    expect(screen.queryByRole("region", { name: "Object document" })).not.toBeInTheDocument();
+  });
   it("locates a cross-schema enum usage from preflight, clears Diagram filters and supports repeated location without closing details", async () => {
     await mount(); fireEvent.click(screen.getByRole("button", { name: "Load enum fixture" }));
     const tree = within(screen.getByRole("region", { name: "Database structure" }));

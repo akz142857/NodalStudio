@@ -2938,7 +2938,8 @@ textarea {
 
 .tree-object-row { display: flex; align-items: center; min-width: 0; }
 .tree-object-row > .tree-row { flex: 1; min-width: 0; }
-.tree-object-actions { flex: 0 0 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--ds-secondary); font-size: 18px; line-height: 1; }
+.tree-object-actions { display: grid; place-items: center; padding: 0; flex: 0 0 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--ds-secondary); font-size: 18px; line-height: 1; }
+.tree-object-actions > svg { display: block; width: 18px; height: 18px; }
 .tree-object-actions:hover, .tree-object-actions[aria-expanded="true"] { background: var(--ds-hover); color: var(--ds-text); }
 
 /* Database context belongs to the content; the source sidebar remains navigation. */

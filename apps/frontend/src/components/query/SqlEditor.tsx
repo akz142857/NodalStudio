@@ -1,11 +1,11 @@
 import { useI18n, useEventTranslator, type Translate } from "../../i18n";
 import { autocompletion, type Completion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { syntaxHighlighting } from "@codemirror/language";
 import { linter, lintGutter } from "@codemirror/lint";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, highlightActiveLine, lineNumbers, keymap, placeholder } from "@codemirror/view";
-import { tags } from "@lezer/highlight";
+import { sqlHighlightStyle } from "../../design-system/sql-highlight";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { DatabaseSnapshot } from "../../platform";
 import { executableSql, quoteIdentifier } from "./query-format";
@@ -41,16 +41,7 @@ function completions(snapshot: DatabaseSnapshot | undefined, t: Translate): Comp
   ]);
 }
 
-const sqlHighlightStyle = HighlightStyle.define([
-  { tag: tags.keyword, color: "var(--ds-syntax-keyword)", fontWeight: "650" },
-  { tag: [tags.string, tags.special(tags.string)], color: "var(--ds-syntax-string)" },
-  { tag: [tags.number, tags.bool, tags.null], color: "var(--ds-syntax-number)" },
-  { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "var(--ds-tertiary)", fontStyle: "italic" },
-  { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: "var(--ds-syntax-function)" },
-  { tag: [tags.typeName, tags.className], color: "var(--ds-syntax-type)" },
-  { tag: [tags.operator, tags.punctuation], color: "var(--ds-secondary)" },
-  { tag: tags.variableName, color: "var(--ds-text)" },
-]);
+
 
 export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function SqlEditor(
   { value, snapshot, onChange },

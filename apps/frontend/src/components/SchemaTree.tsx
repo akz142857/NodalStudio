@@ -16,6 +16,9 @@ interface SchemaTreeProps {
   snapshot: DatabaseSnapshot;
   navigation?: ReactNode;
   selectedTable?: TableDefinition;
+  selectedObject?: ObjectKey;
+  onCloseObject?: () => void;
+  onOpenObject?: (key: ObjectKey) => void;
   onSelectTable: (table: TableDefinition) => void;
   onOpenQuery?: (table: TableDefinition) => void;
 }
@@ -27,7 +30,7 @@ type MenuObject = TableDefinition | ViewDefinition | EnumDefinition | ProgramDef
 type MenuTarget = { object: MenuObject; trigger: HTMLButtonElement; x: number; y: number; scope: string };
 
 /** Filtering expands matches without changing the user's normal disclosure state. */
-export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery, navigation }: SchemaTreeProps) {
+export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery, navigation, selectedObject, onOpenObject, onCloseObject }: SchemaTreeProps) {
   const { t: bt } = useI18n();
   const TYPE_LABEL = { tables: bt("business.tables"), views: bt("business.views"), enums: bt("business.enums"), functions: bt("objects.functions"), procedures: bt("objects.procedures"), triggers: bt("objects.triggers") } as const;
   const [open, setOpen] = useState<OpenState>({});
@@ -57,9 +60,14 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     return { ...schema, tables: schema.tables.filter((table) => matches(table.key)), views: schema.views.filter((view) => matches(view.key)), enums: schema.enums.filter(item => matches(item.key)), programs: (schema.programs ?? []).filter(item => matches(item.key)) };
   }).filter((schema) => !filtering || schema.tables.length + schema.views.length + schema.enums.length + schema.programs.length > 0);
   const totals = visible.reduce((sum, schema) => sum + schema.tables.length + schema.views.length + schema.enums.length + schema.programs.length, 0);
-  const preview = previewKey?.kind === "view" ? snapshot.schemas.flatMap((schema) => schema.views).find((view) => view.key.schema === previewKey.schema && view.key.name === previewKey.name) : undefined;
-  const enumPreview = previewKey?.kind === "enum" ? snapshot.schemas.flatMap((schema) => schema.enums).find((item) => item.key.schema === previewKey.schema && item.key.name === previewKey.name) : undefined;
-  const programPreview = snapshot.schemas.flatMap(s => s.programs ?? []).find(p => p.key.kind === previewKey?.kind && p.key.schema === previewKey.schema && p.key.name === previewKey.name);
+  const activeKey = selectedObject ?? previewKey;
+  const openObject = (key: ObjectKey) => {
+    if (onOpenObject && key.kind !== "enum") { setPreviewKey(undefined); onOpenObject(key); }
+    else { onCloseObject?.(); setPreviewKey(key); }
+  };
+  const preview = activeKey?.kind === "view" ? snapshot.schemas.flatMap((schema) => schema.views).find((view) => view.key.schema === activeKey.schema && view.key.name === activeKey.name) : undefined;
+  const enumPreview = activeKey?.kind === "enum" ? snapshot.schemas.flatMap((schema) => schema.enums).find((item) => item.key.schema === activeKey.schema && item.key.name === activeKey.name) : undefined;
+  const programPreview = snapshot.schemas.flatMap(s => s.programs ?? []).find(p => p.key.kind === activeKey?.kind && p.key.schema === activeKey.schema && p.key.name === activeKey.name);
   if (previewKey && !preview && !enumPreview && !programPreview) setPreviewKey(undefined);
   const selectedId = selectedTable && !preview && !enumPreview && !programPreview ? `${selectedTable.key.schema}.${selectedTable.key.name}` : undefined;
 
@@ -75,8 +83,8 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
       x: pointer ? event.clientX : rect.left + 16, y: pointer ? event.clientY : rect.bottom });
   };
   const chooseTable = (table: TableDefinition) => { setPreviewKey(undefined); onSelectTable(table); };
-  const showView = (view: ViewDefinition) => setPreviewKey(view.key);
-  const showEnum = (item: EnumDefinition) => setPreviewKey(item.key);
+  const showView = (view: ViewDefinition) => openObject(view.key);
+  const showEnum = (item: EnumDefinition) => openObject(item.key);
   const closePreview = (event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => {
     const tree = event.currentTarget.closest(".schema-tree");
     const target = tree?.querySelector<HTMLButtonElement>('.tree-row[aria-current="true"]') ?? tree?.querySelector<HTMLInputElement>('input[type="search"]');
@@ -96,7 +104,7 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
       { label: bt("business.locateInDiagram"), run: () => chooseTable(activeMenu.object as TableDefinition) },
       ...(onOpenQuery ? [{ label: bt("business.openReadOnlyQuery"), run: () => onOpenQuery(activeMenu.object as TableDefinition) }] : []),
     ] : "values" in activeMenu.object ? [{ label: bt("business.showEnumDetails"), run: () => showEnum(activeMenu.object as EnumDefinition) }]
-      : "arguments" in activeMenu.object ? [{ label: bt("objects.showDetails"), run: () => setPreviewKey(activeMenu.object.key) }]
+      : "arguments" in activeMenu.object ? [{ label: bt("objects.showDetails"), run: () => openObject(activeMenu.object.key) }]
       : [{ label: bt("business.showViewDefinition"), run: () => showView(activeMenu.object as ViewDefinition) }]),
     { label: bt("business.copyQualifiedName"), run: () => copyName(activeMenu.object.key) },
   ] : [];
@@ -116,7 +124,7 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     {filtering ? <p className="schema-search-count" role="status">{totals} {translateUiLabel(totals === 1 ? "match" : "matches", bt)}</p> : null}
     {filtering && !totals ? <p className="schema-search-empty">{bt("objects.empty")}</p> : null}
     {copy.state ? <OperationFeedback label={bt("business.objectNameCopy")} state={copy.state} onRetry={lastCopy ? () => copyName(lastCopy) : undefined} retryLabel={bt("business.retryNameCopy")} onDismiss={copy.dismiss} /> : null}
-    {preview ? <section className="schema-object-preview schema-view-preview" aria-label={bt("business.definitionOf", { value0: preview.key.schema, value1: preview.key.name })} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closePreview(event); } }}>
+    {preview && !onOpenObject ? <section className="schema-object-preview schema-view-preview" aria-label={bt("business.definitionOf", { value0: preview.key.schema, value1: preview.key.name })} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closePreview(event); } }}>
       <header><strong>{preview.materialized ? bt("business.materializedView") : bt("business.view")} · {preview.key.schema}.{preview.key.name}</strong><button type="button" aria-label={bt("business.closeViewDefinition")} onClick={closePreview}>×</button></header>
       <p>{bt("business.readOnlyDefinitionViewsAreNotDrawnInDiagram")}</p>
       {preview.comment ? <p>{preview.comment}</p> : null}
@@ -124,7 +132,7 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
       <SchemaIndexDetails indexes={preview.indexes ?? []} />
       <ObjectDependencies snapshot={snapshot} objectKey={preview.key} onSelect={key => setPreviewKey(key)} onSelectTable={chooseTable} />
     </section> : null}
-    {programPreview ? <ProgramDetails snapshot={snapshot} program={programPreview} onClose={closePreview} onSelect={setPreviewKey} onSelectTable={chooseTable} /> : null}
+    {programPreview && !onOpenObject ? <ProgramDetails snapshot={snapshot} program={programPreview} onClose={closePreview} onSelect={setPreviewKey} onSelectTable={chooseTable} /> : null}
     {enumPreview ? <SchemaEnumDetails snapshot={snapshot} item={enumPreview} onLocate={onSelectTable} onClose={closePreview} /> : null}
     {visible.map((schema) => {
       const schemaOpen = expanded(schema.name);
@@ -139,22 +147,22 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
             <button type="button" className="tree-row tree-row-type" aria-expanded={typeOpen} disabled={count === 0} onClick={() => toggle(key)}>
               <TreeDisclosureIcon open={typeOpen} /><ActionIcon name={type === "tables" ? "table" : type === "views" ? "copy" : "list"} /><span className="tree-label">{TYPE_LABEL[type]}</span><small>{count}</small>
             </button>
-            {typeOpen && ["functions", "procedures", "triggers"].includes(type) ? schema.programs.filter(p => `${p.key.kind}s` === type).map(program => <div className="tree-object-row" key={program.key.name}><button type="button" className="tree-row tree-row-object" title={program.key.name} aria-current={program === programPreview ? "true" : undefined} onClick={() => setPreviewKey(program.key)}><span className="tree-label">{program.key.name}</span></button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", {value0:program.key.schema,value1:program.key.name})} aria-haspopup="menu" aria-expanded={activeMenu?.object === program} onClick={event => showMenu(event,program)}>…</button></div>) : null}
+            {typeOpen && ["functions", "procedures", "triggers"].includes(type) ? schema.programs.filter(p => `${p.key.kind}s` === type).map(program => <div className="tree-object-row" key={program.key.name}><button type="button" className="tree-row tree-row-object" title={program.key.name} aria-current={program === programPreview ? "true" : undefined} onClick={() => openObject(program.key)}><span className="tree-label">{program.key.name}</span></button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", {value0:program.key.schema,value1:program.key.name})} aria-haspopup="menu" aria-expanded={activeMenu?.object === program} onClick={event => showMenu(event,program)}><ActionIcon name="more" /></button></div>) : null}
             {typeOpen && type === "tables" ? schema.tables.map((table) => <div className="tree-object-row" key={table.key.name}><button type="button" key={table.key.name} className="tree-row tree-row-object" title={table.key.name}
               aria-current={`${schema.name}.${table.key.name}` === selectedId ? "true" : undefined}
               onClick={() => chooseTable(table)} onDragStart={(event) => event.preventDefault()}>
               <span className="tree-label">{table.key.name}</span><small>{table.columns.length}</small>
-            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: table.key.schema, value1: table.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === table} onClick={(event) => showMenu(event, table)}>…</button></div>) : null}
+            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: table.key.schema, value1: table.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === table} onClick={(event) => showMenu(event, table)}><ActionIcon name="more" /></button></div>) : null}
             {typeOpen && type === "views" ? schema.views.map((view) => <div className="tree-object-row" key={view.key.name}><button type="button" key={view.key.name} className="tree-row tree-row-object" title={view.key.name}
               aria-current={preview?.key.schema === view.key.schema && preview.key.name === view.key.name ? "true" : undefined}
               onClick={() => showView(view)} onDragStart={(event) => event.preventDefault()}>
               <span className="tree-label">{view.key.name}</span>{view.materialized ? <small>{bt("business.materializedView")}</small> : null}
-            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: view.key.schema, value1: view.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === view} onClick={(event) => showMenu(event, view)}>…</button></div>) : null}
+            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: view.key.schema, value1: view.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === view} onClick={(event) => showMenu(event, view)}><ActionIcon name="more" /></button></div>) : null}
             {typeOpen && type === "enums" ? schema.enums.map((item) => <div className="tree-object-row" key={item.key.name}><button type="button" className="tree-row tree-row-object" title={item.key.name} key={item.key.name}
               aria-current={enumPreview?.key.schema === item.key.schema && enumPreview.key.name === item.key.name ? "true" : undefined}
               onClick={() => showEnum(item)} onDragStart={(event) => event.preventDefault()}>
               <span className="tree-label">{item.key.name}</span>
-            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: item.key.schema, value1: item.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === item} onClick={(event) => showMenu(event, item)}>…</button></div>) : null}
+            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: item.key.schema, value1: item.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === item} onClick={(event) => showMenu(event, item)}><ActionIcon name="more" /></button></div>) : null}
           </div>;
         }) : null}
       </div>;

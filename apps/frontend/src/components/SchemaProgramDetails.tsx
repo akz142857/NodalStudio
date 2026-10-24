@@ -53,14 +53,14 @@ export function ProgramDetails({ program, snapshot, onClose, onSelect, onSelectT
   </section>;
 }
 
-export function TableCatalogDetails({snapshot, table}: {snapshot: DatabaseSnapshot; table: TableDefinition}) {
+export function TableCatalogDetails({snapshot, table, onOpenObject}: {snapshot: DatabaseSnapshot; table: TableDefinition; onOpenObject?: (key: ObjectKey) => void}) {
   const { t } = useI18n();
   const [selected, setSelected] = useState<ObjectKey>();
   const triggers = snapshot.schemas.flatMap(s => s.programs ?? []).filter(p => p.table && same(p.table, table.key));
   const program = triggers.find(p => selected && same(p.key, selected));
   return <>
-    {triggers.length ? <section className="inspector-section"><h3>{t("objects.triggers")}</h3><ul className="inspector-list">{triggers.map(p => <li key={JSON.stringify(p.key)}><button type="button" className="object-dependency-link" aria-expanded={program === p} onClick={() => setSelected(p.key)}>{p.key.name}</button></li>)}</ul></section> : null}
+    {triggers.length ? <section className="inspector-section"><h3>{t("objects.triggers")}</h3><ul className="inspector-list">{triggers.map(p => <li key={JSON.stringify(p.key)}><button type="button" className="object-dependency-link" aria-expanded={program === p} onClick={() => onOpenObject ? onOpenObject(p.key) : setSelected(p.key)}>{p.key.name}</button></li>)}</ul></section> : null}
     {program ? <ProgramDetails program={program} snapshot={snapshot} onClose={() => setSelected(undefined)}/> : null}
-    <ObjectDependencies snapshot={snapshot} objectKey={table.key}/>
+    <ObjectDependencies snapshot={snapshot} objectKey={table.key} onSelect={onOpenObject}/>
   </>;
 }
