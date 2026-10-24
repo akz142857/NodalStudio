@@ -42,6 +42,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   const draftBinding = JSON.stringify([settings?.source, settings?.app.privacy, semantics?.logicalRelationships, semantics?.domainGroups, semantics?.knowledge]);
   const [generatedRequest, setGeneratedRequest] = useState<{ sourceId: string; snapshotId: string; sql: string; binding: string }>();
   const [appliedDraft, setAppliedDraft] = useState<{ sourceId: string; snapshotId: string; previous: string; sql: string }>();
+  const [draftExecution, setDraftExecution] = useState<{ sourceId: string; snapshotId: string; sql: string; result: QueryExecutionResult }>();
   const editorTabRef = useRef<HTMLButtonElement>(null);
   const draftTabRef = useRef<HTMLButtonElement>(null);
   const editorId = useId();
@@ -99,6 +100,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
       return;
     }
     setAppliedDraft(undefined);
+    setDraftExecution(undefined);
     const queryId = crypto.randomUUID();
     const revision = sourceRevision.current;
     activeQueryId.current = queryId;
@@ -108,6 +110,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     try {
       const result: QueryExecutionResult = await platform.executeReadonlyQuery({ queryId, sourceId, sql: sqlText, rowLimit: session.rowLimit, timeoutMs: 30_000 });
       if (sourceRevision.current !== revision) return;
+      setDraftExecution({ sourceId, snapshotId: snapshot.id, sql: sqlText, result });
       const summary = `${result.rowCount} rows in ${result.durationMs} ms${result.truncated ? " · truncated at the selected row limit" : ""}.`;
       setSession((current) => ({ ...current, result, outcome: "succeeded", message: [summary, ...result.notices].join("\n"), activeTab: "results", outputCollapsed: false }));
     } catch (error) {
@@ -162,6 +165,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     if (!(event.metaKey || event.ctrlKey) || event.altKey || event.nativeEvent.isComposing) return;
     const key = event.key.toLowerCase();
     if (key !== "r" && key !== "enter" && key !== ".") return;
+    if (drafting && key === "enter") return; // The chat composer owns its send shortcut.
     // Own query shortcuts inside this workspace, including disabled states, so ⌘R cannot refresh the schema.
     event.preventDefault(); event.stopPropagation();
     if (event.repeat || pendingOpen) return;
@@ -195,7 +199,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     </div>
     <div className="query-input-pane">
       <div className="query-editor-pane" role="tabpanel" id={`${editorId}-sql-panel`} aria-labelledby={`${editorId}-sql`} hidden={drafting}><SqlEditor ref={editorRef} value={session.draft} snapshot={snapshot} onChange={(draft) => setSession((current) => ({ ...current, draft }))} onRun={(sqlText) => void run(sqlText)} executing={executing} disabled={!desktopReady || Boolean(pendingOpen)} onStop={stopQuery} /></div>
-      {canDraft && snapshot && settings && semantics ? <div className="query-draft-pane" role="tabpanel" id={`${editorId}-draft-panel`} aria-labelledby={`${editorId}-draft`} hidden={!drafting}><QueryDraftPanel platform={platform} snapshot={snapshot} settings={settings} semantics={semantics} seed={draftSeed} initialTable={selectedTable} onOpenSettings={() => onOpenAiSettings?.()} onUseSql={(sql) => setGeneratedRequest({ sourceId, snapshotId: snapshot.id, sql, binding: draftBinding })} /></div> : null}
+      {canDraft && snapshot && settings && semantics ? <div className="query-draft-pane" role="tabpanel" id={`${editorId}-draft-panel`} aria-labelledby={`${editorId}-draft`} hidden={!drafting}><QueryDraftPanel platform={platform} snapshot={snapshot} settings={settings} semantics={semantics} seed={draftSeed} initialTable={selectedTable} execution={draftExecution?.sourceId === sourceId && draftExecution.snapshotId === snapshot.id ? draftExecution : undefined} onOpenSettings={() => onOpenAiSettings?.()} onUseSql={(sql) => setGeneratedRequest({ sourceId, snapshotId: snapshot.id, sql, binding: draftBinding })} /></div> : null}
     </div>
     <div className="query-result-resizer" hidden={drafting} role="separator" aria-label="Resize query results" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={650} aria-valuenow={session.resultHeight} tabIndex={0} onMouseDown={beginResultResize} onKeyDown={(event) => {
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;

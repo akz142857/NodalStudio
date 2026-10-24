@@ -59,7 +59,8 @@ describe("business discovery app integration", () => {
     const card = screen.getByText("public.orders", { selector: "h4" }).closest("article")!;
     fireEvent.click(within(card).getByRole("button", { name: "Draft query" }));
     expect(await screen.findByRole("tab", { name: "Draft query" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByLabelText("Question")).toHaveValue("orders");
+    expect(screen.getByLabelText("Question")).toHaveValue("");
+    expect(screen.getByLabelText("Query conversation")).toHaveTextContent("orders");
     expect(screen.getByRole("region", { name: "Query context" })).toHaveTextContent("public.orders");
     expect(screen.getByRole("button", { name: /^Run/ })).toBeDisabled();
   });

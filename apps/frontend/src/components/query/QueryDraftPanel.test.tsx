@@ -31,7 +31,8 @@ describe("SQL drafting", () => {
   it.each(["postgreSql", "mySql"] as const)("%s drafting requires review and replacement, permits undo, and never runs automatically", async (dialect) => {
     const p = setup(dialect); const sql = p.draftSql; saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 42;" });
     const { container } = render(<QueryPage {...p} runtimeKind="desktop" draftSeed={seed} />);
-    expect(screen.getByLabelText("Question")).toHaveValue(seed.question);
+    expect(screen.getByLabelText("Question")).toHaveValue("");
+    expect(screen.getByText(seed.question)).toBeVisible();
     fireEvent.click(await screen.findByRole("button", { name: "Review AI request" }));
     await screen.findByRole("button", { name: "Generate SQL" });
     expect(p.mocks.runDiscovery).not.toHaveBeenCalled();
@@ -48,6 +49,8 @@ describe("SQL drafting", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review in editor" })); fireEvent.click(screen.getByRole("button", { name: "Replace" }));
     fireEvent.click(screen.getByRole("button", { name: /^Run/ }));
     await waitFor(() => expect(p.mocks.executeReadonlyQuery).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ sql })));
+    fireEvent.click(screen.getByRole("tab", { name: "Draft query" }));
+    expect(await screen.findByRole("region", { name: "Executed query result" })).toBeVisible();
   });
   it("preserves both authoring modes and suppresses execution while composing a question", async () => {
     const p = setup();
@@ -70,13 +73,14 @@ describe("SQL drafting", () => {
     const p = setup();
     render(<StrictMode><QueryDraftPanel {...p} onUseSql={vi.fn()} onOpenSettings={vi.fn()} /></StrictMode>);
     expect(screen.queryByLabelText("Starting table")).toBeNull();
-    screen.getAllByRole("checkbox").forEach((checkbox) => expect(checkbox).not.toBeVisible());
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
     expect(screen.getByRole("heading", { name: "What would you like to know?" })).toBeVisible();
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Show public.orders IDs" } });
     fireEvent.click(screen.getByRole("button", { name: "Create SQL draft" }));
     await screen.findByRole("button", { name: "Generate SQL" });
     expect((p.mocks.prepareDiscovery.mock.calls[0][0] as DiscoveryInput).task.candidates).toEqual(seed.tables);
     expect(p.mocks.runDiscovery).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "orders" } });
     expect(screen.queryByRole("button", { name: "Generate SQL" })).toBeNull();
     expect(p.mocks.cancelDiscovery).toHaveBeenCalled();
@@ -85,6 +89,7 @@ describe("SQL drafting", () => {
     expect(p.mocks.prepareDiscovery).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /^public\.orders/ }));
     await screen.findByRole("button", { name: "Generate SQL" });
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Show public.customers" } });
     fireEvent.click(screen.getByRole("button", { name: "Create SQL draft" }));
     await screen.findByRole("button", { name: "Generate SQL" });
@@ -95,17 +100,48 @@ describe("SQL drafting", () => {
     render(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Review AI request" })); fireEvent.click(await screen.findByRole("button", { name: "Generate SQL" }));
     expect(await screen.findByText("What counts as active?")).toBeVisible(); expect(screen.queryByRole("button", { name: "Review in editor" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Active means total greater than zero" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send follow-up" }));
+    await waitFor(() => expect(p.mocks.prepareDiscovery).toHaveBeenCalledTimes(2));
+    expect((p.mocks.prepareDiscovery.mock.calls[1][0] as DiscoveryInput).task.question).toContain("What counts as active?");
+    expect((p.mocks.prepareDiscovery.mock.calls[1][0] as DiscoveryInput).task.question).toContain("Active means total greater than zero");
   });
-  it.each(["postgreSql", "mySql"] as const)("%s cancels an in-flight draft when the question changes and rejects late output", async (dialect) => {
+  it.each(["postgreSql", "mySql"] as const)("%s allows composing while a draft runs, cancels on sending the next turn, and rejects late output", async (dialect) => {
     const p = setup(dialect); let finish!: (r: DiscoveryResult) => void;
     p.mocks.runDiscovery.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     render(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Review AI request" })); fireEvent.click(await screen.findByRole("button", { name: "Generate SQL" }));
     const preview = await p.mocks.prepareDiscovery.mock.results[0].value as DiscoveryPreview;
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Changed question" } });
+    expect(p.mocks.cancelDiscovery).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Send follow-up" }));
     expect(p.mocks.cancelDiscovery).toHaveBeenCalledWith(preview.requestId);
     await act(async () => { finish({ ...discoveryResult(preview), answer: { terms: [], meanings: [], rankings: [], interpretations: [], readingOrder: [], unknowns: [], sqlDraft: { sql, explanation: "Late answer", assumptions: [], clarification: [] } } }); await Promise.resolve(); });
     expect(screen.queryByLabelText("Generated SQL")).toBeNull();
+  });
+  it("keeps answers above the composer and sends follow-ups with the reviewed tables but without local result rows", async () => {
+    const p = setup("mySql");
+    const execution = { sql: p.draftSql, result: { queryId: "local", columns: [{ name: "private_note", databaseType: "TEXT" }], rows: [[{ kind: "text" as const, value: "LOCAL_RESULT_ONLY", truncated: false }]], rowCount: 1, durationMs: 2, truncated: false, notices: [] } };
+    render(<QueryDraftPanel {...p} seed={seed} execution={execution} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
+    await generate();
+    expect(screen.getByText("LOCAL_RESULT_ONLY")).toBeVisible();
+    const question = screen.getByLabelText("Question");
+    fireEvent.change(question, { target: { value: "只取前 5 行" } });
+    expect(screen.getByLabelText("Generated SQL")).toBeVisible();
+    fireEvent.keyDown(question, { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(question, { key: "Enter", isComposing: true });
+    expect(p.mocks.prepareDiscovery).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(question, { key: "Enter" });
+    await waitFor(() => expect(p.mocks.prepareDiscovery).toHaveBeenCalledTimes(2));
+    expect(question).toHaveValue("");
+    expect(screen.getByText(seed.question)).toBeVisible();
+    const input = p.mocks.prepareDiscovery.mock.calls[1][0] as DiscoveryInput;
+    expect(input.task.question).toContain(seed.question);
+    expect(input.task.question).toContain("只取前 5 行");
+    expect(input.task.candidates).toEqual(seed.tables);
+    expect(JSON.stringify(input)).not.toContain("LOCAL_RESULT_ONLY");
+    expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(1);
+    expect(p.mocks.executeReadonlyQuery).not.toHaveBeenCalled();
   });
   it("blocks out-of-scope carried tables and offline configuration without silently changing scope", async () => {
     const p = setup(); p.settings.source!.ai.contextScope = "currentTable";
@@ -113,6 +149,31 @@ describe("SQL drafting", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("outside the configured AI scope"); expect(screen.queryByRole("button", { name: "Review AI request" })).toBeNull();
     p.settings.app.privacy.offlineMode = true; view.rerender(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Open AI settings" })).toBeVisible(); expect(p.mocks.prepareDiscovery).not.toHaveBeenCalled();
+    await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+  });
+  it("does not reuse an archived SQL action after relationship evidence changes", async () => {
+    const p = setup();
+    const view = render(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
+    await generate();
+    fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Limit to 5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send follow-up" }));
+    expect(screen.getByRole("button", { name: "Review in editor" })).toBeEnabled();
+    view.rerender(<QueryDraftPanel {...p} semantics={{ ...p.semantics, logicalRelationships: [] }} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Review in editor" })).toBeDisabled();
+    await waitFor(() => expect(p.mocks.prepareDiscovery).toHaveBeenCalled());
+  });
+  it("keeps an over-limit follow-up editable without sending truncated context", async () => {
+    const p = setup();
+    render(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
+    const question = screen.getByLabelText("Question");
+    fireEvent.change(question, { target: { value: "x".repeat(2000) } });
+    fireEvent.click(screen.getByRole("button", { name: "Send follow-up" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("context limit");
+    expect(question).toHaveValue("x".repeat(2000));
+    expect(p.mocks.prepareDiscovery).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+    expect(question).toHaveValue("");
+    expect(screen.queryByText(seed.question)).toBeNull();
     await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
   });
 });

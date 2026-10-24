@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import type { DatabaseSnapshot, DiscoveryInput, DiscoveryPreview, DiscoveryResult, EffectiveSettings, NodalStudioPlatform, TableAiEvidence, TableDefinition } from "../platform";
+import type { DatabaseSnapshot, DiscoveryInput, DiscoveryPreview, DiscoveryResult, EffectiveSettings, NodalStudioPlatform, QueryExecutionResult, SqlDraft, TableAiEvidence, TableDefinition } from "../platform";
+import { QueryDraftAnswer } from "./query/QueryDraftAnswer";
 import { objectId, objectLabel } from "../graph/business-discovery";
 import { TableStructure } from "./TableInspector";
 
@@ -15,13 +16,15 @@ interface Props {
   onOpenSettings: () => void;
   onUseSql?: (sql: string) => void;
   autoPrepare?: boolean;
+  onSqlDraft?: (draft: SqlDraft) => void;
+  execution?: { sql: string; result: QueryExecutionResult };
 }
 
 /** Key every input and policy dependency, including the local search revision. */
 export function DiscoveryAssistant(props: Props) {
   return <DiscoveryRequest key={JSON.stringify([props.input, props.binding, props.snapshot.id, props.snapshot.sourceId, props.snapshot.fingerprint, props.settings.source, props.settings.app.privacy, props.available])} {...props} />;
 }
-function DiscoveryRequest({ platform, snapshot, settings, input, available, onApplyTerms, onLocate, onOpenSettings, onUseSql, autoPrepare = false }: Props) {
+function DiscoveryRequest({ platform, snapshot, settings, input, available, onApplyTerms, onLocate, onOpenSettings, onUseSql, autoPrepare = false, onSqlDraft, execution }: Props) {
   const ai = settings.source?.ai;
   const remote = ai?.provider === "openAiCompatible";
   const enabled = available && settings.source?.sourceId === snapshot.sourceId && !!ai?.enabled && !(remote && settings.app.privacy.offlineMode);
@@ -90,6 +93,7 @@ function DiscoveryRequest({ platform, snapshot, settings, input, available, onAp
       if (Date.now() >= Date.parse(preview.expiresAt)) { invalidate("expired"); return; }
       if (next.requestId !== preview.requestId || next.sourceId !== snapshot.sourceId || next.snapshotId !== snapshot.id || next.operation !== input.task.operation || next.provider !== preview.provider || next.model !== preview.model) throw new Error("The returned answer belongs to a different task.");
       setResult(next); setPhase("done");
+      if (next.answer.sqlDraft) onSqlDraft?.(next.answer.sqlDraft);
     } catch (reason) { if (current === generation.current) { setError(String(reason instanceof Error ? reason.message : reason)); setPhase("error"); } }
     finally { if (current === generation.current) { busy.current = false; request.current = undefined; } }
   }
@@ -125,12 +129,7 @@ function DiscoveryRequest({ platform, snapshot, settings, input, available, onAp
     </section> : null}
     {result && preview ? <section className="ai-result" aria-label="Discovery answer">
       <h4>{input.task.operation === "draftSql" ? "Review your query draft" : "Model suggestions · unverified"}</h4>
-      {result.answer.sqlDraft ? <div className="query-generated-draft">
-        <p>{result.answer.sqlDraft.explanation}</p>
-        {result.answer.sqlDraft.clarification.length ? <><strong>A little more detail is needed</strong><ul>{result.answer.sqlDraft.clarification.map((question, i) => <li key={i}>{question}</li>)}</ul><p>Update your question above with these details, then review a new request.</p></> : null}
-        {result.answer.sqlDraft.assumptions.length ? <><strong>Assumptions to check</strong><ul>{result.answer.sqlDraft.assumptions.map((item, i) => <li key={i}>{item}</li>)}</ul></> : null}
-        {result.answer.sqlDraft.sql ? <><pre aria-label="Generated SQL">{result.answer.sqlDraft.sql}</pre><p>Checked against the selected schema and supported SQL subset. Business meaning still needs your review. Nothing has run.</p><button type="button" disabled={!enabled} onClick={() => onUseSql?.(result.answer.sqlDraft!.sql!)}>Review in editor</button></> : null}
-      </div> : null}
+      {result.answer.sqlDraft ? <QueryDraftAnswer draft={result.answer.sqlDraft} disabled={!enabled} onUseSql={onUseSql} result={execution && execution.sql.trim() === result.answer.sqlDraft.sql?.trim() ? execution.result : undefined} /> : null}
       {result.answer.terms.length ? <><p>{result.answer.terms.join(" · ")}</p><button type="button" onClick={() => onApplyTerms(result.answer.terms)}>Apply terms to local search</button></> : null}
       {result.answer.meanings.map((meaning) => <button type="button" key={meaning.label} onClick={() => onApplyTerms(meaning.terms)}>{meaning.label} · search locally</button>)}
       {input.task.operation === "rank" ? <p>AI order covers only the candidates below. All other results keep their local order; this is not a whole-database ranking.</p> : null}

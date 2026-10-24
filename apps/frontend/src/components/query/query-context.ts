@@ -26,22 +26,30 @@ export function resolveDraftContext(snapshot: DatabaseSnapshot, semantics: Seman
   const namesOnly = { ...snapshot, schemas: snapshot.schemas.map((s) => ({ ...s, tables: s.tables.map((t) => ({ ...t, columns: [], comment: null })) })) };
   const nameScores = new Map(discoverTables(namesOnly, question, [], false).map((c) => [objectId(c.table.key), c.score / c.table.key.name.split(/[_\s]+/).length]));
   const mentions = (text: string) => new RegExp(`(^|[^a-z0-9_])${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9_])`, "i").test(query);
-  const ranked = candidates.map((c) => ({ key: c.table.key, score: mentions(objectLabel(c.table.key)) ? 10000 : mentions(c.table.key.name) ? 1000 : (nameScores.get(objectId(c.table.key)) ?? 0) * 20 + c.score, reason: c.reasons[0] ?? "Matched schema context", nameScore: nameScores.get(objectId(c.table.key)) ?? 0 })).sort((a, b) => b.score - a.score);
+  const ranked = candidates.map((c) => ({ key: c.table.key, explicit: mentions(objectLabel(c.table.key)) || mentions(c.table.key.name), score: mentions(objectLabel(c.table.key)) ? 10000 : mentions(c.table.key.name) ? 1000 : (nameScores.get(objectId(c.table.key)) ?? 0) * 20 + c.score, reason: c.reasons[0] ?? "Matched schema context", nameScore: nameScores.get(objectId(c.table.key)) ?? 0 })).sort((a, b) => Number(b.explicit) - Number(a.explicit) || b.score - a.score);
   let first = ranked[0];
   if (hint && /this table|current table|当前表|这个表/.test(query)) {
     const table = snapshot.schemas.flatMap((s) => s.tables).find((t) => objectId(t.key) === objectId(hint));
-    if (table) first = { key: table.key, score: 10000, reason: "Uses the table you are inspecting", nameScore: 0 };
+    if (table) first = { key: table.key, explicit: true, score: 10000, reason: "Uses the table you are inspecting", nameScore: 0 };
   }
   if (!first) return { kind: "clarify", message: "I couldn’t find a clear match in this database. Describe the business subject or a field you need, or add context below.", choices: [] };
   const runner = ranked.find((c) => objectId(c.key) !== objectId(first.key));
   if (runner && first.score < 10000 && ((runner.key.name === first.key.name && runner.score >= first.score * .75) || (!first.nameScore && first.score < 1000 && runner.score >= first.score * .8))) return { kind: "clarify", message: "More than one dataset could answer this. Which one did you mean?", choices: ranked.slice(0, 4) };
-  const relevant = ranked.filter((c) => objectId(c.key) !== objectId(first.key) && c.key.name !== first.key.name && (c.score >= 1000 || (c.nameScore > 0 && c.score >= first.score * .75)));
+  // A fuzzy score can exceed 1000 in a long question; it does not prove the
+  // table was named (for example, a `state` filter can match `states`).
+  const relevant = ranked.filter((c) => objectId(c.key) !== objectId(first.key) && c.key.name !== first.key.name && (c.explicit || (c.nameScore > 0 && c.score >= first.score * .75)));
   const relations = knownRelationships(snapshot, semantics.logicalRelationships).relationships;
   const context: DraftContext = { root: first.key, tables: [first.key] };
   for (const candidate of relevant) {
     const path = findKnownPath(first.key, candidate.key, relations, 2);
     if (!path) return { kind: "clarify", message: "The question matches separate datasets without a confirmed relationship. Which subject should this query focus on?", choices: [first, ...relevant].slice(0, 4) };
     for (const key of path.tables) if (!context.tables.some((k) => objectId(k) === objectId(key))) context.tables.push(key);
+  }
+  // Automatic retrieval has no user-pinned root. Use the center of the same
+  // reviewed table set when it fits OneHop; never widen the configured scope.
+  if (settings.source?.ai.contextScope === "oneHop" && validateDraftContext(snapshot, semantics, settings, context, domainId)) {
+    const root = context.tables.find((key) => !validateDraftContext(snapshot, semantics, settings, { ...context, root: key }, domainId));
+    if (root) context.root = root;
   }
   const problem = validateDraftContext(snapshot, semantics, settings, context, domainId);
   return problem ? { kind: "blocked", message: problem } : { kind: "ready", context, reason: "Found from your question and local schema. Check this context before generating." };
