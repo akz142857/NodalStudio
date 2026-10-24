@@ -16,7 +16,7 @@ const categories = ["通用", "外观", "画布与 ER", "数据源", "历史与�
 it.each(categories)("opens the translated %s category", (category) => {
   const settings = defaultEffectiveSettings("source"); settings.app.general.language = "zhCn";
   render(<SettingsPage {...props} settings={settings} />);
-  const button = screen.getByRole("button", { name: category, exact: true });
+  const button = screen.getByRole("button", { name: category });
   fireEvent.click(button);
   expect(button).toHaveAttribute("aria-current", "page");
 });
