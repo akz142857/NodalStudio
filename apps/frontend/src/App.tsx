@@ -1087,7 +1087,7 @@ export function App() {
             snapshot={snapshot} semantics={semantics} settings={settings} platform={platform} desktop
             initialTable={historicalSelection ? undefined : selectedTable}
             sourceLabel={dataSources.find((source) => source.id === snapshot.sourceId)?.displayName}
-            onDraftQuery={querySupported && snapshot?.database.databaseType === "postgreSql" ? (seed) => { setQueryDraftSeed({ ...seed, id: Date.now() }); setDiscoverySnapshot(undefined); setOpenQueryRequest(undefined); setMode("query"); } : undefined}
+            onDraftQuery={querySupported ? (seed) => { setQueryDraftSeed({ ...seed, id: Date.now() }); setDiscoverySnapshot(undefined); setOpenQueryRequest(undefined); setMode("query"); } : undefined}
             onClose={() => setDiscoverySnapshot(undefined)}
             onLocate={(table) => { setDiscoverySnapshot(undefined); locateTable(table); }}
             onExplain={(table) => { setDiscoverySnapshot(undefined); locateTable(table); setRightPanel((panel) => ({ ...panel, expanded: true })); setExplainRequest((value) => value + 1); }}

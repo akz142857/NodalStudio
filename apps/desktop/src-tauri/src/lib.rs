@@ -4827,6 +4827,8 @@ fn safe_mysql_error(error: mysql_adapter::MySqlAdapterError) -> String {
     }
 }
 
+// Used directly by Result::map_err, which supplies an owned error.
+#[allow(clippy::needless_pass_by_value)]
 fn safe_store_error(error: snapshot_store::SnapshotStoreError) -> String {
     storage_errors::message(&error).into()
 }

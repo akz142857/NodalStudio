@@ -190,9 +190,6 @@ pub fn build_context(
         }
     };
     let requested = if task.operation == Operation::DraftSql {
-        if snapshot.database.database_type != schema_model::DatabaseType::PostgreSql {
-            return Err("SQL drafting currently supports PostgreSQL only.".into());
-        }
         if task.candidates.is_empty()
             || task.candidates.len() > 3
             || task.candidates.iter().collect::<BTreeSet<_>>().len() != task.candidates.len()

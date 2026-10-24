@@ -334,11 +334,19 @@ fn request_body(
     input: &DiscoveryInput,
     context: &DiscoveryContext,
 ) -> Result<(Option<String>, Value), String> {
+    let sql_prompt;
     let system = match input.task.operation {
         Operation::Expand => discovery::EXPANSION_PROMPT,
         Operation::Rank => discovery::RANK_PROMPT,
         Operation::Path => discovery::PATH_PROMPT,
-        Operation::DraftSql => ai_context::sql_draft::PROMPT,
+        Operation::DraftSql => {
+            sql_prompt = ai_context::sql_draft::prompt(
+                context
+                    .dialect
+                    .ok_or("The SQL source dialect is missing.")?,
+            );
+            &sql_prompt
+        }
     };
     // Expansion must never serialize context, identifiers, candidates or history.
     let prompt = if input.task.operation == Operation::Expand {
@@ -426,7 +434,18 @@ async fn execute(
         .as_ref()
         .and_then(|draft| draft.sql.as_deref())
     {
-        query_engine::validate_read_only_postgres(sql).map_err(|e| e.to_string())?;
+        match prepared
+            .preview
+            .context
+            .dialect
+            .ok_or("The SQL source dialect is missing.")?
+        {
+            schema_model::DatabaseType::PostgreSql => {
+                query_engine::validate_read_only_postgres(sql)
+            }
+            schema_model::DatabaseType::MySql => query_engine::validate_read_only_mysql(sql),
+        }
+        .map_err(|e| e.to_string())?;
     }
     Ok(DiscoveryResult {
         request_id: prepared.preview.request_id,

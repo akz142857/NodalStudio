@@ -43,7 +43,7 @@
 ## 运行端及工作流边界
 
 - **单表 AI 理解（阶段一）**：Desktop 当前来源最新快照支持表/字段解释，先查看后端准备的实际请求 JSON 再发送；CurrentTable、OneHop 与显式单域限制外发集合，保存的注解不参与本阶段请求。解释区分结构证据、未确认推测与未知问题，证据可定位具体对象或逻辑关系的源字段；切换任务、取消和过期隔离旧响应。Web、临时 DDL 和历史快照不接入新流程，后续已完成业务找表、路径解释、说明草稿及确认复用，见 [AI 交付记录](AI_DATABASE_UNDERSTANDING_DELIVERY.md) 与 [v0.2.0 验收](releases/v0.2.0-validation.md)。详见 [阶段一交付记录](AI_DATABASE_UNDERSTANDING_STAGE_ONE.md)。
-- **查询**：Desktop PostgreSQL 和 MySQL 均执行受约束的只读 SELECT/WITH，默认 100 行、最大 5,000 行，前端请求超时 30 秒，支持取消、结果导出与本地查询历史。用户主动执行 Query 会读取行数据；这与元数据采集不同。MySQL 编辑器、补全、当前语句和表格查询入口使用反引号方言；BIGINT/DECIMAL 保留精确文本。MySQL 专用会话开启只读事务，移除 ANSI_QUOTES/NO_BACKSLASH_ESCAPES 以匹配解析器，保留其他 SQL mode；阻止 DML/DDL、多语句、SELECT INTO、锁查询和可执行注释/提示。超时或取消同时尝试结束服务端语句并关闭专用连接。切换来源会取消旧查询并隔离迟到结果与历史。Web 仍不执行 SQL。AI 自动 SQL 草稿仍仅支持 PostgreSQL，本次不扩大该独立功能。详见 [MySQL Query 验证记录](MYSQL_QUERY_ACCEPTANCE.md)。
+- **查询**：Desktop PostgreSQL 和 MySQL 均执行受约束的只读 SELECT/WITH，默认 100 行、最大 5,000 行，前端请求超时 30 秒，支持取消、结果导出与本地查询历史。用户主动执行 Query 会读取行数据；这与元数据采集不同。MySQL 编辑器、补全、当前语句和表格查询入口使用反引号方言；BIGINT/DECIMAL 保留精确文本。MySQL 专用会话开启只读事务，移除 ANSI_QUOTES/NO_BACKSLASH_ESCAPES 以匹配解析器，保留其他 SQL mode；阻止 DML/DDL、多语句、SELECT INTO、锁查询和可执行注释/提示。超时或取消同时尝试结束服务端语句并关闭专用连接。切换来源会取消旧查询并隔离迟到结果与历史。Web 仍不执行 SQL。AI SQL 草稿支持 PostgreSQL/MySQL，提示词、解析器和只读执行校验均绑定当前快照方言；需启用在线模型并审阅 1–3 张表的上下文，关联只能使用完整的物理或已确认映射。MySQL 使用反引号和 MySQL 日期函数；生成、放入编辑器和执行是分开的操作，草稿不自动运行。详见 [MySQL Query 验证记录](MYSQL_QUERY_ACCEPTANCE.md) 与 [MySQL AI SQL 草稿验证记录](MYSQL_AI_SQL_DRAFT_ACCEPTANCE.md)。
 - **Changes 空状态**：没有当前比较时也可点击；展示未选择来源、首份快照、可选择两份快照、加载/错误或 Web 未携带比较的说明。Desktop 提供历史入口及刷新结构按钮；比较的是结构，不是行数据变动。
 - **Web 比较**：当前分享包包含一个快照及可选 changeSet，没有完整 Before 历史。可以看已提供的摘要及当前对象，不能生成未分享的旧属性、删除节点或任意新比较；缺失详情明确显示覆盖限制。
 - **语义及关系**：Desktop 编辑语义层，不修改物理快照。逻辑关系校验主要比较已采集类型身份，并不是完整 PG/MySQL 物理 FK 兼容性验证。Web 只读已分享的语义及关系状态，不能保存或确认候选。

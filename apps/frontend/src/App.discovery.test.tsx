@@ -7,7 +7,8 @@ import { getPlatform, type CaptureSnapshotResult, type SnapshotSummary } from ".
 import type { SchemaCanvasProps } from "./components/SchemaCanvas";
 import { reportSemantics, reportSnapshot } from "./test/schema-report-fixture";
 import { discoverySettings } from "./test/discovery-fixture";
-vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot }: { onSnapshot: (r: CaptureSnapshotResult) => void }) => <button onClick={() => onSnapshot({ snapshot: reportSnapshot, stored: true, changeSet: null })}>Load business fixture</button> }));
+let loadedDialect: "postgreSql" | "mySql" = "postgreSql";
+vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot }: { onSnapshot: (r: CaptureSnapshotResult) => void }) => <button onClick={() => onSnapshot({ snapshot: { ...reportSnapshot, database: { ...reportSnapshot.database, databaseType: loadedDialect } }, stored: true, changeSet: null })}>Load business fixture</button> }));
 vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: (props: SchemaCanvasProps) => {
   const [viewport, setViewport] = useState("original");
   return props.temporaryViewLabel ? <div aria-label="Local business graph" /> : <section aria-label="Full model canvas" inert={props.interactionPaused}>
@@ -26,7 +27,7 @@ function mount(latestId = reportSnapshot.id) {
   return { save };
 }
 describe("business discovery app integration", () => {
-  beforeEach(() => localStorage.clear()); afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => { localStorage.clear(); loadedDialect = "postgreSql"; }); afterEach(() => vi.restoreAllMocks());
   it("retains the mounted full canvas, layout, selection and filter after local graph browsing", async () => {
     const { save } = mount(); await screen.findByText("Discovery runtime"); fireEvent.click(screen.getByRole("button", { name: "Load business fixture" }));
     await screen.findByRole("button", { name: "Business question" });
@@ -48,6 +49,20 @@ describe("business discovery app integration", () => {
     fireEvent.click(within(card).getByRole("button", { name: "Explain this table" }));
     expect(screen.queryByRole("region", { name: "Business table discovery" })).toBeNull(); expect(screen.getByRole("region", { name: "Single-table understanding" })).toBeVisible(); expect(screen.getByTestId("original-selection")).toHaveTextContent("orders");
   });
+  it("opens MySQL drafting from a business candidate with its question and table context", async () => {
+    loadedDialect = "mySql";
+    mount(); await screen.findByText("Discovery runtime");
+    fireEvent.click(screen.getByRole("button", { name: "Load business fixture" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Business question" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Business question" }), { target: { value: "orders" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search locally" }));
+    const card = screen.getByText("public.orders", { selector: "h4" }).closest("article")!;
+    fireEvent.click(within(card).getByRole("button", { name: "Draft query" }));
+    expect(await screen.findByRole("tab", { name: "Draft query" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Question")).toHaveValue("orders");
+    expect(screen.getByRole("region", { name: "Query context" })).toHaveTextContent("public.orders");
+    expect(screen.getByRole("button", { name: /^Run/ })).toBeDisabled();
+  });
   it("keeps the business entry out of historical snapshots", async () => {
     mount("newer-snapshot"); await screen.findByText("Discovery runtime"); fireEvent.click(screen.getByRole("button", { name: "Load business fixture" }));
     await waitFor(() => expect(screen.getByRole("region", { name: "Full model canvas" })).toBeVisible()); expect(screen.queryByRole("button", { name: "Business question" })).toBeNull();
@@ -55,7 +70,7 @@ describe("business discovery app integration", () => {
 });
 
 describe("discovery navigation regression", () => {
-  beforeEach(() => localStorage.clear()); afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => { localStorage.clear(); loadedDialect = "postgreSql"; }); afterEach(() => vi.restoreAllMocks());
   it("global table navigation exits discovery so the destination is visible", async () => {
     mount(); await screen.findByText("Discovery runtime");
     fireEvent.click(screen.getByRole("button", { name: "Load business fixture" }));

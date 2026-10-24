@@ -11,13 +11,24 @@ use tokio::{
 };
 
 async fn fixture(endpoint: &str) -> (AppState, DiscoveryInput, DataSourceSettings) {
+    fixture_for_dialect(endpoint, DatabaseType::PostgreSql).await
+}
+
+async fn fixture_for_dialect(
+    endpoint: &str,
+    dialect: DatabaseType,
+) -> (AppState, DiscoveryInput, DataSourceSettings) {
+    let (version, type_schema, type_name) = match dialect {
+        DatabaseType::PostgreSql => ("17", "pg_catalog", "int8"),
+        DatabaseType::MySql => ("8.4", "public", "bigint"),
+    };
     let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
     let mut snapshot = DatabaseSnapshot::new(
         Uuid::new_v4(),
         DatabaseInfo {
             name: "private-database-name".into(),
-            database_type: DatabaseType::PostgreSql,
-            version: "17".into(),
+            database_type: dialect,
+            version: version.into(),
         },
         vec![SchemaDefinition {
             name: "public".into(),
@@ -33,8 +44,8 @@ async fn fixture(endpoint: &str) -> (AppState, DiscoveryInput, DataSourceSetting
         name: "id".into(),
         ordinal_position: 1,
         formatted_type: "bigint".into(),
-        type_schema: "pg_catalog".into(),
-        type_name: "int8".into(),
+        type_schema: type_schema.into(),
+        type_name: type_name.into(),
         nullable: false,
         default_value: None,
         identity: None,
@@ -600,54 +611,57 @@ async fn confirmed_notes_obey_wire_scope_switch_and_invalidate_old_tasks_on_text
 
 #[tokio::test]
 async fn sql_draft_requires_enabled_model_and_exact_scope_before_any_send() {
-    let (app, mut input, mut settings) = fixture("http://127.0.0.1:9").await;
-    input.task.operation = Operation::DraftSql;
-    input.task.candidates.truncate(1);
-    settings.ai.context_scope = AiContextScope::CurrentTable;
-    app.store
-        .save_data_source_settings(&settings)
-        .await
-        .unwrap();
-    let prepared = prepare(&app, input.clone()).await.unwrap();
-    assert_eq!(prepared.preview.context.tables, input.task.candidates);
-    assert!(
-        !prepared
-            .preview
-            .request_body
-            .to_string()
-            .contains("private_unrelated")
-    );
-    assert!(
-        !prepared
-            .preview
-            .request_body
-            .to_string()
-            .contains("private-field-comment")
-    );
-    input
-        .task
-        .candidates
-        .push(schema_model::ObjectKey::table("public", "customers"));
-    assert!(
-        prepare(&app, input.clone())
+    for dialect in [DatabaseType::PostgreSql, DatabaseType::MySql] {
+        let (app, mut input, mut settings) =
+            fixture_for_dialect("http://127.0.0.1:9", dialect).await;
+        input.task.operation = Operation::DraftSql;
+        input.task.candidates.truncate(1);
+        settings.ai.context_scope = AiContextScope::CurrentTable;
+        app.store
+            .save_data_source_settings(&settings)
             .await
-            .err()
-            .unwrap()
-            .contains("scope")
-    );
-    input.task.candidates.truncate(1);
-    settings.ai.provider = AiProviderKind::Offline;
-    app.store
-        .save_data_source_settings(&settings)
-        .await
-        .unwrap();
-    assert!(
-        prepare(&app, input)
+            .unwrap();
+        let prepared = prepare(&app, input.clone()).await.unwrap();
+        assert_eq!(prepared.preview.context.tables, input.task.candidates);
+        assert!(
+            !prepared
+                .preview
+                .request_body
+                .to_string()
+                .contains("private_unrelated")
+        );
+        assert!(
+            !prepared
+                .preview
+                .request_body
+                .to_string()
+                .contains("private-field-comment")
+        );
+        input
+            .task
+            .candidates
+            .push(schema_model::ObjectKey::table("public", "customers"));
+        assert!(
+            prepare(&app, input.clone())
+                .await
+                .err()
+                .unwrap()
+                .contains("scope")
+        );
+        input.task.candidates.truncate(1);
+        settings.ai.provider = AiProviderKind::Offline;
+        app.store
+            .save_data_source_settings(&settings)
             .await
-            .err()
-            .unwrap()
-            .contains("enabled AI model")
-    );
+            .unwrap();
+        assert!(
+            prepare(&app, input)
+                .await
+                .err()
+                .unwrap()
+                .contains("enabled AI model")
+        );
+    }
 }
 
 #[tokio::test]
@@ -678,6 +692,85 @@ async fn sql_draft_returns_clarification_and_rejects_unsafe_model_sql() {
             assert!(result.unwrap().answer.sql_draft.unwrap().sql.is_none());
         } else {
             assert!(result.is_err());
+        }
+        server.await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn mysql_sql_draft_uses_reviewed_mysql_context_and_rejects_unsafe_answers() {
+    for (sql, allowed) in [
+        (
+            Some("SELECT o.`id` FROM `public`.`orders` o LIMIT 10"),
+            true,
+        ),
+        (
+            Some("SELECT `public`.`orders`.`id` FROM `public`.`orders` WHERE 1=0 LIMIT 10"),
+            true,
+        ),
+        (
+            Some(
+                "SELECT o.ID FROM public.orders o JOIN public.customers c ON o.ID = c.ID LIMIT 10",
+            ),
+            true,
+        ),
+        (None, true),
+        (
+            Some("SELECT o.id FROM public.orders o /*! INTO OUTFILE '/tmp/unsafe' */"),
+            false,
+        ),
+        (
+            Some("SELECT date_trunc('day', o.id) FROM public.orders o"),
+            false,
+        ),
+        (Some("SELECT o.secret FROM public.orders o"), false),
+        (Some("SELECT x.id FROM public.private_unrelated x"), false),
+    ] {
+        let (endpoint, received, respond, server) = server().await;
+        let (app, mut input, _) = fixture_for_dialect(&endpoint, DatabaseType::MySql).await;
+        input.task.operation = Operation::DraftSql;
+        input.task.candidates.truncate(2);
+        let prepared = task(prepare(&app, input).await.unwrap());
+        assert_eq!(
+            prepared.prepared.preview.context.dialect,
+            Some(DatabaseType::MySql)
+        );
+        let preview_body = prepared.prepared.preview.request_body.clone();
+        assert!(
+            preview_body["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .starts_with("Draft a MySQL SELECT")
+        );
+        assert!(!preview_body.to_string().contains("private_unrelated"));
+        assert!(!preview_body.to_string().contains("private-field-comment"));
+        let running =
+            tokio::spawn(async move { execute(&app, &prepared, Some("fixture-key")).await });
+        let wire = tokio::time::timeout(Duration::from_secs(5), received)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(wire, preview_body);
+        let content = serde_json::json!({"sqlDraft":{"sql":sql,"explanation":"Review the selected columns.","assumptions":[],"clarification":if sql.is_none() { vec!["Which date range?"] } else { vec![] }}});
+        respond
+            .send((
+                200,
+                serde_json::json!({"choices":[{"message":{"content":content.to_string()}}]})
+                    .to_string(),
+            ))
+            .unwrap();
+        let result = running.await.unwrap();
+        assert_eq!(
+            result.is_ok(),
+            allowed,
+            "{sql:?}: {:?}",
+            result.as_ref().err()
+        );
+        if allowed {
+            assert_eq!(
+                result.unwrap().answer.sql_draft.unwrap().sql.as_deref(),
+                sql
+            );
         }
         server.await.unwrap();
     }

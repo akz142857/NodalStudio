@@ -2,6 +2,8 @@
 
 日期：2026-10-24。此记录描述实现范围与本机验证，不代表已发布版本。
 
+后续变更：MySQL AI SQL 草稿已实现，当前能力与验收状态见 [MySQL AI SQL 草稿验证记录](MYSQL_AI_SQL_DRAFT_ACCEPTANCE.md)。下文保留此前 Query/Changes 批次的验收边界。
+
 ## 行为
 
 - Desktop MySQL 的 Query 页、运行按钮及表格预览入口可用。编辑器按 MySQL 方言提供反引号标识符补全、语法高亮、选区执行和光标所在语句执行；PostgreSQL 继续使用原方言。普通查询支持结果网格、导出、本机历史及停止。AI 自动 SQL 草稿仍仅支持 PostgreSQL，MySQL 不显示不可用的草稿入口。

@@ -9,16 +9,17 @@ import { clearQuerySessions, saveQuerySession, loadQuerySession } from "./query-
 import { QueryDraftPanel, type QueryDraftSeed } from "./QueryDraftPanel";
 const sql = 'SELECT o.id, o.total FROM public.orders AS o LIMIT 100;';
 const seed: QueryDraftSeed = { id: 1, sourceId: reportSnapshot.sourceId, snapshotId: reportSnapshot.id, question: "Show order IDs and totals", root: reportSnapshot.schemas[0].tables[1].key, tables: [reportSnapshot.schemas[0].tables[1].key], domainId: null };
-function setup() {
+function setup(databaseType: "postgreSql" | "mySql" = "postgreSql") {
+  const draftSql = databaseType === "mySql" ? "SELECT o.`id`, o.`total` FROM `public`.`orders` AS o LIMIT 100;" : sql;
   const previews = new Map<string, DiscoveryPreview>();
   const mocks = {
     listSnapshots: vi.fn().mockResolvedValue([{ id: reportSnapshot.id }]), listQueryHistory: vi.fn().mockResolvedValue([]),
-    prepareDiscovery: vi.fn().mockImplementation((input: DiscoveryInput) => { const p = discoveryPreview(input); previews.set(p.requestId, p); return Promise.resolve(p); }),
-    runDiscovery: vi.fn().mockImplementation((id: string) => { const p = previews.get(id)!; const r = discoveryResult(p); r.answer = { terms: [], meanings: [], rankings: [], interpretations: [], readingOrder: [], unknowns: [], sqlDraft: { sql, explanation: "Lists order IDs and totals.", assumptions: [], clarification: [] } }; return Promise.resolve(r); }),
+    prepareDiscovery: vi.fn().mockImplementation((input: DiscoveryInput) => { const p = discoveryPreview(input); p.context.dialect = databaseType; previews.set(p.requestId, p); return Promise.resolve(p); }),
+    runDiscovery: vi.fn().mockImplementation((id: string) => { const p = previews.get(id)!; const r = discoveryResult(p); r.answer = { terms: [], meanings: [], rankings: [], interpretations: [], readingOrder: [], unknowns: [], sqlDraft: { sql: draftSql, explanation: "Lists order IDs and totals.", assumptions: [], clarification: [] } }; return Promise.resolve(r); }),
     cancelDiscovery: vi.fn().mockResolvedValue(undefined),
     executeReadonlyQuery: vi.fn().mockResolvedValue({ queryId: "q", columns: [], rows: [], rowCount: 0, durationMs: 1, truncated: false, notices: [] }),
   };
-  return { platform: mocks as unknown as NodalStudioPlatform, mocks, snapshot: reportSnapshot, settings: discoverySettings(), semantics: reportSemantics };
+  return { platform: mocks as unknown as NodalStudioPlatform, mocks, draftSql, snapshot: { ...reportSnapshot, database: { ...reportSnapshot.database, databaseType } }, settings: discoverySettings(), semantics: reportSemantics };
 }
 async function generate() {
   fireEvent.click(await screen.findByRole("button", { name: "Review AI request" }));
@@ -27,8 +28,8 @@ async function generate() {
 }
 describe("SQL drafting", () => {
   beforeEach(() => { clearQuerySessions(); });
-  it("reuses context, requires preview/send and editor replacement, permits undo, and never runs automatically", async () => {
-    const p = setup(); saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 42;" });
+  it.each(["postgreSql", "mySql"] as const)("%s drafting requires review and replacement, permits undo, and never runs automatically", async (dialect) => {
+    const p = setup(dialect); const sql = p.draftSql; saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 42;" });
     const { container } = render(<QueryPage {...p} runtimeKind="desktop" draftSeed={seed} />);
     expect(screen.getByLabelText("Question")).toHaveValue(seed.question);
     fireEvent.click(await screen.findByRole("button", { name: "Review AI request" }));
@@ -89,14 +90,14 @@ describe("SQL drafting", () => {
     await screen.findByRole("button", { name: "Generate SQL" });
     expect((p.mocks.prepareDiscovery.mock.calls.at(-1)![0] as DiscoveryInput).task.candidates).toEqual([reportSnapshot.schemas[0].tables[0].key]);
   });
-  it("shows clarification without an actionable SQL draft", async () => {
-    const p = setup(); p.mocks.runDiscovery.mockImplementation(async () => ({ ...discoveryResult(discoveryPreview({ snapshotId: reportSnapshot.id, domainId: null, task: { operation: "draftSql", question: seed.question, root: seed.root, candidates: seed.tables, pathTables: [], pathRelationships: [] } })), requestId: p.mocks.prepareDiscovery.mock.results[0] ? (await p.mocks.prepareDiscovery.mock.results[0].value as DiscoveryPreview).requestId : "", answer: { terms: [], meanings: [], rankings: [], interpretations: [], readingOrder: [], unknowns: [], sqlDraft: { sql: null, explanation: "Business definition needed", assumptions: [], clarification: ["What counts as active?"] } } }));
+  it.each(["postgreSql", "mySql"] as const)("%s shows clarification without an actionable SQL draft", async (dialect) => {
+    const p = setup(dialect); p.mocks.runDiscovery.mockImplementation(async () => ({ ...discoveryResult(discoveryPreview({ snapshotId: reportSnapshot.id, domainId: null, task: { operation: "draftSql", question: seed.question, root: seed.root, candidates: seed.tables, pathTables: [], pathRelationships: [] } })), requestId: p.mocks.prepareDiscovery.mock.results[0] ? (await p.mocks.prepareDiscovery.mock.results[0].value as DiscoveryPreview).requestId : "", answer: { terms: [], meanings: [], rankings: [], interpretations: [], readingOrder: [], unknowns: [], sqlDraft: { sql: null, explanation: "Business definition needed", assumptions: [], clarification: ["What counts as active?"] } } }));
     render(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Review AI request" })); fireEvent.click(await screen.findByRole("button", { name: "Generate SQL" }));
     expect(await screen.findByText("What counts as active?")).toBeVisible(); expect(screen.queryByRole("button", { name: "Review in editor" })).toBeNull();
   });
-  it("cancels an in-flight draft when the question changes and rejects late output", async () => {
-    const p = setup(); let finish!: (r: DiscoveryResult) => void;
+  it.each(["postgreSql", "mySql"] as const)("%s cancels an in-flight draft when the question changes and rejects late output", async (dialect) => {
+    const p = setup(dialect); let finish!: (r: DiscoveryResult) => void;
     p.mocks.runDiscovery.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     render(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Review AI request" })); fireEvent.click(await screen.findByRole("button", { name: "Generate SQL" }));
