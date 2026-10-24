@@ -179,7 +179,7 @@ describe("ConnectionPanel", () => {
     const { rerender } = render(panel());
     await screen.findByRole("button", { name: "Data source: flow" });
     fireEvent.click(screen.getByRole("button", { name: /Tables/ }));
-    const search = screen.getByRole("searchbox", { name: "Search tables and views" });
+    const search = screen.getByRole("searchbox", { name: "Search database objects" });
     fireEvent.change(search, { target: { value: "orders" } });
     // A fresh snapshot for the same source preserves the current object navigation.
     rerender(panel({ ...model, id: "refreshed" }));

@@ -51,6 +51,9 @@ impl ObjectKey {
 #[serde(rename_all = "camelCase")]
 pub enum ObjectKind {
     Schema,
+    Function,
+    Procedure,
+    Trigger,
     Table,
     View,
     Enum,
@@ -202,6 +205,10 @@ pub struct SchemaDefinition {
     pub tables: Vec<TableDefinition>,
     pub views: Vec<ViewDefinition>,
     pub enums: Vec<EnumDefinition>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub programs: Vec<ProgramDefinition>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependencies: Vec<ObjectDependency>,
 }
 
 impl SchemaDefinition {
@@ -211,6 +218,8 @@ impl SchemaDefinition {
             tables: Vec::new(),
             views: Vec::new(),
             enums: Vec::new(),
+            programs: Vec::new(),
+            dependencies: Vec::new(),
         }
     }
 
@@ -219,7 +228,13 @@ impl SchemaDefinition {
             table.canonicalize();
         }
         self.tables.sort_by(|left, right| left.key.cmp(&right.key));
+        for view in &mut self.views {
+            view.indexes.sort_by(|a, b| a.name.cmp(&b.name));
+        }
         self.views.sort_by(|left, right| left.key.cmp(&right.key));
+        self.programs.sort_by(|a, b| a.key.cmp(&b.key));
+        self.dependencies.sort();
+        self.dependencies.dedup();
         self.enums.sort_by(|left, right| left.key.cmp(&right.key));
     }
 }
@@ -470,6 +485,8 @@ pub struct IgnoredRelationshipInference {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexDefinition {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition: Option<String>,
     pub name: String,
     pub method: String,
     pub columns: Vec<String>,
@@ -494,9 +511,33 @@ pub enum ConstraintType {
     Exclusion,
 }
 
+/// Catalog-visible executable object; NULL definition means unavailable, never empty SQL.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgramDefinition {
+    pub key: ObjectKey,
+    pub definition: Option<String>,
+    pub arguments: String,
+    pub language: String,
+    pub result_type: Option<String>,
+    pub owner: String,
+    pub table: Option<ObjectKey>,
+    pub enabled: Option<String>,
+}
+
+/// A dependency confirmed by database metadata, not guessed from SQL text.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectDependency {
+    pub source: ObjectKey,
+    pub target: ObjectKey,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ViewDefinition {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub indexes: Vec<IndexDefinition>,
     pub key: ObjectKey,
     pub definition: String,
     pub materialized: bool,
@@ -563,6 +604,8 @@ mod tests {
                 version: "17".into(),
             },
             vec![SchemaDefinition {
+                programs: Vec::new(),
+                dependencies: Vec::new(),
                 name: "public".into(),
                 tables: vec![users],
                 views: Vec::new(),

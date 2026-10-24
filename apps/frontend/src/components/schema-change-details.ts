@@ -34,11 +34,15 @@ export function operationProperties(
   side: "before" | "after",
 ): ObjectProperties | undefined {
   const key = operation.object;
-  if (["table", "view", "enum"].includes(key.kind)) {
+  if (operation.operationType === "alterDependencies") {
+    return { dependencies: snapshot.schemas.flatMap(s => s.dependencies ?? []).filter(d => d.source.kind === key.kind && d.source.schema === key.schema && d.source.name === key.name).map(d => d.target) };
+  }
+  if (["table", "view", "enum", "function", "procedure", "trigger"].includes(key.kind)) {
     const objects = snapshot.schemas.flatMap((schema) => {
       if (key.kind === "table") return schema.tables.map(flattenKey);
       if (key.kind === "view") return schema.views.map(flattenKey);
-      return schema.enums.map(flattenKey);
+      if (key.kind === "enum") return schema.enums.map(flattenKey);
+      return (schema.programs ?? []).filter(p => p.key.kind === key.kind).map(flattenKey);
     });
     return objects.find((object) => object.schema === key.schema && object.name === key.name);
   }
@@ -86,10 +90,16 @@ export const PROPERTY_LABELS: Record<string, string> = {
   matchType: "Match type", deferrable: "Deferrable", initiallyDeferred: "Initially deferred",
   method: "Method", unique: "Unique", primary: "Primary", predicate: "Predicate",
   constraintType: "Constraint type", definition: "Definition", materialized: "Materialized",
-  values: "Values",
+  values: "Values", arguments: "Arguments", language: "Language", owner: "Owner", resultType: "Result type", enabled: "Enabled", table: "Attached relation", dependencies: "Dependencies",
 };
 
-export function propertyValue(value: unknown, t: Translate = createTranslator("en")): string {
+export function propertyValue(value: unknown, t: Translate = createTranslator("en"), property?: string): string {
+  if (property === "enabled") {
+    if (value === "O") return t("objects.enabledO");
+    if (value === "D") return t("objects.enabledD");
+    if (value === "R") return t("objects.enabledR");
+    if (value === "A" || value === "enabled") return t("objects.enabledA");
+  }
   if (value === undefined) return t("business.notPresent");
   if (value === null) return translateUiLabel("None", t);
   if (value === "") return translateUiLabel('"" (empty string)', t);

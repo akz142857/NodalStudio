@@ -84,7 +84,7 @@ describe("App sidebar object navigation", () => {
     fireEvent.change(globalSearch, { target: { value: "nothing-matches" } });
     pickOrders();
     expect(globalSearch).toHaveValue(""); expect(screen.getByTestId("canvas-query")).toHaveTextContent("");
-    expect(screen.getByRole("searchbox", { name: "Search tables and views" })).toHaveValue("public.orders");
+    expect(screen.getByRole("searchbox", { name: "Search database objects" })).toHaveValue("public.orders");
     expect(requested()).toEqual({ sourceId: reportSnapshot.sourceId, snapshotId: reportSnapshot.id, nodeId: "public.orders", revision: 1 });
     fireEvent.click(screen.getByRole("button", { name: "Acknowledge navigation" }));
     expect(screen.getByTestId("locate-request")).toHaveTextContent("none");

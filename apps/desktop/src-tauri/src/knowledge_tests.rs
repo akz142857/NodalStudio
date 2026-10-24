@@ -18,6 +18,8 @@ fn model(source: Uuid) -> DatabaseSnapshot {
             version: "17".into(),
         },
         vec![SchemaDefinition {
+            programs: Vec::new(),
+            dependencies: Vec::new(),
             name: "public".into(),
             tables: vec![
                 TableDefinition::empty("public", "orders"),

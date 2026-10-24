@@ -62,6 +62,8 @@ fn snapshot() -> DatabaseSnapshot {
             version: "17".into(),
         },
         vec![SchemaDefinition {
+            programs: Vec::new(),
+            dependencies: Vec::new(),
             name: "public".into(),
             tables: vec![a, b, table("secret_c")],
             views: vec![],
@@ -262,6 +264,8 @@ fn composite_mappings_and_schema_qualified_targets_are_preserved() {
     let mut other = table("a");
     other.key.schema = "archive".into();
     s.schemas.push(SchemaDefinition {
+        programs: Vec::new(),
+        dependencies: Vec::new(),
         name: "archive".into(),
         tables: vec![other],
         views: vec![],

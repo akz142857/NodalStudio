@@ -67,7 +67,7 @@ it("preserves tree search and raw object names while translating actions", () =>
   const view = bilingual(<SchemaTree snapshot={reportSnapshot} onSelectTable={vi.fn()} />);
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "public.orders" } });
   view.chinese();
-  expect(screen.getByRole("searchbox", { name: "搜索表和视图" })).toHaveValue("public.orders");
+  expect(screen.getByRole("searchbox", { name: "搜索数据库对象" })).toHaveValue("public.orders");
   fireEvent.click(screen.getByRole("button", { name: "public.orders 的操作" }));
   expect(screen.getByRole("menuitem", { name: "复制限定名称" })).toBeVisible();
   view.english();

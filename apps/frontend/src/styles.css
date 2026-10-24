@@ -2973,3 +2973,12 @@ textarea {
 .workspace-loading { flex: 1; display: grid; place-items: center; min-width: 0; min-height: 0; color: var(--ds-secondary); }
 .page-loading-overlay { position: fixed; inset: 0; z-index: var(--ds-layer-settings); overflow: auto; background: var(--ds-window); }
 .page-loading-overlay > [role="status"] { padding: var(--ds-space-5); color: var(--ds-secondary); }
+
+/* Catalog object details share the inspector's semantic tokens and focus rules. */
+.schema-program-preview .snapshot-summary { display: grid; grid-template-columns: minmax(0, 1fr); }
+.schema-program-preview dd, .object-dependencies { overflow-wrap: anywhere; min-width: 0; }
+.object-dependency-link { border: 0; padding: var(--ds-space-1); background: transparent; color: var(--ds-accent); text-align: start; overflow-wrap: anywhere; }
+.inspector-list pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+
+/* Keep opened routine details below the sticky object search field. */
+.schema-program-preview { scroll-margin-top: 4rem; }

@@ -75,6 +75,7 @@ export interface ForeignKeyDefinition {
 }
 
 export interface IndexDefinition {
+  definition?: string | null;
   name: string;
   method: string;
   columns: string[];
@@ -89,7 +90,20 @@ export interface ConstraintDefinition {
   definition: string;
 }
 
+export interface ProgramDefinition {
+  key: ObjectKey;
+  definition: string | null;
+  arguments: string;
+  language: string;
+  resultType: string | null;
+  owner: string;
+  table: ObjectKey | null;
+  enabled: string | null;
+}
+export interface ObjectDependency { source: ObjectKey; target: ObjectKey }
+
 export interface ViewDefinition {
+  indexes?: IndexDefinition[];
   key: { kind: "view"; schema: string; name: string };
   definition: string;
   materialized: boolean;
@@ -121,6 +135,8 @@ export interface SchemaDefinition {
   tables: TableDefinition[];
   views: ViewDefinition[];
   enums: EnumDefinition[];
+  programs?: ProgramDefinition[];
+  dependencies?: ObjectDependency[];
 }
 
 export interface DatabaseSnapshot {
@@ -464,7 +480,8 @@ export type OperationType =
   | "alterView"
   | "addEnum"
   | "dropEnum"
-  | "alterEnum";
+  | "alterEnum"
+  | "addProgram" | "dropProgram" | "alterProgram" | "alterDependencies";
 
 export type RiskLevel = "informational" | "low" | "medium" | "high";
 

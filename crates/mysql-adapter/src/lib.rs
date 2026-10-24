@@ -1,6 +1,7 @@
 //! Read-only `MySQL` schema introspection through `information_schema`.
 
-use std::{collections::BTreeMap, time::Duration};
+mod programs;
+use std::{collections::BTreeMap, fmt::Write, time::Duration};
 
 use schema_model::{
     ColumnDefinition, DatabaseInfo, DatabaseSnapshot, DatabaseType, ForeignKeyDefinition,
@@ -172,6 +173,7 @@ pub async fn inspect_schema(
     load_views(pool, &mut schema)
         .await
         .map_err(|error| metadata_error("view", error))?;
+    programs::load(pool, &mut schema).await?;
     let mut snapshot = DatabaseSnapshot::new(source_id, database, vec![schema]);
     snapshot.canonicalize()?;
     Ok(snapshot)
@@ -287,7 +289,13 @@ async fn load_indexes(
     pool: &MySqlPool,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let rows = sqlx::query("SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, INDEX_TYPE AS index_type, CAST(NON_UNIQUE AS SIGNED) AS non_unique, COLUMN_NAME AS column_name FROM information_schema.statistics WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX").fetch_all(pool).await?;
+    let expressions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='information_schema' AND TABLE_NAME='STATISTICS' AND COLUMN_NAME='EXPRESSION'").fetch_one(pool).await?;
+    let query = if expressions > 0 {
+        "SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, INDEX_TYPE AS index_type, CAST(NON_UNIQUE AS SIGNED) AS non_unique, COLUMN_NAME AS column_name, EXPRESSION AS expression, CAST(SUB_PART AS SIGNED) AS prefix_length, COLLATION AS direction FROM information_schema.statistics WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX"
+    } else {
+        "SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, INDEX_TYPE AS index_type, CAST(NON_UNIQUE AS SIGNED) AS non_unique, COLUMN_NAME AS column_name, NULL AS expression, CAST(SUB_PART AS SIGNED) AS prefix_length, COLLATION AS direction FROM information_schema.statistics WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX"
+    };
+    let rows = sqlx::query(query).fetch_all(pool).await?;
     let mut grouped: BTreeMap<(String, String), IndexDefinition> = BTreeMap::new();
     for row in rows {
         let table: String = row.try_get("table_name")?;
@@ -295,6 +303,7 @@ async fn load_indexes(
         let entry = grouped
             .entry((table, name.clone()))
             .or_insert(IndexDefinition {
+                definition: None,
                 name: name.clone(),
                 method: row.try_get("index_type")?,
                 columns: vec![],
@@ -308,9 +317,45 @@ async fn load_indexes(
                 predicate: None,
             });
         let column_name: Option<String> = row.try_get("column_name")?;
-        entry.columns.push(index_part(column_name));
+        let expression: Option<String> = row.try_get("expression")?;
+        let mut part = column_name
+            .map(|name| format!("`{}`", name.replace('`', "``")))
+            .or_else(|| expression.map(|value| format!("({value})")))
+            .unwrap_or_else(|| index_part(None));
+        if let Some(prefix) = row.try_get::<Option<i64>, _>("prefix_length")? {
+            let _ = write!(part, "({prefix})");
+        }
+        if row.try_get::<Option<String>, _>("direction")?.as_deref() == Some("D") {
+            part.push_str(" DESC");
+        }
+        let definition = entry.definition.get_or_insert_with(String::new);
+        if !definition.is_empty() {
+            definition.push_str(", ");
+        }
+        definition.push_str(&part);
+        let column: Option<String> = row.try_get("column_name")?;
+        entry.columns.push(
+            column
+                .or(row.try_get("expression")?)
+                .unwrap_or_else(|| index_part(None)),
+        );
     }
-    for ((table, _), index) in grouped {
+    for ((table, _), mut index) in grouped {
+        index.definition = Some(if index.primary {
+            format!(
+                "PRIMARY KEY USING {} ({})",
+                index.method,
+                index.definition.as_deref().unwrap_or("")
+            )
+        } else {
+            format!(
+                "{}INDEX `{}` USING {} ({})",
+                if index.unique { "UNIQUE " } else { "" },
+                index.name.replace('`', "``"),
+                index.method,
+                index.definition.as_deref().unwrap_or("")
+            )
+        });
         table_mut(schema, &table)?.indexes.push(index);
     }
     Ok(())
@@ -323,6 +368,7 @@ async fn load_views(
     let rows=sqlx::query("SELECT TABLE_NAME AS table_name, VIEW_DEFINITION AS view_definition FROM information_schema.views WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME").fetch_all(pool).await?;
     for row in rows {
         schema.views.push(ViewDefinition {
+            indexes: Vec::new(),
             key: ObjectKey::new(
                 schema_model::ObjectKind::View,
                 &schema.name,

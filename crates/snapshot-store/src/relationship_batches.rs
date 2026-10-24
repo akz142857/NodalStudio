@@ -720,6 +720,8 @@ mod tests {
                 version: "8".into(),
             },
             vec![SchemaDefinition {
+                programs: Vec::new(),
+                dependencies: Vec::new(),
                 name: "app".into(),
                 tables: vec![
                     table("orders", &["id", "customer_id"]),

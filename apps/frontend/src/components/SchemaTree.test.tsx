@@ -51,10 +51,10 @@ describe("SchemaTree", () => {
   it("filters table/view names case-insensitively, opens matches and restores disclosures when cleared", () => {
     const onSelectTable = vi.fn();
     render(<SchemaTree snapshot={snapshot} onSelectTable={onSelectTable} />);
-    const search = screen.getByRole("searchbox", { name: "Search tables and views" });
+    const search = screen.getByRole("searchbox", { name: "Search database objects" });
     fireEvent.change(search, { target: { value: " ORDER " } });
     expect(screen.getByRole("button", { name: /^orders/ })).toBeVisible();
-    expect(screen.getByRole("button", { name: "order_totals" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^order_totals/ })).toBeVisible();
     expect(screen.queryByText("customers")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("2 matches");
     fireEvent.click(screen.getByRole("button", { name: /^orders/ }));
@@ -68,14 +68,14 @@ describe("SchemaTree", () => {
   it("searches qualified names across schemas and preserves the filter on refresh but clears it for another source", () => {
     const multi = { ...snapshot, schemas: [...snapshot.schemas, { name: "archive", tables: [{ ...table("orders"), key: { kind: "table" as const, schema: "archive", name: "orders" } }], views: [], enums: [] }] } as DatabaseSnapshot;
     const { rerender } = render(<SchemaTree snapshot={multi} onSelectTable={vi.fn()} />);
-    const search = screen.getByRole("searchbox", { name: "Search tables and views" });
+    const search = screen.getByRole("searchbox", { name: "Search database objects" });
     fireEvent.change(search, { target: { value: "ARCHIVE.orders" } });
     expect(screen.getByRole("status")).toHaveTextContent("1 match");
     expect(screen.queryByRole("button", { name: /public/ })).not.toBeInTheDocument();
     rerender(<SchemaTree snapshot={{ ...multi, id: "refresh" }} onSelectTable={vi.fn()} />);
     expect(search).toHaveValue("ARCHIVE.orders");
     fireEvent.change(search, { target: { value: "missing" } });
-    expect(screen.getByText("No matching tables or views.")).toBeVisible();
+    expect(screen.getByText("No matching objects")).toBeVisible();
     fireEvent.keyDown(search, { key: "Escape" });
     expect(search).toHaveValue("");
     fireEvent.change(search, { target: { value: "orders" } });
@@ -139,7 +139,7 @@ describe("SchemaTree", () => {
     expect(preview).toHaveTextContent("Materialized view"); expect(select).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Close view definition" }));
     expect(screen.queryByRole("region", { name: "Definition of public.order_totals" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "order_totals" }));
+    fireEvent.click(screen.getByRole("button", { name: /^order_totals/ }));
     expect(screen.getByRole("region", { name: "Definition of public.order_totals" })).toBeVisible();
   });
   it("keeps objects out of the DOM until their type node is opened", () => {

@@ -1,3 +1,6 @@
+import { SchemaIndexDetails } from "./SchemaIndexDetails";
+import { TableCatalogDetails } from "./SchemaProgramDetails";
+import type { DatabaseSnapshot } from "../platform/types";
 import { translateUiLabel } from "../i18n/business-labels";
 import { useI18n } from "../i18n";
 import { useUpdateBlocker } from "../platform/update-guard";
@@ -6,6 +9,7 @@ import type { ObjectAnnotation, SaveAnnotationInput, TableAiEvidence, TableDefin
 
 interface TableStructureProps {
   table: TableDefinition;
+  snapshot?: DatabaseSnapshot;
   onOpenQuery?: (table: TableDefinition) => void;
   focusedEvidence?: TableAiEvidence;
 }
@@ -23,7 +27,7 @@ interface TableKnowledgeFormProps {
  * Split from the knowledge form because the inspector shows one or the other —
  * structure is read-only and comes from the snapshot, the form is authored.
  */
-export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStructureProps) {
+export function TableStructure({ table, snapshot, onOpenQuery, focusedEvidence }: TableStructureProps) {
   const { t: bt } = useI18n();
   const structure = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -95,22 +99,7 @@ export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStr
         </section>
       ) : null}
 
-      {table.indexes.length > 0 ? (
-        <section className="inspector-section">
-          <h3>{bt("business.indexes")}</h3>
-          <ul className="inspector-list">
-            {table.indexes.map((index) => (
-              <li key={index.name} tabIndex={-1} data-evidence-target={focused("index", index.name) ? "true" : undefined} data-evidence-focus={focused("index", index.name) ? "true" : undefined}>
-                <strong>{index.name}</strong>
-                <span>
-                  {index.method} · {index.columns.join(", ")}
-                  {index.unique ? bt("business.uniqueDetail") : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <SchemaIndexDetails indexes={table.indexes} focusedName={focusedEvidence?.objectKey.kind === "index" ? focusedEvidence.objectKey.name : undefined} />
 
       {table.constraints.length > 0 ? (
         <section className="inspector-section">
@@ -119,12 +108,13 @@ export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStr
             {table.constraints.map((constraint) => (
               <li key={constraint.name} tabIndex={-1} data-evidence-target={focused("constraint", constraint.name) ? "true" : undefined} data-evidence-focus={focused("constraint", constraint.name) ? "true" : undefined}>
                 <strong>{constraint.name}</strong>
-                <span>{constraint.definition}</span>
+                <small>{translateUiLabel(constraint.constraintType, bt)}</small><pre tabIndex={0}>{constraint.definition}</pre>
               </li>
             ))}
           </ul>
         </section>
       ) : null}
+      {snapshot ? <TableCatalogDetails snapshot={snapshot} table={table} /> : null}
     </div>
   );
 }

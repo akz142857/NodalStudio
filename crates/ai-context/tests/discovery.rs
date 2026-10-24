@@ -64,6 +64,8 @@ fn snapshot() -> DatabaseSnapshot {
             version: "17".into(),
         },
         vec![SchemaDefinition {
+            programs: Vec::new(),
+            dependencies: Vec::new(),
             name: "public".into(),
             tables: vec![a, b, table("secret_c")],
             views: vec![],

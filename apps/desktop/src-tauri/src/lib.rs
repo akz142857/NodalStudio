@@ -1142,9 +1142,16 @@ async fn capture_snapshot_using(
             .await
             .map_err(safe_store_error)?
             .ok_or("The selected data source no longer exists.")?;
-        let password = credential_entry(profile.id)?
-            .get_password()
-            .map_err(|_| "Unable to read the database password from the keychain.".to_owned())?;
+        // macOS may wait for an unlock or authorization dialog here. Keep that
+        // synchronous wait off Tokio workers so local storage and settings remain usable.
+        let source_id = profile.id;
+        let password = tokio::task::spawn_blocking(move || {
+            credential_entry(source_id)?
+                .get_password()
+                .map_err(|_| "Unable to read the database password from the keychain.".to_owned())
+        })
+        .await
+        .map_err(|_| "Unable to read the database password from the keychain.".to_owned())??;
         (profile, password)
     };
     connection_security::validate(&profile.security, profile.ssl_mode)?;
@@ -5094,6 +5101,8 @@ mod tests {
             source,
             before.database.clone(),
             vec![schema_model::SchemaDefinition {
+                programs: Vec::new(),
+                dependencies: Vec::new(),
                 name: "public".into(),
                 tables: vec![schema_model::TableDefinition::empty("public", "orders")],
                 views: vec![],
@@ -5286,6 +5295,8 @@ mod tests {
                 version: "17".into(),
             },
             vec![schema_model::SchemaDefinition {
+                programs: Vec::new(),
+                dependencies: Vec::new(),
                 name: "public".into(),
                 tables: vec![users, orders],
                 views: Vec::new(),
@@ -5368,6 +5379,8 @@ mod tests {
             source_id,
             snapshot.database.clone(),
             vec![schema_model::SchemaDefinition {
+                programs: Vec::new(),
+                dependencies: Vec::new(),
                 name: "public".into(),
                 tables: vec![snapshot.schemas[0].tables[0].clone(), orders],
                 views: Vec::new(),

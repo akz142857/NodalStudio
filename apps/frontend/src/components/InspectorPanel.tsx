@@ -161,7 +161,7 @@ export function InspectorPanel({
               <pre>{focusedEvidence.detail}</pre>
               <button type="button" onClick={() => setSegment("ai")}>{bt("business.backToAIExplanation")}</button>
             </section> : null}
-            <TableStructure table={evidenceTable || selectedTable} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
+            <TableStructure snapshot={snapshot} table={evidenceTable || selectedTable} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
           </>
         ) : (
           <dl className="snapshot-summary">

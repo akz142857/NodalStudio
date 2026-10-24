@@ -1,0 +1,13 @@
+CREATE SCHEMA IF NOT EXISTS catalog_acceptance;
+CREATE TABLE IF NOT EXISTS catalog_acceptance.accounts (id integer PRIMARY KEY, balance numeric NOT NULL CHECK (balance >= 0));
+CREATE OR REPLACE FUNCTION catalog_acceptance.account_count() RETURNS bigint LANGUAGE SQL BEGIN ATOMIC SELECT count(*) FROM catalog_acceptance.accounts; END;
+CREATE OR REPLACE FUNCTION catalog_acceptance.echo(value integer) RETURNS integer LANGUAGE SQL AS 'SELECT value';
+CREATE OR REPLACE FUNCTION catalog_acceptance.echo(value text) RETURNS text LANGUAGE SQL AS 'SELECT value';
+CREATE OR REPLACE PROCEDURE catalog_acceptance.read_accounts() LANGUAGE SQL BEGIN ATOMIC SELECT count(*) FROM catalog_acceptance.accounts; END;
+CREATE OR REPLACE FUNCTION catalog_acceptance.keep_account() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
+CREATE OR REPLACE TRIGGER account_guard BEFORE INSERT ON catalog_acceptance.accounts FOR EACH ROW EXECUTE FUNCTION catalog_acceptance.keep_account();
+CREATE OR REPLACE VIEW catalog_acceptance.account_view AS SELECT * FROM catalog_acceptance.accounts;
+CREATE MATERIALIZED VIEW IF NOT EXISTS catalog_acceptance.account_totals AS SELECT id, balance FROM catalog_acceptance.accounts WITH NO DATA;
+CREATE UNIQUE INDEX IF NOT EXISTS account_totals_id_idx ON catalog_acceptance.account_totals(id);
+CREATE INDEX IF NOT EXISTS accounts_positive_idx ON catalog_acceptance.accounts(balance) WHERE balance > 0;
+CREATE UNIQUE INDEX IF NOT EXISTS account_totals_cover_idx ON catalog_acceptance.account_totals(id) INCLUDE(balance);

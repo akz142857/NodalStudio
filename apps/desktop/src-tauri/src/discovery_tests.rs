@@ -31,6 +31,8 @@ async fn fixture_for_dialect(
             version: version.into(),
         },
         vec![SchemaDefinition {
+            programs: Vec::new(),
+            dependencies: Vec::new(),
             name: "public".into(),
             tables: vec![
                 TableDefinition::empty("public", "orders"),

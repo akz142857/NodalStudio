@@ -88,3 +88,11 @@ Open `/business-preview.html?language=zh-CN&theme=light` to review synthetic mod
 分段导航的当前项统一使用 selection 背景、文字色和 accent 内描边，不依赖 hover 或浏览器焦点。所有原生按钮、链接、下拉框、checkbox/radio、summary 及 button/tab/menuitem/switch 语义控件共享 pointer 指针；禁用控件使用 default。文本输入、画布拖动和尺寸调整保留各自的光标。画布不再用通配选择器覆盖子按钮的指针。
 
 懒加载页面必须在自己的内容区或覆盖层设置 Suspense 边界。加载查询、设置或 DDL 不能替换整个应用外壳；DDL 期间背景工作区保持挂载并设为 inert。
+
+### 函数、过程、触发器与依赖详情
+
+对象树复用既有分组、选中态、搜索和对象操作菜单。函数与过程按对象类型区分，PG 重载函数以数据库提供的标识参数区分；对象名称、参数、SQL 和定义者不翻译。`SchemaProgramDetails` 复用 `ds-surface`、`snapshot-summary`、`inspector-list` 与共享颜色、间距和焦点规则。
+
+`SchemaIndexDetails` 由表详情和物化视图详情共用，展示方法、字段/表达式、主键/唯一标识、完整定义和筛选条件。不要把索引表达式中的原始数据库名称转换为 UI 文案。
+
+依赖区域分别显示“依赖对象”和“被引用”，只将数据库目录确认的关系呈现为已知事实；权限、字符串函数体和动态 SQL 导致的缺失必须保留覆盖范围提示。可定位目标使用共享可点击样式，快照外的目标保留名称。表详情提供所属触发器的只读入口。

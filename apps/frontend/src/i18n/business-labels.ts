@@ -3,6 +3,21 @@ import type { MessageKey, Translate } from "./messages";
 /** Explicit application-owned metadata labels, not user content or server diagnostics.
  * Keep raw enum values in state, keys, selectors and platform requests. */
 const messages = {
+  "Arguments": "objects.arguments",
+  "Attached relation": "objects.table",
+  "Add program": "objects.addProgram",
+  "Drop program": "objects.dropProgram",
+  "Alter program": "objects.alterProgram",
+  "Alter dependencies": "objects.alterDependencies",
+  "Function": "objects.function",
+  "Procedure": "objects.procedure",
+  "Trigger": "objects.trigger",
+  "Dependencies": "objects.dependencies",
+  "Owner": "objects.owner",
+  "Language": "objects.language",
+  "Result type": "objects.resultType",
+  "Enabled": "objects.enabled",
+
   "Default value": "businessMeta.defaultValue",
   "Position": "businessMeta.position",
   "Table kind": "businessMeta.tableKind",
@@ -171,6 +186,9 @@ const messages = {
   "Fit view": "businessExtra.fitView",
   "Toggle interactivity": "businessExtra.toggleInteractivity",
   "Zoom controls": "businessExtra.zoomControls",
+  "check": "objects.checkConstraint",
+  "unique": "objects.uniqueConstraint",
+  "exclusion": "objects.exclusionConstraint",
   "ordinary": "businessMeta.ordinary",
   "partitioned": "businessMeta.partitioned",
   "foreign": "businessMeta.foreign"

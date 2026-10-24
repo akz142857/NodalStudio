@@ -800,6 +800,9 @@ const fn kind_name(kind: ObjectKind) -> &'static str {
         ObjectKind::ForeignKey => "foreign-key",
         ObjectKind::Index => "index",
         ObjectKind::Constraint => "constraint",
+        ObjectKind::Function => "function",
+        ObjectKind::Procedure => "procedure",
+        ObjectKind::Trigger => "trigger",
     }
 }
 
@@ -851,6 +854,8 @@ mod tests {
                 version: "17".into(),
             },
             vec![SchemaDefinition {
+                programs: Vec::new(),
+                dependencies: Vec::new(),
                 name: "public".into(),
                 tables: vec![TableDefinition::empty("public", "users")],
                 views: vec![],

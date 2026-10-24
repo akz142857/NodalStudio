@@ -65,6 +65,12 @@ jobs:
         env:
           SQLAI_QUERY_TEST_DATABASE_URL: postgres://nodalstudio:nodalstudio@127.0.0.1:55432/nodalstudio_test
         run: cargo test -p query-engine --test postgres_query
+      - name: Run PostgreSQL program and dependency coverage
+        env:
+          CATALOG_POSTGRES_URL: postgres://nodalstudio:nodalstudio@127.0.0.1:55432/nodalstudio_test
+        run: |
+          docker compose -f infrastructure/docker-compose.test.yml exec -T postgres psql -U nodalstudio -d nodalstudio_test -v ON_ERROR_STOP=1 < fixtures/catalog-objects/postgres.sql
+          cargo test -p postgres-adapter --test catalog_objects
       - if: always()
         run: docker compose -f infrastructure/docker-compose.test.yml down
 
@@ -85,6 +91,12 @@ jobs:
         env:
           SQLAI_MYSQL_QUERY_TEST_DATABASE_URL: mysql://nodalstudio:nodalstudio@127.0.0.1:53306/nodalstudio_test
         run: cargo test -p query-engine --test mysql_query
+      - name: Run MySQL program and dependency coverage
+        env:
+          CATALOG_MYSQL_URL: mysql://nodalstudio:nodalstudio@127.0.0.1:53306/nodalstudio_test
+        run: |
+          docker compose -f infrastructure/docker-compose.mysql.yml exec -T mysql mysql -uroot -proot-only-for-fixture nodalstudio_test < fixtures/catalog-objects/mysql.sql
+          cargo test -p mysql-adapter --test catalog_objects
       - if: always()
         run: docker compose -f infrastructure/docker-compose.mysql.yml down
 

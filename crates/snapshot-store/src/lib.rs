@@ -2664,6 +2664,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn persists_program_and_dependency_history() {
+        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
+        let mut before = snapshot(Uuid::new_v4(), "app");
+        before
+            .schemas
+            .push(schema_model::SchemaDefinition::empty("app"));
+        before.schemas[0].programs.push(serde_json::from_value(serde_json::json!({
+            "key": {"kind":"trigger","schema":"app","name":"orders.audit"},
+            "definition":"BEFORE INSERT", "arguments":"", "language":"SQL",
+            "resultType":null,"owner":"fixture","table":{"kind":"table","schema":"app","name":"orders"},"enabled":"O"
+        })).unwrap());
+        before.canonicalize().unwrap();
+        let mut after = before.clone();
+        after.id = Uuid::new_v4();
+        after.schemas[0].programs[0].enabled = Some("D".into());
+        let program_key = after.schemas[0].programs[0].key.clone();
+        after.schemas[0]
+            .dependencies
+            .push(schema_model::ObjectDependency {
+                source: program_key,
+                target: ObjectKey::table("app", "orders"),
+            });
+        after.canonicalize().unwrap();
+        store.save_snapshot(&before).await.unwrap();
+        store.save_snapshot(&after).await.unwrap();
+        let changes = diff_snapshots(&before, &after);
+        assert_eq!(changes.operations.len(), 2);
+        store.save_change_set(&changes).await.unwrap();
+        assert_eq!(
+            store.get_snapshot(after.id).await.unwrap(),
+            Some(after.clone())
+        );
+        assert_eq!(
+            store.change_sets_for_snapshot(after.id).await.unwrap(),
+            vec![changes]
+        );
+    }
+
+    #[tokio::test]
     async fn persists_semantic_metadata_separately_from_snapshots() {
         let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
         let source_id = Uuid::new_v4();

@@ -156,6 +156,7 @@ pub fn known_object_keys(snapshot: &DatabaseSnapshot) -> BTreeSet<ObjectKey> {
                 keys.insert(table.key.child(ObjectKind::Constraint, &constraint.name));
             }
         }
+        keys.extend(schema.programs.iter().map(|item| item.key.clone()));
         keys.extend(schema.views.iter().map(|view| view.key.clone()));
         keys.extend(schema.enums.iter().map(|item| item.key.clone()));
     }
@@ -184,6 +185,8 @@ mod tests {
                 version: "17".into(),
             },
             vec![SchemaDefinition {
+                programs: Vec::new(),
+                dependencies: Vec::new(),
                 name: "public".into(),
                 tables: vec![TableDefinition::empty("public", "users")],
                 views: Vec::new(),

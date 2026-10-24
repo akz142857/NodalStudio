@@ -54,6 +54,10 @@ pub enum OperationType {
     AddEnum,
     DropEnum,
     AlterEnum,
+    AddProgram,
+    DropProgram,
+    AlterProgram,
+    AlterDependencies,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -117,6 +121,7 @@ pub fn diff_snapshots(before: &DatabaseSnapshot, after: &DatabaseSnapshot) -> Sc
 
     diff_views(before, after, &mut operations);
     diff_enums(before, after, &mut operations);
+    diff_programs(before, after, &mut operations);
 
     operations.sort_by(|left, right| {
         left.object.cmp(&right.object).then_with(|| {
@@ -136,6 +141,85 @@ pub fn diff_snapshots(before: &DatabaseSnapshot, after: &DatabaseSnapshot) -> Sc
         created_at: Utc::now(),
         operations,
         risk_summary,
+    }
+}
+
+fn diff_programs(
+    before: &DatabaseSnapshot,
+    after: &DatabaseSnapshot,
+    operations: &mut Vec<SchemaOperation>,
+) {
+    let previous: BTreeMap<_, _> = before
+        .schemas
+        .iter()
+        .flat_map(|s| &s.programs)
+        .map(|p| (p.key.clone(), p))
+        .collect();
+    let current: BTreeMap<_, _> = after
+        .schemas
+        .iter()
+        .flat_map(|s| &s.programs)
+        .map(|p| (p.key.clone(), p))
+        .collect();
+    for (key, value) in &current {
+        let old = previous.get(key);
+        if old.is_some_and(|old| *old == *value) {
+            continue;
+        }
+        operations.push(SchemaOperation {
+            object: key.clone(),
+            operation_type: if old.is_some() {
+                OperationType::AlterProgram
+            } else {
+                OperationType::AddProgram
+            },
+            risk: RiskLevel::Medium,
+            before: old.map(|v| serde_json::to_string(v).expect("serializable program")),
+            after: Some(serde_json::to_string(value).expect("serializable program")),
+        });
+    }
+    for (key, value) in &previous {
+        if !current.contains_key(key) {
+            operations.push(SchemaOperation {
+                object: key.clone(),
+                operation_type: OperationType::DropProgram,
+                risk: RiskLevel::High,
+                before: Some(serde_json::to_string(value).expect("serializable program")),
+                after: None,
+            });
+        }
+    }
+    let deps = |snapshot: &DatabaseSnapshot| {
+        let mut grouped: BTreeMap<ObjectKey, Vec<ObjectKey>> = BTreeMap::new();
+        for edge in snapshot.schemas.iter().flat_map(|s| &s.dependencies) {
+            grouped
+                .entry(edge.source.clone())
+                .or_default()
+                .push(edge.target.clone());
+        }
+        for targets in grouped.values_mut() {
+            targets.sort();
+            targets.dedup();
+        }
+        grouped
+    };
+    let old = deps(before);
+    let new = deps(after);
+    let keys: std::collections::BTreeSet<_> = old.keys().chain(new.keys()).collect();
+    for key in keys {
+        if old.get(key) != new.get(key) {
+            operations.push(SchemaOperation {
+                object: key.clone(),
+                operation_type: OperationType::AlterDependencies,
+                risk: RiskLevel::Informational,
+                before: old
+                    .get(key)
+                    .map(|v| serde_json::to_string(v).expect("serializable dependencies")),
+                after: new
+                    .get(key)
+                    .map(|v| serde_json::to_string(v).expect("serializable dependencies")),
+            });
+        }
     }
 }
 
@@ -476,7 +560,9 @@ impl NamedSchemaObject for IndexDefinition {
     }
 
     fn summary(&self) -> String {
-        format!("{} ({})", self.method, self.columns.join(", "))
+        self.definition
+            .clone()
+            .unwrap_or_else(|| format!("{} ({})", self.method, self.columns.join(", ")))
     }
 }
 
@@ -601,6 +687,10 @@ const fn operation_order(operation: OperationType) -> u8 {
         OperationType::AddEnum => 17,
         OperationType::DropEnum => 18,
         OperationType::AlterEnum => 19,
+        OperationType::AddProgram => 20,
+        OperationType::DropProgram => 21,
+        OperationType::AlterProgram => 22,
+        OperationType::AlterDependencies => 23,
     }
 }
 
@@ -622,6 +712,8 @@ mod tests {
                 version: "17".into(),
             },
             vec![SchemaDefinition {
+                programs: Vec::new(),
+                dependencies: Vec::new(),
                 name: "public".into(),
                 tables: vec![table],
                 views: Vec::new(),
@@ -737,6 +829,7 @@ mod tests {
     fn dropping_an_index_is_medium_risk() {
         let mut before_table = TableDefinition::empty("public", "users");
         before_table.indexes.push(IndexDefinition {
+            definition: None,
             name: "users_email_idx".into(),
             method: "btree".into(),
             columns: vec!["email".into()],
@@ -769,6 +862,8 @@ mod tests {
                 version: "17".into(),
             },
             vec![SchemaDefinition {
+                programs: Vec::new(),
+                dependencies: Vec::new(),
                 name: "public".into(),
                 tables: Vec::new(),
                 views: Vec::new(),
@@ -790,5 +885,75 @@ mod tests {
             OperationType::AlterEnum
         );
         assert_eq!(changes.operations[0].risk, RiskLevel::High);
+    }
+}
+
+#[cfg(test)]
+mod program_tests {
+    use super::*;
+    use schema_model::{
+        DatabaseInfo, DatabaseType, ObjectDependency, ProgramDefinition, SchemaDefinition,
+    };
+    #[test]
+    fn tracks_program_definition_and_dependency_changes() {
+        let mut schema = SchemaDefinition::empty("app");
+        let key = ObjectKey::new(ObjectKind::Function, "app", "total()");
+        schema.programs.push(ProgramDefinition {
+            key: key.clone(),
+            definition: Some("SELECT 1".into()),
+            arguments: String::new(),
+            language: "sql".into(),
+            result_type: Some("integer".into()),
+            owner: "test".into(),
+            table: None,
+            enabled: None,
+        });
+        let before = DatabaseSnapshot::new(
+            Uuid::nil(),
+            DatabaseInfo {
+                name: "test".into(),
+                database_type: DatabaseType::PostgreSql,
+                version: "17".into(),
+            },
+            vec![schema],
+        );
+        let mut after = before.clone();
+        after.schemas[0].programs[0].definition = Some("SELECT count(*) FROM app.orders".into());
+        after.schemas[0].dependencies.push(ObjectDependency {
+            source: key,
+            target: ObjectKey::table("app", "orders"),
+        });
+        let diff = diff_snapshots(&before, &after);
+        assert!(
+            diff.operations
+                .iter()
+                .any(|o| o.operation_type == OperationType::AlterProgram)
+        );
+        assert!(
+            diff.operations
+                .iter()
+                .any(|o| o.operation_type == OperationType::AlterDependencies)
+        );
+        assert!(diff_snapshots(&after, &after).operations.is_empty());
+        after.schemas[0].programs.clear();
+        assert!(
+            diff_snapshots(&before, &after)
+                .operations
+                .iter()
+                .any(
+                    |o| o.operation_type == OperationType::DropProgram && o.risk == RiskLevel::High
+                )
+        );
+    }
+    #[test]
+    fn old_snapshot_schema_defaults_are_empty() {
+        let schema: SchemaDefinition =
+            serde_json::from_str(r#"{"name":"app","tables":[],"views":[],"enums":[]}"#).unwrap();
+        assert!(schema.programs.is_empty());
+        assert!(schema.dependencies.is_empty());
+        assert_eq!(
+            serde_json::to_value(schema).unwrap(),
+            serde_json::json!({"name":"app","tables":[],"views":[],"enums":[]})
+        );
     }
 }

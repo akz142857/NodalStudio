@@ -1,5 +1,6 @@
 //! Read-only `PostgreSQL` schema introspection.
 
+mod programs;
 use std::time::Duration;
 
 use schema_model::{
@@ -179,10 +180,11 @@ pub async fn inspect_schema(
     load_columns(pool, &mut schemas).await?;
     load_primary_keys(pool, &mut schemas).await?;
     load_foreign_keys(pool, &mut schemas).await?;
+    load_views(pool, &mut schemas).await?;
     load_indexes(pool, &mut schemas).await?;
     load_constraints(pool, &mut schemas).await?;
-    load_views(pool, &mut schemas).await?;
     load_enums(pool, &mut schemas).await?;
+    programs::load(pool, &mut schemas).await?;
 
     let mut snapshot = DatabaseSnapshot::new(source_id, database, schemas);
     snapshot.canonicalize()?;
@@ -435,6 +437,7 @@ async fn load_indexes(
             namespace.nspname AS schema_name,
             relation.relname AS table_name,
             index_relation.relname AS index_name,
+            pg_get_indexdef(index_row.indexrelid) AS definition,
             access_method.amname AS method,
             index_row.indisunique AS unique,
             index_row.indisprimary AS primary,
@@ -459,7 +462,7 @@ async fn load_indexes(
             index_row.indisunique,
             index_row.indisprimary,
             index_row.indpred,
-            index_row.indrelid
+            index_row.indrelid, index_row.indexrelid
         ORDER BY namespace.nspname, relation.relname, index_relation.relname
         ",
     )
@@ -469,16 +472,27 @@ async fn load_indexes(
     for row in rows {
         let schema_name: String = row.try_get("schema_name")?;
         let table_name: String = row.try_get("table_name")?;
-        find_table_mut(schemas, &schema_name, &table_name)?
-            .indexes
-            .push(IndexDefinition {
-                name: row.try_get("index_name")?,
-                method: row.try_get("method")?,
-                columns: row.try_get("columns")?,
-                unique: row.try_get("unique")?,
-                primary: row.try_get("primary")?,
-                predicate: row.try_get("predicate")?,
-            });
+        let schema = find_schema_mut(schemas, &schema_name)?;
+        let indexes =
+            if let Some(table) = schema.tables.iter_mut().find(|t| t.key.name == table_name) {
+                &mut table.indexes
+            } else if let Some(view) = schema.views.iter_mut().find(|v| v.key.name == table_name) {
+                &mut view.indexes
+            } else {
+                return Err(PostgresAdapterError::UnknownTable {
+                    schema: schema_name,
+                    table: table_name,
+                });
+            };
+        indexes.push(IndexDefinition {
+            definition: row.try_get("definition")?,
+            name: row.try_get("index_name")?,
+            method: row.try_get("method")?,
+            columns: row.try_get("columns")?,
+            unique: row.try_get("unique")?,
+            primary: row.try_get("primary")?,
+            predicate: row.try_get("predicate")?,
+        });
     }
     Ok(())
 }
@@ -557,6 +571,7 @@ async fn load_views(
         find_schema_mut(schemas, &schema_name)?
             .views
             .push(ViewDefinition {
+                indexes: Vec::new(),
                 key: ObjectKey::new(ObjectKind::View, &schema_name, view_name),
                 definition: row.try_get("definition")?,
                 materialized: row.try_get("materialized")?,

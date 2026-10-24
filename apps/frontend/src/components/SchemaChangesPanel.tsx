@@ -91,8 +91,8 @@ function OperationDetail({ operation, before, after }: { operation: SchemaOperat
           <tbody>{visibleRows.map(({ key, changed }) => (
             <tr key={key} data-changed={changed}>
               <th scope="row">{translateUiLabel(PROPERTY_LABELS[key] ?? changeLabel(key), bt)}{changed ? <> <small>{bt("business.changedDetail")}</small></> : null}</th>
-              <td><pre>{beforeProperties ? propertyValue(beforeProperties[key], bt) : detailStatus(bt, before, operation, "before")}</pre></td>
-              <td><pre>{afterProperties ? propertyValue(afterProperties[key], bt) : detailStatus(bt, after, operation, "after")}</pre></td>
+              <td><pre>{beforeProperties ? propertyValue(beforeProperties[key], bt, key) : detailStatus(bt, before, operation, "before")}</pre></td>
+              <td><pre>{afterProperties ? propertyValue(afterProperties[key], bt, key) : detailStatus(bt, after, operation, "after")}</pre></td>
             </tr>
           ))}</tbody>
         </table>

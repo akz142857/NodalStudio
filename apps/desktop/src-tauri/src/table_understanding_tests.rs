@@ -20,6 +20,8 @@ async fn fixture(endpoint: &str) -> (AppState, TableInput, DataSourceSettings) {
             version: "17".into(),
         },
         vec![SchemaDefinition {
+            programs: Vec::new(),
+            dependencies: Vec::new(),
             name: "public".into(),
             tables: vec![
                 TableDefinition::empty("public", "orders"),

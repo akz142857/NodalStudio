@@ -17,6 +17,8 @@ fn snapshot(source: Uuid) -> DatabaseSnapshot {
             version: "17".into(),
         },
         vec![SchemaDefinition {
+            programs: Vec::new(),
+            dependencies: Vec::new(),
             name: "public".into(),
             tables: vec![
                 TableDefinition::empty("public", "orders"),
@@ -976,9 +978,12 @@ async fn dotted_schema_independent_objects_are_unavailable_and_cannot_be_confirm
     let view = ObjectKey::new(ObjectKind::View, "public.orders", "reporting_view");
     let enumeration = ObjectKey::new(ObjectKind::Enum, "public.orders", "status");
     s.schemas.push(SchemaDefinition {
+        programs: Vec::new(),
+        dependencies: Vec::new(),
         name: "public.orders".into(),
         tables: vec![],
         views: vec![ViewDefinition {
+            indexes: Vec::new(),
             key: view.clone(),
             definition: "SELECT 1".into(),
             materialized: false,

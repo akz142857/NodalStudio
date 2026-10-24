@@ -220,6 +220,8 @@ mod tests {
                 version: "17".into(),
             },
             vec![SchemaDefinition {
+                programs: Vec::new(),
+                dependencies: Vec::new(),
                 name: "public".into(),
                 tables: vec![a.clone(), b.clone()],
                 views: vec![],
