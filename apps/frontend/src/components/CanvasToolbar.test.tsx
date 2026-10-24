@@ -2,14 +2,16 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { CanvasToolbar } from "./CanvasToolbar";
-import { canvasToolButton } from "../test/canvas-tools";
+import { canvasToolButton, openCanvasTools } from "../test/canvas-tools";
 
 function Fixture({ disabled = false, onManage = vi.fn(), onViewAll = vi.fn(), onAutoLayout = vi.fn() }) {
   const [physical, setPhysical] = useState(true);
+  const [logical, setLogical] = useState(true);
   const [inferred, setInferred] = useState(false);
   const [selected, setSelected] = useState(3);
   return <><CanvasToolbar tableCount={125} disabled={disabled} selectedCount={selected} selectionActions={selected ? <button onClick={() => setSelected(0)}>Clear selection</button> : null} createViewAction={selected ? <button>Save as view…</button> : null} layoutDisabled={false} onManageRelationships={onManage} onViewAll={onViewAll} onAutoLayout={onAutoLayout} filters={[
     { id: "physical", label: "Physical relationships", count: 0, description: "Declared constraints", checked: physical, onChange: () => setPhysical(!physical) },
+    { id: "logical", label: "Logical relationships", count: 3, description: "Relationships defined in your model", checked: logical, onChange: () => setLogical(!logical) },
     { id: "inferred", label: "Inferred relationships", count: 119, description: "Suggestions, not constraints", checked: inferred, onChange: () => setInferred(!inferred) },
   ]} /><button>Outside</button></>;
 }
@@ -49,20 +51,29 @@ describe("canvas toolbar", () => {
     expect(screen.queryByRole("button", { name: "Save as view…" })).not.toBeInTheDocument();
     expect(screen.queryByText("3 tables selected")).not.toBeInTheDocument();
   });
-  it("keeps display toggles independent and uses Escape to close one disclosure at a time", () => {
+  it("shows all relationship filters on opening Tools and preserves them while using other commands", () => {
     render(<Fixture />);
-    const trigger = canvasToolButton("Relationships");
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    fireEvent.click(trigger);
+    const trigger = openCanvasTools();
+    expect(screen.getByRole("heading", { name: "Relationships" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Relationships" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
     const physical = screen.getByRole("checkbox", { name: "Physical relationships" });
+    const logical = screen.getByRole("checkbox", { name: "Logical relationships" });
     expect(physical).toBeChecked();
+    expect(logical).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Inferred relationships" })).not.toBeChecked();
     fireEvent.click(screen.getByRole("checkbox", { name: "Inferred relationships" }));
     expect(physical).toBeChecked();
+    expect(logical).toBeChecked();
+    physical.focus(); screen.getByRole("button", { name: "View all" }).focus();
+    expect(screen.getByRole("group", { name: "Relationships" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Manage relationships" })).toBeVisible();
     physical.focus(); fireEvent.keyDown(physical, { key: "Escape" });
     expect(trigger).toHaveFocus();
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByRole("group", { name: "Canvas tool panel" })).toBeVisible();
-    fireEvent.click(trigger);
+    expect(screen.queryByRole("group", { name: "Canvas tool panel" })).not.toBeInTheDocument();
+    openCanvasTools();
     expect(screen.getByRole("checkbox", { name: "Inferred relationships" })).toBeChecked();
     fireEvent.pointerDown(screen.getByRole("button", { name: "Outside" }));
     expect(screen.queryByRole("group", { name: "Canvas tool panel" })).not.toBeInTheDocument();
@@ -72,15 +83,14 @@ describe("canvas toolbar", () => {
     render(<Fixture onManage={onManage} onViewAll={onViewAll} onAutoLayout={onAutoLayout} />);
     fireEvent.click(canvasToolButton("View all"));
     fireEvent.click(canvasToolButton("Auto layout"));
-    fireEvent.click(canvasToolButton("Relationships"));
-    fireEvent.click(screen.getByRole("button", { name: "Manage relationships" }));
+    fireEvent.click(canvasToolButton("Manage relationships"));
     expect(onManage).toHaveBeenCalledOnce(); expect(onViewAll).toHaveBeenCalledOnce(); expect(onAutoLayout).toHaveBeenCalledOnce();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Canvas tools" })).toHaveFocus();
   });
   it("prevents tools from opening during export", () => {
     const { rerender } = render(<Fixture />);
-    fireEvent.click(canvasToolButton("Relationships"));
+    openCanvasTools();
     rerender(<Fixture disabled />);
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Canvas tools" })).toBeDisabled();

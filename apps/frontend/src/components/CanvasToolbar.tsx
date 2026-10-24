@@ -1,6 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ActionIcon } from "./ActionIcon";
-import { DiagramToolbarMenu } from "./DiagramToolbarMenu";
 import "./canvas-toolbar.css";
 
 export interface CanvasRelationshipFilter {
@@ -97,14 +96,15 @@ export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, 
       <button type="button" className="canvas-command-row" disabled={disabled} aria-label="View all" title="Exit table focus and fit every table" onClick={() => { close(); onViewAll(); }}><ActionIcon name="fit" />View all</button>
       <button type="button" className="canvas-command-row" disabled={disabled || layoutDisabled} aria-label="Auto layout" title="Arrange all movable tables; pinned tables stay in place" onClick={() => { close(); onAutoLayout(); }}><ActionIcon name="grid" />Layout all tables</button>
       {onToggleMinimap ? <button type="button" className="canvas-command-row" aria-label="Show minimap" aria-pressed={minimapVisible} disabled={disabled} onClick={onToggleMinimap}><ActionIcon name="map" />Minimap<span className="canvas-command-toggle-state">{minimapVisible ? "On" : "Off"}</span></button> : null}
-      <DiagramToolbarMenu inline label="Relationships" title="Relationship visibility and management" disabled={disabled}>
+      <div className="canvas-command-relationships" role="group" aria-labelledby={`${id}-relationships`}>
+        <h3 id={`${id}-relationships`} className="canvas-command-section-label">Relationships</h3>
         <div className="canvas-command-filters">{filters.map((filter) => <label key={filter.id} className="canvas-command-filter">
-          <input type="checkbox" aria-label={filter.label} checked={filter.checked} onChange={filter.onChange} aria-describedby={`${id}-${filter.id}`} />
+          <input type="checkbox" aria-label={filter.label} checked={filter.checked} disabled={disabled} onChange={filter.onChange} aria-describedby={`${id}-${filter.id}`} />
           <span><strong>{filter.label}</strong><small id={`${id}-${filter.id}`}>{filter.description}</small></span>
           {filter.count !== undefined ? <span className="canvas-command-badge">{filter.count}</span> : null}
         </label>)}</div>
         {onManageRelationships ? <button type="button" className="canvas-command-manage" onClick={() => { close(); onManageRelationships(); }}><ActionIcon name="sliders" />Manage relationships<ActionIcon name="chevronRight" /></button> : null}
-      </DiagramToolbarMenu>
+      </div>
     </div>
     <button ref={restore} type="button" className="canvas-command-restore" hidden={!collapsed} disabled={disabled} aria-label="Expand canvas toolbar" title="Expand toolbar; selection is preserved" onClick={() => { setCollapsed(false); requestAnimationFrame(() => trigger.current?.focus()); }}><ActionIcon name="sliders" />Tools{selectedCount > 0 ? <span className="canvas-command-badge">{selectedCount}</span> : null}</button>
     <div className="canvas-command-bar" role="toolbar" aria-label="Canvas tools" hidden={collapsed}>

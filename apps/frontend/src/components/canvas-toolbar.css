@@ -36,7 +36,11 @@
 .canvas-command-popover .diagram-toolbar-inline > .diagram-toolbar-popover { position: static; width: auto; max-width: none; max-height: none; min-width: 0; margin: 3px 0 5px 8px; padding: 3px 0 3px 8px; border: 0; border-left: 1px solid var(--ds-separator); border-radius: 0; box-shadow: none; background: transparent; display: flex; flex-direction: column; gap: 3px; }
 .canvas-command-popover .diagram-toolbar-inline .diagram-toolbar-popover button { justify-content: flex-start; text-align: left; white-space: normal; }
 .canvas-command-popover select { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--ds-border); border-radius: 5px; background: var(--ds-field); color: var(--ds-text); font: inherit; }
-.canvas-command-filter { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 8px 2px; border-radius: 6px; cursor: pointer; }
+.canvas-command-relationships { margin-top: 6px; padding-top: 4px; border-top: 1px solid var(--ds-separator); }
+.canvas-command-relationships > h3 { margin: 0; font-weight: 500; }
+.canvas-command-popover .canvas-command-manage { width: 100%; margin-top: 4px; justify-content: flex-start; text-align: left; }
+.canvas-command-manage > svg:last-child { margin-left: auto; }
+.canvas-command-filter { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 7px 9px; border-radius: 6px; cursor: pointer; }
 .canvas-command-filter:hover { background: var(--ds-hover); }
 .canvas-command-filter input { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--ds-accent-fill); }
 .canvas-command-filter strong { display: block; font-weight: 500; line-height: 20px; }

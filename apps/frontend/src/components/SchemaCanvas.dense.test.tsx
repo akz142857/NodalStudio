@@ -1,4 +1,4 @@
-import { canvasToolButton } from "../test/canvas-tools";
+import { openCanvasTools } from "../test/canvas-tools";
 import { memo, useEffect } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useStoreApi, type NodeProps } from "@xyflow/react";
@@ -152,7 +152,7 @@ it.each([16, 250])("retains the dense model, selects, exports and rebuilds all e
   expect(store.getState().edges).toHaveLength(1000);
   expect(saveDiagramExport).toHaveBeenCalledOnce();
   stylesheet.remove();
-  fireEvent.click(canvasToolButton("Relationships"));
+  openCanvasTools();
   fireEvent.click(screen.getByRole("checkbox", { name: "Physical relationships" }));
   await frames.until(() => expect(container.querySelectorAll("[data-shared-edge-layer]")).toHaveLength(0));
   fireEvent.click(screen.getByRole("checkbox", { name: "Physical relationships" }));

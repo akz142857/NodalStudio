@@ -1,4 +1,4 @@
-import { canvasToolButton } from "../test/canvas-tools";
+import { canvasToolButton, openCanvasTools } from "../test/canvas-tools";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,15 +93,14 @@ describe("SchemaCanvas table selection", () => {
     expect(screen.getByRole("button", { name: "Show minimap" })).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(screen.getByRole("button", { name: "Show minimap" }));
     expect(container.querySelector(".react-flow__minimap")).not.toBeNull();
-    fireEvent.click(canvasToolButton("Relationships"));
+    openCanvasTools();
     fireEvent.click(screen.getByRole("checkbox", { name: "Physical relationships" }));
     fireEvent.click(screen.getByRole("button", { name: "Close canvas tool panel" }));
     expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(2);
     expect(container.querySelector<HTMLElement>(".react-flow__viewport")!.style.transform).toBe(viewport);
     expect([...container.querySelectorAll<HTMLElement>(".react-flow__node")].map(node => node.style.transform)).toEqual(positions);
     expect(save).not.toHaveBeenCalled();
-    const relations = canvasToolButton("Relationships");
-    if (relations.getAttribute("aria-expanded") !== "true") fireEvent.click(relations);
+    openCanvasTools();
     expect(screen.getByRole("checkbox", { name: "Physical relationships" })).not.toBeChecked();
   });
 
@@ -143,7 +142,7 @@ describe("SchemaCanvas table selection", () => {
     expect(canvasToolButton("Business domain")).toHaveAttribute("title", expect.stringContaining("DDL previews cannot edit business semantics")); expect(screen.queryByRole("button", { name: "Export SVG" })).not.toBeInTheDocument();
     fireEvent.click(canvasToolButton("Fix table positions"));
     expect(save).not.toHaveBeenCalled(); expect(add).not.toHaveBeenCalled(); expect(query).not.toHaveBeenCalled(); expect(localStorage.length).toBe(0);
-    fireEvent.click(canvasToolButton("Relationships"));
+    openCanvasTools();
     expect(screen.getByRole("checkbox", { name: "Declared foreign keys" })).toBeVisible();
   });
 
