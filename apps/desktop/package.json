@@ -1,6 +1,6 @@
 {
   "name": "@nodalstudio/desktop",
-  "version": "0.2.2-beta.2",
+  "version": "0.2.3",
   "private": true,
   "scripts": {
     "tauri": "tauri"

@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "ai-context"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "schema-diff",
  "schema-model",
@@ -996,7 +996,7 @@ dependencies = [
 
 [[package]]
 name = "extension-model"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "schema-diff",
@@ -1382,7 +1382,7 @@ dependencies = [
 
 [[package]]
 name = "git-workspace"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "extension-model",
@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "mysql-adapter"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "schema-model",
  "sqlx",
@@ -2297,7 +2297,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nodalstudio-cloud-api"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "axum",
  "chrono",
@@ -2317,7 +2317,7 @@ dependencies = [
 
 [[package]]
 name = "nodalstudio-desktop"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "ai-context",
  "chrono",
@@ -2804,7 +2804,7 @@ dependencies = [
 
 [[package]]
 name = "postgres-adapter"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "schema-model",
  "sqlx",
@@ -2908,7 +2908,7 @@ dependencies = [
 
 [[package]]
 name = "query-engine"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "futures-util",
@@ -3378,7 +3378,7 @@ dependencies = [
 
 [[package]]
 name = "schema-diff"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "schema-model",
@@ -3389,7 +3389,7 @@ dependencies = [
 
 [[package]]
 name = "schema-model"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "hex",
@@ -3514,7 +3514,7 @@ dependencies = [
 
 [[package]]
 name = "semantic-model"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "schema-model",
@@ -3717,7 +3717,7 @@ dependencies = [
 
 [[package]]
 name = "settings-model"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -3819,7 +3819,7 @@ dependencies = [
 
 [[package]]
 name = "snapshot-store"
-version = "0.2.2-beta.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "extension-model",
