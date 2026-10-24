@@ -31,7 +31,11 @@ export function ConnectionManager({ profiles, activeSourceId, onClose, onCreate,
   const visible = profiles.filter((profile) => `${profile.displayName} ${profile.database}`.toLowerCase().includes(query.trim().toLowerCase()));
   return createPortal(<dialog ref={dialog} className="connection-manager" aria-labelledby="connection-manager-title"
     onContextMenu={(event) => event.stopPropagation()}
-    onKeyDown={(event) => event.stopPropagation()}
+    onKeyDown={(event) => {
+      event.stopPropagation();
+      // WebKit's search input can consume Escape before native dialog cancel.
+      if (event.key === "Escape") { event.preventDefault(); onClose(); }
+    }}
     onCancel={(event) => { event.preventDefault(); onClose(); }}>
     <h2 id="connection-manager-title">Manage connections</h2>
     <input type="search" aria-label="Find database connections" placeholder="Find databases…" value={query} onChange={(event) => setQuery(event.target.value)} />

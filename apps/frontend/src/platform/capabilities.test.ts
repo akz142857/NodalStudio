@@ -18,7 +18,7 @@ describe("declared capability matrix", () => {
   it.each(capabilityTargets)("supports database capture separately from query execution for $label", (target) => {
     expect(currentCapabilityTarget(target.runtime, target.database)).toBe(target.id);
     expect(resolveCapability("database-connection", target.runtime, target.database).status).toBe(target.runtime === "desktop" ? "supported" : "unavailable");
-    expect(resolveCapability("read-only-query", target.runtime, target.database).status).toBe(target.id === "desktop-postgres" ? "supported" : "unavailable");
+    expect(resolveCapability("read-only-query", target.runtime, target.database).status).toBe(target.runtime === "desktop" ? "supported" : "unavailable");
   });
   it.each(capabilityTargets.filter((target) => target.runtime === "web"))("keeps Web writes/history/AI unavailable while allowing temporary layouts and local exports for $label", (target) => {
     for (const id of ["semantic-edit", "logical-relationships", "layout-persistence", "snapshot-history", "cloud-publish", "git-workspace", "portable-backup", "ai-explanation"] as const) expect(resolveCapability(id, target.runtime, target.database).status).toBe("unavailable");

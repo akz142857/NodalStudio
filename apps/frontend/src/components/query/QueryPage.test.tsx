@@ -26,6 +26,26 @@ const result: QueryExecutionResult = {
 
 describe("QueryPage", () => {
   beforeEach(() => clearQuerySessions());
+  it.each([false, true])("runs MySQL cursor statements and discards a late result after changing sources (return to original: %s)", async (returnToOriginal) => {
+    let finish!: (value: QueryExecutionResult) => void;
+    const executeReadonlyQuery = vi.fn<NodalStudioPlatform["executeReadonlyQuery"]>().mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const cancelQuery = vi.fn().mockResolvedValue(true);
+    const api = { executeReadonlyQuery, cancelQuery, listQueryHistory: vi.fn().mockResolvedValue([]) } as unknown as NodalStudioPlatform;
+    const mysql = { ...snapshot, database: { ...snapshot.database, databaseType: "mySql" as const } };
+    const { container, rerender } = render(<QueryPage platform={api} snapshot={mysql} runtimeKind="desktop" />);
+    const editor = container.querySelector<HTMLElement>(".cm-editor")!;
+    const view = EditorView.findFromDOM(editor)!;
+    const sql = "SELECT `semi;colon` FROM `orders`;\nSELECT 9;";
+    act(() => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: sql }, selection: { anchor: sql.indexOf("9") } }));
+    fireEvent.keyDown(editor, { key: "R", metaKey: true, shiftKey: true });
+    await waitFor(() => expect(executeReadonlyQuery).toHaveBeenCalledWith(expect.objectContaining({ sourceId: snapshot.sourceId, sql: "SELECT 9;" })));
+    rerender(<QueryPage platform={api} snapshot={{ ...snapshot, sourceId: "other-source" }} runtimeKind="desktop" />);
+    expect(cancelQuery).toHaveBeenCalledWith(executeReadonlyQuery.mock.calls[0][0].queryId);
+    if (returnToOriginal) rerender(<QueryPage platform={api} snapshot={mysql} runtimeKind="desktop" />);
+    await act(async () => { finish(result); await Promise.resolve(); });
+    expect(screen.queryByRole("region", { name: "Query results" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Data source changed/)).toBeVisible();
+  });
   it("runs editor SQL and resizes the output with the global pointer stream", async () => {
     let finishQuery!: (value: QueryExecutionResult) => void;
     const executeReadonlyQuery = vi.fn<NodalStudioPlatform["executeReadonlyQuery"]>().mockReturnValue(new Promise<QueryExecutionResult>((resolve) => { finishQuery = resolve; }));

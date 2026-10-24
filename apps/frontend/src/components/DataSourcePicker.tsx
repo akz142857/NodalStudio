@@ -14,11 +14,13 @@ function address(profile: DataSourceProfile) {
   return `${host}:${profile.port}`;
 }
 
-export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect }: {
+export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect, onEdit, onManage }: {
   profiles: DataSourceProfile[];
   activeProfile?: DataSourceProfile;
   disabled: boolean;
   onSelect: (profile: DataSourceProfile) => void;
+  onEdit?: (profile: DataSourceProfile) => void;
+  onManage?: () => void;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const menuId = useId();
@@ -49,11 +51,12 @@ export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect }
       initialFocus={opening.focus} onClose={close} onSelect={(profile) => {
         close(true);
         if (profile.id !== activeSourceId) onSelect(profile);
-      }} /> : null}
+      }} onEdit={activeProfile && onEdit ? () => { close(true); onEdit(activeProfile); } : undefined}
+      onManage={onManage ? () => { close(true); onManage(); } : undefined} /> : null}
   </>;
 }
 
-function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, onClose, onSelect }: {
+function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, onClose, onSelect, onEdit, onManage }: {
   id: string;
   trigger: RefObject<HTMLButtonElement | null>;
   profiles: DataSourceProfile[];
@@ -61,6 +64,8 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
   initialFocus: InitialFocus;
   onClose: (restoreFocus: boolean) => void;
   onSelect: (profile: DataSourceProfile) => void;
+  onEdit?: () => void;
+  onManage?: () => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const typeahead = useRef({ text: "", time: 0 });
@@ -84,7 +89,7 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
       menu.style.top = `${upward ? Math.max(8, bounds.top / scale - menu.offsetHeight - 6) : bounds.bottom / scale + 6}px`;
     }
     position();
-    const items = menu.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]');
+    const items = menu.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"], [role="menuitem"]');
     const selected = menu.querySelector<HTMLButtonElement>('[aria-checked="true"]');
     const first = initialFocus === "last" ? items[items.length - 1] : initialFocus === "selected" ? selected : items[0];
     (first ?? items[0])?.focus({ preventScroll: true });
@@ -115,7 +120,7 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
     onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}
     onKeyDown={(event) => {
       event.stopPropagation();
-      const items = Array.from(root.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? []);
+      const items = Array.from(root.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"], [role="menuitem"]') ?? []);
       const current = items.indexOf(document.activeElement as HTMLButtonElement);
       if (event.key === "Escape") { event.preventDefault(); onClose(true); }
       // Let Tab advance from the trigger in the sidebar instead of the body portal.
@@ -143,5 +148,9 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
       <span className="data-source-menu-label"><strong>{profile.database}</strong><span>{engine(profile)} · {profile.displayName}</span><small>{address(profile)}</small></span>
       <span className="data-source-menu-check" aria-hidden="true">✓</span>
     </button>)}
+    {onEdit || onManage ? <div className="data-source-menu-actions" role="group" aria-label="Connection actions">
+      {onEdit ? <button type="button" role="menuitem" onClick={onEdit}><ActionIcon name="settings" />Edit current connection…</button> : null}
+      {onManage ? <button type="button" role="menuitem" onClick={onManage}><ActionIcon name="sliders" />Manage connections…</button> : null}
+    </div> : null}
   </div>, document.body);
 }

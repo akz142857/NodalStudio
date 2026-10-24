@@ -70,6 +70,7 @@ mod github_releases;
 mod knowledge;
 mod query_export;
 mod schema_report;
+mod storage_errors;
 mod table_understanding;
 mod updates;
 
@@ -1230,22 +1231,17 @@ async fn execute_readonly_query(
         max_cell_bytes: query_engine::DEFAULT_CELL_BYTES,
         max_result_bytes: query_engine::DEFAULT_RESULT_BYTES,
     };
-    request
-        .validate()
-        .map_err(|error| query_command_error(query_id, error))?;
-
     let profile = state
         .store
         .get_data_source(input.source_id)
         .await
         .map_err(|_| query_command_error(query_id, QueryError::Connection))?
         .ok_or_else(|| query_command_error(query_id, QueryError::Connection))?;
-    if profile.database_type != DatabaseType::PostgreSql {
-        return Err(query_command_error(
-            query_id,
-            QueryError::Validation("Query currently supports PostgreSQL data sources only.".into()),
-        ));
+    match profile.database_type {
+        DatabaseType::PostgreSql => request.validate(),
+        DatabaseType::MySql => request.validate_mysql(),
     }
+    .map_err(|error| query_command_error(query_id, error))?;
     let password = credential_entry(profile.id)
         .map_err(|_| query_command_error(query_id, QueryError::Connection))?
         .get_password()
@@ -1269,20 +1265,13 @@ async fn execute_readonly_query(
     )
     .await
     .map_err(|error| query_command_error(query_id, QueryError::Validation(error)))?;
-    let options = connection_options_from_profile(&profile, &password)
-        .with_socket(tunnel.postgres_socket())
-        .with_connect_timeout(Duration::from_secs(u64::from(
-            source_settings.refresh.connection_timeout_seconds,
-        )));
-    let pool = connect(&options)
-        .await
-        .map_err(|_| query_command_error(query_id, QueryError::Connection))?;
     let cancellation = CancellationToken::new();
     {
         let mut active = state.active_queries.lock().await;
-        if active
-            .values()
-            .any(|(source_id, _)| *source_id == input.source_id)
+        if active.contains_key(&query_id)
+            || active
+                .values()
+                .any(|(source_id, _)| *source_id == input.source_id)
         {
             return Err(query_command_error(
                 query_id,
@@ -1291,9 +1280,50 @@ async fn execute_readonly_query(
         }
         active.insert(query_id, (input.source_id, cancellation.clone()));
     }
-    let result = execute_postgres_query(&pool, &request, &cancellation).await;
+    let connect_timeout = Duration::from_secs(u64::from(
+        source_settings.refresh.connection_timeout_seconds,
+    ));
+    // Register before connecting, so Stop works during pool acquisition as well.
+    let result = match profile.database_type {
+        DatabaseType::PostgreSql => {
+            let options = connection_options_from_profile(&profile, &password)
+                .with_socket(tunnel.postgres_socket())
+                .with_connect_timeout(connect_timeout);
+            let connected = tokio::select! {
+                biased;
+                () = cancellation.cancelled() => Err(QueryError::Cancelled),
+                pool = connect(&options) => pool.map_err(|_| QueryError::Connection),
+            };
+            match connected {
+                Ok(pool) => {
+                    let result = execute_postgres_query(&pool, &request, &cancellation).await;
+                    pool.close().await;
+                    result
+                }
+                Err(error) => Err(error),
+            }
+        }
+        DatabaseType::MySql => {
+            let options = mysql_connection_options_from_profile(&profile, &password)
+                .with_socket(tunnel.mysql_socket())
+                .with_connect_timeout(connect_timeout);
+            let connected = tokio::select! {
+                biased;
+                () = cancellation.cancelled() => Err(QueryError::Cancelled),
+                pool = connect_mysql(&options) => pool.map_err(|_| QueryError::Connection),
+            };
+            match connected {
+                Ok(pool) => {
+                    let result =
+                        query_engine::execute_mysql_query(&pool, &request, &cancellation).await;
+                    pool.close().await;
+                    result
+                }
+                Err(error) => Err(error),
+            }
+        }
+    };
     state.active_queries.lock().await.remove(&query_id);
-    pool.close().await;
 
     let history = match &result {
         Ok(value) => QueryHistoryEntry {
@@ -4797,8 +4827,8 @@ fn safe_mysql_error(error: mysql_adapter::MySqlAdapterError) -> String {
     }
 }
 
-fn safe_store_error(_error: snapshot_store::SnapshotStoreError) -> String {
-    "Unable to access Nodal Studio local storage.".into()
+fn safe_store_error(error: snapshot_store::SnapshotStoreError) -> String {
+    storage_errors::message(&error).into()
 }
 
 fn safe_git_workspace_error(error: &git_workspace::GitWorkspaceError) -> String {

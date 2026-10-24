@@ -61,6 +61,10 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://nodalstudio:nodalstudio@127.0.0.1:55432/nodalstudio_test
         run: cargo test -p postgres-adapter --test introspection
+      - name: Run bounded PostgreSQL query regression
+        env:
+          SQLAI_QUERY_TEST_DATABASE_URL: postgres://nodalstudio:nodalstudio@127.0.0.1:55432/nodalstudio_test
+        run: cargo test -p query-engine --test postgres_query
       - if: always()
         run: docker compose -f infrastructure/docker-compose.test.yml down
 
@@ -77,6 +81,10 @@ jobs:
         env:
           TEST_MYSQL_DATABASE_URL: mysql://nodalstudio:nodalstudio@127.0.0.1:53306/nodalstudio_test
         run: cargo test -p mysql-adapter --test introspection
+      - name: Run bounded MySQL query integration test
+        env:
+          SQLAI_MYSQL_QUERY_TEST_DATABASE_URL: mysql://nodalstudio:nodalstudio@127.0.0.1:53306/nodalstudio_test
+        run: cargo test -p query-engine --test mysql_query
       - if: always()
         run: docker compose -f infrastructure/docker-compose.mysql.yml down
 

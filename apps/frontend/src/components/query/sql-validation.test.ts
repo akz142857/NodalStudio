@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { currentPostgresStatement, validatePostgresSqlText } from "./sql-validation";
+import { currentSqlStatement, validateSqlText, currentPostgresStatement, validatePostgresSqlText } from "./sql-validation";
 
 describe("PostgreSQL syntax validation", () => {
   it("accepts a complete select and reports an incomplete expression", () => {
@@ -28,5 +28,15 @@ describe("current statement execution", () => {
     const sql = `${first}\nSELECT 9;`;
     expect(currentPostgresStatement(sql, 4)).toBe(first);
     expect(currentPostgresStatement(sql, sql.indexOf("9"))).toBe("SELECT 9;");
+  });
+});
+
+
+describe("MySQL lexical boundaries", () => {
+  it.each(["SELECT `semi;colon` FROM `order``item`;", "SELECT 'escaped\\';still one';", "SELECT 1 # comment;\n + 2;"])("keeps literals, quoted names and comments together: %s", (first) => {
+    const sql = `${first}\nSELECT 9;`;
+    expect(currentSqlStatement(sql, 1, "mySql")).toBe(first);
+    expect(currentSqlStatement(sql, sql.indexOf("9"), "mySql")).toBe("SELECT 9;");
+    expect(validateSqlText(first, "mySql")).toEqual([]);
   });
 });

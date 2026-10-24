@@ -1,6 +1,8 @@
 //! Safe, bounded, read-only query execution for `Nodal Studio`.
 
 mod guard;
+mod mysql;
+mod mysql_value;
 mod postgres;
 mod value;
 
@@ -8,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-pub use guard::validate_read_only_postgres;
+pub use guard::{validate_read_only_mysql, validate_read_only_postgres};
+pub use mysql::execute_mysql_query;
 pub use postgres::execute_postgres_query;
 
 pub const DEFAULT_ROW_LIMIT: u32 = 100;
@@ -47,6 +50,20 @@ impl ExecuteQueryRequest {
     /// # Errors
     /// Returns [`QueryError::Validation`] when SQL is empty or a limit is outside the hard bounds.
     pub fn validate(&self) -> Result<(), QueryError> {
+        self.validate_limits()?;
+        validate_read_only_postgres(&self.sql)
+    }
+
+    /// Validates limits and a single read-only `MySQL` statement.
+    ///
+    /// # Errors
+    /// Returns a validation error for unsupported SQL or invalid limits.
+    pub fn validate_mysql(&self) -> Result<(), QueryError> {
+        self.validate_limits()?;
+        validate_read_only_mysql(&self.sql)
+    }
+
+    fn validate_limits(&self) -> Result<(), QueryError> {
         if self.sql.trim().is_empty() {
             return Err(QueryError::Validation("SQL cannot be empty.".into()));
         }
@@ -70,7 +87,7 @@ impl ExecuteQueryRequest {
                 "Result limit must be between 1 and {MAX_RESULT_BYTES} bytes."
             )));
         }
-        validate_read_only_postgres(&self.sql)
+        Ok(())
     }
 }
 

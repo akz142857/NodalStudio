@@ -1,11 +1,16 @@
-import { PostgreSQL, sql } from "@codemirror/lang-sql";
+import { MySQL, PostgreSQL, SQLDialect, sql } from "@codemirror/lang-sql";
 import { syntaxTree } from "@codemirror/language";
 import type { Diagnostic } from "@codemirror/lint";
 import { EditorState } from "@codemirror/state";
 
+export type SqlDialect = "postgreSql" | "mySql";
 export const postgresSqlLanguage = sql({ dialect: PostgreSQL });
+// Match the backend session mode, including MySQL backslash string escapes.
+const mysqlDialect = SQLDialect.define({ ...MySQL.spec, backslashEscapes: true });
+export const mysqlSqlLanguage = sql({ dialect: mysqlDialect });
+export function sqlLanguage(dialect: SqlDialect) { return dialect === "mySql" ? mysqlSqlLanguage : postgresSqlLanguage; }
 
-export function postgresSqlSyntaxDiagnostics(state: EditorState): Diagnostic[] {
+export function sqlSyntaxDiagnostics(state: EditorState): Diagnostic[] {
   if (!state.doc.toString().trim()) return [];
   const diagnostics: Diagnostic[] = [];
   const cursor = syntaxTree(state).cursor();
@@ -19,13 +24,21 @@ export function postgresSqlSyntaxDiagnostics(state: EditorState): Diagnostic[] {
 }
 
 export function validatePostgresSqlText(sqlText: string): Diagnostic[] {
-  return postgresSqlSyntaxDiagnostics(EditorState.create({ doc: sqlText, extensions: [postgresSqlLanguage] }));
+  return validateSqlText(sqlText, "postgreSql");
 }
 
-/** Use PostgreSQL lexical boundaries, so semicolons in literals/comments never split a statement. */
+export function validateSqlText(sqlText: string, dialect: SqlDialect): Diagnostic[] {
+  return sqlSyntaxDiagnostics(EditorState.create({ doc: sqlText, extensions: [sqlLanguage(dialect)] }));
+}
+
 export function currentPostgresStatement(document: string, position: number): string {
+  return currentSqlStatement(document, position, "postgreSql");
+}
+
+/** Use the source dialect's lexical boundaries for quoted names, literals and comments. */
+export function currentSqlStatement(document: string, position: number, dialect: SqlDialect): string {
   const statements: { from: number; to: number }[] = [];
-  const tree = PostgreSQL.language.parser.parse(document);
+  const tree = (dialect === "mySql" ? mysqlDialect : PostgreSQL).language.parser.parse(document);
   for (let node = tree.topNode.firstChild; node; node = node.nextSibling) {
     if (node.name === "Statement" && document.slice(node.from, node.to).replaceAll(";", "").trim()) statements.push({ from: node.from, to: node.to });
   }

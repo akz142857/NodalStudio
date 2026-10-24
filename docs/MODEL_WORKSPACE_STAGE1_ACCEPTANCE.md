@@ -189,3 +189,11 @@ Review 与原生检查修复了全局右键捕获阻断菜单、WebKit 原生 se
 原生验收发现临时 DDL 的非日期 capturedAt 标记导致快照标题 DateTimeFormat 抛出 RangeError、整页空白。标题现先验证时间，缺失/非法时间不调用格式化，也不输出非法 time 元素；标题、DDL 与画布相关 3 文件 72 项通过（与前批画布测试有重合）。所有改动代码 ESLint、TypeScript/Vite、最终 macOS debug app 构建和差异检查通过；保留既有构建 IIFE 命名与 chunk 大小提示。
 
 最终原生应用：临时 DDL 解析 11 张合成表、11 条外键，无解析错误，成功显示分层关系图且无排版错误；关闭临时预览后返回 Flow 的 499 表模型，执行 Re-layout ER canvas，底部显示 Saved on this device。应用保持运行；仅更新本地布局，没有执行 DDL、删除数据源或发布版本。
+
+### 连接操作移入弹层与启动恢复修正（2026-10-24）
+
+按用户选定方案，将 Edit current connection… 与 Manage connections… 放入数据源详情弹层底部，用分隔线区别于来源列表；移除卡片下独立编辑行及此前要求移除的 Model navigation 总折叠入口。视图和对象树保持直接可用。弹层菜单的方向键、Home/End、Enter/Space 覆盖底部操作，打开编辑/管理前关闭弹层，管理入口在无活动来源时仍可用。原生验收发现 WebKit 搜索框内 Escape 未关闭连接管理窗口，现显式处理关闭并恢复焦点。
+
+存储调查：用户本地 SQLite 的只读 quick_check 为 ok，当前有 1 份约 1.60 MB 快照。原始通用错误的底层触发条件未能再次复现，因此不标记为根因已解决。已修正确定存在的流程问题：关闭 autoConnect 时启动恢复只读取本地快照；手动选择使未完成的启动恢复失效；打开失败提示与该次工作区上下文关联，成功切换后不再残留或因迟到的失败结果重新出现，并提供重试入口。桌面存储错误改为安全的分类说明和稳定代码，区分连接池超时、SQLite 锁定、只读/空间不足、记录解码等，不回传原始 SQL、路径或数据内容。
+
+验证：前端全量 123 文件、755 项通过，ESLint 通过；最后补充 Escape 修复后，3 文件 36 项相关回归及改动文件 lint 通过。Rust 存储错误测试 2 项通过，其中锁定场景使用隔离临时 SQLite 实际产生错误。最终 TypeScript/Vite/macOS debug app 构建通过，保留已有 IIFE 命名和 chunk 大小提示。真实应用两次恢复 Flow 的 499 张表，无存储错误提示；核对弹层底部菜单、键盘进入编辑的 Name 焦点、管理搜索焦点和 Escape 关闭后返回选择器。截图位于 `target/connection-footer-review/sidebar.png` 和 `popup.png`。最终应用停在详情弹层展开状态。本节验收未修改或删除用户连接及凭据，验收时尚未提交、推送或发布。

@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ConnectionTestStatus } from "./ConnectionTestStatus";
 import { connectionFailure, type ConnectionTestState } from "./connection-test-state";
 import { ConnectionSecurityFields } from "./ConnectionSecurityFields";
@@ -6,7 +6,6 @@ import { ConnectionManager } from "./ConnectionManager";
 import { SchemaObjectMenu } from "./SchemaObjectMenu";
 import { DataSourcePicker } from "./DataSourcePicker";
 import "./model-navigation.css";
-import { TreeDisclosureIcon } from "./TreeDisclosureIcon";
 import type {
   DataSourceProfile,
   CaptureSnapshotResult,
@@ -24,6 +23,7 @@ interface ConnectionPanelProps {
   children?: ReactNode;
   platform: NodalStudioPlatform;
   onSnapshot: (result: CaptureSnapshotResult) => void;
+  onSourceOpenStart?: () => void;
   onRefresh?: () => void;
   refreshDisabled?: boolean;
   onSourceDeleted?: (sourceId: string) => void;
@@ -77,7 +77,7 @@ function connectionDetailsDiffer(
   );
 }
 
-export function ConnectionPanel({ enabled, activeSourceId, children, platform, onSnapshot, onSourceDeleted, onRefresh, refreshDisabled, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
+export function ConnectionPanel({ enabled, activeSourceId, children, platform, onSnapshot, onSourceOpenStart, onSourceDeleted, onRefresh, refreshDisabled, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
   const navigation = useRef<HTMLElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number }>();
   const [managerOpen, setManagerOpen] = useState(false);
@@ -88,14 +88,12 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
   const [testState, setTestState] = useState<ConnectionTestState>({ status: "idle" });
   const [connectionResult, setConnectionResult] = useState<ConnectionTestResult>();
   const [error, setError] = useState<string>();
+  const openContext = useMemo(() => ({ sourceId: activeSourceId }), [activeSourceId]);
+  const [openError, setOpenError] = useState<{ context: typeof openContext; profile: DataSourceProfile; message: string }>();
   const [pending, setPending] = useState(false);
   const [connectionTab, setConnectionTab] = useState<"general" | "tls" | "ssh">("general");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<DataSourceProfile>();
-  const [disclosure, setDisclosure] = useState({ sourceId: activeSourceId, collapsed: false });
-  // Selecting another source opens its directory; refreshing this source keeps
-  // the user's disclosure choice and never reloads the canvas just to toggle it.
-  if (disclosure.sourceId !== activeSourceId) setDisclosure({ sourceId: activeSourceId, collapsed: false });
   const requiresLiveVerification = editingProfile
     ? connectionDetailsDiffer(editingProfile, form) || Boolean(form.sshPassword) || Boolean(form.password)
     : false;
@@ -258,13 +256,15 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
   }
 
   async function handleExistingOpen(profile: DataSourceProfile) {
+    onSourceOpenStart?.();
     setPending(true);
     setError(undefined);
+    setOpenError(undefined);
     setConnectionResult(undefined);
     try {
       await openSavedSnapshot(profile);
     } catch (reason) {
-      setError(connectionFailure(reason).message);
+      setOpenError({ context: openContext, profile, message: connectionFailure(reason).message });
     } finally {
       setPending(false);
     }
@@ -332,7 +332,9 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
   }
 
   const activeProfile = profiles.find((profile) => profile.id === activeSourceId);
-  const expanded = !disclosure.collapsed;
+  // A successful open from another entry point supersedes this attempt, even
+  // when its rejection arrives after the workspace has already changed.
+  const visibleOpenError = openError?.context === openContext ? openError : undefined;
 
   return (
     <section ref={navigation} className="connection-stack model-navigation" aria-label="Data sources" tabIndex={0}
@@ -354,13 +356,12 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
       </header>
       {profiles.length > 0 ? <div className="source-navigation-current">
         <DataSourcePicker profiles={profiles} activeProfile={activeProfile} disabled={!enabled || pending}
-          onSelect={(profile) => { void handleExistingOpen(profile); }} />
-        <div className="source-navigation-details">
-          {activeProfile
-            ? <button type="button" aria-label={`Edit ${activeProfile.displayName}`} title="Edit connection" disabled={pending} onClick={() => openEditDialog(activeProfile)}>Edit connection…</button>
-            : <button type="button" disabled={!enabled || pending} onClick={() => setManagerOpen(true)}>Manage connections…</button>}
-        </div>
-        {activeProfile ? <button className="source-disclosure" type="button" aria-label={`${expanded ? "Collapse" : "Expand"} ${activeProfile.displayName}`} aria-expanded={expanded} onClick={() => setDisclosure({ sourceId: activeSourceId, collapsed: expanded })}><TreeDisclosureIcon open={expanded} /><span>Model navigation</span></button> : null}
+          onSelect={(profile) => { void handleExistingOpen(profile); }}
+          onEdit={openEditDialog} onManage={() => setManagerOpen(true)} />
+      </div> : null}
+      {visibleOpenError ? <div className="connection-status error-message" role="alert">
+        <p>Could not open {visibleOpenError.profile.database}. {visibleOpenError.message}</p>
+        <button type="button" disabled={pending} onClick={() => { void handleExistingOpen(visibleOpenError.profile); }}>Retry opening database</button>
       </div> : null}
       {menu ? <SchemaObjectMenu {...menu} name="Databases" actions={[
         { label: "New connection…", disabled: !enabled || pending, run: openCreateDialog },
@@ -373,7 +374,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
         onOpen={(profile) => { setManagerOpen(false); if (profile.id !== activeSourceId) void handleExistingOpen(profile); }} /> : null}
       {profiles.length > 0 ? (
         <div className="saved-sources">
-          {activeProfile ? <div key={activeProfile.id} hidden={!expanded}>{children}</div> : null}
+          {activeProfile ? <div key={activeProfile.id}>{children}</div> : null}
         </div>
       ) : (
         <button type="button" className="empty-data-source" onClick={openCreateDialog} disabled={!enabled}>

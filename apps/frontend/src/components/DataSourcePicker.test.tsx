@@ -17,6 +17,40 @@ function setup() {
 }
 
 describe("DataSourcePicker", () => {
+  it("keeps connection actions in the popup footer and supports keyboard activation without switching sources", () => {
+    const onSelect = vi.fn(), onEdit = vi.fn(), onManage = vi.fn();
+    render(<DataSourcePicker profiles={[first, second]} activeProfile={first} disabled={false} onSelect={onSelect} onEdit={onEdit} onManage={onManage} />);
+    const trigger = screen.getByRole("button", { name: "Data source: midigi_db" });
+    expect(screen.queryByText("Edit current connection…")).not.toBeInTheDocument();
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getAllByRole("menuitemradio")[0], { key: "End" });
+    const manage = screen.getByRole("menuitem", { name: "Manage connections…" });
+    expect(manage).toHaveFocus();
+    fireEvent.keyDown(manage, { key: "ArrowUp" });
+    const edit = screen.getByRole("menuitem", { name: "Edit current connection…" });
+    expect(edit).toHaveFocus();
+    fireEvent.keyDown(edit, { key: "Enter" });
+    expect(onEdit).toHaveBeenCalledExactlyOnceWith(first);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });
+    expect(screen.getByRole("menuitem", { name: "Manage connections…" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: " " });
+    expect(onManage).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("offers management but no current-connection edit before a model is selected", () => {
+    const onManage = vi.fn();
+    render(<DataSourcePicker profiles={[first]} disabled={false} onSelect={vi.fn()} onEdit={vi.fn()} onManage={onManage} />);
+    fireEvent.click(screen.getByRole("button", { name: "Select database" }));
+    expect(screen.queryByRole("menuitem", { name: "Edit current connection…" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
+    expect(onManage).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   it("uses the same detail picker before any model is selected without marking a source active", () => {
     const onSelect = vi.fn();
     render(<DataSourcePicker profiles={[first, second]} disabled={false} onSelect={onSelect} />);

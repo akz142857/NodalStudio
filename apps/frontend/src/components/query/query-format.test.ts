@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TableDefinition } from "../../platform";
-import { executableSql, quotePostgresIdentifier, tablePreviewSql } from "./query-format";
+import { quoteIdentifier, executableSql, quotePostgresIdentifier, tablePreviewSql } from "./query-format";
 
 const table = {
   key: { kind: "table", schema: "Sales Ops", name: "order\"item" },
@@ -24,4 +24,11 @@ describe("query formatting", () => {
     expect(executableSql(document, 10, 19)).toBe("SELECT 2;");
     expect(executableSql(document, 0, 0)).toBe(document);
   });
+});
+
+
+it("quotes MySQL identifiers with escaped backticks for row previews", () => {
+  const table = { key: { schema: "Sales Ops", name: "order`item" } } as TableDefinition;
+  expect(quoteIdentifier("order`item", "mySql")).toBe("`order``item`");
+  expect(tablePreviewSql(table, 100, "mySql")).toBe("SELECT *\nFROM `Sales Ops`.`order``item`\nLIMIT 100;");
 });

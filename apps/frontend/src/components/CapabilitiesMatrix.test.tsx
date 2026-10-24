@@ -8,9 +8,9 @@ describe("CapabilitiesMatrix", () => {
     const table = screen.getByRole("table"); expect(within(table).getAllByRole("columnheader")).toHaveLength(5);
     expect(within(table).getByRole("columnheader", { name: "Desktop · PostgreSQL Current" })).toHaveAttribute("data-current", "true");
     const row = within(table).getByRole("row", { name: /Read-only SQL execution/ });
-    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["Supported", "Unavailable", "Unavailable", "Unavailable"]);
+    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["Supported", "Supported", "Unavailable", "Unavailable"]);
     const details = screen.getByRole("region", { name: "Capability details" });
-    expect(details).toHaveTextContent("maximum 5,000"); expect(details).toHaveTextContent("MySQL metadata capture is supported, but SQL execution is currently PostgreSQL-only");
+    expect(details).toHaveTextContent("maximum 5,000"); expect(details).toHaveTextContent("Desktop MySQL: one read-only SELECT or WITH query");
   });
   it("updates context without assuming PostgreSQL when no database is loaded", () => {
     const { rerender, container } = render(<CapabilitiesMatrix />);

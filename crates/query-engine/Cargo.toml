@@ -9,7 +9,7 @@ chrono.workspace = true
 futures-util = "0.3.31"
 serde.workspace = true
 serde_json.workspace = true
-sqlparser.workspace = true
+sqlparser = { workspace = true, features = ["visitor"] }
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

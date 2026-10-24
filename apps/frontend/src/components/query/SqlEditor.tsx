@@ -7,8 +7,8 @@ import { EditorView, highlightActiveLine, lineNumbers, keymap, placeholder } fro
 import { tags } from "@lezer/highlight";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { DatabaseSnapshot } from "../../platform";
-import { executableSql } from "./query-format";
-import { currentPostgresStatement, postgresSqlLanguage, postgresSqlSyntaxDiagnostics } from "./sql-validation";
+import { executableSql, quoteIdentifier } from "./query-format";
+import { currentSqlStatement, sqlLanguage, sqlSyntaxDiagnostics } from "./sql-validation";
 
 
 export interface SqlEditorHandle {
@@ -29,12 +29,13 @@ interface SqlEditorProps {
 
 function completions(snapshot?: DatabaseSnapshot): Completion[] {
   if (!snapshot) return [];
+  const quote = (value: string) => quoteIdentifier(value, snapshot.database.databaseType);
   return snapshot.schemas.flatMap((schema) => [
-    { label: schema.name, type: "namespace", detail: "schema" },
+    { label: schema.name, apply: quote(schema.name), type: "namespace", detail: "schema" },
     ...schema.tables.flatMap((table) => [
-      { label: `${schema.name}.${table.key.name}`, apply: `"${schema.name}"."${table.key.name}"`, type: "class", detail: "table" },
-      { label: table.key.name, type: "class", detail: schema.name },
-      ...table.columns.map((column) => ({ label: column.name, type: "property", detail: `${table.key.name} · ${column.formattedType}` })),
+      { label: `${schema.name}.${table.key.name}`, apply: `${quote(schema.name)}.${quote(table.key.name)}`, type: "class", detail: "table" },
+      { label: table.key.name, apply: quote(table.key.name), type: "class", detail: schema.name },
+      ...table.columns.map((column) => ({ label: column.name, apply: quote(column.name), type: "property", detail: `${table.key.name} · ${column.formattedType}` })),
     ]),
   ]);
 }
@@ -56,6 +57,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
+  const dialect = snapshot?.database.databaseType ?? "postgreSql";
   const currentValueRef = useRef(value);
   const onChangeRef = useRef(onChange);
   currentValueRef.current = value;
@@ -64,7 +66,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   useImperativeHandle(ref, () => ({
     getCurrentStatementSql() {
       const view = viewRef.current;
-      return view ? currentPostgresStatement(view.state.doc.toString(), view.state.selection.main.head) : "";
+      return view ? currentSqlStatement(view.state.doc.toString(), view.state.selection.main.head, dialect) : "";
     },
     getExecutableSql() {
       const view = viewRef.current;
@@ -73,24 +75,24 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       return executableSql(view.state.doc.toString(), selection.from, selection.to);
     },
     focus() { viewRef.current?.focus(); },
-  }), []);
+  }), [dialect]);
 
   useEffect(() => {
     if (!hostRef.current) return;
     const state = EditorState.create({
       doc: currentValueRef.current,
       extensions: [
-        postgresSqlLanguage,
+        sqlLanguage(dialect),
         syntaxHighlighting(sqlHighlightStyle),
         history(),
         placeholder("Write a read-only SELECT query…"),
-        linter((view) => postgresSqlSyntaxDiagnostics(view.state), { delay: 250 }),
+        linter((view) => sqlSyntaxDiagnostics(view.state), { delay: 250 }),
         lineNumbers(),
         highlightActiveLine(),
         lintGutter(),
         autocompletion({
           override: [(context) => ({
-            from: context.matchBefore(/[\w."]*/)?.from ?? context.pos,
+            from: context.matchBefore(/[\w."`]*/)?.from ?? context.pos,
             options: completions(snapshot),
           })],
         }),
@@ -126,7 +128,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       view.destroy();
       viewRef.current = undefined;
     };
-  }, [snapshot]);
+  }, [snapshot, dialect]);
 
   useEffect(() => {
     const view = viewRef.current;

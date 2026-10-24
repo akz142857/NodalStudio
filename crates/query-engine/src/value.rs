@@ -64,7 +64,7 @@ fn cell_from_text(database_type: &str, text: &str, max_cell_bytes: usize) -> Que
     }
 }
 
-fn text_cell(text: &str, max_cell_bytes: usize) -> QueryCell {
+pub(crate) fn text_cell(text: &str, max_cell_bytes: usize) -> QueryCell {
     let truncated = text.len() > max_cell_bytes;
     let value = if truncated {
         truncate_utf8(text, max_cell_bytes).to_owned()

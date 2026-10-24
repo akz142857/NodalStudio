@@ -71,7 +71,7 @@ describe("SettingsPage", () => {
   it("supports the capabilities category deep link with a loaded MySQL context", () => {
     render(<SettingsPage {...baseProps} settings={defaultEffectiveSettings()} initialCategory="capabilities" activeDatabase={{ name: "fixture", databaseType: "mySql", version: "8.4" }} />);
     expect(screen.getByRole("columnheader", { name: "Desktop · MySQL Current" })).toHaveAttribute("data-current", "true");
-    expect(screen.getByText(/MySQL metadata capture is supported/)).toBeVisible();
+    expect(screen.getByText(/Desktop MySQL: one read-only SELECT or WITH query/)).toBeVisible();
   });
   it("searches settings and saves a Canvas preference", async () => {
     const onUpdateApp = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());

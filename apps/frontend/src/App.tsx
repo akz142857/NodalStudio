@@ -12,6 +12,7 @@ import { IconButton } from "./components/IconButton";
 import { useOperation } from "./components/use-operation";
 import { resolveCapability } from "./platform/capabilities";
 import { SchemaCanvas, type CanvasLocateRequest } from "./components/SchemaCanvas";
+import { ChangesEmptyState } from "./components/ChangesEmptyState";
 import { SchemaChangesPanel } from "./components/SchemaChangesPanel";
 import { SchemaChangesDiagram } from "./components/SchemaChangesDiagram";
 import { SchemaTree } from "./components/SchemaTree";
@@ -135,6 +136,9 @@ export function App() {
   const [openQueryRequest, setOpenQueryRequest] = useState<OpenQueryRequest>();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const autoConnectAttempted = useRef(false);
+  const startupRevision = useRef(0);
+  const beginSourceOpen = useCallback(() => { startupRevision.current += 1; }, []);
+  useEffect(() => () => { startupRevision.current += 1; }, []);
   const automaticUpdateChecked = useRef(false);
   const runtime = useQuery({
     queryKey: ["runtime-info"],
@@ -269,6 +273,7 @@ export function App() {
   const healthCheckFailing = useRef(false);
 
   const handleCapture = useCallback((result: CaptureSnapshotResult) => {
+    startupRevision.current += 1;
     const sameSource = snapshot?.sourceId === result.snapshot.sourceId;
     setHistoryPreview(false);
     setSnapshot(result.snapshot);
@@ -413,6 +418,8 @@ export function App() {
       dataSources.length === 0
     ) return;
     autoConnectAttempted.current = true;
+    const revision = startupRevision.current;
+    const isCurrent = () => startupRevision.current === revision;
     void Promise.all(
       dataSources.map(async (profile) => ({
         profile,
@@ -427,11 +434,23 @@ export function App() {
         return lastSource ?? candidates.find(({ effective }) => effective.source?.refresh.autoConnect);
       })
       .then(async (candidate) => {
-        if (!candidate) return;
-        const result = await platform.capturePostgresSnapshot(candidate.profile.id, "background");
-        handleCapture(result);
+        if (!candidate || !isCurrent()) return;
+        if (candidate.effective.source?.refresh.autoConnect) {
+          const result = await platform.capturePostgresSnapshot(candidate.profile.id, "background");
+          if (isCurrent()) handleCapture(result);
+        } else {
+          // Reopening a workspace is a local read. Live introspection is opt-in.
+          const snapshots = await platform.listSnapshots(candidate.profile.id);
+          if (!isCurrent()) return;
+          const latest = snapshots[0];
+          if (!latest) throw new Error("No saved model is available. Edit the connection to create one.");
+          const saved = await platform.getSnapshot(latest.id);
+          if (isCurrent()) handleCapture({ snapshot: saved, stored: false, changeSet: null });
+        }
       })
-      .catch((reason: unknown) => publishNoticeRef.current({ id: "auto-connect-failed", title: "Automatic connection failed", message: `Choose the data source to reconnect. ${noticeReason(reason)}`, createdAt: new Date().toISOString() }));
+      .catch((reason: unknown) => {
+        if (isCurrent()) publishNoticeRef.current({ id: "auto-connect-failed", title: "Workspace could not be opened", message: `Choose the data source to retry. ${noticeReason(reason)}`, createdAt: new Date().toISOString() });
+      });
   }, [dataSources, handleCapture, runtime.data?.kind, settings.app.general.lastSourceId, settings.app.general.reopenLastWorkspace, settings.app.general.startPage, settingsLoaded, snapshot]);
 
   useEffect(() => {
@@ -776,9 +795,9 @@ export function App() {
     if (!querySupported) return;
     setPreflightOpen(false);
     setLocateRequest(undefined);
-    setOpenQueryRequest({ id: Date.now(), sql: tablePreviewSql(table) });
+    setOpenQueryRequest({ id: Date.now(), sql: tablePreviewSql(table, 100, snapshot?.database.databaseType) });
     setMode("query");
-  }, [querySupported]);
+  }, [querySupported, snapshot?.database.databaseType]);
 
   return (
     <Suspense fallback={<main className="app-shell"><p>Loading workspace…</p></main>}>
@@ -808,7 +827,7 @@ export function App() {
               disabled: runtime.data?.kind === "web" || Boolean(snapshot && !querySupported),
               title: queryCapability.status === "supported" ? undefined : queryCapability.scope,
             },
-            { value: "changes", label: "Changes", disabled: !changeSet },
+            { value: "changes", label: "Changes" },
           ]}
         />
         <label className="global-search">
@@ -917,6 +936,7 @@ export function App() {
             enabled={runtime.data?.kind === "desktop"}
             platform={platform}
             onSnapshot={handleCapture}
+            onSourceOpenStart={beginSourceOpen}
             onRefresh={snapshot && !historyPreview ? () => void refreshActive() : undefined}
             refreshDisabled={refreshState === "refreshing"}
             onSourceDeleted={(sourceId) => {
@@ -993,6 +1013,13 @@ export function App() {
               openRequest={openQueryRequest}
               onConsumeOpenRequest={() => setOpenQueryRequest(undefined)}
             />
+          ) : mode === "changes" && !changeSet ? (
+            <ChangesEmptyState snapshot={snapshot} desktop={runtime.data?.kind === "desktop"}
+              snapshotCount={discoveryLatest.data?.length ?? 0} loading={discoveryLatest.isPending} error={discoveryLatest.isError}
+              refreshing={refreshState === "refreshing"}
+              onHistory={() => { setRightPanel((panel) => ({ ...panel, expanded: true })); window.dispatchEvent(new Event("nodalstudio:inspect-history")); }}
+              onRefresh={snapshot && !historyPreview ? () => { void refreshActive(); } : undefined}
+              onRetry={() => { void discoveryLatest.refetch(); }} />
           ) : mode === "changes" && changeSet && snapshot && changesView === "list" ? (
             <SchemaChangesPanel
               key={changeSet.id}
@@ -1060,7 +1087,7 @@ export function App() {
             snapshot={snapshot} semantics={semantics} settings={settings} platform={platform} desktop
             initialTable={historicalSelection ? undefined : selectedTable}
             sourceLabel={dataSources.find((source) => source.id === snapshot.sourceId)?.displayName}
-            onDraftQuery={querySupported ? (seed) => { setQueryDraftSeed({ ...seed, id: Date.now() }); setDiscoverySnapshot(undefined); setOpenQueryRequest(undefined); setMode("query"); } : undefined}
+            onDraftQuery={querySupported && snapshot?.database.databaseType === "postgreSql" ? (seed) => { setQueryDraftSeed({ ...seed, id: Date.now() }); setDiscoverySnapshot(undefined); setOpenQueryRequest(undefined); setMode("query"); } : undefined}
             onClose={() => setDiscoverySnapshot(undefined)}
             onLocate={(table) => { setDiscoverySnapshot(undefined); locateTable(table); }}
             onExplain={(table) => { setDiscoverySnapshot(undefined); locateTable(table); setRightPanel((panel) => ({ ...panel, expanded: true })); setExplainRequest((value) => value + 1); }}

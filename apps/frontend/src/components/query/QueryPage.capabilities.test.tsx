@@ -8,29 +8,29 @@ function platform() { return { executeReadonlyQuery: vi.fn<NodalStudioPlatform["
 describe("Query capability boundaries", () => {
   beforeEach(() => localStorage.clear());
   it.each([
-    ["desktop", "mySql"], ["web", "postgreSql"], ["web", "mySql"],
+    ["web", "postgreSql"], ["web", "mySql"],
   ] as const)("blocks Run and editor execution on %s/%s without requesting query history", (runtimeKind, databaseType) => {
     const api = platform();
     render(<QueryPage platform={api as unknown as NodalStudioPlatform} runtimeKind={runtimeKind} snapshot={{ ...reportSnapshot, database: { ...reportSnapshot.database, databaseType } }} />);
     expect(screen.getByRole("button", { name: /Run/ })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Editor execution shortcut" }));
     expect(api.executeReadonlyQuery).not.toHaveBeenCalled(); expect(api.listQueryHistory).not.toHaveBeenCalled();
-    expect(screen.getByText(runtimeKind === "web" ? /web viewer never connects/ : /MySQL metadata capture is supported/)).toBeVisible();
+    expect(screen.getByText(/web viewer never connects/)).toBeVisible();
   });
-  it("allows Desktop PostgreSQL execution through the same guard", async () => {
-    const api = platform(); render(<QueryPage platform={api as unknown as NodalStudioPlatform} runtimeKind="desktop" snapshot={reportSnapshot} />);
+  it.each(["postgreSql", "mySql"] as const)("allows Desktop %s execution through the same guard", async (databaseType) => {
+    const api = platform(); render(<QueryPage platform={api as unknown as NodalStudioPlatform} runtimeKind="desktop" snapshot={{ ...reportSnapshot, database: { ...reportSnapshot.database, databaseType } }} />);
     expect(screen.getByRole("button", { name: /Run/ })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Editor execution shortcut" }));
     await waitFor(() => expect(api.executeReadonlyQuery).toHaveBeenCalledOnce());
     expect(api.executeReadonlyQuery).toHaveBeenCalledWith(expect.objectContaining({ sourceId: reportSnapshot.sourceId, sql: "SELECT 1;", rowLimit: 100 }));
   });
-  it("ignores pending history when switching from PostgreSQL to an unsupported MySQL source", async () => {
+  it("ignores pending history when switching from PostgreSQL to another MySQL source", async () => {
     const api = platform(); let finish!: (entries: QueryHistoryEntry[]) => void;
     vi.mocked(api.listQueryHistory).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     const { rerender } = render(<QueryPage platform={api as unknown as NodalStudioPlatform} runtimeKind="desktop" snapshot={reportSnapshot} />);
     rerender(<QueryPage platform={api as unknown as NodalStudioPlatform} runtimeKind="desktop" snapshot={{ ...reportSnapshot, sourceId: "mysql", database: { ...reportSnapshot.database, databaseType: "mySql" } }} />);
     await act(() => Promise.resolve(finish([{ id: "old", sourceId: reportSnapshot.sourceId, executedAt: reportSnapshot.capturedAt, sqlText: "SELECT 'old-source';", durationMs: 1, rowCount: 1, status: "succeeded", errorKind: null }])));
     expect(screen.getByRole("tab", { name: "History 0" })).toBeVisible();
-    expect(screen.queryByText("SELECT 'old-source';")).not.toBeInTheDocument(); expect(api.listQueryHistory).toHaveBeenCalledOnce();
+    expect(screen.queryByText("SELECT 'old-source';")).not.toBeInTheDocument(); expect(api.listQueryHistory).toHaveBeenCalledTimes(2);
   });
 });

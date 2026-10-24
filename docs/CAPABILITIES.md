@@ -1,6 +1,6 @@
 # PostgreSQL / MySQL / Desktop / Web 能力矩阵
 
-核对日期：2026-10-14。应用入口为 **Settings → Capabilities**，也可通过命令面板 **Open capability matrix** 或 `#/settings/capabilities` 打开。支持按能力名称、限制文字和状态筛选，点击功能查看四种组合的具体范围。当前运行端与已加载快照方言对应的列会高亮；未加载数据库、未知方言或运行端未识别时，不默认当作 PostgreSQL/Desktop。
+核对日期：2026-10-24。应用入口为 **Settings → Capabilities**，也可通过命令面板 **Open capability matrix** 或 `#/settings/capabilities` 打开。支持按能力名称、限制文字和状态筛选，点击功能查看四种组合的具体范围。当前运行端与已加载快照方言对应的列会高亮；未加载数据库、未知方言或运行端未识别时，不默认当作 PostgreSQL/Desktop。
 
 这里描述当前代码实现的范围，不是实时服务器、权限或配置探测。支持表示在限定范围内可用；部分表示数据或功能覆盖有限；不可用表示该组合未实现或不适用。凭据、元数据权限、分享内容、网络及组织策略仍可能使受支持功能不可用。现有数据库集成验证使用 PostgreSQL 17 和 MySQL 8.4 fixture，不代表其他版本已逐一验证。
 
@@ -22,7 +22,7 @@
 | 保存完整模型及独立视图布局 | 支持 | 支持 | 不可用 | 不可用 |
 | 结构预检 | 部分 | 部分 | 部分 | 部分 |
 | 保存预检忽略理由 | 支持，本机 | 支持，本机 | 支持，本浏览器 | 支持，本浏览器 |
-| 只读 SQL 执行 | 支持 | 不可用 | 不可用 | 不可用 |
+| 只读 SQL 执行 | 支持 | 支持 | 不可用 | 不可用 |
 | Event Trigger 审阅脚本 | 部分，只生成 | 不可用 | 不可用 | 不可用 |
 | AI 结构解释 | 支持，需满足配置/策略 | 支持，需满足配置/策略 | 不可用 | 不可用 |
 | Git 语义工作区 | 支持 | 支持 | 不可用 | 不可用 |
@@ -43,7 +43,8 @@
 ## 运行端及工作流边界
 
 - **单表 AI 理解（阶段一）**：Desktop 当前来源最新快照支持表/字段解释，先查看后端准备的实际请求 JSON 再发送；CurrentTable、OneHop 与显式单域限制外发集合，保存的注解不参与本阶段请求。解释区分结构证据、未确认推测与未知问题，证据可定位具体对象或逻辑关系的源字段；切换任务、取消和过期隔离旧响应。Web、临时 DDL 和历史快照不接入新流程，后续已完成业务找表、路径解释、说明草稿及确认复用，见 [AI 交付记录](AI_DATABASE_UNDERSTANDING_DELIVERY.md) 与 [v0.2.0 验收](releases/v0.2.0-validation.md)。详见 [阶段一交付记录](AI_DATABASE_UNDERSTANDING_STAGE_ONE.md)。
-- **查询**：只有 Desktop PostgreSQL 执行受约束的只读 SELECT，默认 100 行、最大 5,000 行，前端请求超时 30 秒，支持取消与本地查询历史。用户主动执行 Query 会读取行数据；这与元数据采集不同。MySQL 与 Web 的执行按钮、表格查询入口和编辑器执行回调都被阻止；SQL 草稿可以保留。不支持的来源不会加载或展示旧来源查询历史。后端仍执行方言和只读校验。
+- **查询**：Desktop PostgreSQL 和 MySQL 均执行受约束的只读 SELECT/WITH，默认 100 行、最大 5,000 行，前端请求超时 30 秒，支持取消、结果导出与本地查询历史。用户主动执行 Query 会读取行数据；这与元数据采集不同。MySQL 编辑器、补全、当前语句和表格查询入口使用反引号方言；BIGINT/DECIMAL 保留精确文本。MySQL 专用会话开启只读事务，移除 ANSI_QUOTES/NO_BACKSLASH_ESCAPES 以匹配解析器，保留其他 SQL mode；阻止 DML/DDL、多语句、SELECT INTO、锁查询和可执行注释/提示。超时或取消同时尝试结束服务端语句并关闭专用连接。切换来源会取消旧查询并隔离迟到结果与历史。Web 仍不执行 SQL。AI 自动 SQL 草稿仍仅支持 PostgreSQL，本次不扩大该独立功能。详见 [MySQL Query 验证记录](MYSQL_QUERY_ACCEPTANCE.md)。
+- **Changes 空状态**：没有当前比较时也可点击；展示未选择来源、首份快照、可选择两份快照、加载/错误或 Web 未携带比较的说明。Desktop 提供历史入口及刷新结构按钮；比较的是结构，不是行数据变动。
 - **Web 比较**：当前分享包包含一个快照及可选 changeSet，没有完整 Before 历史。可以看已提供的摘要及当前对象，不能生成未分享的旧属性、删除节点或任意新比较；缺失详情明确显示覆盖限制。
 - **语义及关系**：Desktop 编辑语义层，不修改物理快照。逻辑关系校验主要比较已采集类型身份，并不是完整 PG/MySQL 物理 FK 兼容性验证。Web 只读已分享的语义及关系状态，不能保存或确认候选。
 - **布局**：Desktop 完整当前模型图和保存视图独立保存位置、尺寸、固定状态及手动调整的视角；搜索/聚焦/业务域/历史/比较图是临时排版。新增节点增量安排，已有有效坐标保留。Web 支持浏览和临时排版，但不能写回完整模型布局。固定表跳过排版，撤销历史仅用于当前会话。详见 [布局规则](DIAGRAM_LAYOUT.md)。
@@ -59,12 +60,12 @@
 核对来源：
 
 - [PostgreSQL 采集器](../crates/postgres-adapter/src/lib.rs)、[MySQL 采集器](../crates/mysql-adapter/src/lib.rs) 的实际采集对象和字段。
-- [Desktop 命令](../apps/desktop/src-tauri/src/lib.rs) 的按方言连接/采集分发、PostgreSQL-only Query 检查、Event Trigger 与存储操作。
+- [Desktop 命令](../apps/desktop/src-tauri/src/lib.rs) 的按方言连接/采集分发、PostgreSQL/MySQL Query 分发与只读检查、Event Trigger 与存储操作。
 - [WebPlatform](../apps/frontend/src/platform/web-platform.ts) 的分享读取、下载路径和不支持操作；Web 与 Desktop 复用前端渲染/预检，不等于共用数据库连接能力。
 - [Query 引擎](../crates/query-engine/src/lib.rs)、[QueryPage](../apps/frontend/src/components/query/QueryPage.tsx)、Diff/Diagram、导出与预检实现及其测试。
 - [DDL parser](../apps/frontend/src/ddl/ddl-parser.ts)、[临时来源](../apps/frontend/src/ddl/ddl-preview.ts)、[导入页面](../apps/frontend/src/components/DdlImportPanel.tsx) 及 App/Diagram 写入隔离测试。
 
-新增 27 项声明、矩阵组件、Settings/命令面板/App 入口与 Query 边界测试；覆盖四种组合、未知上下文、Web 写入/历史/AI 限制、方言差异、搜索筛选、当前列和详情、MySQL/Web 执行阻止及旧历史响应隔离。完整前端共 323 项测试，另验证类型检查、ESLint、生产构建与合成快照浏览器界面。
+最初新增 27 项声明、矩阵组件、Settings/命令面板/App 入口与 Query 边界测试；覆盖四种组合、未知上下文、Web 写入/历史/AI 限制、方言差异、搜索筛选、当前列和详情、MySQL/Web 执行阻止及旧历史响应隔离。完整前端共 323 项测试，另验证类型检查、ESLint、生产构建与合成快照浏览器界面。
 
 后续 DDL 临时预览实现将该行四组合更新为部分支持，并增加 43 项边界测试；当前完整前端 366 项测试通过。此状态只适用于独立 DDL 预览入口，不扩大在线数据库工作流能力。
 

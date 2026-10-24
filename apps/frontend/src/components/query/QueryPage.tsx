@@ -38,7 +38,7 @@ function queryError(error: unknown): { kind: QueryErrorKind; message: string } {
 }
 
 export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onConsumeOpenRequest, settings, semantics, selectedTable, draftSeed, onOpenAiSettings }: QueryPageProps) {
-  const [drafting, setDrafting] = useState(Boolean(draftSeed && draftSeed.sourceId === snapshot?.sourceId && draftSeed.snapshotId === snapshot?.id));
+  const [drafting, setDrafting] = useState(Boolean(snapshot?.database.databaseType === "postgreSql" && draftSeed && draftSeed.sourceId === snapshot?.sourceId && draftSeed.snapshotId === snapshot?.id));
   const draftBinding = JSON.stringify([settings?.source, settings?.app.privacy, semantics?.logicalRelationships, semantics?.domainGroups, semantics?.knowledge]);
   const [generatedRequest, setGeneratedRequest] = useState<{ sourceId: string; snapshotId: string; sql: string; binding: string }>();
   const [appliedDraft, setAppliedDraft] = useState<{ sourceId: string; snapshotId: string; previous: string; sql: string }>();
@@ -54,7 +54,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   const sourceId = snapshot?.sourceId ?? "no-source";
   const capability = resolveCapability("read-only-query", runtimeKind, snapshot?.database.databaseType);
   const desktopReady = Boolean(snapshot) && capability.status === "supported";
-  const canDraft = desktopReady && Boolean(settings && semantics);
+  const canDraft = desktopReady && snapshot?.database.databaseType === "postgreSql" && Boolean(settings && semantics);
   const sessionKey = "query-workspace";
   const [session, setSession] = useState<QuerySession>(() => loadQuerySession(sessionKey));
   const [historyRecord, setHistoryRecord] = useState<{ sourceId: string; entries: QueryHistoryEntry[] }>({ sourceId, entries: [] });
@@ -64,10 +64,12 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   const editorRef = useRef<SqlEditorHandle>(null);
   const activeQueryId = useRef<string | undefined>(undefined);
   const previousSourceId = useRef(sourceId);
+  const sourceRevision = useRef(0);
   const stopResizeRef = useRef<(() => void) | undefined>(undefined);
 
   if (previousSourceId.current !== sourceId) {
     previousSourceId.current = sourceId;
+    setDrafting(false);
     setSession((current) => ({ ...current, result: undefined, outcome: undefined, message: "Data source changed. The SQL draft was preserved; run it again against the new source.", activeTab: "message" }));
   }
   useEffect(() => { saveQuerySession(sessionKey, session); }, [session]);
@@ -84,6 +86,10 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     return () => window.clearInterval(timer);
   }, [executing]);
   useEffect(() => () => stopResizeRef.current?.(), []);
+  useEffect(() => () => {
+    sourceRevision.current += 1;
+    if (activeQueryId.current) void platform.cancelQuery(activeQueryId.current).catch(() => {});
+  }, [platform, sourceId]);
 
   async function run(sqlText: string) {
     if (!snapshot || !desktopReady || executing || activeQueryId.current || drafting || pendingOpen) return;
@@ -94,21 +100,25 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     }
     setAppliedDraft(undefined);
     const queryId = crypto.randomUUID();
+    const revision = sourceRevision.current;
     activeQueryId.current = queryId;
     setExecuting(true);
     setElapsedMs(0);
     setSession((current) => ({ ...current, message: "Executing read-only query…", activeTab: "message", outputCollapsed: false }));
     try {
       const result: QueryExecutionResult = await platform.executeReadonlyQuery({ queryId, sourceId, sql: sqlText, rowLimit: session.rowLimit, timeoutMs: 30_000 });
+      if (sourceRevision.current !== revision) return;
       const summary = `${result.rowCount} rows in ${result.durationMs} ms${result.truncated ? " · truncated at the selected row limit" : ""}.`;
       setSession((current) => ({ ...current, result, outcome: "succeeded", message: [summary, ...result.notices].join("\n"), activeTab: "results", outputCollapsed: false }));
     } catch (error) {
+      if (sourceRevision.current !== revision) return;
       const normalized = queryError(error);
       setSession((current) => ({ ...current, outcome: "failed", message: `${normalized.kind}: ${normalized.message}`, activeTab: "message", outputCollapsed: false }));
     } finally {
       activeQueryId.current = undefined;
       setExecuting(false);
-      setHistoryRecord({ sourceId, entries: await platform.listQueryHistory(sourceId).catch(() => []) });
+      const entries = await platform.listQueryHistory(sourceId).catch(() => []);
+      if (sourceRevision.current === revision) setHistoryRecord({ sourceId, entries });
     }
   }
 
