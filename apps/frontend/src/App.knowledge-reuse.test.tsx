@@ -60,6 +60,8 @@ it.each(['manual', 'domain-race', 'create', 'update', 'delete', 'delete-missing'
     fireEvent.click(screen.getByRole('button',{name: `${kind==='delete-missing'?'Delete':kind[0].toUpperCase()+kind.slice(1)} relationship`}));
   } else {
     fireEvent.click(screen.getByRole('button',{name:'Open Settings'}));
+    // Wait for the real lazy settings module before starting the element timeout.
+    await act(async () => { await vi.dynamicImportSettled(); });
     const category=kind.startsWith('git')?'Git':kind==='cloud'?'Cloud Sync':kind==='portable'?'History & Storage':'Data Sources';
     fireEvent.click(await screen.findByRole('button',{name:category}));
     if(kind==='portable') fireEvent.change(screen.getByLabelText('Portable backup path'),{target:{value:'/synthetic/model.nodalmodel'}});
