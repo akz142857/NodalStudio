@@ -46,7 +46,7 @@ it.each(['manual', 'domain-race', 'create', 'update', 'delete', 'delete-missing'
   });
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><App/></QueryClientProvider>);
   await screen.findByText('Reuse review');fireEvent.click(screen.getByRole('button',{name:'Load review source'}));
-  fireEvent.click(await screen.findByRole('button',{name:'Select review table'}));fireEvent.click(screen.getByRole('button',{name:'Semantics'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Select review table'}));fireEvent.click(screen.getByRole('button',{name:'Expand right inspector'}));fireEvent.click(screen.getByRole('button',{name:'Semantics'}));
   await screen.findByDisplayValue('quasarzephyr');
   if(kind==='domain-race') {
     fireEvent.change(screen.getByPlaceholderText('Business group'),{target:{value:'Late group'}});

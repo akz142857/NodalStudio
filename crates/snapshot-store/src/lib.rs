@@ -18,6 +18,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 mod knowledge;
+pub mod relationship_batches;
 mod snapshot_history;
 
 const LOCAL_SCHEMA_VERSION: i64 = 5;
@@ -34,6 +35,8 @@ pub enum SnapshotStoreError {
     UnsupportedSchema(i64),
     #[error("{0}")]
     KnowledgeConflict(String),
+    #[error("{0}")]
+    ReviewConflict(String),
     #[error("local database backup failed: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -832,6 +835,8 @@ impl LocalSnapshotStore {
                 "DELETE FROM code_lineage WHERE source_id = ?",
                 "DELETE FROM logical_relationships WHERE source_id = ?",
                 "DELETE FROM ignored_relationship_inferences WHERE source_id = ?",
+                "DELETE FROM relationship_review_batches WHERE source_id = ?",
+                "DELETE FROM relationship_review_versions WHERE source_id = ?",
                 "DELETE FROM sync_queue WHERE source_id = ?",
             ] {
                 affected += sqlx::query(statement)
@@ -880,6 +885,8 @@ impl LocalSnapshotStore {
             "DELETE FROM code_lineage",
             "DELETE FROM logical_relationships",
             "DELETE FROM ignored_relationship_inferences",
+            "DELETE FROM relationship_review_batches",
+            "DELETE FROM relationship_review_versions",
             "DELETE FROM sync_queue",
             "DELETE FROM data_source_settings",
             "DELETE FROM data_sources",
@@ -2136,6 +2143,7 @@ impl LocalSnapshotStore {
         }
         self.initialize_semantic_tables().await?;
         self.initialize_knowledge().await?;
+        self.initialize_relationship_batches().await?;
         self.initialize_sync_tables().await?;
         self.initialize_extension_tables().await?;
         self.remove_retired_project_tables().await?;
@@ -3046,7 +3054,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn persists_and_isolates_logical_relationships_and_ignored_candidates() {
+    async fn persists_and_isolates_logical_relationships() {
         let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
         let source_id = Uuid::new_v4();
         let other_source = Uuid::new_v4();
@@ -3093,10 +3101,23 @@ mod tests {
                 .unwrap()
         );
 
+        assert!(
+            store
+                .delete_logical_relationship(source_id, relationship.id)
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn persists_restores_and_isolates_ignored_candidates() {
+        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
+        let source_id = Uuid::new_v4();
+        let other_source = Uuid::new_v4();
         let ignored = IgnoredRelationshipInference {
             source_id,
-            relationship_key: relationship.relationship_key(),
-            ignored_at: now,
+            relationship_key: "public.orders[user_id]->public.users[id]".into(),
+            ignored_at: Utc::now(),
         };
         store
             .save_ignored_relationship_inference(&ignored)
@@ -3107,7 +3128,7 @@ mod tests {
                 .list_ignored_relationship_inferences(source_id)
                 .await
                 .unwrap(),
-            [ignored.clone()]
+            std::slice::from_ref(&ignored)
         );
         let rule = IgnoredRelationshipInference {
             relationship_key: "rule:naming-id:public.orders.user_id".into(),
@@ -3140,7 +3161,7 @@ mod tests {
                 .list_ignored_relationship_inferences(source_id)
                 .await
                 .unwrap(),
-            [rule.clone()]
+            std::slice::from_ref(&rule)
         );
         assert!(
             store
@@ -3154,12 +3175,6 @@ mod tests {
                 .await
                 .unwrap()
                 .is_empty()
-        );
-        assert!(
-            store
-                .delete_logical_relationship(source_id, relationship.id)
-                .await
-                .unwrap()
         );
     }
 }

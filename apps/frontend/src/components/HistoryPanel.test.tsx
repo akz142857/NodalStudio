@@ -88,6 +88,7 @@ function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"])
     updateLogicalRelationship: vi.fn(),
     deleteLogicalRelationship: vi.fn(),
     ignoreRelationshipInference: vi.fn(),
+    previewRelationshipBatch: vi.fn(), applyRelationshipBatch: vi.fn(), listRelationshipBatches: vi.fn(), undoRelationshipBatch: vi.fn(),
     restoreRelationshipInference: vi.fn(),
     listIgnoredRelationshipInferences: vi.fn(),
     saveAnnotation: vi.fn(),

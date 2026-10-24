@@ -20,6 +20,7 @@ interface RelationshipManagerProps {
   selectedTableId?: string;
   onIgnore?: (key: string) => Promise<void>;
   onRestore?: (key: string) => Promise<void>;
+  batchApi?: import("../../platform/relationship-batches").RelationshipBatchApi;
   onSelect: (relationship: LogicalRelationship) => void;
   onValidate: ValidateRelationship;
   onSave: (input: SaveLogicalRelationshipInput) => Promise<LogicalRelationship>;
@@ -38,7 +39,7 @@ function Endpoint({ label, value }: { label: string; value: LogicalRelationship[
   return <div className="relationship-manager-endpoint"><span>{label} · {value.schema}</span><strong>{value.table}</strong><code>{value.columns.join(", ")}</code></div>;
 }
 
-export function RelationshipManager({ open = true, snapshot, relationships, ignoredInferences = noIgnored, reviewRequest, visibleTableIds, selectedTableId, onIgnore, onRestore, onSelect, onValidate, onSave, onToggle, onDelete, canEdit = true, onClose }: RelationshipManagerProps) {
+export function RelationshipManager({ open = true, snapshot, relationships, ignoredInferences = noIgnored, reviewRequest, visibleTableIds, selectedTableId, onIgnore, onRestore, batchApi, onSelect, onValidate, onSave, onToggle, onDelete, canEdit = true, onClose }: RelationshipManagerProps) {
   const [tab, setTab] = useState<"logical" | "inferred" | "ignored">(reviewRequest ? "inferred" : "logical");
   const [previousRequest, setPreviousRequest] = useState(reviewRequest);
   const [query, setQuery] = useState("");
@@ -113,7 +114,7 @@ export function RelationshipManager({ open = true, snapshot, relationships, igno
     </div> : null}
     {pendingAction ? <div className="relationship-discard" role="alert"><span>Discard unsaved changes?</span><button type="button" onClick={() => setPendingAction(undefined)}>Keep editing</button><button type="button" onClick={() => { const action = pendingAction; closeEditor(); action(); }}>Discard changes</button></div> : null}
     {tab !== "logical" && onIgnore && onRestore ? <InferredRelationshipReview key={`${snapshot.id}:${tab}:${reviewRequest?.revision ?? 0}`} snapshot={snapshot} tab={tab} candidates={candidates} allCandidates={inferred.all} ignored={ignoredInferences}
-      initialCandidateKey={reviewRequest?.candidateKey} visibleTableIds={visibleTableIds} selectedTableId={selectedTableId} onValidate={onValidate} onSave={onSave} onIgnore={onIgnore} onRestore={onRestore} onNavigate={requestAction} onStateChange={setEditorState} /> : <div className="relationship-manager-body">
+      initialCandidateKey={reviewRequest?.candidateKey} visibleTableIds={visibleTableIds} selectedTableId={selectedTableId} onValidate={onValidate} onSave={onSave} onIgnore={onIgnore} onRestore={onRestore} batchApi={batchApi} onNavigate={requestAction} onStateChange={setEditorState} /> : <div className="relationship-manager-body">
       <nav className="relationship-manager-list" aria-label="Logical relationships">
         {visibleRelationships.map((relationship) => <button type="button" className="relationship-manager-row" key={relationship.id} data-status={relationship.status} disabled={locked} aria-pressed={(editor ? editor.relationship?.id : selected?.id) === relationship.id} onClick={() => select(relationship.id)}>
           <strong>{relationship.source.table} <span aria-hidden="true">→</span> {relationship.target.table}</strong><code>{relationship.source.columns.join(", ")} → {relationship.target.columns.join(", ")}</code>

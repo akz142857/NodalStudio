@@ -28,7 +28,7 @@ it('refreshes committed confirmation after switching away from the editing segme
   vi.spyOn(platform,'cancelKnowledgeDraft').mockResolvedValue(undefined);
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><App/></QueryClientProvider>);
   await screen.findByText('Review runtime');fireEvent.click(screen.getByRole('button',{name:'Load review source'}));
-  fireEvent.click(await screen.findByRole('button',{name:'Select review table'}));fireEvent.click(screen.getByRole('button',{name:'Semantics'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Select review table'}));fireEvent.click(screen.getByRole('button',{name:'Expand right inspector'}));fireEvent.click(screen.getByRole('button',{name:'Semantics'}));
   await screen.findByDisplayValue('quasarzephyr');
   fireEvent.click(await screen.findByRole('button',{name:'Review and confirm description'}));
   await screen.findByLabelText('Proposed description');fireEvent.click(screen.getByRole('button',{name:'Confirm this description'}));
@@ -59,7 +59,7 @@ it.each(['annotation-return', 'confirmation-return', 'confirmation-other'] as co
   vi.spyOn(platform,'cancelKnowledgeDraft').mockResolvedValue(undefined);
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><App/></QueryClientProvider>);
   await screen.findByText('Review runtime');fireEvent.click(screen.getByRole('button',{name:'Load review source'}));
-  fireEvent.click(await screen.findByRole('button',{name:'Select review table'}));fireEvent.click(screen.getByRole('button',{name:'Semantics'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Select review table'}));fireEvent.click(screen.getByRole('button',{name:'Expand right inspector'}));fireEvent.click(screen.getByRole('button',{name:'Semantics'}));
   await screen.findByDisplayValue('quasarzephyr');
   if (entry==='annotation-return') {
     fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Current confirmed note'}});

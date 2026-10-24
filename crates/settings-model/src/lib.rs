@@ -127,7 +127,7 @@ impl Default for AppearanceSettings {
             color_blind_palette: false,
             left_sidebar_expanded: true,
             left_sidebar_width: 272,
-            right_sidebar_expanded: true,
+            right_sidebar_expanded: false,
             right_sidebar_width: 300,
             restore_sidebar_state: true,
         }

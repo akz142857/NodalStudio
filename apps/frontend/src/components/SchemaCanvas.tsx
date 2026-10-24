@@ -141,6 +141,7 @@ export interface SchemaCanvasProps {
   onDeleteLogicalRelationship?: (relationshipId: string) => Promise<void>;
   onIgnoreRelationshipInference?: (relationshipKey: string) => Promise<void>;
   onRestoreRelationshipInference?: (relationshipKey: string) => Promise<void>;
+  relationshipBatchApi?: import("../platform/relationship-batches").RelationshipBatchApi;
   onClearSearch?: () => void;
   onAddTablesToDomain?: (domainId: string, tableKeys: ObjectKey[]) => Promise<DomainGroup>;
 }
@@ -192,6 +193,7 @@ function SchemaCanvasInner({
   onDeleteLogicalRelationship,
   onIgnoreRelationshipInference,
   onRestoreRelationshipInference,
+  relationshipBatchApi,
   onClearSearch,
   onAddTablesToDomain,
 }: SchemaCanvasProps) {
@@ -1211,6 +1213,7 @@ function SchemaCanvasInner({
         selectedTableId={selectedTable ? `${selectedTable.key.schema}.${selectedTable.key.name}` : undefined}
         onIgnore={onIgnoreRelationshipInference}
         onRestore={onRestoreRelationshipInference}
+        batchApi={relationshipBatchApi}
         onValidate={onValidateLogicalRelationship}
         canEdit={Boolean(onUpdateLogicalRelationship)}
         onSave={async (input) => {

@@ -69,6 +69,7 @@ mod export_file;
 mod github_releases;
 mod knowledge;
 mod query_export;
+mod relationship_batches;
 mod schema_report;
 mod storage_errors;
 mod table_understanding;
@@ -5026,6 +5027,10 @@ pub fn run() {
                 delete_logical_relationship,
                 ignore_relationship_inference,
                 restore_relationship_inference,
+                relationship_batches::preview_relationship_batch,
+                relationship_batches::apply_relationship_batch,
+                relationship_batches::list_relationship_batches,
+                relationship_batches::undo_relationship_batch,
                 list_ignored_relationship_inferences,
                 save_annotation,
                 save_domain_group,
@@ -5239,9 +5244,7 @@ mod tests {
         assert!(remote_chat_endpoint("http://127.0.0.1:11434/v1").is_ok());
     }
 
-    #[test]
-    fn validates_logical_relationship_types_duplicates_and_physical_constraints() {
-        let source_id = Uuid::new_v4();
+    fn relationship_validation_snapshot(source_id: Uuid) -> DatabaseSnapshot {
         let column = |name: &str| schema_model::ColumnDefinition {
             name: name.into(),
             ordinal_position: 1,
@@ -5262,7 +5265,7 @@ mod tests {
         });
         let mut orders = schema_model::TableDefinition::empty("public", "orders");
         orders.columns.push(column("user_id"));
-        let snapshot = DatabaseSnapshot::new(
+        DatabaseSnapshot::new(
             source_id,
             DatabaseInfo {
                 name: "app".into(),
@@ -5271,11 +5274,18 @@ mod tests {
             },
             vec![schema_model::SchemaDefinition {
                 name: "public".into(),
-                tables: vec![users, orders.clone()],
+                tables: vec![users, orders],
                 views: Vec::new(),
                 enums: Vec::new(),
             }],
-        );
+        )
+    }
+
+    #[test]
+    fn validates_logical_relationship_types_duplicates_and_physical_constraints() {
+        let source_id = Uuid::new_v4();
+        let snapshot = relationship_validation_snapshot(source_id);
+        let mut orders = snapshot.schemas[0].tables[1].clone();
         let source = RelationshipEndpoint::new("public", "orders", vec!["user_id".into()]);
         let target = RelationshipEndpoint::new("public", "users", vec!["id".into()]);
         let validation =

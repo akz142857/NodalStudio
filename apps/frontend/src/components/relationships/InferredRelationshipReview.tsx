@@ -6,6 +6,10 @@ import type { ValidateRelationship } from "./RelationshipEditor";
 import { relationshipCardinalityLabel } from "./relationship-labels";
 import { candidateInScope, candidateMatches, candidateNeedsReview, type RelationshipCandidate } from "./inferred-review";
 
+import { batchActionLabels } from "../../platform/relationship-batches";
+import type { ApplyReviewBatch, RelationshipBatchApi, ReviewAction, ReviewBatch, ReviewRequest } from "../../platform/relationship-batches";
+import { RelationshipBatchHistory, RelationshipBatchPanel } from "./RelationshipBatchPanel";
+
 interface ReviewState { dirty: boolean; saving: boolean }
 interface Props {
   snapshot: DatabaseSnapshot;
@@ -20,6 +24,7 @@ interface Props {
   onSave: (input: SaveLogicalRelationshipInput) => Promise<LogicalRelationship>;
   onIgnore: (key: string) => Promise<void>;
   onRestore: (key: string) => Promise<void>;
+  batchApi?: RelationshipBatchApi;
   onNavigate: (action: () => void) => void;
   onStateChange: (state: ReviewState) => void;
 }
@@ -83,6 +88,7 @@ function CandidateConfirmation({ candidate, snapshot, onValidate, onSave, onSave
     <div className="relationship-detail-heading"><div><h3 tabIndex={-1}>Review candidate</h3><p>Naming suggestion · business meaning not yet confirmed</p></div></div>
     <CandidateEndpoints candidate={candidate} />
     <ul className="inference-evidence" aria-label="Inference evidence">{candidate.evidence.map((evidence) => <li key={evidence}>{evidence}</li>)}</ul>
+    {candidate.bulkReviewReason ? <p className="relationship-attention">{candidate.bulkReviewReason}. Check the business mapping before confirming.</p> : null}
     {!candidate.targetUnique ? <p className="relationship-attention">This target field is not known to be unique by itself. Review the relationship type before confirming.</p> : null}
     {candidate.existingTargets.length ? <div className="relationship-attention"><strong>This source field already has a logical relationship</strong><ul>{candidate.existingTargets.map((target) => <li key={target}>{target}</li>)}</ul><p>Check whether this additional target represents a different business relationship before confirming.</p></div> : null}
     <fieldset disabled={saving || disabled}>
@@ -104,11 +110,17 @@ function CandidateConfirmation({ candidate, snapshot, onValidate, onSave, onSave
   </form>;
 }
 
-export function InferredRelationshipReview({ snapshot, tab, candidates, allCandidates, ignored, initialCandidateKey, visibleTableIds, selectedTableId, onValidate, onSave, onIgnore, onRestore, onNavigate, onStateChange }: Props) {
+export function InferredRelationshipReview({ snapshot, tab, candidates, allCandidates, ignored, initialCandidateKey, visibleTableIds, selectedTableId, onValidate, onSave, onIgnore, onRestore, batchApi, onNavigate, onStateChange }: Props) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [scope, setScope] = useState(initialCandidateKey ? "all" : selectedTableId ? "selected" : visibleTableIds ? "view" : "all");
   const [selectedKey, setSelectedKey] = useState(initialCandidateKey);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [batchRequest, setBatchRequest] = useState<ReviewRequest>();
+  const [history, setHistory] = useState(false);
+  const [lastBatch, setLastBatch] = useState<ReviewBatch>();
+  const lastCheckedKey = useRef<string | undefined>(undefined);
+  const quickAttempt = useRef<ApplyReviewBatch | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const [draftRevision, setDraftRevision] = useState(0);
@@ -128,12 +140,52 @@ export function InferredRelationshipReview({ snapshot, tab, candidates, allCandi
       candidate: allCandidates.find((candidate) => candidate.key === entry.relationshipKey || candidate.ruleKey === entry.relationshipKey) }))
       .filter((row) => row.candidate ? candidateMatches(row.candidate, query) : row.key.toLowerCase().includes(query.trim().toLowerCase()));
   }, [tab, candidates, ignored, allCandidates, query, filter, resolvedScope, visibleTableIds, selectedTableId]);
+  const selectedRows = rows.filter((row) => checked.has(row.key));
+  const eligibleRows = rows.filter((row) => row.candidate && !candidateNeedsReview(row.candidate));
   const selected = rows.find((row) => row.key === selectedKey) ?? rows[0];
   useEffect(() => { onStateChange({ dirty: formState.dirty, saving: locked }); }, [formState.dirty, locked, onStateChange]);
   useEffect(() => {
     if (focusNext.current) { focusNext.current = false; detailRef.current?.querySelector<HTMLElement>('h3')?.focus(); }
   }, [selected?.key, step]);
   function navigate(action: () => void) { onNavigate(() => { setDraftRevision((value) => value + 1); setFormState({ dirty: false, saving: false }); setError(""); setMessage(""); action(); }); }
+  function leaveBatch() { setBatchRequest(undefined); setHistory(false); setFormState({ dirty: false, saving: false }); }
+  function clearSelection() { setChecked(new Set()); lastCheckedKey.current = undefined; quickAttempt.current = undefined; leaveBatch(); }
+  function changeFilters(action: () => void) { if (checked.size) setMessage("Selection cleared because the filters changed."); clearSelection(); action(); }
+  function makeRequest(action: ReviewAction): ReviewRequest {
+    return { sourceId: snapshot.sourceId, snapshotId: snapshot.id, action, entries: selectedRows.map((row) => ({ key: row.key, source: row.candidate?.source, target: row.candidate?.target })) };
+  }
+  function batchDone(batch: ReviewBatch) {
+    setChecked((current) => new Set([...current].filter((key) => !batch.keys.includes(key))));
+    leaveBatch(); setLastBatch(batch); quickAttempt.current = undefined; setError("");
+    setMessage(`${batchActionLabels[batch.action]} ${batch.keys.length} candidates. ${batch.action === "confirm" ? "Other selected candidates remain for individual review." : "You can undo this batch."}`);
+  }
+  function undone(batch: ReviewBatch) {
+    setLastBatch(batch); clearSelection(); setHistory(true);
+    setMessage(`Undone ${batch.keys.length - batch.skippedKeys.length} changes.${batch.skippedKeys.length ? ` Preserved ${batch.skippedKeys.length} subsequently changed items; see batch details.` : ""}`);
+  }
+  async function quickBatch(action: "ignore" | "restore") {
+    if (!batchApi || actionPending.current || !selectedRows.length) return;
+    actionPending.current = true; setBusy(true); setError("");
+    try {
+      const request = makeRequest(action);
+      let input = quickAttempt.current;
+      if (!input || JSON.stringify(input.request) !== JSON.stringify(request)) {
+        const preview = await batchApi.preview(request);
+        if (preview.checks.some((check) => check.reason)) throw new Error("The selection changed. Refresh this model and select candidates again.");
+        input = { request, revision: preview.revision, batchId: crypto.randomUUID(), approvedKeys: preview.checks.map((check) => check.entry.key) };
+        quickAttempt.current = input;
+      }
+      batchDone(await batchApi.apply(input));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { actionPending.current = false; setBusy(false); }
+  }
+  async function undoLast() {
+    if (!batchApi || !lastBatch || actionPending.current) return;
+    actionPending.current = true; setBusy(true); setError("");
+    try { undone(await batchApi.undo(snapshot.sourceId, lastBatch.id)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { actionPending.current = false; setBusy(false); }
+  }
   function advance(key: string) {
     const index = rows.findIndex((row) => row.key === key);
     setSelectedKey(rows[index + 1]?.key ?? rows[index - 1]?.key);
@@ -155,23 +207,37 @@ export function InferredRelationshipReview({ snapshot, tab, candidates, allCandi
   const hasFilters = Boolean(query || (tab === "inferred" && (filter !== "all" || resolvedScope !== "all")));
   return <>
     <div className="relationship-manager-tools inference-tools">
-      <label className="relationship-manager-search"><ActionIcon name="search" /><input type="search" autoCorrect="off" autoCapitalize="none" spellCheck={false} aria-label="Search candidates" placeholder="Search tables, fields, or comments…" value={query} disabled={locked || formState.dirty} onChange={(event) => { setQuery(event.target.value); setSelectedKey(undefined); setMessage(""); }} /></label>
-      {tab === "inferred" ? <><select aria-label="Candidate scope" disabled={locked || formState.dirty} value={resolvedScope} onChange={(event) => { setScope(event.target.value); setSelectedKey(undefined); }}><option value="all">Entire database</option>{visibleTableIds ? <option value="view">Current diagram</option> : null}{selectedTableId ? <option value="selected">Selected table</option> : null}</select>
-        <select aria-label="Candidate evidence" disabled={locked || formState.dirty} value={filter} onChange={(event) => { setFilter(event.target.value); setSelectedKey(undefined); }}><option value="all">All evidence</option><option value="matching">Compatible types · unique target</option><option value="review">Needs review</option></select></> : null}
+      <label className="relationship-manager-search"><ActionIcon name="search" /><input type="search" autoCorrect="off" autoCapitalize="none" spellCheck={false} aria-label="Search candidates" placeholder="Search tables, fields, or comments…" value={query} disabled={locked || formState.dirty} onChange={(event) => { changeFilters(() => { setQuery(event.target.value); setSelectedKey(undefined); }); }} /></label>
+      {tab === "inferred" ? <><select aria-label="Candidate scope" disabled={locked || formState.dirty} value={resolvedScope} onChange={(event) => { changeFilters(() => { setScope(event.target.value); setSelectedKey(undefined); }); }}><option value="all">Entire database</option>{visibleTableIds ? <option value="view">Current diagram</option> : null}{selectedTableId ? <option value="selected">Selected table</option> : null}</select>
+        <select aria-label="Candidate evidence" disabled={locked || formState.dirty} value={filter} onChange={(event) => { changeFilters(() => { setFilter(event.target.value); setSelectedKey(undefined); }); }}><option value="all">All evidence</option><option value="matching">Compatible types · unique target</option><option value="review">Needs review</option></select></> : null}
     </div>
+    {batchApi ? <div className="inference-bulk-toolbar" aria-label="Batch review actions">
+      <select aria-label="Select candidates for batch" value="" disabled={locked || formState.dirty} onChange={(event) => { quickAttempt.current = undefined; leaveBatch(); setChecked(new Set(event.target.value === "all" ? rows.map((row) => row.key) : event.target.value === "eligible" ? eligibleRows.map((row) => row.key) : [])); }}>
+        <option value="" disabled>Select…</option><option value="all">All filtered · {rows.length}</option>{tab === "inferred" ? <option value="eligible">Structure checks passed · {eligibleRows.length}</option> : null}<option value="none">Clear selection</option>
+      </select>
+      <span aria-live="polite">{selectedRows.length} selected</span>
+      {tab === "inferred" ? <button className={selectedRows.length ? "ds-primary" : undefined} disabled={!selectedRows.length || locked || formState.dirty} onClick={() => navigate(() => { setBatchRequest(makeRequest("confirm")); setHistory(false); })}>Preview confirmation</button> : null}
+      <button disabled={!selectedRows.length || locked || formState.dirty} onClick={() => void quickBatch(tab === "ignored" ? "restore" : "ignore")}>{tab === "ignored" ? "Restore" : "Ignore"} {selectedRows.length}</button>
+      {selectedRows.length ? <button disabled={locked || formState.dirty} onClick={clearSelection}>Clear</button> : null}
+      <button disabled={locked} onClick={() => navigate(() => { setHistory(true); setBatchRequest(undefined); })}>Batch history</button>
+    </div> : null}
     <div className="inference-result-count">{rows.length} {tab === "inferred" ? rows.length === 1 ? "candidate" : "candidates" : rows.length === 1 ? "ignored entry" : "ignored entries"}{tab === "inferred" && formState.dirty ? " · Finish this review to change filters" : tab === "ignored" ? " · Includes previously ignored naming rules" : " · Naming suggestions, not confirmed facts"}</div>
     <div className="relationship-manager-body">
       <nav className="relationship-manager-list" aria-label={tab === "inferred" ? "Inferred candidates" : "Ignored candidates"}>
-        {rows.map((row) => <button type="button" key={row.key} className="relationship-manager-row" aria-pressed={row.key === selected?.key} disabled={locked} data-status={row.candidate && candidateNeedsReview(row.candidate) ? "conflicted" : undefined} onClick={() => navigate(() => setSelectedKey(row.key))}>
+        {rows.map((row) => <div key={row.key} className={batchApi ? "inference-selectable-row" : undefined}>
+          {batchApi ? <input type="checkbox" aria-label={`Select ${row.key}`} checked={checked.has(row.key)} disabled={locked || formState.dirty} onChange={(event) => { const next = new Set(checked); const previous = rows.findIndex((item) => item.key === lastCheckedKey.current); const current = rows.findIndex((item) => item.key === row.key); const range = "shiftKey" in event.nativeEvent && event.nativeEvent.shiftKey === true && previous >= 0 ? rows.slice(Math.min(previous, current), Math.max(previous, current) + 1) : [row]; for (const item of range) { if (event.target.checked) next.add(item.key); else next.delete(item.key); } lastCheckedKey.current = row.key; setChecked(next); quickAttempt.current = undefined; leaveBatch(); }} /> : null}
+          <button type="button" className="relationship-manager-row" aria-pressed={row.key === selected?.key} disabled={locked} data-status={row.candidate && candidateNeedsReview(row.candidate) ? "conflicted" : undefined} onClick={() => navigate(() => { leaveBatch(); setSelectedKey(row.key); })}>
           <strong>{row.candidate ? `${row.candidate.source.table} → ${row.candidate.target.table}` : row.key.startsWith("rule:naming-id:") ? "Ignored field rule" : "Previous candidate"}</strong>
           <code>{row.candidate ? `${row.candidate.sourceColumn.name} → ${row.candidate.targetColumn.name}` : row.key.replace(/^rule:naming-id:/, "")}</code>
           {row.candidate ? <span className="relationship-row-schema">{row.candidate.source.schema}{row.candidate.source.schema !== row.candidate.target.schema ? ` → ${row.candidate.target.schema}` : ""}</span> : null}
           <span className="relationship-status-badge">{row.key.startsWith("rule:naming-id:") ? "Naming rule · all suggestions for this field" : tab === "ignored" ? "Ignored candidate" : row.candidate && !candidateNeedsReview(row.candidate) ? "Compatible types · unique target" : "Needs review"}</span>
-        </button>)}
-        {!rows.length ? <div className="relationship-manager-empty"><strong>{hasFilters ? "No matching candidates" : tab === "ignored" ? "No ignored candidates" : "Review queue complete"}</strong><p>{tab === "ignored" ? "Ignored candidates and field rules appear here." : "Adjust the search or scope to review other suggestions."}</p>{hasFilters ? <button type="button" onClick={() => navigate(() => { setQuery(""); setFilter("all"); setScope("all"); })}>Clear filters</button> : null}</div> : null}
+        </button></div>)}
+        {!rows.length ? <div className="relationship-manager-empty"><strong>{hasFilters ? "No matching candidates" : tab === "ignored" ? "No ignored candidates" : "Review queue complete"}</strong><p>{tab === "ignored" ? "Ignored candidates and field rules appear here." : "Adjust the search or scope to review other suggestions."}</p>{hasFilters ? <button type="button" onClick={() => navigate(() => { changeFilters(() => { setQuery(""); setFilter("all"); setScope("all"); }); })}>Clear filters</button> : null}</div> : null}
       </nav>
       <div ref={detailRef} className="relationship-manager-detail">
-        {selected && tab === "inferred" && selected.candidate ? <CandidateConfirmation key={`${snapshot.id}:${selected.key}:${draftRevision}`} candidate={selected.candidate} snapshot={snapshot} onValidate={onValidate} onSave={onSave} onStateChange={setFormState} disabled={busy}
+        {batchApi && history ? <RelationshipBatchHistory api={batchApi} sourceId={snapshot.sourceId} onBack={leaveBatch} onUndone={undone} onStateChange={setFormState} />
+          : batchApi && batchRequest ? <RelationshipBatchPanel api={batchApi} request={batchRequest} candidates={allCandidates} onDone={batchDone} onBack={() => navigate(leaveBatch)} onReview={(key) => navigate(() => { leaveBatch(); setSelectedKey(key); })} onStateChange={setFormState} />
+          : selected && tab === "inferred" && selected.candidate ? <CandidateConfirmation key={`${snapshot.id}:${selected.key}:${draftRevision}`} candidate={selected.candidate} snapshot={snapshot} onValidate={onValidate} onSave={onSave} onStateChange={setFormState} disabled={busy}
           onIgnore={() => navigate(() => { void mutate(selected.key, false); })}
           onSaved={() => { advance(selected.key); setMessage("Confirmed as a logical relationship. Review the next candidate."); }} />
           : selected ? <section aria-label="Ignored relationship details"><div className="relationship-detail-heading"><div><h3>{isRule ? "Ignored naming rule" : "Ignored candidate"}</h3><p>{selected.ignored ? `Ignored ${new Date(selected.ignored.ignoredAt).toLocaleDateString()}` : ""}</p></div></div>
@@ -182,6 +248,6 @@ export function InferredRelationshipReview({ snapshot, tab, candidates, allCandi
           </section> : <div className="relationship-manager-empty"><ActionIcon name="relationships" /><strong>Select a candidate to review</strong><p>Confirmed suggestions become logical relationships in this model.</p></div>}
       </div>
     </div>
-    {error || message ? <div className="inference-feedback" role={error ? "alert" : "status"}>{error || message}</div> : null}
+    {error || message ? <div className="inference-feedback" role={error ? "alert" : "status"}>{error || message}{!error && lastBatch && !lastBatch.undoneAt && batchApi ? <button disabled={locked} onClick={() => void undoLast()}>Undo batch</button> : null}</div> : null}
   </>;
 }

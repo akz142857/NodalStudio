@@ -112,3 +112,26 @@
   .relationship-manager-detail { padding: 18px; }
   .relationship-editor-footer { bottom: -18px; margin-inline: -18px; margin-bottom: -18px; padding: 14px 18px; }
 }
+.inference-bulk-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--ds-separator); font-size: var(--ds-text-caption); }
+.inference-bulk-toolbar > span { margin-right: auto; color: var(--ds-secondary); }
+.inference-selectable-row { display: flex; align-items: flex-start; gap: 4px; flex-shrink: 0; min-width: 0; }
+.inference-selectable-row > input[type="checkbox"] { flex: 0 0 16px; margin: 17px 4px 0 3px; }
+.inference-selectable-row > button.relationship-manager-row { width: auto; flex: 1; }
+.relationship-batch-group { display: grid; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--ds-separator); overflow-wrap: anywhere; }
+.relationship-batch-group > strong { font-weight: var(--ds-weight-medium); }
+.relationship-batch-group .relationship-check { margin: 8px 0 0; font-size: var(--ds-text-caption); }
+.relationship-batch-members { display: grid; gap: 8px; }
+.relationship-batch-expand { justify-self: start; font-size: var(--ds-text-caption); }
+.relationship-batch-member { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; min-width: 0; }
+.relationship-batch-member > span { display: grid; gap: 3px; min-width: 0; }
+.relationship-batch-member small { color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.relationship-batch-member code, .relationship-batch-key { overflow-wrap: anywhere; font-size: var(--ds-text-caption); }
+.relationship-batch-key { display: block; margin: 10px 0; }
+.relationship-batch-blocked { margin-top: 24px; }
+.relationship-batch-blocked > div { padding: 12px 0; border-bottom: 1px solid var(--ds-separator); overflow-wrap: anywhere; }
+.relationship-batch-blocked p { color: var(--ds-warning); font-size: var(--ds-text-caption); margin: 6px 0; }
+.inference-feedback { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+.relationship-batch-group-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.relationship-batch-group-heading strong { font-weight: var(--ds-weight-medium); min-width: 0; }
+.relationship-batch-group-heading button { flex-shrink: 0; font-size: var(--ds-text-caption); }

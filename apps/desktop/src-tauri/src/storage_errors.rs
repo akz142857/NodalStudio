@@ -40,7 +40,7 @@ pub(super) fn message(error: &SnapshotStoreError) -> &'static str {
         SnapshotStoreError::Io(_) => {
             "The local storage file could not be accessed. Check disk space and app data folder permissions. [storage-file-access]"
         }
-        SnapshotStoreError::KnowledgeConflict(_) => {
+        SnapshotStoreError::KnowledgeConflict(_) | SnapshotStoreError::ReviewConflict(_) => {
             "The saved model changed or conflicts with this operation. Reload it and retry. [storage-conflict]"
         }
         SnapshotStoreError::Database(_) => {

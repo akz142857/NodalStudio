@@ -26,7 +26,7 @@ it.each(['manual', 'model', 'return-to-a', 'reload-order'] as const)('isolates l
  vi.spyOn(platform,'confirmKnowledgeDraft').mockResolvedValue({} as never);vi.spyOn(platform,'cancelKnowledgeDraft').mockResolvedValue(undefined);
  render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><App/></QueryClientProvider>);
  await screen.findByText('Review runtime');fireEvent.click(screen.getByRole('button',{name:'Load source A'}));
- await waitFor(()=>expect(semantics).toHaveBeenCalledWith('source-a'));fireEvent.click(await screen.findByRole('button',{name:'Select current table'}));if(entry==='model') {
+ await waitFor(()=>expect(semantics).toHaveBeenCalledWith('source-a'));fireEvent.click(await screen.findByRole('button',{name:'Select current table'}));fireEvent.click(screen.getByRole('button',{name:'Expand right inspector'}));if(entry==='model') {
    fireEvent.click(screen.getByRole('button',{name:'AI'}));
    await waitFor(()=>expect(screen.getByRole('button',{name:'Send and answer'})).toBeEnabled());
    fireEvent.click(await screen.findByRole('button',{name:'Send and answer'}));

@@ -576,6 +576,10 @@ export interface NodalStudioPlatform {
   deleteQueryHistory(sourceId: string, historyId: string): Promise<boolean>;
   clearQueryHistory(sourceId: string): Promise<number>;
   getSemantics(sourceId: string): Promise<SemanticBundle>;
+  previewRelationshipBatch(input: import("./relationship-batches").ReviewRequest): Promise<import("./relationship-batches").ReviewPreview>;
+  applyRelationshipBatch(input: import("./relationship-batches").ApplyReviewBatch): Promise<import("./relationship-batches").ReviewBatch>;
+  listRelationshipBatches(sourceId: string): Promise<import("./relationship-batches").ReviewBatch[]>;
+  undoRelationshipBatch(sourceId: string, batchId: string): Promise<import("./relationship-batches").ReviewBatch>;
   listLogicalRelationships(sourceId: string): Promise<LogicalRelationship[]>;
   validateLogicalRelationship(input: {
     sourceId: string;

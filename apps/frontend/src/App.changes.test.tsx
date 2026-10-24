@@ -72,6 +72,7 @@ describe("App schema changes", () => {
     expect(screen.getByText("Diagram: after · forward")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Database" }));
     expect(screen.getByText("Diagram: after · no comparison")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Expand right inspector" }));
     fireEvent.click(screen.getByRole("button", { name: "History" }));
     fireEvent.click(screen.getByRole("button", { name: "Review all changes" }));
     expect(screen.getByRole("region", { name: "Schema comparison" })).toBeVisible();

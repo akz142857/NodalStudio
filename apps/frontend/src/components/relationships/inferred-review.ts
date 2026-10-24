@@ -15,6 +15,7 @@ export interface RelationshipCandidate {
   targetUnique: boolean;
   existingTargets: string[];
   evidence: string[];
+  bulkReviewReason?: string;
 }
 
 export function relationshipCandidates(snapshot: DatabaseSnapshot, relationships: LogicalRelationship[]) {
@@ -39,10 +40,15 @@ export function relationshipCandidates(snapshot: DatabaseSnapshot, relationships
       && relationship.source.table === sourceTable.key.name && relationship.source.columns.includes(sourceColumn.name)
       && relationship.status !== "orphaned")
       .map((relationship) => `${relationship.target.schema}.${relationship.target.table}.${relationship.target.columns.join(", ")} (${relationship.status})`);
+    const stem = sourceColumn.name.replace(/_id$/, "");
+    const plural = stem.endsWith("y") ? `${stem.slice(0, -1)}ies` : `${stem}s`;
+    const alternatives = tables.filter(({ table }) => table.primaryKey?.columns.includes("id") && [stem, plural].some((name) => table.key.name === name || table.key.name.endsWith(`_${name}`)));
+    const bulkReviewReason = sourceTable.key.schema !== targetTable.key.schema ? "Cross-schema mapping requires individual review"
+      : alternatives.length !== 1 || ![stem, plural].includes(targetTable.key.name) ? "The naming target is ambiguous or requires contextual review" : undefined;
     return [{ key: inference.relationshipKey, ruleKey: inferredRelationshipRuleKey(inference),
       source: { schema: sourceTable.key.schema, table: sourceTable.key.name, columns: [sourceColumn.name] },
       target: { schema: targetTable.key.schema, table: targetTable.key.name, columns: [targetColumn.name] },
-      sourceTable, targetTable, sourceColumn, targetColumn, typeMatches, targetUnique, existingTargets,
+      sourceTable, targetTable, sourceColumn, targetColumn, typeMatches, targetUnique, existingTargets, bulkReviewReason,
       evidence: [inference.evidence[0], typeMatches ? "Base types and signedness match" : "Column types or signedness differ",
         singlePrimary ? "Target is a single-column primary key" : targetUnique ? "Target has a single-column unique index" : "Target belongs to a composite primary key; this column alone is not known to be unique"],
     }];
@@ -51,7 +57,7 @@ export function relationshipCandidates(snapshot: DatabaseSnapshot, relationships
 }
 
 export function candidateNeedsReview(candidate: RelationshipCandidate) {
-  return !candidate.typeMatches || !candidate.targetUnique || candidate.existingTargets.length > 0;
+  return !candidate.typeMatches || !candidate.targetUnique || candidate.existingTargets.length > 0 || Boolean(candidate.bulkReviewReason);
 }
 
 export function pendingCandidates(candidates: RelationshipCandidate[], ignored: IgnoredRelationshipInference[]) {

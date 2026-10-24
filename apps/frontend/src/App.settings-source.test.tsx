@@ -29,6 +29,8 @@ vi.mock("./components/SchemaCanvas", () => ({
 
 function effectiveSettings(sourceId?: string): EffectiveSettings {
   const settings = defaultEffectiveSettings(sourceId);
+  // Keep this fixture focused on workspace saves, without a sidebar preference save.
+  settings.app.appearance.rightSidebarExpanded = true;
   settings.app.legacyStorageMigrationVersion = 3;
   settings.app.general.theme = sourceId === "source-a" ? "dark" : "light";
   if (settings.source) {
@@ -64,6 +66,8 @@ function mount() {
 async function loadSource(name: "A" | "B") {
   fireEvent.click(screen.getByRole("button", { name: `Load source ${name}` }));
   fireEvent.click(await screen.findByRole("button", { name: "Select current table" }));
+  const expand = screen.queryByRole("button", { name: "Expand right inspector" });
+  if (expand) fireEvent.click(expand);
   fireEvent.click(screen.getByRole("button", { name: "AI" }));
   await waitFor(() => expect(screen.getByRole("textbox", { name: "Question" })).toBeEnabled());
 }

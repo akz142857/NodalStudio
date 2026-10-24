@@ -63,7 +63,7 @@ type PanelPreference = {
 };
 
 const LEFT_PANEL_DEFAULT: PanelPreference = { expanded: true, width: 272 };
-const RIGHT_PANEL_DEFAULT: PanelPreference = { expanded: true, width: 300 };
+const RIGHT_PANEL_DEFAULT: PanelPreference = { expanded: false, width: 300 };
 const LEFT_PANEL_LIMITS = { min: 220, max: 480 };
 const RIGHT_PANEL_LIMITS = { min: 240, max: 520 };
 
@@ -123,7 +123,12 @@ export function App() {
   const runRefresh = refreshOperation.run;
   const refreshState = refreshOperation.busy ? "refreshing" : refreshOperation.state?.phase === "error" ? "error" : "idle";
   const [leftPanel, setLeftPanel] = useState(LEFT_PANEL_DEFAULT);
-  const [rightPanel, setRightPanel] = useState(RIGHT_PANEL_DEFAULT);
+  const [rightPanel, restoreRightPanel] = useState(RIGHT_PANEL_DEFAULT);
+  const rightPanelInteracted = useRef(false);
+  const setRightPanel = useCallback((update: PanelPreference | ((current: PanelPreference) => PanelPreference)) => {
+    rightPanelInteracted.current = true;
+    restoreRightPanel(update);
+  }, []);
   const [settings, setSettings] = useState<EffectiveSettings>(() => defaultEffectiveSettings());
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -334,10 +339,13 @@ export function App() {
             expanded: loaded.app.appearance.leftSidebarExpanded,
             width: loaded.app.appearance.leftSidebarWidth,
           });
-          setRightPanel({
-            expanded: loaded.app.appearance.rightSidebarExpanded,
-            width: loaded.app.appearance.rightSidebarWidth,
-          });
+          // A delayed settings read must not undo an explicit open/close action.
+          if (!rightPanelInteracted.current) {
+            restoreRightPanel({
+              expanded: loaded.app.appearance.rightSidebarExpanded,
+              width: loaded.app.appearance.rightSidebarWidth,
+            });
+          }
         }
         setSettingsLoaded(true);
       })
@@ -623,7 +631,7 @@ export function App() {
     }
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [ddlPreviewOpen, openSchemaSearch, refreshActive, settings.app.shortcuts.bindings]);
+  }, [ddlPreviewOpen, openSchemaSearch, refreshActive, settings.app.shortcuts.bindings, setRightPanel]);
 
   async function updateAppSettings(next: AppSettings) {
     await platform.updateAppSettings(next);
@@ -734,6 +742,13 @@ export function App() {
       ignoredRelationshipInferences: current.ignoredRelationshipInferences.filter((item) => item.relationshipKey !== relationshipKey),
     }));
   }, [snapshot, semanticSession]);
+
+  const relationshipBatchApi = useMemo<import("./platform/relationship-batches").RelationshipBatchApi>(() => ({
+    preview: (input) => platform.previewRelationshipBatch(input),
+    apply: async (input) => { const batch = await platform.applyRelationshipBatch(input); await refreshSemantics(); return batch; },
+    list: (sourceId) => platform.listRelationshipBatches(sourceId),
+    undo: async (sourceId, batchId) => { const batch = await platform.undoRelationshipBatch(sourceId, batchId); await refreshSemantics(); return batch; },
+  }), [refreshSemantics]);
 
   const saveCanvasLayout = useCallback(async (positions: Record<string, import("./platform/types").CanvasNodeLayout>, viewport?: import("./platform/types").CanvasLayout["viewport"]) => {
     if (!snapshot || historyPreview || mode !== "explore") throw new Error("Historical layouts are temporary. Return to the latest model to save.");
@@ -1078,6 +1093,7 @@ export function App() {
               onDeleteLogicalRelationship={runtime.data?.kind === "desktop" ? deleteLogicalRelationship : undefined}
               onIgnoreRelationshipInference={runtime.data?.kind === "desktop" ? ignoreRelationshipInference : undefined}
               onRestoreRelationshipInference={runtime.data?.kind === "desktop" ? restoreRelationshipInference : undefined}
+              relationshipBatchApi={runtime.data?.kind === "desktop" ? relationshipBatchApi : undefined}
               onClearSearch={() => setQuery("")}
             />
           ) : (

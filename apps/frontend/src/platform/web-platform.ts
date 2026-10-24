@@ -113,6 +113,11 @@ function downloadFile(blob: Blob, fileName: string): Promise<FileExportReceipt> 
 }
 
 export class WebPlatform implements NodalStudioPlatform {
+  previewRelationshipBatch(): Promise<import("./relationship-batches").ReviewPreview> { return Promise.reject(new Error("Batch review requires the desktop app.")); }
+  applyRelationshipBatch(): Promise<import("./relationship-batches").ReviewBatch> { return Promise.reject(new Error("Batch review requires the desktop app.")); }
+  listRelationshipBatches(): Promise<import("./relationship-batches").ReviewBatch[]> { return Promise.resolve([]); }
+  undoRelationshipBatch(): Promise<import("./relationship-batches").ReviewBatch> { return Promise.reject(new Error("Batch review requires the desktop app.")); }
+
   pickConnectionFile(): Promise<string | null> { return Promise.reject(new Error("Local certificate files require the desktop app.")); }
   exportQueryResult(): Promise<string | null> { return Promise.reject(new Error("Query result export requires the desktop app.")); }
   prepareKnowledgeDraft(): Promise<never> { return Promise.reject(new Error("Knowledge confirmation requires the desktop app.")); }

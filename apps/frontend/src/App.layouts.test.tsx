@@ -62,6 +62,7 @@ describe("App layout persistence wiring", () => {
     await screen.findByText("Orders workspace");
     fireEvent.click(screen.getByRole("button", { name: "Save test layout" }));
     await waitFor(() => expect(save).toHaveBeenCalledWith(reportSnapshot.sourceId, view.id, positions, undefined, reportSnapshot.id));
+    fireEvent.click(screen.getByRole("button", { name: "Expand right inspector" }));
     fireEvent.click(screen.getByRole("button", { name: "Open historical model" }));
     await screen.findByText("Historical snapshot.");
     await screen.findByText("Layout loaded");
