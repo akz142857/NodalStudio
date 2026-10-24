@@ -1,0 +1,14 @@
+{
+  "Nodal-Studio_0.2.4_windows-x64-unsigned-setup.exe": {
+    "bytes": 9161379,
+    "sha256": "9324954c6f5d0525536ca67afda2c38453c2b026b517f43c29951c356a9f63ad"
+  },
+  "Nodal-Studio_0.2.4_windows-x64-unsigned-setup.exe.sha256": {
+    "bytes": 116,
+    "sha256": "494d3a3c8862717d2f1fe33c16e38c3d4584ef4680706efcc2924fb84e3bfffc"
+  },
+  "latest.json": {
+    "bytes": 3982,
+    "sha256": "382d308109a92154f953f78c9e11d92f01eddb7343c9c7d99fa53e491dce3df6"
+  }
+}
