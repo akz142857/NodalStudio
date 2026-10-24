@@ -12,7 +12,7 @@ export function defaultAppSettings(): AppSettings {
     privacy: { offlineMode: false, diagnosticsEnabled: false, crashReportsEnabled: false, logLevel: "warn", logRetentionDays: 14 },
     notifications: { schemaChanges: "highRisk", gitConflicts: true, cloudFailures: true, storageWarnings: true, updateAvailable: true, systemNotifications: false, quietHoursEnabled: false, quietHoursStart: "22:00", quietHoursEnd: "08:00" },
     shortcuts: { bindings: { openSettings: "Mod+,", focusSearch: "Mod+F", refreshSchema: "Mod+R", toggleLeftSidebar: "Mod+Shift+L", toggleRightInspector: "Mod+Shift+I", fitCanvas: "F", focusSelectedTable: "Enter", relayoutCanvas: "Mod+Shift+R" } },
-    updates: { automaticChecks: false, channel: "stable", customFeedUrl: null },
+    updates: { automaticChecks: true, channel: "stable", customFeedUrl: null },
     advanced: { performanceMetrics: false, layoutWorkerTimeoutMs: 15_000, renderDegradeThreshold: 500, betaFeatures: false, experimentalFeatures: { largeModelVirtualization: false, relationshipInferenceV2: false }, extensions: { environmentDrift: true, migrationProvenance: true, codeLineage: true } },
   };
 }

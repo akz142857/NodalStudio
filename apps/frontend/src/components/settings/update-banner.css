@@ -1,0 +1,34 @@
+.app-shell.has-update-banner { grid-template-rows: auto auto minmax(0, 1fr); }
+.app-update-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ds-accent) 35%, var(--ds-separator));
+  background: color-mix(in srgb, var(--ds-accent) 12%, var(--ds-window));
+  color: var(--ds-text);
+}
+.app-update-icon { display: grid; place-items: center; flex: none; color: var(--ds-accent); }
+.app-update-icon svg { width: 20px; height: 20px; }
+.app-update-copy { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.app-update-copy strong { font-size: 13px; overflow-wrap: anywhere; }
+.app-update-copy > span { color: var(--ds-secondary); font-size: 12px; }
+.app-update-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.app-update-actions button, .notification-update-action {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.app-update-actions .app-update-open { background: var(--ds-accent-fill); color: var(--ds-on-accent); font-weight: 600; }
+.app-update-open:hover { filter: brightness(1.1); }
+.app-update-later { background: transparent; color: var(--ds-secondary); }
+.app-update-later:hover { background: var(--ds-hover); color: var(--ds-text); }
+.notification-update-action { display: block; margin-top: 8px; color: var(--ds-accent); background: var(--ds-hover); }
+@container app-shell (max-width: 650px) {
+  .app-update-banner { flex-wrap: wrap; padding: 10px 14px; }
+  .app-update-actions { margin-left: 32px; }
+}

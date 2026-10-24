@@ -44,6 +44,8 @@ import type {
 } from "./platform";
 import { defaultEffectiveSettings } from "./platform";
 import { migrateLegacySettings } from "./settings-migration";
+import { useAvailableUpdate } from "./components/settings/use-available-update";
+import { UpdateBanner } from "./components/settings/UpdateBanner";
 
 const platform = getPlatform();
 const SettingsPage = lazy(() => import("./components/SettingsPage").then((module) => ({ default: module.SettingsPage })));
@@ -51,7 +53,7 @@ const QueryPage = lazy(() => import("./components/query/QueryPage").then((module
 const DdlImportPanel = lazy(() => import("./components/DdlImportPanel").then((module) => ({ default: module.DdlImportPanel })));
 
 type ViewMode = "explore" | "query" | "changes";
-type AppNotice = { id: string; title: string; message: string; createdAt: string };
+type AppNotice = { id: string; title: string; message: string; createdAt: string; settingsCategory?: SettingsCategory };
 
 function noticeReason(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
@@ -131,6 +133,7 @@ export function App() {
   }, []);
   const [settings, setSettings] = useState<EffectiveSettings>(() => defaultEffectiveSettings());
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsAvailable, setSettingsAvailable] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("general");
   const [dataSources, setDataSources] = useState<DataSourceProfile[]>([]);
@@ -144,11 +147,17 @@ export function App() {
   const startupRevision = useRef(0);
   const beginSourceOpen = useCallback(() => { startupRevision.current += 1; }, []);
   useEffect(() => () => { startupRevision.current += 1; }, []);
-  const automaticUpdateChecked = useRef(false);
+  const [dismissedUpdate, setDismissedUpdate] = useState<string>();
+  const notifiedUpdate = useRef<string | undefined>(undefined);
   const runtime = useQuery({
     queryKey: ["runtime-info"],
     queryFn: () => platform.getRuntimeInfo(),
   });
+  const availableUpdate = useAvailableUpdate(platform,
+    settingsAvailable && runtime.data?.kind === "desktop" && settings.app.updates.automaticChecks && !settings.app.privacy.offlineMode,
+    settings.app.updates);
+  const updateNotificationsEnabled = settings.app.notifications.updateAvailable && !isQuietHours(settings.app.notifications);
+  const showUpdateBanner = Boolean(availableUpdate && updateNotificationsEnabled && dismissedUpdate !== availableUpdate);
   const discoveryLatest = useQuery({
     queryKey: ["discovery-latest-snapshot", snapshot?.sourceId, snapshot?.id],
     queryFn: () => platform.listSnapshots(snapshot!.sourceId),
@@ -233,6 +242,13 @@ export function App() {
   useEffect(() => {
     publishNoticeRef.current = publishNotice;
   }, [publishNotice]);
+  useEffect(() => {
+    if (!availableUpdate || !updateNotificationsEnabled || notifiedUpdate.current === availableUpdate) return;
+    notifiedUpdate.current = availableUpdate;
+    publishNoticeRef.current({ id: `update-${availableUpdate}`, title: "Application update available",
+      message: `Nodal Studio ${availableUpdate} is available. Review what’s new and choose when to update.`,
+      createdAt: new Date().toISOString(), settingsCategory: "updates" });
+  }, [availableUpdate, updateNotificationsEnabled]);
   const loadSemantics = useCallback(() => {
     if (!snapshot || activeSemanticSession.current !== semanticSession) return Promise.resolve();
     const request = ++semanticRequest.current;
@@ -334,6 +350,7 @@ export function App() {
       .then((loaded) => {
         if (!active) return;
         setSettings(loaded);
+        setSettingsAvailable(true);
         if (loaded.app.appearance.restoreSidebarState) {
           setLeftPanel({
             expanded: loaded.app.appearance.leftSidebarExpanded,
@@ -354,6 +371,7 @@ export function App() {
         // substituting them makes a load failure indistinguishable from a fresh
         // install, and the defaults include the privacy and cloud posture.
         if (!active) return;
+        setSettingsAvailable(false);
         setSettingsLoaded(true);
         publishNoticeRef.current({
           id: "settings-load-failed",
@@ -555,23 +573,11 @@ export function App() {
     }
     runHealthCheck();
     const timer = window.setInterval(runHealthCheck, 60_000);
-    if (
-      !automaticUpdateChecked.current &&
-      settings.app.updates.automaticChecks &&
-      !settings.app.privacy.offlineMode
-    ) {
-      automaticUpdateChecked.current = true;
-      void platform.checkForUpdates().then((result) => {
-        if (active && result.availableVersion && settings.app.notifications.updateAvailable) {
-          publishNotice({ id: `update-${result.availableVersion}`, title: "Application update available", message: `Nodal Studio ${result.availableVersion} is available on the ${settings.app.updates.channel} channel.`, createdAt: new Date().toISOString() });
-        }
-      }).catch(() => undefined);
-    }
     return () => {
       active = false;
       window.clearInterval(timer);
     };
-  }, [publishNotice, runtime.data?.kind, settings.app.history.storageWarningMegabytes, settings.app.notifications.cloudFailures, settings.app.notifications.gitConflicts, settings.app.notifications.storageWarnings, settings.app.notifications.updateAvailable, settings.app.privacy.offlineMode, settings.app.updates.automaticChecks, settings.app.updates.channel, settings.app.updates.customFeedUrl, settings.source, settingsLoaded, snapshot]);
+  }, [publishNotice, runtime.data?.kind, settings.app.history.storageWarningMegabytes, settings.app.notifications.cloudFailures, settings.app.notifications.gitConflicts, settings.app.notifications.storageWarnings, settings.source, settingsLoaded, snapshot]);
 
   useEffect(() => {
     function openFromLocation() {
@@ -647,6 +653,7 @@ export function App() {
   }
 
   function openSettings(category: SettingsCategory = "general") {
+    setNoticesOpen(false);
     setSettingsCategory(category);
     setSettingsOpen(true);
     window.history.replaceState(null, "", `#/settings/${category}`);
@@ -826,7 +833,7 @@ export function App() {
 
   return (
     <Suspense fallback={<main className="app-shell"><p>Loading workspace…</p></main>}>
-    {ddlPreviewOpen ? <DdlImportPanel canvasSettings={settings.app.canvas} runtimeKind={runtime.data?.kind} onClose={() => setDdlPreviewOpen(false)} /> : <main className="app-shell">
+    {ddlPreviewOpen ? <DdlImportPanel canvasSettings={settings.app.canvas} runtimeKind={runtime.data?.kind} onClose={() => setDdlPreviewOpen(false)} /> : <main className={`app-shell${showUpdateBanner ? " has-update-banner" : ""}`}>
       <header className="topbar">
         <HeaderSidebarToggle
           side="left"
@@ -934,7 +941,7 @@ export function App() {
           />
           <IconButton icon="command" label="Open command palette" description="Command palette (⌘⇧P)" onClick={() => setCommandPaletteOpen(true)} />
           <IconButton icon="bell" label="Open notifications" description={notices.length ? `${notices.length} notifications` : "No notifications"} className="notification-button" aria-expanded={noticesOpen} onClick={() => setNoticesOpen((value) => !value)}>{notices.length ? <b aria-hidden="true">{notices.length > 99 ? "99+" : notices.length}</b> : null}</IconButton>
-          {noticesOpen ? <section className="notification-popover" aria-label="Notifications"><header><strong>Notifications</strong><button type="button" onClick={() => setNotices([])}>Clear</button></header>{notices.length ? notices.map((notice) => <article key={notice.id}><strong>{notice.title}</strong><p>{notice.message}</p><small>{new Date(notice.createdAt).toLocaleTimeString()}</small></article>) : <p>No notifications.</p>}</section> : null}
+          {noticesOpen ? <section className="notification-popover" aria-label="Notifications"><header><strong>Notifications</strong><button type="button" onClick={() => setNotices([])}>Clear</button></header>{notices.length ? notices.map((notice) => <article key={notice.id}><strong>{notice.title}</strong><p>{notice.message}</p><small>{new Date(notice.createdAt).toLocaleTimeString()}</small>{notice.settingsCategory ? <button type="button" className="notification-update-action" onClick={() => openSettings(notice.settingsCategory)}>View update</button> : null}</article>) : <p>No notifications.</p>}</section> : null}
         </div>
         <HeaderSidebarToggle
           side="right"
@@ -944,6 +951,8 @@ export function App() {
           }
         />
       </header>
+
+      {showUpdateBanner && availableUpdate ? <UpdateBanner version={availableUpdate} onOpen={() => openSettings("updates")} onDismiss={() => setDismissedUpdate(availableUpdate)} /> : null}
 
       <section
         className="workspace"

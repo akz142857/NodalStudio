@@ -183,6 +183,10 @@ and offers manual installation in builds without an updater signing key, includi
 Windows. Signed macOS distributions use the release's `latest.json` and verified
 `.app.tar.gz` archive for in-app installation, backup and restart.
 
+New settings enable startup update checks by default; saved opt-outs are preserved.
+A newer version appears in a banner and the notification center, with **View update**
+opening Updates & About directly. Downloads and installation still require your action.
+
 The macOS release script can generate verified GitHub updater artifacts when
 `UPDATER_PUBLIC_KEY_PATH` and the signing environment are configured. Key setup,
 release publishing, local acceptance builds and the one-time manual upgrade from

@@ -4,7 +4,35 @@ Scope
 Manual check, signed full download, cancellation/retry, explicit install/restart,
 local data backup and shared Settings design-system UI. macOS first.
 Scheduled checks, staged rollout and migration recovery UI
-remain later phases. The existing opt-in startup check is retained.
+remain later phases. Startup checks are enabled by default for new settings;
+an existing saved opt-out is preserved. Failed settings reads do not trigger a
+check using fallback defaults. Offline mode and organization policy still apply.
+
+When a startup check finds a newer version, a persistent banner below the main
+toolbar shows the version and a View update button. It opens Settings > Updates &
+About directly, without downloading anything. Later hides the banner for this
+session; the notification center keeps its own View update action. Update-notice
+preferences and quiet hours apply to both the banner and notification. Download
+and Install and Restart remain separate user actions, including the final install
+confirmation. Workspace restoration does not cancel a pending startup reminder.
+
+Startup-reminder validation (2026-10-24, local changes after v0.2.0)
+- All 827 frontend tests, TypeScript, ESLint, six settings-model tests, Rust
+  formatting and native debug builds passed. Regression coverage includes
+  delayed workspace restoration, StrictMode, failed settings reads, offline and
+  notification preferences, both navigation actions, and explicit download/install.
+- A separately identified native preview, built with test version 0.1.2 and an
+  empty data directory, automatically detected public v0.2.0. The banner opened
+  Updates & About, Later dismissed the banner, and the notification action still
+  opened the same page. No download or installation was triggered.
+- The actual installation's automatic-check preference was enabled through its
+  UI. The current local 0.2.0 build reopened the existing model and automatically
+  reported up to date. Local table digests were unchanged except app settings and
+  external-access logs. The published release and /Applications bundle were not
+  replaced by these development builds.
+- Local screenshots, preview configuration and verification report are under
+  target/update-notice-acceptance/ (ignored by Git). These changes are not yet a
+  published release.
 
 GitHub source (2026-10-22)
 The official public repository is https://github.com/akz142857/NodalStudio.

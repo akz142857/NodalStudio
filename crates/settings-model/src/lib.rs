@@ -300,7 +300,7 @@ pub struct UpdateSettings {
 impl Default for UpdateSettings {
     fn default() -> Self {
         Self {
-            automatic_checks: false,
+            automatic_checks: true,
             channel: UpdateChannel::Stable,
             custom_feed_url: None,
         }
@@ -940,6 +940,16 @@ string_enum!(DefaultSslMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn update_checks_default_on_but_preserve_an_explicit_opt_out() {
+        assert!(AppSettings::default().updates.automatic_checks);
+        let stored: UpdateSettings = serde_json::from_value(serde_json::json!({
+            "automaticChecks": false, "channel": "stable", "customFeedUrl": null
+        }))
+        .unwrap();
+        assert!(!stored.automatic_checks);
+    }
 
     #[test]
     fn defaults_are_valid_and_do_not_serialize_secrets() {
