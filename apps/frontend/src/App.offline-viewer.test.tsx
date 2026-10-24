@@ -19,10 +19,10 @@ describe("App offline export range", () => {
     const capture = vi.spyOn(platform, "capturePostgresSnapshot"); const execute = vi.spyOn(platform, "executeReadonlyQuery"); const layout = vi.spyOn(platform, "saveLayout"); const domain = vi.spyOn(platform, "saveDomainGroup");
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { callback(0); return 1; });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>); await screen.findByText(`${kind} Viewer fixture`);
-    expect(screen.queryByRole("button", { name: "Export offline Viewer" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Load Viewer fixture" })); await waitFor(() => expect(screen.getByRole("button", { name: "Export offline Viewer" })).toBeEnabled());
+    expect(screen.queryByRole("button", { name: "Export interactive viewer" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load Viewer fixture" })); await waitFor(() => expect(screen.getByRole("button", { name: "Export interactive viewer" })).toBeEnabled());
     fireEvent.change(screen.getByRole("searchbox", { name: "Search schema" }), { target: { value: "customers" } }); expect(screen.getByText("Diagram filter: customers")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Export offline Viewer" })); await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "Export interactive viewer" })); await waitFor(() => expect(save).toHaveBeenCalledOnce());
     const input: SchemaReportExportInput = save.mock.calls[0][0]; expect(input.html).toContain('id="table-1-0"'); expect(input.html).toContain("orders_customer_fk"); expect(input.html).toContain("independent of the app’s Diagram filters");
     expect(capture).not.toHaveBeenCalled(); expect(execute).not.toHaveBeenCalled(); expect(layout).not.toHaveBeenCalled(); expect(domain).not.toHaveBeenCalled();
   });

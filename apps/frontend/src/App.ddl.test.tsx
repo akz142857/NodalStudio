@@ -8,7 +8,7 @@ import type { CaptureSnapshotResult } from "./platform";
 import type { SchemaCanvasProps } from "./components/SchemaCanvas";
 vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot }: { onSnapshot: (result: CaptureSnapshotResult) => void }) => <button type="button" onClick={() => onSnapshot({ snapshot: reportSnapshot, stored: true, changeSet: null })}>Load live workspace</button> }));
 vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: ({ snapshot }: SchemaCanvasProps) => <p>Live workspace {snapshot.id}</p> }));
-vi.mock("./components/DdlImportPanel", () => ({ DdlImportPanel: ({ onClose }: { onClose: () => void }) => <section aria-label="Read-only DDL import preview"><button type="button" onClick={onClose}>Close DDL preview</button></section> }));
+vi.mock("./components/DdlImportPanel", () => ({ DdlImportPanel: ({ onClose, onReturn }: { onClose: () => void; onReturn: () => void }) => <section aria-label="Read-only DDL import preview"><button type="button" onClick={onReturn}>Return to database</button><button type="button" onClick={onClose}>Close DDL preview</button></section> }));
 describe("DDL preview workspace isolation", () => {
   beforeEach(() => { localStorage.clear(); window.history.replaceState(null, "", "/"); }); afterEach(() => vi.restoreAllMocks());
   it.each(["desktop", "web"] as const)("opens without a connection and returns to the existing workspace on %s", async (kind) => {
@@ -16,10 +16,17 @@ describe("DDL preview workspace isolation", () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>); await screen.findByText(`${kind} fixture`);
     fireEvent.click(screen.getByRole("button", { name: "Import DDL" })); expect(await screen.findByRole("region", { name: "Read-only DDL import preview" })).toBeVisible(); fireEvent.click(screen.getByRole("button", { name: "Close DDL preview" }));
     fireEvent.click(screen.getByRole("button", { name: "Load live workspace" })); expect(screen.getByText(`Live workspace ${reportSnapshot.id}`)).toBeVisible();
+    const liveCanvas = screen.getByText(`Live workspace ${reportSnapshot.id}`);
     const capture = vi.spyOn(platform, "capturePostgresSnapshot"); const query = vi.spyOn(platform, "executeReadonlyQuery"); const save = vi.spyOn(platform, "saveLayout");
     fireEvent.click(screen.getByRole("button", { name: "Import DDL" })); await screen.findByRole("region", { name: "Read-only DDL import preview" });
     fireEvent.keyDown(window, { key: "r", metaKey: true });
     expect(capture).not.toHaveBeenCalled(); expect(query).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
+    const preview = screen.getByRole("region", {name:"Read-only DDL import preview"});
+    fireEvent.click(screen.getByRole("button", {name:"Return to database"}));
+    expect(screen.getByText(`Live workspace ${reportSnapshot.id}`)).toBe(liveCanvas);
+    expect(preview).toBeInTheDocument(); expect(preview).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button", {name:"Import DDL"}));
+    expect(screen.getByRole("region", {name:"Read-only DDL import preview"})).toBe(preview);
     fireEvent.click(screen.getByRole("button", { name: "Close DDL preview" })); expect(screen.getByText(`Live workspace ${reportSnapshot.id}`)).toBeVisible();
   });
   it("provides a read-only preview command before loading any database", async () => {

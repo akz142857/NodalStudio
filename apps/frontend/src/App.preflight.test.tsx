@@ -11,7 +11,7 @@ const fixture = structuredClone(diagramAfter);
 fixture.schemas[0].tables[1].primaryKey = null;
 vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot }: { onSnapshot: (result: CaptureSnapshotResult) => void }) => <>
   <button type="button" onClick={() => onSnapshot({ snapshot: fixture, changeSet: diagramChangeSet, stored: true })}>Capture preflight fixture</button>
-  <button type="button" onClick={() => onSnapshot({ snapshot: { ...fixture, id: "other-id", sourceId: "other-source", fingerprint: "other-fingerprint" }, changeSet: null, stored: true })}>Capture other source</button>
+  <button type="button" onClick={() => onSnapshot({ snapshot: { ...fixture, database: { ...fixture.database, name: "Other source database" }, id: "other-id", sourceId: "other-source", fingerprint: "other-fingerprint" }, changeSet: null, stored: true })}>Capture other source</button>
 </> }));
 vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: ({ query, selectedTable }: SchemaCanvasProps) => <div data-testid="preflight-canvas">Canvas query: {query || "none"} · Selected: {selectedTable?.key.name ?? "none"}</div> }));
 
@@ -36,9 +36,9 @@ describe("App structure preflight integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Structure preflight" }));
     const panel = screen.getByRole("region", { name: "Structure preflight" });
     await waitFor(() => expect(within(panel).getByRole("status")).toHaveTextContent("3 tables"));
-    expect(within(panel).getByRole("article", { name: "table-primary-key: public.orders" })).toBeVisible();
+    expect(screen.getByRole("article", { name: "table-primary-key: public.orders" })).toBeVisible();
     expect(panel).not.toHaveTextContent("public.audit");
-    fireEvent.click(within(panel).getByRole("button", { name: "Locate table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Locate table" }));
     expect(screen.getByRole("button", { name: "Database" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByPlaceholderText("Table, field, schema…")).toHaveValue("");
     expect(screen.getByTestId("preflight-canvas")).toHaveTextContent("Canvas query: none · Selected: orders");
@@ -50,9 +50,9 @@ describe("App structure preflight integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Structure preflight" }));
     await waitFor(() => expect(within(screen.getByRole("region", { name: "Structure preflight" })).getByRole("status")).toHaveTextContent("Completed"));
     fireEvent.click(screen.getByRole("button", { name: "Capture other source" }));
-    expect(screen.getByText(/Entire loaded snapshot/)).toHaveTextContent("other-fingerprint".slice(0, 12));
+    expect(within(screen.getByRole("region", { name: "Structure preflight" })).getByText(/Other source database/)).toBeVisible();
     await waitFor(() => expect(within(screen.getByRole("region", { name: "Structure preflight" })).getByRole("status")).toHaveTextContent("Completed"));
-    fireEvent.click(screen.getByRole("button", { name: "Close preflight" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to diagram" }));
     expect(screen.getByTestId("preflight-canvas")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Structure preflight" }));
     fireEvent.click(screen.getByRole("button", { name: "Database" }));

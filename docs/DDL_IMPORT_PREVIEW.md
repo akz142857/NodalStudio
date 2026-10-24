@@ -33,7 +33,7 @@
 
 ## 部分结果与资源限制
 
-不支持的字段属性、CHECK、生成表达式、列 collation 或表语法使整条 `CREATE TABLE` 原子省略，避免把截断定义显示为完整表。其他已成功解析的声明保留。ALTER、DROP、视图、独立 TYPE/ENUM、COMMENT ON 等不进入结构；DROP 不会删除预览表。含省略、错误或覆盖警告时结果明确标注 **Partial preview**；无警告也只表示支持子集的预览，不是完整结构验证。
+不支持的字段属性、CHECK、生成表达式、列 collation 或表语法使整条 `CREATE TABLE` 原子省略，避免把截断定义显示为完整表。其他已成功解析的声明保留。ALTER、DROP、视图、独立 TYPE/ENUM、COMMENT ON 等不进入结构；DROP 不会删除预览表。结果显示表数量和诊断数量，诊断说明省略、错误与覆盖警告；无警告也只表示支持子集的预览，不是完整结构验证。
 
 非 DDL / INSERT 不进入模型。COPY FROM STDIN 的数据区跳过至 `\.` 或 EOF。遇到 routine / DELIMITER 区域保守停止解析后续区域，避免函数体里的 CREATE 被当作表。MySQL 可执行注释 `/*! … */` 不执行并警告，不能据此还原完整 mysqldump。诊断不附带被拒语句或行数据片段；原文本只保留在当前内存编辑区，未发送到后端或第三方。
 
@@ -43,7 +43,7 @@
 
 ## 临时工作流
 
-预览展示结构列表和 Diagram，图例明确为 **declared FKs**，不生成推断关系。可临时移动、多选、排版或固定表；不读取/保存数据库布局。DDL 页面不提供查询、语义/业务域/逻辑关系写入或导出。关闭或重载页面丢弃预览，返回之前工作区。
+预览展示结构列表和 Diagram，图例明确为 **declared FKs**，不生成推断关系。可临时移动、多选、排版或固定表；不读取/保存数据库布局。DDL 页面不提供查询、语义/业务域/逻辑关系写入或导出。“返回数据库”保留输入、临时选择及画布，再次点击导入入口即可继续；“关闭临时模型”在有内容时确认丢弃。重载或退出应用仍会丢弃临时内容。
 
 解析模型不替换 App 的在线快照，不创建伪连接，不写 SQLite、History、语义、Git、云或 AI，不执行任何 DDL/查询，也不能作为迁移脚本。已有工作区的后台任务可以继续，但导入本身不触发刷新或数据库访问。持久文件模型、完整 DDL 编辑、迁移生成/执行和交互离线 Viewer 仍需后续独立需求设计。
 
@@ -54,3 +54,12 @@
 实现包括 [lexer/parser](../apps/frontend/src/ddl/ddl-parser.ts)、[身份与摘要](../apps/frontend/src/ddl/ddl-preview.ts)、[Worker 生命周期](../apps/frontend/src/ddl/ddl-worker-client.ts)、[导入页面](../apps/frontend/src/components/DdlImportPanel.tsx) 和 [只读 Diagram](../apps/frontend/src/components/SchemaCanvas.tsx)。方言边界核对了官方 [PostgreSQL lexical syntax](https://www.postgresql.org/docs/current/sql-syntax-lexical.html)、[PostgreSQL CREATE TABLE](https://www.postgresql.org/docs/18/sql-createtable.html) 和 [MySQL 8.4 CREATE TABLE](https://dev.mysql.com/doc/refman/8.4/en/create-table.html)；支持范围以本页及实现为准，不因数据库支持某语法而自动扩展。
 
 新增 43 项解析、摘要、Worker、导入页面、App 和真实 React Flow 边界测试，覆盖两种方言、引用/注释/字符串、源位置、原子省略、前向引用、数据区和 routine 隔离、资源上限、文件 UTF-8、剪贴板拒绝与重试、取消/过期响应、临时来源及写入隔离。完整前端 63 个测试文件、366 项测试通过，TypeScript、ESLint 和生产构建通过。浏览器另使用合成 MySQL 本地 SQL 文件和 PostgreSQL 编辑区文本验证真实 Worker、结果/诊断及 ELK Diagram，关闭后恢复原工作区；没有控制台错误。没有在数据库执行这些 DDL，也不宣称已经验证原生剪贴板权限或所有服务器版本。
+
+
+## 2026-10-24 交互与样式调整
+
+- 入口使用原生语义的模态导入面板；文件、剪贴板、方言、SQL 编辑区和固定底部操作复用共享设计系统。默认 namespace 放入高级选项。
+- 解析完成后，临时工作区位于主导航下方，复用对象树、关系图与表结构详情。结构/关系图切换不销毁画布；原数据库工作区保持挂载并暂停交互。
+- 诊断在底部展开，支持返回编辑区定位表、字段或语句。会话 ID、哈希及指纹收入技术详情。中文显示诊断分类摘要，解析器原始消息可展开查看。
+- 所有新增操作和状态使用中英文消息；样式使用稳定 class，不依赖翻译后的 aria-label。
+- 验收记录见 [DDL 工作区验收](DDL_WORKSPACE_ACCEPTANCE.md)。

@@ -147,7 +147,14 @@ Prepare a real GitHub distribution
    existing installations trust the public key embedded in their application.
 2. Install the maintained minisign verifier (on macOS: brew install minisign).
    Set UPDATER_PUBLIC_KEY_PATH in config/macos-release.env to the .pub file.
-   Optionally set UPDATER_NOTES_PATH to a release-notes text file.
+   For every release, write the public release notes in English at
+   docs/releases/vVERSION-release-notes.md and set UPDATER_NOTES_PATH to that file.
+   Use the same file for the GitHub Release body (--notes-file) and the updater
+   manifest's notes field. In-app update notes remain in English regardless of
+   the application's interface language. Do not maintain separate translations.
+   Before publishing, verify that the release body and latest.json notes match
+   this file. If notes change after publication, update both metadata locations
+   together and verify them again; preserve installer payloads and signatures.
    Set UPDATER_PRIVATE_KEY_PATH to an encrypted private key and
    UPDATER_KEYCHAIN_SERVICE / UPDATER_KEYCHAIN_ACCOUNT to its password entry.
    Alternatively export TAURI_SIGNING_PRIVATE_KEY (path or key content) and

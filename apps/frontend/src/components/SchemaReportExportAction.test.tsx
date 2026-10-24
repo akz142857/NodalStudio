@@ -13,7 +13,7 @@ describe("SchemaReportExportAction", () => {
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { callback(0); return 1; });
     const saveSchemaReport = vi.fn().mockResolvedValue({ path: "/Downloads/report-1.html" });
     render(<SchemaReportExportAction snapshot={reportSnapshot} semantics={reportSemantics} platform={{ saveSchemaReport } as unknown as NodalStudioPlatform} />);
-    fireEvent.click(screen.getByRole("button", { name: "Export HTML report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export structure document" }));
     await waitFor(() => expect(saveSchemaReport).toHaveBeenCalledOnce());
     const input = saveSchemaReport.mock.calls[0][0] as SchemaReportExportInput;
     expect(input.fileName).toBe("Commerce-schema-report-schema-repor.html");
@@ -30,11 +30,11 @@ describe("SchemaReportExportAction", () => {
     const saveSchemaReport = vi.fn().mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     const platform = { saveSchemaReport } as unknown as NodalStudioPlatform;
     const { rerender } = render(<SchemaReportExportAction snapshot={reportSnapshot} platform={platform} />);
-    expect(screen.getByRole("button", { name: "Export HTML report" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Export structure document" })).toBeDisabled();
     rerender(<SchemaReportExportAction snapshot={reportSnapshot} semantics={reportSemantics} platform={platform} />);
-    const button = screen.getByRole("button", { name: "Export HTML report" });
+    const button = screen.getByRole("button", { name: "Export structure document" });
     fireEvent.click(button); fireEvent.click(button);
-    expect(screen.getByRole("button", { name: "Exporting report…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Exporting structure document…" })).toBeDisabled();
     await waitFor(() => expect(saveSchemaReport).toHaveBeenCalledOnce());
     await act(() => Promise.resolve(finish({ path: null })));
     expect(screen.getByRole("status")).toHaveTextContent("Download started: Commerce-schema-report");
@@ -44,7 +44,7 @@ describe("SchemaReportExportAction", () => {
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { callback(0); return 1; });
     const saveSchemaReport = vi.fn().mockRejectedValueOnce(new Error("Downloads unavailable")).mockResolvedValue({ path: null });
     render(<SchemaReportExportAction snapshot={reportSnapshot} semantics={reportSemantics} platform={{ saveSchemaReport } as unknown as NodalStudioPlatform} />);
-    fireEvent.click(screen.getByRole("button", { name: "Export HTML report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export structure document" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Downloads unavailable");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry report export" }));
@@ -58,21 +58,21 @@ describe("SchemaReportExportAction", () => {
     const saveSchemaReport = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
     const platform = { saveSchemaReport } as unknown as NodalStudioPlatform;
     const { rerender } = render(<SchemaReportExportAction snapshot={reportSnapshot} semantics={reportSemantics} platform={platform} />);
-    fireEvent.click(screen.getByRole("button", { name: "Export HTML report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export structure document" }));
     expect(screen.getByRole("status")).toHaveTextContent("Running");
     await waitFor(() => expect(saveSchemaReport).toHaveBeenCalledOnce());
     rerender(<SchemaReportExportAction snapshot={{ ...reportSnapshot, id: "new" }} semantics={reportSemantics} platform={platform} />);
     await act(() => Promise.resolve(finish({ path: "/Downloads/old.html" })));
-    expect(screen.queryByRole("status")).not.toBeInTheDocument(); expect(screen.getByRole("button", { name: "Export HTML report" })).toBeEnabled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument(); expect(screen.getByRole("button", { name: "Export structure document" })).toBeEnabled();
   });
 
   it("exports an interactive whole-snapshot file through the existing HTML save path with its own name and retry", async () => {
     vi.stubGlobal("crypto", webcrypto); vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { callback(0); return 1; });
     const saveSchemaReport = vi.fn().mockRejectedValueOnce(new Error("Downloads unavailable")).mockResolvedValue({ path: null });
     render(<SchemaReportExportAction snapshot={reportSnapshot} semantics={reportSemantics} platform={{ saveSchemaReport } as unknown as NodalStudioPlatform} />);
-    fireEvent.click(screen.getByRole("button", { name: "Export offline Viewer" }));
-    expect(screen.getByRole("button", { name: "Exporting offline Viewer…" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Export HTML report" })).toBeDisabled();
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to export offline Viewer");
+    fireEvent.click(screen.getByRole("button", { name: "Export interactive viewer" }));
+    expect(screen.getByRole("button", { name: "Exporting interactive viewer…" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Export structure document" })).toBeDisabled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to export interactive viewer");
     fireEvent.click(screen.getByRole("button", { name: "Retry Viewer export" }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Download started: Commerce-offline-viewer-schema-repor.html · 3 tables · 6 columns"));
     const input = saveSchemaReport.mock.calls[1][0] as SchemaReportExportInput;
@@ -85,11 +85,11 @@ describe("SchemaReportExportAction", () => {
     const saveSchemaReport = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
     const platform = { saveSchemaReport } as unknown as NodalStudioPlatform;
     const { rerender } = render(<SchemaReportExportAction snapshot={reportSnapshot} semantics={reportSemantics} platform={platform} />);
-    const button = screen.getByRole("button", { name: "Export offline Viewer" }); fireEvent.click(button); fireEvent.click(button); fireEvent.click(screen.getByRole("button", { name: "Export HTML report" }));
+    const button = screen.getByRole("button", { name: "Export interactive viewer" }); fireEvent.click(button); fireEvent.click(button); fireEvent.click(screen.getByRole("button", { name: "Export structure document" }));
     await waitFor(() => expect(saveSchemaReport).toHaveBeenCalledOnce());
     rerender(<SchemaReportExportAction snapshot={{ ...reportSnapshot, id: "new" }} semantics={reportSemantics} platform={platform} />);
     await act(() => Promise.resolve(finish({ path: "/Downloads/old-viewer.html" })));
-    expect(screen.queryByRole("status")).not.toBeInTheDocument(); expect(screen.getByRole("button", { name: "Export offline Viewer" })).toBeEnabled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument(); expect(screen.getByRole("button", { name: "Export interactive viewer" })).toBeEnabled();
   });
 
   it("rejects temporary DDL and generation errors before saving, and waits for current semantics", async () => {
@@ -97,9 +97,9 @@ describe("SchemaReportExportAction", () => {
     const saveSchemaReport = vi.fn(); const platform = { saveSchemaReport } as unknown as NodalStudioPlatform;
     const snapshot = { ...reportSnapshot, sourceId: "ddl-preview:test" };
     const { rerender } = render(<SchemaReportExportAction snapshot={snapshot} platform={platform} />);
-    expect(screen.getByRole("button", { name: "Export offline Viewer" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Export interactive viewer" })).toBeDisabled();
     rerender(<SchemaReportExportAction snapshot={snapshot} semantics={reportSemantics} platform={platform} />);
-    fireEvent.click(screen.getByRole("button", { name: "Export offline Viewer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export interactive viewer" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Temporary DDL previews"); expect(saveSchemaReport).not.toHaveBeenCalled();
   });
 });

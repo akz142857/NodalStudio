@@ -40,7 +40,7 @@
 .inspector-view .segmented button:not(.active):hover { color: var(--ds-text); background: var(--ds-hover); }
 .inspector-view .inspector-body { display: grid; gap: 20px; min-width: 0; }
 .inspector-view .inspector-body > [hidden] { display: none; }
-.inspector-view :is(.inspector-section, .annotation-form, .knowledge-panel, .history-panel, .change-summary) { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.inspector-view :is(.inspector-section, .object-dependency-group, .annotation-form, .knowledge-panel, .history-panel, .change-summary) { display: grid; gap: var(--ds-space-3); margin: 0; padding: 0; border: 0; min-width: 0; }
 .inspector-view .inspector-body > :is(.knowledge-panel, .history-panel, .knowledge-review, .inspector-disclosure) { padding-top: 16px; border-top: 1px solid var(--ds-separator); }
 .inspector-view .inspector-body > :first-child { border-top: 0; padding-top: 0; }
 .inspector-view :is(.annotation-heading, .section-heading) { gap: 8px; align-items: baseline; }

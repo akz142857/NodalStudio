@@ -89,8 +89,28 @@ export function App() {
   const latestWorkspace = useRef<{ snapshot: DatabaseSnapshot; view?: SavedView } | undefined>(undefined);
   const [changeSet, setChangeSet] = useState<SchemaChangeSet>();
   const [mode, setMode] = useState<ViewMode>("explore");
-  const [preflightOpen, setPreflightOpen] = useState(false);
-  const [ddlPreviewOpen, setDdlPreviewOpen] = useState(false);
+  const [preflightOpen, restorePreflightOpen] = useState(false);
+  const [preflightMounted, setPreflightMounted] = useState(false);
+  const [preflightDetailsExpanded, setPreflightDetailsExpanded] = useState(true);
+  const [preflightDetailHost, setPreflightDetailHost] = useState<HTMLDivElement | null>(null);
+  const setPreflightOpen = useCallback((open: boolean) => { if (open) { setPreflightMounted(true); setMode("explore"); } restorePreflightOpen(open); }, []);
+  const [ddlPreviewOpen, setDdlActive] = useState(false);
+  const [ddlMounted, setDdlMounted] = useState(false);
+  const ddlTrigger = useRef<HTMLElement | null>(null);
+  const setDdlPreviewOpen = (open: boolean) => {
+    if (open) { ddlTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setDdlMounted(true); }
+    setDdlActive(open);
+    if (!open) requestAnimationFrame(() => { if (ddlTrigger.current?.isConnected) ddlTrigger.current.focus(); });
+  };
+  const ddlHost = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ddlMounted) return;
+    const topbar = document.querySelector<HTMLElement>(".app-shell > .topbar");
+    if (!topbar || typeof ResizeObserver === "undefined") return;
+    const update = () => ddlHost.current?.style.setProperty("--ddl-workspace-top", `${topbar.offsetTop + topbar.offsetHeight}px`);
+    const observer = new ResizeObserver(update); observer.observe(topbar); update();
+    return () => observer.disconnect();
+  }, [ddlMounted]);
   const [changesView, setChangesView] = useState<"list" | "diagram">("list");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -220,7 +240,7 @@ export function App() {
       searchInputRef.current?.focus();
       searchInputRef.current?.select();
     });
-  }, []);
+  }, [setPreflightOpen]);
 
   const locateTable = useCallback((table: TableDefinition) => {
     if (!snapshot) return;
@@ -234,7 +254,7 @@ export function App() {
     setSelectedTable(table);
     setLocateRequest({ sourceId: snapshot.sourceId, snapshotId: snapshot.id,
       nodeId: `${table.key.schema}.${table.key.name}`, revision: ++locateRevision.current });
-  }, [snapshot]);
+  }, [snapshot, setPreflightOpen]);
   const locateSearchResult = useCallback((result: SchemaSearchResult) => locateTable(result.table), [locateTable]);
 
   const publishNotice = useCallback((notice: AppNotice) => {
@@ -841,7 +861,7 @@ export function App() {
     setLocateRequest(undefined);
     setOpenQueryRequest({ id: Date.now(), sql: tablePreviewSql(table, 100, snapshot?.database.databaseType) });
     setMode("query");
-  }, [querySupported, snapshot?.database.databaseType]);
+  }, [querySupported, snapshot?.database.databaseType, setPreflightOpen]);
 
   const documentObject = objectDocument && objectDocument.snapshot === snapshot ? findDocumentObject(snapshot, objectDocument.key) : undefined;
   const documentVisible = Boolean(documentObject && mode === "explore" && !preflightOpen);
@@ -964,9 +984,9 @@ export function App() {
         </div>
         <HeaderSidebarToggle
           side="right"
-          expanded={rightPanel.expanded}
+          expanded={preflightOpen ? preflightDetailsExpanded : rightPanel.expanded}
           onToggle={() =>
-            setRightPanel((current) => ({ ...current, expanded: !current.expanded }))
+            preflightOpen ? setPreflightDetailsExpanded(value => !value) : setRightPanel((current) => ({ ...current, expanded: !current.expanded }))
           }
         />
       </header>
@@ -979,7 +999,7 @@ export function App() {
         style={
           {
             "--left-sidebar-width": `${leftPanel.expanded ? leftPanel.width : 0}px`,
-            "--right-sidebar-width": `${rightPanel.expanded ? rightPanel.width : 0}px`,
+            "--right-sidebar-width": `${(preflightOpen ? preflightDetailsExpanded : rightPanel.expanded) ? rightPanel.width : 0}px`,
           } as CSSProperties
         }
       >
@@ -1037,7 +1057,7 @@ export function App() {
           }
         />
 
-        <section className={`canvas-placeholder${snapshot && mode === "explore" && !preflightOpen ? " database-workspace" : ""}${mode === "changes" && changeSet ? " changes-workspace" : ""}`}>
+        <section className={`canvas-placeholder${snapshot && mode === "explore" ? " database-workspace" : ""}${mode === "changes" && changeSet ? " changes-workspace" : ""}`}>
           {historyPreview && snapshot ? <div className="workspace-history-banner" role="status"><span>{t("navigation.historicalWorkspaceLayoutChangesAreTemporary")}</span><button type="button" onClick={() => { void returnToLatestModel().catch((reason: unknown) => publishNotice({ id: "return-latest-failed", title: t("navigation.unableToOpenLatestModel"), message: noticeReason(reason), createdAt: new Date().toISOString() })); }}>{t("navigation.returnToLatestModel")}</button></div> : null}
           {!preflightOpen && mode === "changes" && changeSet ? (
             <div className="changes-view-toolbar">
@@ -1052,11 +1072,12 @@ export function App() {
               </span>
             </div>
           ) : null}
-          {preflightOpen && snapshot ? <SchemaPreflightPanel key={JSON.stringify([snapshot.sourceId, snapshot.id, snapshot.fingerprint])} snapshot={snapshot}
+          {preflightMounted && snapshot ? <SchemaPreflightPanel key={JSON.stringify([snapshot.sourceId, snapshot.id, snapshot.fingerprint])} snapshot={snapshot} active={preflightOpen} detailHost={preflightDetailHost}
             onClose={() => setPreflightOpen(false)} onLocate={(key) => {
               const table = snapshot.schemas.flatMap((schema) => schema.tables).find((item) => item.key.schema === key.schema && item.key.name === key.name);
               if (table) locateSearchResult({ schema: key.schema, table, matchingColumns: [] });
-            }} /> : mode === "query" ? (
+            }} /> : null}
+          {mode === "query" ? (
             <Suspense fallback={<div className="workspace-loading" role="status">{t("navigation.loadingWorkspace")}</div>}><QueryPage
               platform={platform}
               snapshot={snapshot}
@@ -1086,7 +1107,7 @@ export function App() {
               runtimeKind={runtime.data?.kind}
             />
           ) : snapshot ? (
-            <div className="object-canvas-host" style={documentVisible ? { visibility: "hidden" } : undefined} inert={documentVisible}>
+            <div className="object-canvas-host" style={documentVisible || preflightOpen ? { visibility: "hidden" } : undefined} inert={documentVisible || preflightOpen}>
             <WorkspaceCanvas
               onOpenHistory={mode === "explore" ? () => {
                 setRightPanel((panel) => ({ ...panel, expanded: true }));
@@ -1094,7 +1115,7 @@ export function App() {
               } : undefined}
               latestSnapshotId={discoveryLatest.data?.[0]?.id}
               refreshState={refreshState}
-              interactionPaused={documentVisible || (discoverySnapshot === snapshot && mode === "explore" && !preflightOpen)}
+              interactionPaused={preflightOpen || ddlPreviewOpen || documentVisible || (discoverySnapshot === snapshot && mode === "explore" && !preflightOpen)}
               platform={platform}
               runtimeKind={runtime.data?.kind}
               snapshot={snapshot}
@@ -1145,6 +1166,7 @@ export function App() {
               </div>
             </>
           )}
+          {preflightMounted && !preflightOpen && snapshot && mode === "explore" ? <div className="preflight-resume ds-surface"><button onClick={() => setPreflightOpen(true)}>{t("preflight.resume")}</button></div> : null}
           {documentVisible && snapshot && documentObject ? <ObjectDocument key={JSON.stringify([snapshot.id, documentObject.key])} snapshot={snapshot} object={documentObject} onClose={() => setObjectDocument(undefined)} onSelect={openObjectDocument} onSelectTable={locateTable} /> : null}
           {snapshot && discoverySnapshot === snapshot && mode === "explore" && !preflightOpen && runtime.data?.kind === "desktop" ? <BusinessExplorer
             snapshot={snapshot} semantics={semantics} settings={settings} platform={platform} desktop
@@ -1160,22 +1182,23 @@ export function App() {
 
         <SidebarRail
           side="right"
-          expanded={rightPanel.expanded}
+          expanded={(preflightOpen ? preflightDetailsExpanded : rightPanel.expanded)}
           width={rightPanel.width}
           minWidth={RIGHT_PANEL_LIMITS.min}
           maxWidth={RIGHT_PANEL_LIMITS.max}
           onResize={(width) => setRightPanel((current) => ({ ...current, width }))}
           onToggle={() =>
-            setRightPanel((current) => ({ ...current, expanded: !current.expanded }))
+            preflightOpen ? setPreflightDetailsExpanded(value => !value) : setRightPanel((current) => ({ ...current, expanded: !current.expanded }))
           }
         />
 
-        <aside className="inspector" hidden={!rightPanel.expanded}>
+        <aside className="inspector" hidden={!(preflightOpen ? preflightDetailsExpanded : rightPanel.expanded)}>
           {/* changeSet is not gated on the view mode here: the canvas overlay is
               a rendering mode, while the History segment owns time whatever the
               main area happens to be showing. */}
           {documentVisible && documentObject ? <ObjectDocumentProperties object={documentObject} /> : null}
-          <div hidden={documentVisible}>
+          <div ref={setPreflightDetailHost} hidden={!preflightOpen} />
+          <div hidden={documentVisible || preflightOpen}>
           <InspectorPanel
             onOpenObject={openObjectDocument}
             explainRequest={explainRequest}
@@ -1255,7 +1278,7 @@ export function App() {
       ) : null}
       {commandPaletteOpen ? <CommandPalette commands={commands} onClose={() => setCommandPaletteOpen(false)} /> : null}
     </main>
-    {ddlPreviewOpen ? <div className="page-loading-overlay"><Suspense fallback={<div role="status">{t("navigation.loadingWorkspace")}</div>}><DdlImportPanel canvasSettings={settings.app.canvas} runtimeKind={runtime.data?.kind} onClose={() => setDdlPreviewOpen(false)} /></Suspense></div> : null}
+    {ddlMounted ? <div ref={ddlHost} className="ddl-session-host" hidden={!ddlPreviewOpen}><Suspense fallback={<div role="status">{t("navigation.loadingWorkspace")}</div>}><DdlImportPanel active={ddlPreviewOpen} canvasSettings={settings.app.canvas} runtimeKind={runtime.data?.kind} onReturn={() => setDdlPreviewOpen(false)} onClose={() => { setDdlPreviewOpen(false); setDdlMounted(false); }} /></Suspense></div> : null}
     </I18nProvider>
   );
 }

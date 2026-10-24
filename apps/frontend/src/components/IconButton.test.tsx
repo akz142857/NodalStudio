@@ -34,13 +34,13 @@ describe("IconButton", () => {
 
   it("explains unavailable actions without triggering them and preserves running state", () => {
     const onClick = vi.fn();
-    const { rerender } = render(<IconButton icon="report" label="Export HTML report" description="Wait for semantics" disabled onClick={onClick} />);
-    const button = screen.getByRole("button", { name: "Export HTML report" });
+    const { rerender } = render(<IconButton icon="report" label="Export structure document" description="Wait for semantics" disabled onClick={onClick} />);
+    const button = screen.getByRole("button", { name: "Export structure document" });
     hover(button);
     expect(screen.getByRole("tooltip")).toHaveTextContent("Wait for semantics");
     fireEvent.click(button);
     expect(onClick).not.toHaveBeenCalled();
-    rerender(<IconButton icon="report" label="Export HTML report" onClick={onClick} />);
+    rerender(<IconButton icon="report" label="Export structure document" onClick={onClick} />);
     fireEvent.click(button);
     expect(onClick).toHaveBeenCalledOnce();
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();

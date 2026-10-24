@@ -35,12 +35,12 @@ describe("App schema changes", () => {
     const save = vi.spyOn(platform, "saveSchemaReport").mockResolvedValue({ path: "/Downloads/report.html" });
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);
     await screen.findByText("Desktop runtime");
-    expect(screen.queryByRole("button", { name: "Export HTML report" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export structure document" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Capture fixture" }));
-    expect(screen.getByRole("button", { name: "Export HTML report" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Export structure document" })).toBeDisabled();
     await act(() => Promise.resolve(finish(semantics)));
     fireEvent.change(screen.getByPlaceholderText("Table, field, schema…"), { target: { value: "non-matching-filter" } });
-    fireEvent.click(screen.getByRole("button", { name: "Export HTML report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export structure document" }));
     await waitFor(() => expect(save).toHaveBeenCalledOnce());
     const input = save.mock.calls[0][0];
     expect(input.html).toContain("public.orders");

@@ -26,7 +26,7 @@ describe("App snapshot operation feedback", () => {
   it("presents header functions as named icons with contextual help and working actions", async () => {
     await mount();
     const tools = within(screen.getByRole("group", { name: "Application tools" }));
-    for (const name of ["Import DDL", "Structure preflight", "Export HTML report", "Export offline Viewer", "Refresh schema", "Open Settings", "Open command palette", "Open notifications"]) {
+    for (const name of ["Import DDL", "Structure preflight", "Export structure document", "Export interactive viewer", "Refresh schema", "Open Settings", "Open command palette", "Open notifications"]) {
       const button = tools.getByRole("button", { name });
       expect(button.textContent).toBe("");
     }

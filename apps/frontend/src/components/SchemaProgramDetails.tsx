@@ -21,7 +21,7 @@ export function ObjectDependencies({ snapshot, objectKey, onSelect, onSelectTabl
     <p className="muted-copy">{t("objects.coverage")}</p>
     {([false, true] as const).map(incoming => {
       const keys = edges.filter(e => same(incoming ? e.target : e.source, objectKey)).map(e => incoming ? e.source : e.target);
-      return <div key={String(incoming)}><h3>{t(incoming ? "objects.dependents" : "objects.dependencies")}</h3>{keys.length ? <ul className="inspector-list">{keys.map(link)}</ul> : <p>{t("objects.none")}</p>}</div>;
+      return <div className="object-dependency-group" key={String(incoming)}><h3>{t(incoming ? "objects.dependents" : "objects.dependencies")}</h3>{keys.length ? <ul className="inspector-list">{keys.map(link)}</ul> : <p>{t("objects.none")}</p>}</div>;
     })}
   </section>;
 }

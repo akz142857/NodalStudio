@@ -12,6 +12,7 @@ interface TableStructureProps {
   table: TableDefinition;
   snapshot?: DatabaseSnapshot;
   onOpenQuery?: (table: TableDefinition) => void;
+  onShowColumnSource?: (name: string) => void;
   focusedEvidence?: TableAiEvidence;
 }
 
@@ -28,7 +29,7 @@ interface TableKnowledgeFormProps {
  * Split from the knowledge form because the inspector shows one or the other —
  * structure is read-only and comes from the snapshot, the form is authored.
  */
-export function TableStructure({ table, snapshot, onOpenQuery, focusedEvidence, onOpenObject }: TableStructureProps) {
+export function TableStructure({ table, snapshot, onOpenQuery, focusedEvidence, onOpenObject, onShowColumnSource }: TableStructureProps) {
   const { t: bt } = useI18n();
   const structure = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -78,6 +79,11 @@ export function TableStructure({ table, snapshot, onOpenQuery, focusedEvidence, 
                 {column.nullable ? "" : bt("business.notNullDetail")}
               </small>
               {column.comment ? <p>{column.comment}</p> : null}
+              {onShowColumnSource ? <>
+                {column.identity ? <small>{bt("businessMeta.identity")}: {column.identity}</small> : null}
+                {column.defaultValue !== null ? <small>{bt("businessMeta.default")}: {column.defaultValue}</small> : null}
+                <button type="button" onClick={() => onShowColumnSource(column.name)}>{bt("business.showColumnSource")} · {column.name}</button>
+              </> : null}
             </div>
           ))}
         </div>
@@ -94,6 +100,7 @@ export function TableStructure({ table, snapshot, onOpenQuery, focusedEvidence, 
                   {key.columns.join(", ")} → {key.referencedSchema}.{key.referencedTable}(
                   {key.referencedColumns.join(", ")})
                 </span>
+                {onShowColumnSource ? <span>{bt("business.onDelete")}: {key.onDelete} · {bt("business.onUpdate")}: {key.onUpdate}</span> : null}
               </li>
             ))}
           </ul>

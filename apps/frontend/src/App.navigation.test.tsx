@@ -113,6 +113,19 @@ describe("App sidebar object navigation", () => {
     pickOrders();
     expect(requested().revision).toBe(2);
   });
+  it("retains the same canvas and preflight filter across round trips", async () => {
+    await mount(); fireEvent.click(screen.getByRole("button", { name: "Load navigation fixture" }));
+    const canvas = screen.getByRole("region", {name: "Navigation canvas"});
+    fireEvent.click(screen.getByRole("button", {name: "Structure preflight"}));
+    const search = await screen.findByRole("searchbox", {name: "Search findings"});
+    fireEvent.change(search,{target:{value:"orders"}});
+    expect(canvas).toBeInTheDocument(); expect(canvas).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button",{name:"Back to diagram"}));
+    expect(screen.getByRole("region",{name:"Navigation canvas"})).toBe(canvas);
+    fireEvent.click(screen.getByRole("button",{name:"Return to preflight"}));
+    expect(screen.getByRole("searchbox",{name:"Search findings"})).toBe(search);
+    expect(search).toHaveValue("orders");
+  });
   it("switches from change list and preflight back to Diagram without losing the navigation request", async () => {
     await mount(); fireEvent.click(screen.getByRole("button", { name: "Load changed fixture" }));
     expect(screen.queryByRole("region", { name: "Navigation canvas" })).not.toBeInTheDocument();

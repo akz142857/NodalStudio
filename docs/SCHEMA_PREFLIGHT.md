@@ -37,3 +37,23 @@
 重新检查只重新计算当前快照；不刷新数据库，不读取行数据，不运行查询、DDL 或修复 SQL。首版在下一帧开始同步计算，并展示耗时；不宣称后台线程处理。测试覆盖 500 表/5,000 字段及结果分批显示，但不是任意规模性能保证。
 
 新增 50 项规则、理由存储、组件和 App 集成测试，覆盖复合 FK、跨 schema/含点名称、类型差异与信息缺失、空模型、命名选项、来源/指纹隔离、依据变化、保存失败重试、筛选分页及 Web 无数据库刷新/语义写入。实际浏览器验证使用合成元数据，不依赖真实数据库。生产构建、类型检查和 ESLint 与完整前端测试一并验证。
+
+## Central workspace (2026-10-24)
+
+- Structure preflight opens as a central workspace with separate **Check findings** and **Rule coverage** segments. The sidebar remains the database navigator. Selecting a compact finding row opens evidence, recommendations and local review actions in the right inspector, replacing unrelated table details.
+- The naming-hint checkbox is shown directly; the check-options disclosure and snapshot-details entry were removed after UI review. Coverage rows expand individually. Findings distinguish an empty report, unmatched filters and an entirely ignored report; zero findings do not certify database validity.
+- The diagram remains mounted and interaction-paused while preflight is visible. Back to diagram / Return to preflight retain the report, filters, selected finding, scroll containers and in-progress review draft for the same snapshot. Changing snapshot identity resets the report UI; stored reviews retain the existing source/fingerprint/evidence isolation.
+- Rules still analyze only captured metadata. Re-running does not refresh the database or execute SQL. English rule output remains the stable review evidence; presentation translates rule names, explanations, findings, recommendations and evidence labels into the selected UI language without changing database identifiers.
+- Controls use the shared surface, Button and Segmented primitives. The right inspector can be collapsed independently of its diagram preference.
+
+### Native desktop acceptance
+
+Validated in `/tmp/Nodal Locale Acceptance.app`, a real Tauri/WKWebView acceptance wrapper loading the current local frontend. Its backend reports `0.2.2-beta.1`; this validation is not an installer/release acceptance.
+
+- PostgreSQL acceptance source: zero findings; Chinese rule coverage and expanded PostgreSQL explanation; back to diagram and return retained the active coverage segment and expanded rule.
+- MySQL acceptance source: real `orders_customer_fk` binary-type information gap; Chinese evidence and recommendation; filtering `orders`, drafting an ignore reason, locating the table and returning retained both filter and draft.
+- Ignored and restored the test finding, verifying local review feedback and counts. The synthetic review was restored before finishing.
+- Switched to English/dark and back to Chinese/light at 110% scale. Checked findings, evidence, controls and inspector collapse/reopen. Fixed a shared-button centering conflict and a saved success message that previously retained its old language.
+- Evidence under `target/preflight-workspace-acceptance/`: `coverage-zh.png`, `findings-zh.png`, `findings-en-dark.png` (local, ignored build artifacts).
+
+Validation: production build (including TypeScript), ESLint, and the full frontend suite passed: 139 files / 894 tests. Vite retains its existing large-chunk advisory. Regression coverage includes canvas DOM identity across preflight round trips, retained filters/draft, review persistence/failure retry, source isolation, localized evidence, and metadata-only behavior.
