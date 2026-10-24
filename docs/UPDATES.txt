@@ -232,3 +232,17 @@ Production signing preparation (2026-10-22, v0.1.1)
 - Artifact signing/notarization, GitHub publication and the upgrade round trip
   completed successfully. See docs/releases/v0.1.1-validation.md for exact scope
   and retained evidence. The release source remains commit 85d0c70.
+
+Cross-platform release completion gate (all subsequent stable releases)
+- A stable release is not complete with macOS artifacts alone. Prepare both macOS
+  and Windows before publication unless the user explicitly approves a platform delay.
+- Check the Windows package run conclusion, clean source provenance and lifecycle
+  receipt; a queued or failed workflow is not an installer or installation acceptance.
+- Run Windows release acceptance with the target version, successful build run,
+  full source commit and the previous published Windows version. Require clean
+  installation and manual upgrade receipts for the exact installer checksum.
+- Include the Windows x64 installer and checksum in the same versioned release.
+  State unsigned distribution and manual-update limitations in English notes;
+  keep GitHub release notes and application update notes identical.
+- After upload, anonymously download both platform installers and update metadata,
+  verify checksums/signatures as applicable, and record platform-specific evidence.

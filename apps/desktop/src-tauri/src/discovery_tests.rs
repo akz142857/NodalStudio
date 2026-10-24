@@ -345,7 +345,7 @@ async fn changed_comments_scope_model_snapshot_and_expiry_require_a_new_preview(
             .contains("changed")
     );
     let mut prepared = task(prepare(&app, input.clone()).await.unwrap());
-    prepared.created = Instant::now().checked_sub(PREVIEW_LIFETIME).unwrap();
+    prepared.created = crate::tests::expired_instant(PREVIEW_LIFETIME).await;
     assert!(
         validate_current(&app, &prepared)
             .await

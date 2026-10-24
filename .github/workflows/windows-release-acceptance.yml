@@ -1,7 +1,24 @@
-name: Windows v0.2.3 release acceptance
+name: Windows release acceptance
 
 on:
   workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Windows package workflow run ID
+        required: true
+        type: string
+      source_commit:
+        description: Full source commit recorded in the package manifest
+        required: true
+        type: string
+      version:
+        description: Target release version (without v)
+        required: true
+        type: string
+      baseline_version:
+        description: Published Windows version to upgrade from (without v)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -11,37 +28,52 @@ jobs:
   upgrade:
     runs-on: windows-2022
     timeout-minutes: 20
+    env:
+      BUILD_RUN: ${{ inputs.build_run }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      BASELINE_VERSION: ${{ inputs.baseline_version }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate release inputs
+        run: |
+          if ($env:BUILD_RUN -notmatch '^\d+$' -or $env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$') { throw 'Invalid build provenance inputs.' }
+          foreach ($version in @($env:RELEASE_VERSION, $env:BASELINE_VERSION)) {
+            if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Expected a stable version.' }
+          }
+          $current = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($current -ne $env:RELEASE_VERSION) { throw 'Checkout version must match target release.' }
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Download exact release-source installer and original evidence
+      - name: Download source-verified installer and clean-install evidence
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 40092100247 --repo akz142857/NodalStudio --name Nodal-Studio-windows-x64-unsigned-809c50400cf2ec64af1e6a9ce5cc791a90deb51a --dir dist/releases
+          $run = gh run view $env:BUILD_RUN --repo $env:GITHUB_REPOSITORY --json conclusion,headSha | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.conclusion -ne 'success' -or $run.headSha -ne $env:SOURCE_COMMIT) { throw 'Build run must pass at the expected commit.' }
+          gh run download $env:BUILD_RUN --repo $env:GITHUB_REPOSITORY --name "Nodal-Studio-windows-x64-unsigned-$env:SOURCE_COMMIT" --dir dist/releases
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $manifest = Get-Content dist/releases/windows-0.2.3-test/manifest.json -Raw | ConvertFrom-Json
-          if ($manifest.sourceCommit -ne '809c50400cf2ec64af1e6a9ce5cc791a90deb51a' -or $manifest.sourceDirty -or $manifest.version -ne '0.2.3') { throw 'Unexpected release provenance.' }
-          $receipt = Get-Content dist/releases/windows-0.2.3-test/evidence/lifecycle.json -Raw | ConvertFrom-Json
+          $manifest = Get-Content "dist/releases/windows-$env:RELEASE_VERSION-test/manifest.json" -Raw | ConvertFrom-Json
+          if ($manifest.sourceCommit -ne $env:SOURCE_COMMIT -or $manifest.sourceDirty -or $manifest.version -ne $env:RELEASE_VERSION) { throw 'Unexpected release provenance.' }
+          $receipt = Get-Content "dist/releases/windows-$env:RELEASE_VERSION-test/evidence/lifecycle.json" -Raw | ConvertFrom-Json
           if ($receipt.status -ne 'passed' -or $receipt.installerSha256 -ne $manifest.sha256) { throw 'Missing clean-install acceptance.' }
-      - name: Download published Windows v0.1.0 upgrade baseline
+      - name: Download published Windows upgrade baseline
         run: |
           New-Item baseline -ItemType Directory | Out-Null
-          $name = 'Nodal-Studio_0.1.0_windows-x64-unsigned-setup.exe'
-          $base = 'https://github.com/akz142857/NodalStudio/releases/download/v0.1.0'
+          $name = "Nodal-Studio_${env:BASELINE_VERSION}_windows-x64-unsigned-setup.exe"
+          $base = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/v$env:BASELINE_VERSION"
           Invoke-WebRequest "$base/$name" -OutFile "baseline/$name"
           Invoke-WebRequest "$base/$name.sha256" -OutFile baseline/checksum.txt
           $expected = (Get-Content baseline/checksum.txt -Raw).Trim().Split(' ')[0]
           if ((Get-FileHash "baseline/$name" -Algorithm SHA256).Hash -ne $expected) { throw 'Baseline checksum mismatch.' }
           if ((Get-AuthenticodeSignature "baseline/$name").Status -ne 'NotSigned') { throw 'Unexpected baseline signature.' }
-      - name: Install v0.1.0, persist data, upgrade to v0.2.3 and uninstall
-        run: ./Scripts/test_windows_package.ps1 -BaselineInstaller "$pwd/baseline/Nodal-Studio_0.1.0_windows-x64-unsigned-setup.exe" -BaselineVersion '0.1.0'
+      - name: Install baseline, persist data, upgrade and uninstall
+        run: ./Scripts/test_windows_package.ps1 -BaselineInstaller "$pwd/baseline/Nodal-Studio_${env:BASELINE_VERSION}_windows-x64-unsigned-setup.exe" -BaselineVersion $env:BASELINE_VERSION
       - name: Upload installer and acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Nodal-Studio-0.2.3-windows-upgrade-acceptance
-          path: dist/releases/windows-0.2.3-test/
+          name: Nodal-Studio-${{ inputs.version }}-windows-upgrade-acceptance
+          path: dist/releases/windows-${{ inputs.version }}-test/
           retention-days: 30

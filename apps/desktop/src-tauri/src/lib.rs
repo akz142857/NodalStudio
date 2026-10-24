@@ -5077,6 +5077,18 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    /// Some monotonic clocks cannot represent an instant before their origin.
+    /// Keep expiry tests real on those platforms instead of panicking or skipping.
+    pub(crate) async fn expired_instant(age: Duration) -> std::time::Instant {
+        let now = std::time::Instant::now();
+        if let Some(past) = now.checked_sub(age) {
+            past
+        } else {
+            tokio::time::sleep(age).await;
+            now
+        }
+    }
+
     #[tokio::test]
     async fn layout_snapshot_guard_rejects_history_and_other_sources() {
         let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();

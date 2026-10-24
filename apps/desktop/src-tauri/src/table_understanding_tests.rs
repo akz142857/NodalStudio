@@ -187,7 +187,7 @@ async fn knowledge_draft_uses_one_current_claim_and_cancel_prevents_late_answer_
     assert!(tasks.draft_source(&app, id, Some(0)).await.is_err());
 
     let mut expired = task(prepare(&app, input).await.unwrap());
-    expired.created = Instant::now().checked_sub(PREVIEW_LIFETIME).unwrap();
+    expired.created = crate::tests::expired_instant(PREVIEW_LIFETIME).await;
     let result = completed_result(&expired);
     let id = result.request_id;
     tasks
@@ -342,7 +342,7 @@ async fn effective_changes_expiry_and_new_snapshots_invalidate_previews() {
             .contains("changed")
     );
     prepared_task = task(prepare(&app, input.clone()).await.unwrap());
-    prepared_task.created = Instant::now().checked_sub(PREVIEW_LIFETIME).unwrap();
+    prepared_task.created = crate::tests::expired_instant(PREVIEW_LIFETIME).await;
     assert!(
         validate_current(&app, &prepared_task)
             .await
