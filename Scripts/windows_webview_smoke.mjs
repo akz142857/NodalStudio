@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const [port, phase, output] = process.argv.slice(2);
+const [port, phase, output, expectedVersion] = process.argv.slice(2);
 assert(['seed', 'verify'].includes(phase));
 await mkdir(output, { recursive: true });
 let target;
@@ -59,6 +59,7 @@ try {
   assert(text.length > 100 && /Nodal Studio/.test(text), 'Application UI did not render');
   const runtime = await invoke('get_runtime_info');
   assert.equal(runtime.kind, 'desktop');
+  if (expectedVersion) assert.equal(runtime.version, expectedVersion, 'Installed application version mismatch');
   const diagnostics = await invoke('get_diagnostic_info');
   assert.equal(diagnostics.target, 'windows');
   const settings = await invoke('get_settings', { input: { sourceId: null } });

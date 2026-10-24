@@ -1,0 +1,47 @@
+name: Windows v0.2.3 release acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  upgrade:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Download exact release-source installer and original evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 40092100247 --repo akz142857/NodalStudio --name Nodal-Studio-windows-x64-unsigned-809c50400cf2ec64af1e6a9ce5cc791a90deb51a --dir dist/releases/windows-0.2.3-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $manifest = Get-Content dist/releases/windows-0.2.3-test/manifest.json -Raw | ConvertFrom-Json
+          if ($manifest.sourceCommit -ne '809c50400cf2ec64af1e6a9ce5cc791a90deb51a' -or $manifest.sourceDirty -or $manifest.version -ne '0.2.3') { throw 'Unexpected release provenance.' }
+          $receipt = Get-Content dist/releases/windows-0.2.3-test/evidence/lifecycle.json -Raw | ConvertFrom-Json
+          if ($receipt.status -ne 'passed' -or $receipt.installerSha256 -ne $manifest.sha256) { throw 'Missing clean-install acceptance.' }
+      - name: Download published Windows v0.1.0 upgrade baseline
+        run: |
+          New-Item baseline -ItemType Directory | Out-Null
+          $name = 'Nodal-Studio_0.1.0_windows-x64-unsigned-setup.exe'
+          $base = 'https://github.com/akz142857/NodalStudio/releases/download/v0.1.0'
+          Invoke-WebRequest "$base/$name" -OutFile "baseline/$name"
+          Invoke-WebRequest "$base/$name.sha256" -OutFile baseline/checksum.txt
+          $expected = (Get-Content baseline/checksum.txt -Raw).Trim().Split(' ')[0]
+          if ((Get-FileHash "baseline/$name" -Algorithm SHA256).Hash -ne $expected) { throw 'Baseline checksum mismatch.' }
+          if ((Get-AuthenticodeSignature "baseline/$name").Status -ne 'NotSigned') { throw 'Unexpected baseline signature.' }
+      - name: Install v0.1.0, persist data, upgrade to v0.2.3 and uninstall
+        run: ./Scripts/test_windows_package.ps1 -BaselineInstaller "$pwd/baseline/Nodal-Studio_0.1.0_windows-x64-unsigned-setup.exe" -BaselineVersion '0.1.0'
+      - name: Upload installer and acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nodal-Studio-0.2.3-windows-upgrade-acceptance
+          path: dist/releases/windows-0.2.3-test/
+          retention-days: 30

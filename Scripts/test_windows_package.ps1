@@ -1,6 +1,6 @@
 #requires -Version 7.0
 [CmdletBinding()]
-param([string]$PackageDirectory = '')
+param([string]$PackageDirectory = '', [string]$BaselineInstaller = '', [string]$BaselineVersion = '')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (-not $IsWindows) { throw 'This acceptance check requires Windows.' }
@@ -19,28 +19,42 @@ foreach ($directory in @($dataDirectory, $localDirectory)) {
     if (Test-Path -LiteralPath $directory) { throw "Refusing to touch existing app data: $directory" }
 }
 $installDirectory = Join-Path $env:LOCALAPPDATA "Nodal Studio 测试 $([guid]::NewGuid().ToString('N'))"
-$evidence = Join-Path $PackageDirectory evidence
+$evidence = Join-Path $PackageDirectory $(if ($BaselineInstaller) { 'upgrade-evidence' } else { 'evidence' })
 New-Item $evidence -ItemType Directory -Force | Out-Null
 $previousArguments = $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
 $previousUserData = $env:WEBVIEW2_USER_DATA_FOLDER
 $application = $null
 try {
-    $installed = Start-Process -FilePath $installer -ArgumentList "/S /D=$installDirectory" -PassThru -Wait
+    $firstInstaller = if ($BaselineInstaller) { $BaselineInstaller } else { $installer }
+    if ($BaselineInstaller -and -not $BaselineVersion) { throw 'BaselineVersion is required for upgrade acceptance.' }
+    $installed = Start-Process -FilePath $firstInstaller -ArgumentList "/S /D=$installDirectory" -PassThru -Wait
     if ($installed.ExitCode -ne 0) { throw "Installer failed: $($installed.ExitCode)" }
     $binary = Join-Path $installDirectory 'nodalstudio-desktop.exe'
     if (-not (Test-Path $binary)) { throw 'Installed application not found.' }
+    $binaryReceipt = $null
+    if (-not $BaselineInstaller) {
     $binaryReceipt = & node "$PSScriptRoot/windows_bundle_hash.mjs" $binary $manifest.applicationSha256 | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { throw 'Installed binary differs from the expected NSIS payload.' }
     if ((Get-AuthenticodeSignature $binary).Status -ne 'NotSigned') { throw 'Unexpected signature status.' }
+    }
     $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $installDirectory 'smoke-webview-data'
     foreach ($phase in @('seed', 'verify')) {
+        if ($BaselineInstaller -and $phase -eq 'verify') {
+            $upgraded = Start-Process -FilePath $installer -ArgumentList "/S /D=$installDirectory" -PassThru -Wait
+            if ($upgraded.ExitCode -ne 0) { throw "Upgrade installer failed: $($upgraded.ExitCode)" }
+            $binaryReceipt = & node "$PSScriptRoot/windows_bundle_hash.mjs" $binary $manifest.applicationSha256 | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw 'Upgraded binary differs from the release payload.' }
+            if ((Get-AuthenticodeSignature $binary).Status -ne 'NotSigned') { throw 'Unexpected upgraded signature status.' }
+        }
+        $expectedVersion = if ($BaselineInstaller -and $phase -eq 'seed') { $BaselineVersion } else { $version }
+
         $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
         $listener.Start()
         $port = $listener.LocalEndpoint.Port
         $listener.Stop()
         $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$port --remote-debugging-address=127.0.0.1"
         $application = Start-Process -FilePath $binary -PassThru -RedirectStandardOutput (Join-Path $evidence "app-$phase.stdout.log") -RedirectStandardError (Join-Path $evidence "app-$phase.stderr.log")
-        & node "$PSScriptRoot/windows_webview_smoke.mjs" $port $phase $evidence
+        & node "$PSScriptRoot/windows_webview_smoke.mjs" $port $phase $evidence $expectedVersion
         if ($LASTEXITCODE -ne 0) { throw "Installed application acceptance failed: $phase" }
         if ($application.HasExited) { throw 'Application exited unexpectedly.' }
         if (-not $application.CloseMainWindow()) { throw 'Unable to close the application window.' }
@@ -54,11 +68,11 @@ try {
     for ($attempt = 0; $attempt -lt 30 -and (Test-Path $binary); $attempt++) { Start-Sleep -Seconds 1 }
     if (Test-Path $binary) { throw 'Application executable remains after uninstall.' }
     [ordered]@{
-        status = 'passed'; installerSha256 = $manifest.sha256
+        status = 'passed'; upgradeFrom = $BaselineVersion; upgradeTo = $version; installerSha256 = $manifest.sha256
         installedApplicationSha256 = $binaryReceipt.installedSha256
         applicationBuildSha256 = $binaryReceipt.buildSha256
         os = [Environment]::OSVersion.VersionString; architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
-        checks = @('silent current-user installation', 'Unicode and spaces in install path', 'installed binary hash', 'unsigned signature status', 'WebView2 and IPC', 'SQLite and credential persistence after restart', 'silent uninstall')
+        checks = @('silent current-user installation', 'Unicode and spaces in install path', 'installed binary hash', 'unsigned signature status', 'WebView2 and IPC', 'SQLite and credential persistence after restart', 'silent uninstall') + $(if ($BaselineInstaller) { @('manual installer upgrade from ' + $BaselineVersion + ' to ' + $version, 'settings, connection and credential retained across upgrade') } else { @() })
         notTested = @('physical Windows 10/11 desktop', 'SmartScreen UX', 'missing WebView2 installation', 'live PostgreSQL/MySQL connection', 'signed update')
     } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $evidence lifecycle.json) -Encoding utf8
 } finally {
