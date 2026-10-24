@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ActionIcon } from "./ActionIcon";
 import "./canvas-toolbar.css";
@@ -32,6 +33,7 @@ interface CanvasToolbarProps {
 
 /** A stable bottom dock. Collapsing is presentation-only and never clears selection. */
 export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, layoutDisabled, onViewAll, onAutoLayout, onManageRelationships, onReviewInferences, status, context, selectedCount = 0, createViewAction, selectionActions, navigationControls, minimapVisible, onToggleMinimap }: CanvasToolbarProps) {
+  const { t: bt, locale } = useI18n();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -90,33 +92,33 @@ export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, 
   }}>
     {status ? <div className="canvas-command-status" role="status">{status}</div> : null}
     {context ? <div className="canvas-command-context">{context}</div> : null}
-    <div className="canvas-command-popover" ref={panel} id={id} role="group" aria-label="Canvas tool panel" hidden={!expanded}>
-      <header><strong>Canvas tools</strong><button type="button" aria-label="Close canvas tool panel" title="Close panel; keep selection" onClick={close}><ActionIcon name="chevronUp" /></button></header>
+    <div className="canvas-command-popover" ref={panel} id={id} role="group" aria-label={bt("business.canvasToolPanel")} hidden={!expanded}>
+      <header><strong>{bt("business.canvasTools")}</strong><button type="button" aria-label={bt("business.closeCanvasToolPanel")} title={bt("business.closePanelKeepSelection")} onClick={close}><ActionIcon name="chevronUp" /></button></header>
       {selectionActions}
-      <div className="canvas-command-section-label">Entire diagram · {tableCount} tables{comparisonLabel ? ` · ${comparisonLabel}` : ""}</div>
-      <button type="button" className="canvas-command-row" disabled={disabled} aria-label="View all" title="Exit table focus and fit every table" onClick={() => { close(); onViewAll(); }}><ActionIcon name="fit" />View all</button>
-      <button type="button" className="canvas-command-row" disabled={disabled || layoutDisabled} aria-label="Auto layout" title="Arrange all movable tables; pinned tables stay in place" onClick={() => { close(); onAutoLayout(); }}><ActionIcon name="grid" />Layout all tables</button>
-      {onToggleMinimap ? <button type="button" className="canvas-command-row" aria-label="Show minimap" aria-pressed={minimapVisible} disabled={disabled} onClick={onToggleMinimap}><ActionIcon name="map" />Minimap<span className="canvas-command-toggle-state">{minimapVisible ? "On" : "Off"}</span></button> : null}
+      <div className="canvas-command-section-label">{bt("business.entireDiagram")} {tableCount} {bt("business.tablesDetail")}{comparisonLabel ? ` · ${comparisonLabel}` : ""}</div>
+      <button type="button" className="canvas-command-row" disabled={disabled} aria-label={bt("business.viewAll")} title={bt("business.exitTableFocusAndFitEveryTable")} onClick={() => { close(); onViewAll(); }}><ActionIcon name="fit" />{bt("business.viewAll")}</button>
+      <button type="button" className="canvas-command-row" disabled={disabled || layoutDisabled} aria-label={bt("business.autoLayout")} title={bt("business.arrangeAllMovableTablesPinnedTablesStayInPlace")} onClick={() => { close(); onAutoLayout(); }}><ActionIcon name="grid" />{bt("business.layoutAllTables")}</button>
+      {onToggleMinimap ? <button type="button" className="canvas-command-row" aria-label={bt("business.showMinimap")} aria-pressed={minimapVisible} disabled={disabled} onClick={onToggleMinimap}><ActionIcon name="map" />{bt("business.minimap")}<span className="canvas-command-toggle-state">{minimapVisible ? bt("business.on") : bt("business.off")}</span></button> : null}
       <div className="canvas-command-relationships" role="group" aria-labelledby={`${id}-relationships`}>
-        <h3 id={`${id}-relationships`} className="canvas-command-section-label">Relationships</h3>
+        <h3 id={`${id}-relationships`} className="canvas-command-section-label">{bt("business.relationships")}</h3>
         <div className="canvas-command-filters">{filters.map((filter) => <label key={filter.id} className="canvas-command-filter">
           <input type="checkbox" aria-label={filter.label} checked={filter.checked} disabled={disabled} onChange={filter.onChange} aria-describedby={`${id}-${filter.id}`} />
           <span><strong>{filter.label}</strong><small id={`${id}-${filter.id}`}>{filter.description}</small></span>
           {filter.count !== undefined ? <span className="canvas-command-badge">{filter.count}</span> : null}
         </label>)}</div>
-        {onReviewInferences ? <button type="button" className="canvas-command-manage" disabled={disabled} onClick={() => { close(); onReviewInferences(); }}><ActionIcon name="relationships" />Review candidates<ActionIcon name="chevronRight" /></button> : null}
-        {onManageRelationships ? <button type="button" className="canvas-command-manage" onClick={() => { close(); onManageRelationships(); }}><ActionIcon name="sliders" />Manage relationships<ActionIcon name="chevronRight" /></button> : null}
+        {onReviewInferences ? <button type="button" className="canvas-command-manage" disabled={disabled} onClick={() => { close(); onReviewInferences(); }}><ActionIcon name="relationships" />{bt("business.reviewCandidates")}<ActionIcon name="chevronRight" /></button> : null}
+        {onManageRelationships ? <button type="button" className="canvas-command-manage" onClick={() => { close(); onManageRelationships(); }}><ActionIcon name="sliders" />{bt("business.manageRelationships")}<ActionIcon name="chevronRight" /></button> : null}
       </div>
     </div>
-    <button ref={restore} type="button" className="canvas-command-restore" hidden={!collapsed} disabled={disabled} aria-label="Expand canvas toolbar" title="Expand toolbar; selection is preserved" onClick={() => { setCollapsed(false); requestAnimationFrame(() => trigger.current?.focus()); }}><ActionIcon name="sliders" />Tools{selectedCount > 0 ? <span className="canvas-command-badge">{selectedCount}</span> : null}</button>
-    <div className="canvas-command-bar" role="toolbar" aria-label="Canvas tools" hidden={collapsed}>
-      {selectedCount > 0 ? <span className="canvas-command-count">{selectedCount} table{selectedCount === 1 ? "" : "s"} selected</span> : null}
+    <button ref={restore} type="button" className="canvas-command-restore" hidden={!collapsed} disabled={disabled} aria-label={bt("business.expandCanvasToolbar")} title={bt("business.expandToolbarSelectionIsPreserved")} onClick={() => { setCollapsed(false); requestAnimationFrame(() => trigger.current?.focus()); }}><ActionIcon name="sliders" />{bt("business.tools")}{selectedCount > 0 ? <span className="canvas-command-badge">{selectedCount}</span> : null}</button>
+    <div className="canvas-command-bar" role="toolbar" aria-label={bt("business.canvasTools")} hidden={collapsed}>
+      {selectedCount > 0 ? <span className="canvas-command-count">{selectedCount} {bt("businessExtra.table")}{locale === "zh-CN" || selectedCount === 1 ? "" : "s"} {bt("businessExtra.selected")}</span> : null}
       {createViewAction}
-      <button ref={trigger} type="button" disabled={disabled} aria-label="Canvas tools" title="Show or hide canvas tools" aria-expanded={expanded} aria-controls={id} onKeyDown={(event) => {
+      <button ref={trigger} type="button" disabled={disabled} aria-label={bt("business.canvasTools")} title={bt("business.showOrHideCanvasTools")} aria-expanded={expanded} aria-controls={id} onKeyDown={(event) => {
         if (event.key === "ArrowUp") { event.preventDefault(); setOpen(true); requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus()); }
-      }} onClick={() => setOpen((value) => !value)}><ActionIcon name="sliders" />Tools</button>
+      }} onClick={() => setOpen((value) => !value)}><ActionIcon name="sliders" />{bt("business.tools")}</button>
       {navigationControls ? <div className="canvas-command-navigation">{navigationControls}</div> : null}
-      <button type="button" disabled={disabled} aria-label="Collapse canvas toolbar" title="Collapse toolbar; keep selection" onClick={() => { setOpen(false); setCollapsed(true); requestAnimationFrame(() => restore.current?.focus()); }}><ActionIcon name="chevronDown" /></button>
+      <button type="button" disabled={disabled} aria-label={bt("business.collapseCanvasToolbar")} title={bt("business.collapseToolbarKeepSelection")} onClick={() => { setOpen(false); setCollapsed(true); requestAnimationFrame(() => restore.current?.focus()); }}><ActionIcon name="chevronDown" /></button>
     </div>
   </div>;
 }

@@ -1,11 +1,12 @@
+import { useI18n, useEventTranslator, type Translate } from "../../i18n";
 import { autocompletion, type Completion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { linter, lintGutter } from "@codemirror/lint";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, highlightActiveLine, lineNumbers, keymap, placeholder } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { DatabaseSnapshot } from "../../platform";
 import { executableSql, quoteIdentifier } from "./query-format";
 import { currentSqlStatement, sqlLanguage, sqlSyntaxDiagnostics } from "./sql-validation";
@@ -27,13 +28,13 @@ interface SqlEditorProps {
   onStop: () => void;
 }
 
-function completions(snapshot?: DatabaseSnapshot): Completion[] {
+function completions(snapshot: DatabaseSnapshot | undefined, t: Translate): Completion[] {
   if (!snapshot) return [];
   const quote = (value: string) => quoteIdentifier(value, snapshot.database.databaseType);
   return snapshot.schemas.flatMap((schema) => [
-    { label: schema.name, apply: quote(schema.name), type: "namespace", detail: "schema" },
+    { label: schema.name, apply: quote(schema.name), type: "namespace", detail: t("business.schemas") },
     ...schema.tables.flatMap((table) => [
-      { label: `${schema.name}.${table.key.name}`, apply: `${quote(schema.name)}.${quote(table.key.name)}`, type: "class", detail: "table" },
+      { label: `${schema.name}.${table.key.name}`, apply: `${quote(schema.name)}.${quote(table.key.name)}`, type: "class", detail: t("business.table") },
       { label: table.key.name, apply: quote(table.key.name), type: "class", detail: schema.name },
       ...table.columns.map((column) => ({ label: column.name, apply: quote(column.name), type: "property", detail: `${table.key.name} · ${column.formattedType}` })),
     ]),
@@ -55,6 +56,9 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   { value, snapshot, onChange },
   ref,
 ) {
+  const { t: bt } = useI18n();
+  const eventBt = useEventTranslator(bt);
+  const language = useMemo(() => new Compartment(), []);
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const dialect = snapshot?.database.databaseType ?? "postgreSql";
@@ -85,7 +89,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
         sqlLanguage(dialect),
         syntaxHighlighting(sqlHighlightStyle),
         history(),
-        placeholder("Write a read-only SELECT query…"),
+        language.of([EditorState.phrases.of({ Completions: eventBt("queryEditor.completions") }), placeholder(eventBt("business.writeAReadOnlySELECTQuery")), EditorView.contentAttributes.of({ "aria-label": eventBt("business.sQLEditor") })]),
         linter((view) => sqlSyntaxDiagnostics(view.state), { delay: 250 }),
         lineNumbers(),
         highlightActiveLine(),
@@ -93,7 +97,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
         autocompletion({
           override: [(context) => ({
             from: context.matchBefore(/[\w."`]*/)?.from ?? context.pos,
-            options: completions(snapshot),
+            options: completions(snapshot, eventBt),
           })],
         }),
         keymap.of([
@@ -128,7 +132,11 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       view.destroy();
       viewRef.current = undefined;
     };
-  }, [snapshot, dialect]);
+  }, [snapshot, dialect, language, eventBt]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: language.reconfigure([EditorState.phrases.of({ Completions: bt("queryEditor.completions") }), placeholder(bt("business.writeAReadOnlySELECTQuery")), EditorView.contentAttributes.of({ "aria-label": bt("business.sQLEditor") })]) });
+  }, [bt, language]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -137,6 +145,6 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   }, [value]);
 
   return <div className="query-sql-editor-shell" onContextMenu={(event) => event.preventDefault()}>
-    <div className="query-sql-editor" ref={hostRef} aria-label="SQL editor" />
+    <div className="query-sql-editor" ref={hostRef} aria-label={bt("business.sQLEditor")} />
   </div>;
 });

@@ -1,3 +1,6 @@
+import { EmptyState } from "../../design-system/EmptyState";
+import { translateUiLabel } from "../../i18n/business-labels";
+import { useI18n } from "../../i18n";
 import type { QueryHistoryEntry } from "../../platform";
 
 interface QueryHistoryProps {
@@ -8,11 +11,12 @@ interface QueryHistoryProps {
 }
 
 export function QueryHistory({ entries, onRestore, onDelete, onClear }: QueryHistoryProps) {
+  const { t: bt , formatDate } = useI18n();
   return <section className="query-history">
-    <header><strong>Local query history</strong><button type="button" onClick={onClear} disabled={!entries.length}>Clear all</button></header>
+    <header><strong>{bt("business.localQueryHistory")}</strong><button type="button" onClick={onClear} disabled={!entries.length}>{bt("business.clearAll")}</button></header>
     {entries.length ? entries.map((entry) => <article key={entry.id}>
-      <button type="button" className="query-history-sql" onClick={() => onRestore(entry.sqlText)} title="Restore query">{entry.sqlText}</button>
-      <div><span data-status={entry.status}>{entry.status}</span><small>{new Date(entry.executedAt).toLocaleString()} · {entry.durationMs} ms · {entry.rowCount} rows</small><button type="button" aria-label="Delete query history entry" onClick={() => onDelete(entry.id)}>Delete</button></div>
-    </article>) : <div className="query-empty-state">History is stored only on this device.</div>}
+      <button type="button" className="query-history-sql" onClick={() => onRestore(entry.sqlText)} title={bt("business.restoreQuery")}>{entry.sqlText}</button>
+      <div><span data-status={entry.status}>{translateUiLabel(entry.status, bt)}</span><small>{formatDate(entry.executedAt)} · {entry.durationMs} {bt("business.ms")} {entry.rowCount} {bt("business.rows")}</small><button type="button" aria-label={bt("business.deleteQueryHistoryEntry")} onClick={() => onDelete(entry.id)}>{translateUiLabel("Delete", bt)}</button></div>
+    </article>) : <EmptyState compact className="query-empty-state" title={bt("business.historyIsStoredOnlyOnThisDevice")} />}
   </section>;
 }

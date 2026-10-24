@@ -1,3 +1,5 @@
+import { createTranslator, type Translate } from "../../i18n";
+import { translateUiLabel } from "../../i18n/business-labels";
 import { defineCatalog, type Spec } from "@json-render/core";
 import { schema } from "@json-render/react/schema";
 import { z } from "zod";
@@ -24,16 +26,16 @@ export const queryAnswerCatalog = defineCatalog(schema, {
 });
 
 /** Map validated domain output to our own catalog; never execute a model UI spec. */
-export function queryAnswerSpec(draft: SqlDraft, result?: QueryExecutionResult): Spec {
+export function queryAnswerSpec(draft: SqlDraft, result?: QueryExecutionResult, t: Translate = createTranslator("en")): Spec {
   const spec: Spec = { root: "answer", elements: { answer: { type: "Answer", props: {}, children: [] } } };
   const add = (id: string, type: string, props: Record<string, unknown>) => {
     spec.elements[id] = { type, props, children: [] };
     spec.elements.answer.children!.push(id);
   };
   add("summary", "Summary", { text: draft.explanation });
-  if (draft.clarification.length) add("clarification", "Notes", { title: "A little more detail is needed", items: draft.clarification, clarification: true });
+  if (draft.clarification.length) add("clarification", "Notes", { title: translateUiLabel("A little more detail is needed", t), items: draft.clarification, clarification: true });
   if (draft.sql && result) add("result", "Result", { queryId: result.queryId, columns: result.columns.slice(0, 8).map((c) => c.name), rows: result.rows.slice(0, 12).map((row) => row.slice(0, 8).map(resultCellText)), total: result.rowCount, columnCount: result.columns.length, duration: result.durationMs, truncated: result.truncated, presentation: presentResult(result) });
   if (draft.sql) add("sql", "Sql", { sql: draft.sql });
-  if (draft.assumptions.length) add("assumptions", "Notes", { title: "Assumptions to check", items: draft.assumptions, clarification: false });
+  if (draft.assumptions.length) add("assumptions", "Notes", { title: translateUiLabel("Assumptions to check", t), items: draft.assumptions, clarification: false });
   return spec;
 }

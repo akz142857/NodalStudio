@@ -1,3 +1,5 @@
+import { capabilityMessages } from "./i18n/capabilities";
+import { I18nProvider, useI18n, useEventTranslator } from "./i18n";
 import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ModelViewNavigation } from "./components/ModelViewNavigation";
@@ -10,7 +12,7 @@ import { OperationFeedback } from "./components/OperationFeedback";
 import { ActionIcon } from "./components/ActionIcon";
 import { IconButton } from "./components/IconButton";
 import { useOperation } from "./components/use-operation";
-import { resolveCapability } from "./platform/capabilities";
+import { currentCapabilityTarget, resolveCapability } from "./platform/capabilities";
 import { SchemaCanvas, type CanvasLocateRequest } from "./components/SchemaCanvas";
 import { ChangesEmptyState } from "./components/ChangesEmptyState";
 import { SchemaChangesPanel } from "./components/SchemaChangesPanel";
@@ -132,6 +134,9 @@ export function App() {
     restoreRightPanel(update);
   }, []);
   const [settings, setSettings] = useState<EffectiveSettings>(() => defaultEffectiveSettings());
+  const i18n = useI18n(settings.app.general.language);
+  const { t } = i18n;
+  const translate = useEventTranslator(t);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsAvailable, setSettingsAvailable] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -164,6 +169,8 @@ export function App() {
     enabled: runtime.data?.kind === "desktop" && !!snapshot,
   });
   const queryCapability = resolveCapability("read-only-query", runtime.data?.kind, snapshot?.database.databaseType);
+  const queryTarget = currentCapabilityTarget(runtime.data?.kind, snapshot?.database.databaseType);
+  const queryScope = queryTarget ? t(capabilityMessages["read-only-query"].targets[queryTarget]) : t("navigation.query.unknown");
   const querySupported = Boolean(snapshot) && queryCapability.status === "supported";
   const domainWorkspace = useRef({ snapshot, semantics, semanticsSnapshot, runtimeKind: runtime.data?.kind, mode });
   const pendingDomainUpdates = useRef(new Set<string>());
@@ -175,14 +182,14 @@ export function App() {
     const workspace = domainWorkspace.current;
     const currentSnapshot = workspace.snapshot;
     if (!currentSnapshot || workspace.runtimeKind !== "desktop" || workspace.mode !== "explore" || workspace.semanticsSnapshot !== currentSnapshot) {
-      throw new Error("Open a loaded Database diagram in the desktop app to edit business domains.");
+      throw new Error(translate("navigation.openALoadedDatabaseDiagramInTheDesktop"));
     }
     const group = workspace.semantics.domainGroups.find((item) => item.id === domainId && item.sourceId === currentSnapshot.sourceId);
-    if (!group) throw new Error("This business domain is no longer available. Choose an existing domain and try again.");
+    if (!group) throw new Error(translate("navigation.thisBusinessDomainIsNoLongerAvailableChoose"));
     const addition = domainMembershipAddition(currentSnapshot, group, tableKeys);
     if (!addition.addedCount) return group;
     const updateKey = `${currentSnapshot.sourceId}:${domainId}`;
-    if (pendingDomainUpdates.current.has(updateKey)) throw new Error("This business domain is still being saved. Try again when it finishes.");
+    if (pendingDomainUpdates.current.has(updateKey)) throw new Error(translate("navigation.thisBusinessDomainIsStillBeingSavedTry"));
     pendingDomainUpdates.current.add(updateKey);
     try {
       const saved = await platform.saveDomainGroup(addition.input);
@@ -194,7 +201,7 @@ export function App() {
     } finally {
       pendingDomainUpdates.current.delete(updateKey);
     }
-  }, []);
+  }, [translate]);
 
   const schemaSearchResults = useMemo(() => searchSchema(snapshot, query), [query, snapshot]);
   const WorkspaceCanvas = mode === "changes" && changeSet ? SchemaChangesDiagram : SchemaCanvas;
@@ -245,10 +252,10 @@ export function App() {
   useEffect(() => {
     if (!availableUpdate || !updateNotificationsEnabled || notifiedUpdate.current === availableUpdate) return;
     notifiedUpdate.current = availableUpdate;
-    publishNoticeRef.current({ id: `update-${availableUpdate}`, title: "Application update available",
-      message: `Nodal Studio ${availableUpdate} is available. Review what’s new and choose when to update.`,
+    publishNoticeRef.current({ id: `update-${availableUpdate}`, title: translate("navigation.applicationUpdateAvailable"),
+      message: translate("navigation.nodalStudioIsAvailableReviewWhatSNew", { value0: availableUpdate }),
       createdAt: new Date().toISOString(), settingsCategory: "updates" });
-  }, [availableUpdate, updateNotificationsEnabled]);
+  }, [availableUpdate, updateNotificationsEnabled, translate]);
   const loadSemantics = useCallback(() => {
     if (!snapshot || activeSemanticSession.current !== semanticSession) return Promise.resolve();
     const request = ++semanticRequest.current;
@@ -271,13 +278,13 @@ export function App() {
       setSemanticsSettledSnapshot(snapshot);
       publishNoticeRef.current({
         id: `semantics-load-failed-${snapshot.sourceId}`,
-        title: "Semantic model could not be loaded",
-        message: `Annotations, domain groups and saved views are unavailable for this snapshot — they have not been deleted. ${noticeReason(reason)}`,
+        title: translate("navigation.semanticModelCouldNotBeLoaded"),
+        message: translate("navigation.annotationsDomainGroupsAndSavedViewsAreUnavailable", { value0: noticeReason(reason) }),
         createdAt: new Date().toISOString(),
       });
       throw reason;
     });
-  }, [snapshot, semanticSession, historyPreview]);
+  }, [snapshot, semanticSession, historyPreview, translate]);
   const currentSemanticLoader = useRef<{ sourceId: string; load: () => Promise<void> } | undefined>(undefined);
   useLayoutEffect(() => {
     currentSemanticLoader.current = snapshot ? { sourceId: snapshot.sourceId, load: loadSemantics } : undefined;
@@ -316,12 +323,12 @@ export function App() {
     if (shouldNotify) {
       publishNotice({
         id: result.changeSet?.id ?? result.snapshot.id,
-        title: hasHighRisk ? "High-risk schema change" : "Schema changed",
-        message: `${result.changeSet?.operations.length ?? 0} structural operations detected in ${result.snapshot.database.name}.`,
+        title: hasHighRisk ? translate("navigation.highRiskSchemaChange") : translate("navigation.schemaChanged"),
+        message: translate("navigation.structuralOperationsDetectedIn", { value0: result.changeSet?.operations.length ?? 0, value1: result.snapshot.database.name }),
         createdAt: new Date().toISOString(),
       });
     }
-  }, [publishNotice, settings.app.notifications, settings.source?.refresh.changeNotifications, snapshot?.sourceId, savedView, historyPreview]);
+  }, [publishNotice, settings.app.notifications, settings.source?.refresh.changeNotifications, snapshot?.sourceId, savedView, historyPreview, translate]);
 
   const refreshActive = useCallback(async (trigger: "manual" | "background" = "manual") => {
     if (!snapshot) return;
@@ -329,8 +336,8 @@ export function App() {
       const result = await platform.capturePostgresSnapshot(snapshot.sourceId, trigger);
       if (isCurrent() && result.stored) handleCapture(result);
       return result;
-    }, { running: `Refreshing ${snapshot.database.name}…`, success: (result) => `Snapshot refreshed · ${result.snapshot.schemas.reduce((count, schema) => count + schema.tables.length, 0)} tables · ${result.changeSet?.operations.length ?? 0} structural changes.${result.stored ? "" : " No new snapshot stored."}`, failure: `Unable to refresh ${snapshot.database.name}. The loaded snapshot remains available.` });
-  }, [handleCapture, runRefresh, snapshot]);
+    }, { running: translate("navigation.refreshing", { value0: snapshot.database.name }), success: (result) => translate("navigation.snapshotRefreshedTablesStructuralChanges", { value0: result.snapshot.schemas.reduce((count, schema) => count + schema.tables.length, 0), value1: result.changeSet?.operations.length ?? 0, value2: result.stored ? "" : translate("navigation.refresh.noSnapshot") }), failure: translate("navigation.unableToRefreshTheLoadedSnapshotRemainsAvailable", { value0: snapshot.database.name }) });
+  }, [handleCapture, runRefresh, snapshot, translate]);
 
   useEffect(() => {
     const intervalSeconds = settings.source?.refresh.intervalSeconds ?? 30;
@@ -375,15 +382,15 @@ export function App() {
         setSettingsLoaded(true);
         publishNoticeRef.current({
           id: "settings-load-failed",
-          title: "Stored settings could not be loaded",
-          message: `Running with default settings, including default privacy and cloud options. ${noticeReason(reason)}`,
+          title: translate("navigation.storedSettingsCouldNotBeLoaded"),
+          message: translate("navigation.runningWithDefaultSettingsIncludingDefaultPrivacyAnd", { value0: noticeReason(reason) }),
           createdAt: new Date().toISOString(),
         });
       });
     return () => {
       active = false;
     };
-  }, [snapshot?.sourceId]);
+  }, [snapshot?.sourceId, translate]);
 
   useEffect(() => {
     if (!settingsLoaded) return;
@@ -406,7 +413,6 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.app.general.theme;
-    document.documentElement.lang = settings.app.general.language === "zhCn" ? "zh-CN" : settings.app.general.language === "en" ? "en" : navigator.language;
     document.documentElement.dataset.density = settings.app.appearance.density;
     document.documentElement.dataset.reduceMotion = String(settings.app.appearance.reduceMotion);
     document.documentElement.dataset.highContrastRelations = String(settings.app.appearance.highContrastRelations);
@@ -414,7 +420,9 @@ export function App() {
     document.documentElement.style.setProperty("--ui-font-size", `${settings.app.appearance.uiFontSize}px`);
     document.documentElement.style.setProperty("--node-font-size", `${settings.app.appearance.nodeFontSize}px`);
     document.documentElement.style.setProperty("--monospace-font-size", `${settings.app.appearance.monospaceFontSize}px`);
-    document.body.style.setProperty("zoom", String(settings.app.general.uiScalePercent / 100));
+    const uiScale = String(settings.app.general.uiScalePercent / 100);
+    document.documentElement.style.setProperty("--ui-scale", uiScale);
+    document.body.style.setProperty("zoom", uiScale);
   }, [settings.app.appearance, settings.app.general]);
 
   useEffect(() => {
@@ -428,12 +436,12 @@ export function App() {
         setDataSources([]);
         publishNoticeRef.current({
           id: "data-sources-load-failed",
-          title: "Data sources could not be listed",
-          message: `Existing connections are not shown — they have not been removed. ${noticeReason(reason)}`,
+          title: translate("navigation.dataSourcesCouldNotBeListed"),
+          message: translate("navigation.existingConnectionsAreNotShownTheyHaveNot", { value0: noticeReason(reason) }),
           createdAt: new Date().toISOString(),
         });
       });
-  }, [runtime.data?.kind]);
+  }, [runtime.data?.kind, translate]);
 
   useEffect(() => {
     if (
@@ -469,15 +477,15 @@ export function App() {
           const snapshots = await platform.listSnapshots(candidate.profile.id);
           if (!isCurrent()) return;
           const latest = snapshots[0];
-          if (!latest) throw new Error("No saved model is available. Edit the connection to create one.");
+          if (!latest) throw new Error(translate("navigation.noSavedModelIsAvailableEditTheConnection"));
           const saved = await platform.getSnapshot(latest.id);
           if (isCurrent()) handleCapture({ snapshot: saved, stored: false, changeSet: null });
         }
       })
       .catch((reason: unknown) => {
-        if (isCurrent()) publishNoticeRef.current({ id: "auto-connect-failed", title: "Workspace could not be opened", message: `Choose the data source to retry. ${noticeReason(reason)}`, createdAt: new Date().toISOString() });
+        if (isCurrent()) publishNoticeRef.current({ id: "auto-connect-failed", title: translate("navigation.workspaceCouldNotBeOpened"), message: translate("navigation.chooseTheDataSourceToRetry", { value0: noticeReason(reason) }), createdAt: new Date().toISOString() });
       });
-  }, [dataSources, handleCapture, runtime.data?.kind, settings.app.general.lastSourceId, settings.app.general.reopenLastWorkspace, settings.app.general.startPage, settingsLoaded, snapshot]);
+  }, [dataSources, handleCapture, runtime.data?.kind, settings.app.general.lastSourceId, settings.app.general.reopenLastWorkspace, settings.app.general.startPage, settingsLoaded, snapshot, translate]);
 
   useEffect(() => {
     if (!settingsLoaded || runtime.data?.kind !== "desktop" || !snapshot) return;
@@ -505,7 +513,7 @@ export function App() {
           if (!active) return;
           publishNoticeRef.current({
             id: "workspace-settings-save-failed",
-            title: "Recent workspace could not be saved",
+            title: translate("navigation.recentWorkspaceCouldNotBeSaved"),
             message: noticeReason(reason),
             createdAt: new Date().toISOString(),
           });
@@ -515,7 +523,7 @@ export function App() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [mode, runtime.data?.kind, settings.app, settingsLoaded, snapshot]);
+  }, [mode, runtime.data?.kind, settings.app, settingsLoaded, snapshot, translate]);
 
   useEffect(() => {
     if (!settings.app.general.confirmBeforeQuit || refreshState !== "refreshing") return;
@@ -535,19 +543,19 @@ export function App() {
       if (!active) return;
       const totalBytes = usage.snapshotBytes + usage.semanticBytes + usage.layoutBytes + usage.syncQueueBytes + usage.settingsBytes;
       if (settings.app.notifications.storageWarnings && totalBytes >= settings.app.history.storageWarningMegabytes * 1024 * 1024) {
-        publishNotice({ id: "storage-warning", title: "Local storage warning", message: `Nodal Studio local data uses ${formatAppBytes(totalBytes)}.`, createdAt: new Date().toISOString() });
+        publishNotice({ id: "storage-warning", title: translate("navigation.localStorageWarning"), message: translate("navigation.nodalStudioLocalDataUses", { value0: formatAppBytes(totalBytes) }), createdAt: new Date().toISOString() });
       }
       if (!snapshot || !settings.source) return;
       if (settings.app.notifications.cloudFailures) {
         const queue = await platform.listSyncDiagnostics(snapshot.sourceId);
         if (active && queue.some((item) => item.state === "conflict" || item.attempts > 0)) {
-          publishNotice({ id: `cloud-queue-${snapshot.sourceId}`, title: "Cloud sync needs attention", message: `${queue.length} queued item(s), including failed or conflicted metadata.`, createdAt: new Date().toISOString() });
+          publishNotice({ id: `cloud-queue-${snapshot.sourceId}`, title: translate("navigation.cloudSyncNeedsAttention"), message: translate("navigation.queuedItemSIncludingFailedOrConflictedMetadata", { value0: queue.length }), createdAt: new Date().toISOString() });
         }
       }
       if (settings.app.notifications.gitConflicts && settings.source.git.repositoryPath) {
         const git = await platform.checkMergeDriver(snapshot.sourceId, settings.source.git.repositoryPath);
         if (active && (git.fingerprintMatches === false || git.conflictReports.length > 0)) {
-          publishNotice({ id: `git-conflict-${snapshot.sourceId}`, title: "Git semantics need attention", message: git.conflictReports.length ? `${git.conflictReports.length} unresolved semantic conflict report(s).` : "Git workspace fingerprint differs from the active Snapshot.", createdAt: new Date().toISOString() });
+          publishNotice({ id: `git-conflict-${snapshot.sourceId}`, title: translate("navigation.gitSemanticsNeedAttention"), message: git.conflictReports.length ? translate("navigation.unresolvedSemanticConflictReportS", { value0: git.conflictReports.length }) : translate("navigation.gitWorkspaceFingerprintDiffersFromTheActiveSnapshot"), createdAt: new Date().toISOString() });
         }
       }
     }
@@ -565,8 +573,8 @@ export function App() {
           healthCheckFailing.current = true;
           publishNotice({
             id: "health-check-failed",
-            title: "Background checks are not running",
-            message: `Storage, cloud sync and Git conflict warnings are paused until this recovers. ${noticeReason(reason)}`,
+            title: translate("navigation.backgroundChecksAreNotRunning"),
+            message: translate("navigation.storageCloudSyncAndGitConflictWarningsAre", { value0: noticeReason(reason) }),
             createdAt: new Date().toISOString(),
           });
         });
@@ -577,7 +585,7 @@ export function App() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [publishNotice, runtime.data?.kind, settings.app.history.storageWarningMegabytes, settings.app.notifications.cloudFailures, settings.app.notifications.gitConflicts, settings.app.notifications.storageWarnings, settings.source, settingsLoaded, snapshot]);
+  }, [publishNotice, runtime.data?.kind, settings.app.history.storageWarningMegabytes, settings.app.notifications.cloudFailures, settings.app.notifications.gitConflicts, settings.app.notifications.storageWarnings, settings.source, settingsLoaded, snapshot, translate]);
 
   useEffect(() => {
     function openFromLocation() {
@@ -660,19 +668,19 @@ export function App() {
   }
 
   const commands: AppCommand[] = [
-    { id: "settings", label: "Open Settings", keywords: "preferences general", shortcut: "Mod+,", run: () => openSettings() },
-    { id: "settings-git", label: "Open Git Settings", keywords: "repository merge conflict", run: () => openSettings("git") },
-    { id: "settings-ai", label: "Open AI Settings", keywords: "provider model explanation", run: () => openSettings("ai") },
-    { id: "capabilities", label: "Open capability matrix", keywords: "support PostgreSQL MySQL Desktop Web limitations", run: () => openSettings("capabilities") },
-    { id: "ddl-preview", label: "Open read-only DDL preview", keywords: "SQL file clipboard PostgreSQL MySQL import", run: () => { setSettingsOpen(false); setDdlPreviewOpen(true); } },
-    { id: "refresh", label: "Refresh schema", keywords: "database capture", shortcut: settings.app.shortcuts.bindings.refreshSchema, run: () => void refreshActive() },
-    { id: "toggle-left", label: "Toggle left sidebar", keywords: "collapse structure", shortcut: settings.app.shortcuts.bindings.toggleLeftSidebar, run: () => setLeftPanel((value) => ({ ...value, expanded: !value.expanded })) },
-    { id: "toggle-right", label: "Toggle right inspector", keywords: "collapse details", shortcut: settings.app.shortcuts.bindings.toggleRightInspector, run: () => setRightPanel((value) => ({ ...value, expanded: !value.expanded })) },
-    { id: "fit", label: "Fit ER canvas", keywords: "zoom model", shortcut: settings.app.shortcuts.bindings.fitCanvas, run: () => window.dispatchEvent(new Event("nodalstudio:fit-canvas")) },
-    { id: "view-all", label: "View all database tables", keywords: "global overview exit focus", run: () => window.dispatchEvent(new Event("nodalstudio:view-all-tables")) },
-    { id: "focus-selected", label: "Focus selected table", keywords: "isolate relationship table", shortcut: settings.app.shortcuts.bindings.focusSelectedTable, run: () => window.dispatchEvent(new Event("nodalstudio:focus-selected-table")) },
-    { id: "preflight", label: "Open structure preflight", keywords: "schema check validation PostgreSQL MySQL", run: () => { if (snapshot) setPreflightOpen(true); } },
-    { id: "relayout", label: "Re-layout ER canvas", keywords: "automatic layout", shortcut: settings.app.shortcuts.bindings.relayoutCanvas, run: () => window.dispatchEvent(new Event("nodalstudio:relayout-canvas")) },
+    { id: "settings", label: t("navigation.openSettings"), keywords: "preferences general", shortcut: "Mod+,", run: () => openSettings() },
+    { id: "settings-git", label: t("navigation.openGitSettings"), keywords: "repository merge conflict", run: () => openSettings("git") },
+    { id: "settings-ai", label: t("navigation.openAISettings"), keywords: "provider model explanation", run: () => openSettings("ai") },
+    { id: "capabilities", label: t("navigation.openCapabilityMatrix"), keywords: "support PostgreSQL MySQL Desktop Web limitations", run: () => openSettings("capabilities") },
+    { id: "ddl-preview", label: t("navigation.openReadOnlyDDLPreview"), keywords: "SQL file clipboard PostgreSQL MySQL import", run: () => { setSettingsOpen(false); setDdlPreviewOpen(true); } },
+    { id: "refresh", label: t("navigation.refreshSchema"), keywords: "database capture", shortcut: settings.app.shortcuts.bindings.refreshSchema, run: () => void refreshActive() },
+    { id: "toggle-left", label: t("navigation.toggleLeftSidebar"), keywords: "collapse structure", shortcut: settings.app.shortcuts.bindings.toggleLeftSidebar, run: () => setLeftPanel((value) => ({ ...value, expanded: !value.expanded })) },
+    { id: "toggle-right", label: t("navigation.toggleRightInspector"), keywords: "collapse details", shortcut: settings.app.shortcuts.bindings.toggleRightInspector, run: () => setRightPanel((value) => ({ ...value, expanded: !value.expanded })) },
+    { id: "fit", label: t("navigation.fitERCanvas"), keywords: "zoom model", shortcut: settings.app.shortcuts.bindings.fitCanvas, run: () => window.dispatchEvent(new Event("nodalstudio:fit-canvas")) },
+    { id: "view-all", label: t("navigation.viewAllDatabaseTables"), keywords: "global overview exit focus", run: () => window.dispatchEvent(new Event("nodalstudio:view-all-tables")) },
+    { id: "focus-selected", label: t("navigation.focusSelectedTable"), keywords: "isolate relationship table", shortcut: settings.app.shortcuts.bindings.focusSelectedTable, run: () => window.dispatchEvent(new Event("nodalstudio:focus-selected-table")) },
+    { id: "preflight", label: t("navigation.openStructurePreflight"), keywords: "schema check validation PostgreSQL MySQL", run: () => { if (snapshot) setPreflightOpen(true); } },
+    { id: "relayout", label: t("navigation.reLayoutERCanvas"), keywords: "automatic layout", shortcut: settings.app.shortcuts.bindings.relayoutCanvas, run: () => window.dispatchEvent(new Event("nodalstudio:relayout-canvas")) },
   ];
 
   useEffect(() => {
@@ -742,13 +750,13 @@ export function App() {
   }, [snapshot, semanticSession]);
 
   const restoreRelationshipInference = useCallback(async (relationshipKey: string) => {
-    if (!snapshot) throw new Error("Select a data source to restore this candidate.");
+    if (!snapshot) throw new Error(translate("navigation.selectADataSourceToRestoreThisCandidate"));
     await platform.restoreRelationshipInference(snapshot.sourceId, relationshipKey);
     if (activeSemanticSession.current !== semanticSession) return;
     setSemantics((current) => ({ ...current,
       ignoredRelationshipInferences: current.ignoredRelationshipInferences.filter((item) => item.relationshipKey !== relationshipKey),
     }));
-  }, [snapshot, semanticSession]);
+  }, [snapshot, semanticSession, translate]);
 
   const relationshipBatchApi = useMemo<import("./platform/relationship-batches").RelationshipBatchApi>(() => ({
     preview: (input) => platform.previewRelationshipBatch(input),
@@ -758,29 +766,29 @@ export function App() {
   }), [refreshSemantics]);
 
   const saveCanvasLayout = useCallback(async (positions: Record<string, import("./platform/types").CanvasNodeLayout>, viewport?: import("./platform/types").CanvasLayout["viewport"]) => {
-    if (!snapshot || historyPreview || mode !== "explore") throw new Error("Historical layouts are temporary. Return to the latest model to save.");
+    if (!snapshot || historyPreview || mode !== "explore") throw new Error(translate("navigation.historicalLayoutsAreTemporaryReturnToTheLatest"));
     const viewId = savedView && !savedView.id.startsWith("domain:") ? savedView.id : null;
     await platform.saveLayout(snapshot.sourceId, viewId, positions, viewport, snapshot.id);
     if (activeSemanticSession.current !== semanticSession) return;
     const layout = { sourceId: snapshot.sourceId, viewId, positions, viewport, updatedAt: new Date().toISOString() };
     setSemantics((current) => ({ ...current, ...(viewId ? {} : { layout }), viewLayouts: [...(current.viewLayouts ?? []).filter((item) => item.viewId !== viewId), layout] }));
-  }, [snapshot, savedView, historyPreview, mode, semanticSession]);
+  }, [snapshot, savedView, historyPreview, mode, semanticSession, translate]);
 
   const saveModelView = useCallback(async (input: import("./platform/types").SaveViewInput) => {
-    if (!snapshot || historyPreview || mode !== "explore" || input.sourceId !== snapshot.sourceId || input.snapshotId !== snapshot.id) throw new Error("Return to the latest model to save views.");
+    if (!snapshot || historyPreview || mode !== "explore" || input.sourceId !== snapshot.sourceId || input.snapshotId !== snapshot.id) throw new Error(translate("navigation.returnToTheLatestModelToSaveViews"));
     const view = await platform.saveView(input);
     if (activeSemanticSession.current === semanticSession) {
       setSemantics((current) => ({ ...current, savedViews: [...current.savedViews.filter((item) => item.id !== view.id), view],
         viewLayouts: input.positions ? [...(current.viewLayouts ?? []).filter((item) => item.viewId !== view.id), { sourceId: view.sourceId, viewId: view.id, positions: input.positions, viewport: input.viewport, updatedAt: view.updatedAt }] : current.viewLayouts }));
     }
     return view;
-  }, [snapshot, historyPreview, mode, semanticSession]);
+  }, [snapshot, historyPreview, mode, semanticSession, translate]);
 
   const deleteModelView = useCallback(async (id: string) => {
-    if (!snapshot || historyPreview || mode !== "explore") throw new Error("Return to the latest model to delete views.");
+    if (!snapshot || historyPreview || mode !== "explore") throw new Error(translate("navigation.returnToTheLatestModelToDeleteViews"));
     await platform.deleteView(snapshot.sourceId, id, snapshot.id);
     if (activeSemanticSession.current === semanticSession) setSemantics((current) => ({ ...current, savedViews: current.savedViews.filter((item) => item.id !== id), viewLayouts: current.viewLayouts?.filter((item) => item.viewId !== id) }));
-  }, [snapshot, historyPreview, mode, semanticSession]);
+  }, [snapshot, historyPreview, mode, semanticSession, translate]);
 
   function rememberLatestWorkspace() {
     if (snapshot && !historyPreview) latestWorkspace.current = { snapshot, view: savedView };
@@ -832,8 +840,8 @@ export function App() {
   }, [querySupported, snapshot?.database.databaseType]);
 
   return (
-    <Suspense fallback={<main className="app-shell"><p>Loading workspace…</p></main>}>
-    {ddlPreviewOpen ? <DdlImportPanel canvasSettings={settings.app.canvas} runtimeKind={runtime.data?.kind} onClose={() => setDdlPreviewOpen(false)} /> : <main className={`app-shell${showUpdateBanner ? " has-update-banner" : ""}`}>
+    <I18nProvider value={i18n}>
+    <main inert={ddlPreviewOpen || undefined} aria-hidden={ddlPreviewOpen || undefined} className={`app-shell${showUpdateBanner ? " has-update-banner" : ""}`}>
       <header className="topbar">
         <HeaderSidebarToggle
           side="left"
@@ -842,33 +850,33 @@ export function App() {
             setLeftPanel((current) => ({ ...current, expanded: !current.expanded }))
           }
         />
-        <div className="brand-block" title={runtime.isPending ? "Detecting runtime…" : runtime.data?.label}>
-          <p className="eyebrow">LIVING SYSTEM BLUEPRINT</p>
+        <div className="brand-block" title={runtime.isPending ? t("navigation.detectingRuntime") : runtime.data?.label}>
+          <p className="eyebrow">{t("navigation.lIVINGSYSTEMBLUEPRINT")}</p>
           <h1>Nodal Studio</h1>
-          <span className="visually-hidden" data-testid="runtime-badge">{runtime.isPending ? "Detecting runtime…" : runtime.data?.label}</span>
+          <span className="visually-hidden" data-testid="runtime-badge">{runtime.isPending ? t("navigation.detectingRuntime") : runtime.data?.label}</span>
         </div>
         <Segmented
-          label="View mode"
+          label={t("navigation.viewMode")}
           value={mode}
           onChange={(next) => { setPreflightOpen(false); setLocateRequest(undefined); setMode(next); }}
           options={[
-            { value: "explore", label: "Database" },
+            { value: "explore", label: t("navigation.database") },
             {
               value: "query",
-              label: "Query",
+              label: t("navigation.query"),
               disabled: runtime.data?.kind === "web" || Boolean(snapshot && !querySupported),
-              title: queryCapability.status === "supported" ? undefined : queryCapability.scope,
+              title: queryCapability.status === "supported" ? undefined : queryScope,
             },
-            { value: "changes", label: "Changes" },
+            { value: "changes", label: t("navigation.changes") },
           ]}
         />
         <label className="global-search">
-          <span className="visually-hidden">Search schema</span>
+          <span className="visually-hidden">{t("navigation.searchSchema")}</span>
           <ActionIcon name="search" />
           <input
             ref={searchInputRef}
             type="search"
-            placeholder="Table, field, schema…"
+            placeholder={t("navigation.tableFieldSchema")}
             value={query}
             onFocus={() => setSearchOpen(true)}
             onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
@@ -897,7 +905,7 @@ export function App() {
             }}
             disabled={!snapshot}
           />
-          {searchOpen && query.trim() ? <div className="global-search-results" role="listbox" aria-label="Schema search results">
+          {searchOpen && query.trim() ? <div className="global-search-results" role="listbox" aria-label={t("navigation.schemaSearchResults")}>
             {schemaSearchResults.length ? schemaSearchResults.map((result, index) => <button
               type="button"
               role="option"
@@ -908,14 +916,14 @@ export function App() {
             >
               <strong>{result.table.key.name}</strong>
               <span>{result.schema}{result.matchingColumns.length ? ` · ${result.matchingColumns.slice(0, 3).join(", ")}` : ""}</span>
-            </button>) : <p>No matching tables or fields</p>}
+            </button>) : <p>{t("navigation.noMatchingTablesOrFields")}</p>}
           </div> : null}
         </label>
-        <div className="runtime-actions" role="group" aria-label="Application tools">
-          {snapshot && runtime.data?.kind === "desktop" && discoveryLatest.data?.[0]?.id === snapshot.id && mode === "explore" && !preflightOpen && semanticsSettledSnapshot === snapshot ? <IconButton icon="question" label="Business question" description="Find relevant tables from a business question" aria-pressed={Boolean(discoverySnapshot)} onClick={() => { setSearchOpen(false); setDiscoverySnapshot(snapshot); }} /> : null}
-          <IconButton icon="import" label="Import DDL" onClick={() => setDdlPreviewOpen(true)} description="Open a temporary PostgreSQL/MySQL file or clipboard model; never execute SQL" />
-          {refreshOperation.state?.phase === "error" ? <div className="refresh-operation-result"><OperationFeedback label="Snapshot refresh" state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel="Retry snapshot refresh" onDismiss={refreshOperation.dismiss} /></div> : null}
-          {snapshot ? <IconButton icon="preflight" label="Structure preflight" aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} description="Check the entire loaded snapshot with dialect-aware metadata rules" /> : null}
+        <div className="runtime-actions" role="group" aria-label={t("navigation.applicationTools")}>
+          {snapshot && runtime.data?.kind === "desktop" && discoveryLatest.data?.[0]?.id === snapshot.id && mode === "explore" && !preflightOpen && semanticsSettledSnapshot === snapshot ? <IconButton icon="question" label={t("navigation.businessQuestion")} description={t("navigation.findRelevantTablesFromABusinessQuestion")} aria-pressed={Boolean(discoverySnapshot)} onClick={() => { setSearchOpen(false); setDiscoverySnapshot(snapshot); }} /> : null}
+          <IconButton icon="import" label={t("navigation.importDDL")} onClick={() => setDdlPreviewOpen(true)} description={t("navigation.openATemporaryPostgreSQLMySQLFileOrClipboard")} />
+          {refreshOperation.state?.phase === "error" ? <div className="refresh-operation-result"><OperationFeedback label={t("navigation.snapshotRefresh")} state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel={t("navigation.retrySnapshotRefresh")} onDismiss={refreshOperation.dismiss} /></div> : null}
+          {snapshot ? <IconButton icon="preflight" label={t("navigation.structurePreflight")} aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} description={t("navigation.checkTheEntireLoadedSnapshotWithDialectAware")} /> : null}
           {snapshot ? <SchemaReportExportAction key={snapshot.id} snapshot={snapshot} semantics={semanticsSnapshot === snapshot ? semantics : undefined} platform={platform} /> : null}
           {snapshot && runtime.data?.kind === "desktop" ? (
             <IconButton
@@ -924,24 +932,24 @@ export function App() {
               onClick={() => void refreshActive()}
               disabled={refreshState === "refreshing"}
               aria-busy={refreshState === "refreshing"}
-              description={refreshState === "error" ? "Last refresh failed. Try refreshing the schema again." : "Refresh schema now"}
+              description={refreshState === "error" ? t("navigation.lastRefreshFailedTryRefreshingTheSchemaAgain") : t("navigation.refreshSchemaNow")}
               label={refreshState === "refreshing"
-                ? "Refreshing…"
+                ? t("navigation.refreshingDetail")
                 : refreshState === "error"
-                  ? "Retry schema refresh"
-                  : "Refresh schema"}
+                  ? t("navigation.retrySchemaRefresh")
+                  : t("navigation.refreshSchema")}
             />
           ) : null}
           <span className="toolbar-separator" aria-hidden="true" />
           <IconButton
             icon="settings"
-            label="Open Settings"
-            description="Settings (⌘,)"
+            label={t("navigation.openSettings")}
+            description={t("navigation.settings")}
             onClick={() => openSettings()}
           />
-          <IconButton icon="command" label="Open command palette" description="Command palette (⌘⇧P)" onClick={() => setCommandPaletteOpen(true)} />
-          <IconButton icon="bell" label="Open notifications" description={notices.length ? `${notices.length} notifications` : "No notifications"} className="notification-button" aria-expanded={noticesOpen} onClick={() => setNoticesOpen((value) => !value)}>{notices.length ? <b aria-hidden="true">{notices.length > 99 ? "99+" : notices.length}</b> : null}</IconButton>
-          {noticesOpen ? <section className="notification-popover" aria-label="Notifications"><header><strong>Notifications</strong><button type="button" onClick={() => setNotices([])}>Clear</button></header>{notices.length ? notices.map((notice) => <article key={notice.id}><strong>{notice.title}</strong><p>{notice.message}</p><small>{new Date(notice.createdAt).toLocaleTimeString()}</small>{notice.settingsCategory ? <button type="button" className="notification-update-action" onClick={() => openSettings(notice.settingsCategory)}>View update</button> : null}</article>) : <p>No notifications.</p>}</section> : null}
+          <IconButton icon="command" label={t("navigation.openCommandPalette")} description={t("navigation.commandPaletteP")} onClick={() => setCommandPaletteOpen(true)} />
+          <IconButton icon="bell" label={t("navigation.openNotifications")} description={notices.length ? t("navigation.notifications", { value0: notices.length }) : t("navigation.noNotifications")} className="notification-button" aria-expanded={noticesOpen} onClick={() => setNoticesOpen((value) => !value)}>{notices.length ? <b aria-hidden="true">{notices.length > 99 ? "99+" : notices.length}</b> : null}</IconButton>
+          {noticesOpen ? <section className="notification-popover" aria-label={t("settings.notifications")}><header><strong>{t("settings.notifications")}</strong><button type="button" onClick={() => setNotices([])}>{t("navigation.clear")}</button></header>{notices.length ? notices.map((notice) => <article key={notice.id}><strong>{notice.title}</strong><p>{notice.message}</p><small>{i18n.formatDate(notice.createdAt, "local", { timeStyle: "medium" })}</small>{notice.settingsCategory ? <button type="button" className="notification-update-action" onClick={() => openSettings(notice.settingsCategory)}>{t("navigation.viewUpdate")}</button> : null}</article>) : <p>{t("navigation.noNotificationsDetail")}</p>}</section> : null}
         </div>
         <HeaderSidebarToggle
           side="right"
@@ -956,7 +964,7 @@ export function App() {
 
       <section
         className="workspace"
-        aria-label="Nodal Studio workspace"
+        aria-label={t("navigation.nodalStudioWorkspace")}
         style={
           {
             "--left-sidebar-width": `${leftPanel.expanded ? leftPanel.width : 0}px`,
@@ -1016,17 +1024,17 @@ export function App() {
         />
 
         <section className={`canvas-placeholder${snapshot && mode === "explore" && !preflightOpen ? " database-workspace" : ""}${mode === "changes" && changeSet ? " changes-workspace" : ""}`}>
-          {historyPreview && snapshot ? <div className="workspace-history-banner" role="status"><span>Historical workspace · layout changes are temporary.</span><button type="button" onClick={() => { void returnToLatestModel().catch((reason: unknown) => publishNotice({ id: "return-latest-failed", title: "Unable to open latest model", message: noticeReason(reason), createdAt: new Date().toISOString() })); }}>Return to latest model</button></div> : null}
+          {historyPreview && snapshot ? <div className="workspace-history-banner" role="status"><span>{t("navigation.historicalWorkspaceLayoutChangesAreTemporary")}</span><button type="button" onClick={() => { void returnToLatestModel().catch((reason: unknown) => publishNotice({ id: "return-latest-failed", title: t("navigation.unableToOpenLatestModel"), message: noticeReason(reason), createdAt: new Date().toISOString() })); }}>{t("navigation.returnToLatestModel")}</button></div> : null}
           {!preflightOpen && mode === "changes" && changeSet ? (
             <div className="changes-view-toolbar">
               <Segmented
-                label="Changes view"
+                label={t("navigation.changesView")}
                 value={changesView}
-                options={[{ value: "list", label: "Change list" }, { value: "diagram", label: "Diagram" }]}
+                options={[{ value: "list", label: t("navigation.changeList") }, { value: "diagram", label: t("navigation.diagram") }]}
                 onChange={setChangesView}
               />
               <span title={`Before: ${changeSet.beforeSnapshotId}\nAfter: ${changeSet.afterSnapshotId}`}>
-                Before {changeSet.beforeSnapshotId.slice(0, 8)} → After {changeSet.afterSnapshotId.slice(0, 8)}
+                {t("navigation.before")}{" "}{changeSet.beforeSnapshotId.slice(0, 8)} {t("navigation.after")}{" "}{changeSet.afterSnapshotId.slice(0, 8)}
               </span>
             </div>
           ) : null}
@@ -1035,7 +1043,7 @@ export function App() {
               const table = snapshot.schemas.flatMap((schema) => schema.tables).find((item) => item.key.schema === key.schema && item.key.name === key.name);
               if (table) locateSearchResult({ schema: key.schema, table, matchingColumns: [] });
             }} /> : mode === "query" ? (
-            <QueryPage
+            <Suspense fallback={<div className="workspace-loading" role="status">{t("navigation.loadingWorkspace")}</div>}><QueryPage
               platform={platform}
               snapshot={snapshot}
               runtimeKind={runtime.data?.kind}
@@ -1047,6 +1055,7 @@ export function App() {
               openRequest={openQueryRequest}
               onConsumeOpenRequest={() => setOpenQueryRequest(undefined)}
             />
+            </Suspense>
           ) : mode === "changes" && !changeSet ? (
             <ChangesEmptyState snapshot={snapshot} desktop={runtime.data?.kind === "desktop"}
               snapshotCount={discoveryLatest.data?.length ?? 0} loading={discoveryLatest.isPending} error={discoveryLatest.isError}
@@ -1084,7 +1093,8 @@ export function App() {
               semantics={semantics}
               onAddTablesToDomain={runtime.data?.kind === "desktop" && mode === "explore" && semanticsSnapshot === snapshot ? addTablesToDomain : undefined}
               savedView={savedView}
-              temporaryViewLabel={historyPreview ? "Historical snapshot." : undefined}
+              temporaryViewKind={historyPreview ? "historical" : undefined}
+              temporaryViewLabel={historyPreview ? t("navigation.historicalSnapshot") : undefined}
               onApplyView={!historyPreview ? applyView : undefined}
               onSaveView={!historyPreview ? saveModelView : undefined}
               onDeleteView={!historyPreview ? deleteModelView : undefined}
@@ -1109,12 +1119,12 @@ export function App() {
             <>
               <div className="canvas-grid" />
               <div className="hero-card">
-                <p className="eyebrow">EXPLORE · CHANGES · HISTORY</p>
-                <h2>{dataSources.length ? "Select a database to explore." : "Your database model, kept visible."}</h2>
+                <p className="eyebrow">{t("navigation.eXPLORECHANGESHISTORY")}</p>
+                <h2>{dataSources.length ? t("navigation.selectADatabaseToExplore") : t("navigation.yourDatabaseModelKeptVisible")}</h2>
                 <p>
                   {dataSources.length
-                    ? "Choose a saved connection from the database picker to open its local model."
-                    : "Connect a database to generate an ER map and track every schema change over time."}
+                    ? t("navigation.chooseASavedConnectionFromTheDatabasePicker")
+                    : t("navigation.connectADatabaseToGenerateAnERMap")}
                 </p>
               </div>
             </>
@@ -1172,7 +1182,7 @@ export function App() {
         </aside>
       </section>
       {settingsOpen ? (
-        <SettingsPage
+        <Suspense fallback={<div className="page-loading-overlay" role="status">{t("navigation.loadingWorkspace")}</div>}><SettingsPage
           key={settingsCategory}
           platform={platform}
           settings={settings}
@@ -1220,11 +1230,12 @@ export function App() {
             setSettingsOpen(false);
             return Promise.resolve();
           }}
-        />
+        /></Suspense>
       ) : null}
       {commandPaletteOpen ? <CommandPalette commands={commands} onClose={() => setCommandPaletteOpen(false)} /> : null}
-    </main>}
-    </Suspense>
+    </main>
+    {ddlPreviewOpen ? <div className="page-loading-overlay"><Suspense fallback={<div role="status">{t("navigation.loadingWorkspace")}</div>}><DdlImportPanel canvasSettings={settings.app.canvas} runtimeKind={runtime.data?.kind} onClose={() => setDdlPreviewOpen(false)} /></Suspense></div> : null}
+    </I18nProvider>
   );
 }
 

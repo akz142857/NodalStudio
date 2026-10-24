@@ -1,3 +1,9 @@
+/* All semantic click targets share an affordance, including controls outside ds-surface.
+ * Text editors, drag handles and resize handles retain their own cursors. */
+:where(button, a[href], summary, select, input[type="button"], input[type="submit"], input[type="reset"], input[type="checkbox"], input[type="radio"], [role="button"], [role="tab"], [role="menuitem"], [role="switch"]):not(:disabled):not([aria-disabled="true"]) { cursor: pointer; }
+:where(button, select, input, [role="button"], [role="tab"], [role="menuitem"], [role="switch"]):is(:disabled, [aria-disabled="true"]) { cursor: default; }
+:where(button, a[href], summary, [role="button"], [role="tab"], [role="menuitem"]):not(:disabled):not([aria-disabled="true"]):hover { background-color: var(--ds-hover); }
+
 /* Opt-in control primitives. Native semantics and keyboard behavior are kept. */
 .ds-surface {
   color-scheme: var(--ds-color-scheme);
@@ -21,7 +27,7 @@
 .ds-surface :where(input, select, textarea) { padding: 5px 8px; background: var(--ds-field); }
 .ds-surface :where(input, textarea)::placeholder { color: var(--ds-tertiary); opacity: 1; }
 .ds-surface :where(button) {
-  padding: 4px 10px;
+  padding: var(--ds-control-padding-block) var(--ds-control-padding-inline);
   color: var(--ds-text);
   background: var(--ds-control);
   font-weight: var(--ds-weight-medium);
@@ -31,7 +37,7 @@
 .ds-surface :where(button):hover:not(:disabled) { background: var(--ds-hover); }
 .ds-surface :where(button):active:not(:disabled) { background: var(--ds-selected-control); }
 .ds-surface :where(button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--ds-accent);
+  outline: var(--ds-focus-ring);
   outline-offset: 2px;
 }
 .ds-surface :where(button, input, select, textarea):disabled { opacity: .5; cursor: default; }
@@ -68,4 +74,39 @@
 @media (forced-colors: active) {
   .ds-surface .ds-switch { appearance: auto; }
   .ds-surface .ds-switch::before { display: none; }
+}
+
+/* Explicit variants share the same surface contract and native button semantics. */
+.ds-surface .ds-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-space-2); height: auto; white-space: normal; overflow-wrap: anywhere; }
+.ds-surface .ds-button[data-size="small"] { min-height: var(--ds-control-height-small); }
+.ds-surface .ds-button[data-variant="ghost"] { border-color: transparent; background: transparent; }
+.ds-surface .ds-button[data-variant="danger"] { color: var(--ds-danger); }
+.ds-surface .ds-button[data-variant="ghost"]:hover:not(:disabled) { background: var(--ds-hover); }
+.ds-surface :where(button, label, legend) { overflow-wrap: anywhere; }
+
+/* Explicit native select styling also works in macOS WebKit, which ignores
+   control padding while its platform appearance is enabled. */
+select.ds-select {
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--ds-control-height);
+  padding: 5px 28px 5px 8px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-control);
+  color: var(--ds-text);
+  background-color: var(--ds-field);
+  background-image: linear-gradient(45deg, transparent 50%, var(--ds-secondary) 50%), linear-gradient(135deg, var(--ds-secondary) 50%, transparent 50%);
+  background-position: calc(100% - 13px) 50%, calc(100% - 9px) 50%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  font: inherit;
+  font-size: var(--ds-text-control);
+  line-height: var(--ds-leading);
+  text-overflow: ellipsis;
+}
+select.ds-select:focus-visible { outline: var(--ds-focus-ring); outline-offset: 2px; }
+select.ds-select:disabled { opacity: .5; cursor: default; }
+@media (forced-colors: active) {
+  select.ds-select { appearance: auto; background-image: none; }
 }

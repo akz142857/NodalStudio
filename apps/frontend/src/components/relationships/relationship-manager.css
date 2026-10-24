@@ -1,7 +1,7 @@
 /* A stable list and an independent detail pane keep editing in context. */
-.relationship-manager { width: min(1000px, calc(100vw - 40px)); height: min(760px, calc(100vh - 40px)); max-width: none; max-height: none; padding: 0; margin: auto; overflow: hidden; border: 1px solid var(--ds-border); border-radius: 14px; color: var(--ds-text); background: var(--ds-sidebar); box-shadow: 0 24px 80px #0006; font: var(--ds-text-control)/var(--ds-leading) var(--ds-font-ui); }
+.relationship-manager { width: min(1000px, calc(var(--ds-viewport-width) - 40px)); height: min(760px, calc(var(--ds-viewport-height) - 40px)); max-width: none; max-height: none; padding: 0; margin: auto; overflow: hidden; border: 1px solid var(--ds-border); border-radius: 14px; color: var(--ds-text); background: var(--ds-sidebar); box-shadow: 0 24px 80px #0006; font: var(--ds-text-control)/var(--ds-leading) var(--ds-font-ui); }
 .relationship-manager[open] { display: flex; flex-direction: column; }
-.relationship-manager::backdrop { background: #070a0f94; backdrop-filter: blur(3px); }
+.relationship-manager::backdrop { background: var(--ds-overlay); backdrop-filter: blur(3px); }
 .relationship-manager * { box-sizing: border-box; }
 .relationship-manager button, .relationship-manager select, .relationship-manager input:not([type="checkbox"]), .relationship-manager textarea { min-width: 0; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); padding: 7px 10px; color: var(--ds-text); background: var(--ds-field); font: inherit; }
 .relationship-manager button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; background: var(--ds-control); }
@@ -57,7 +57,7 @@
 .relationship-manager-endpoint code { color: var(--ds-accent); font: inherit; font-family: var(--ds-font-mono); }
 .relationship-manager-arrow { display: flex; align-items: center; gap: 12px; padding: 7px 15px; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
 .relationship-detail-note { white-space: pre-wrap; overflow-wrap: anywhere; margin: 18px 0; color: var(--ds-secondary); }
-.relationship-attention { padding: 12px; margin: 0 0 16px; color: var(--ds-warning); background: var(--ds-warning-soft); border-radius: 6px; }
+.relationship-attention { padding: 12px; margin: 0 0 16px; color: var(--ds-warning); background: var(--ds-warning-soft); border-radius: var(--ds-radius-control); }
 .relationship-manager .relationship-check { display: flex; align-items: flex-start; gap: 8px; margin: 18px 0; }
 .relationship-manager input[type="checkbox"] { width: 16px; height: 16px; min-height: 16px; margin: 1px 0 0; accent-color: var(--ds-accent-fill); }
 .relationship-metadata { border-top: 1px solid var(--ds-separator); padding-top: 14px; margin-top: 18px; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
@@ -67,9 +67,9 @@
 .relationship-pair-summary { display: grid; gap: 4px; margin-top: 12px; color: var(--ds-secondary); overflow-wrap: anywhere; }
 .relationship-detail-actions { display: flex; align-items: center; gap: 10px; margin-top: 24px; }
 .relationship-more { position: relative; margin-left: auto; }
-.relationship-more summary { list-style: none; display: grid; place-items: center; min-width: 32px; min-height: 32px; border: 1px solid var(--ds-border); border-radius: 6px; cursor: pointer; }
+.relationship-more summary { list-style: none; display: grid; place-items: center; min-width: 32px; min-height: 32px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); cursor: pointer; }
 .relationship-more summary::-webkit-details-marker { display: none; }
-.relationship-more > div { position: absolute; bottom: calc(100% + 5px); right: 0; white-space: nowrap; padding: 5px; border: 1px solid var(--ds-border); border-radius: 7px; background: var(--ds-surface); box-shadow: 0 4px 16px #0003; }
+.relationship-more > div { position: absolute; bottom: calc(100% + 5px); right: 0; white-space: nowrap; padding: 5px; border: 1px solid var(--ds-border); border-radius: 7px; background: var(--ds-surface); box-shadow: var(--ds-shadow-popover); }
 .relationship-manager .danger, .relationship-manager .relationship-error { color: var(--ds-danger); }
 .relationship-manager-message { color: var(--ds-secondary); margin: 16px 0 0; }
 .relationship-manager-empty { display: grid; align-content: center; justify-items: start; gap: 10px; min-height: 180px; padding: 16px; color: var(--ds-secondary); }
@@ -90,7 +90,7 @@
 .relationship-field-pair > .relationship-icon-button { width: 24px; margin-bottom: 3px; }
 .relationship-field-pair label { font-size: var(--ds-text-caption); }
 .relationship-search-select { position: relative; display: grid; gap: 6px; min-width: 0; }
-.relationship-search-results { position: absolute; z-index: 5; top: 100%; left: 0; width: 100%; min-width: 180px; max-height: 200px; overflow-y: auto; margin-top: 4px; padding: 4px; border: 1px solid var(--ds-border); border-radius: 6px; background: var(--ds-surface); box-shadow: 0 8px 25px #0004; }
+.relationship-search-results { position: absolute; z-index: 5; top: 100%; left: 0; width: 100%; min-width: 180px; max-height: 200px; overflow-y: auto; margin-top: 4px; padding: 4px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); background: var(--ds-surface); box-shadow: var(--ds-shadow-popover); }
 .relationship-manager .relationship-search-results button { display: grid; justify-content: stretch; gap: 2px; width: 100%; border: 0; background: transparent; text-align: left; overflow-wrap: anywhere; }
 .relationship-manager .relationship-search-results button[aria-selected="true"] { background: var(--ds-selection); }
 .relationship-search-results small, .relationship-search-results p { font-size: var(--ds-text-caption); color: var(--ds-secondary); margin: 0; }
@@ -103,7 +103,7 @@
 .relationship-editor-validation [role="alert"] { color: var(--ds-warning); }
 .relationship-editor-footer { display: flex; justify-content: flex-end; gap: 10px; position: sticky; bottom: -24px; margin: 20px -24px -24px; padding: 14px 24px; border-top: 1px solid var(--ds-separator); background: var(--ds-surface); z-index: 6; }
 @media (max-width: 760px) {
-  .relationship-manager { width: calc(100vw - 20px); height: calc(100vh - 20px); }
+  .relationship-manager { width: calc(var(--ds-viewport-width) - 20px); height: calc(var(--ds-viewport-height) - 20px); }
   .relationship-manager-header { padding: 14px; flex-wrap: wrap; }
   .relationship-manager-header > div { flex-basis: 50%; }
   .relationship-manager-tools { padding: 12px 14px; flex-wrap: wrap; }

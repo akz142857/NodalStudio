@@ -1,3 +1,5 @@
+import { translateUiLabel } from "../i18n/business-labels";
+import { createTranslator, type Translate } from "../i18n";
 import type { DatabaseSnapshot, ObjectKey, SchemaOperation, TableDefinition } from "../platform";
 
 export type ObjectProperties = Record<string, unknown>;
@@ -87,11 +89,11 @@ export const PROPERTY_LABELS: Record<string, string> = {
   values: "Values",
 };
 
-export function propertyValue(value: unknown): string {
-  if (value === undefined) return "Not present";
-  if (value === null) return "None";
-  if (value === "") return '"" (empty string)';
-  if (typeof value === "boolean") return value ? "Yes" : "No";
+export function propertyValue(value: unknown, t: Translate = createTranslator("en")): string {
+  if (value === undefined) return t("business.notPresent");
+  if (value === null) return translateUiLabel("None", t);
+  if (value === "") return translateUiLabel('"" (empty string)', t);
+  if (typeof value === "boolean") return translateUiLabel(value ? "Yes" : "No", t);
   if (typeof value === "string" || typeof value === "number") return String(value);
   return JSON.stringify(value, null, 2);
 }

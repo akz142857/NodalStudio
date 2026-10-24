@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { useState } from "react";
 import type {
   DomainGroup,
@@ -28,6 +29,7 @@ export function KnowledgePanel({
   onChange,
   onApplyView,
 }: KnowledgePanelProps) {
+  const { t: bt } = useI18n();
   const [groupName, setGroupName] = useState("");
   const [groupColor, setGroupColor] = useState("#77e08a");
   const [viewName, setViewName] = useState("");
@@ -96,12 +98,11 @@ export function KnowledgePanel({
   }
 
   return (
-    <section className="knowledge-panel" aria-label="Semantic model">
+    <section className="knowledge-panel" aria-label={bt("businessSupport.semanticModel")}>
       <div className="section-heading">
-        <h2>Groups & views</h2>
+        <h2>{bt("businessSupport.groupsViews")}</h2>
         <button type="button" onClick={() => onApplyView(undefined)}>
-          Clear view
-        </button>
+          {bt("businessSupport.clearView")}</button>
       </div>
 
       {semantics.domainGroups.length > 0 ? (
@@ -125,7 +126,7 @@ export function KnowledgePanel({
           {semantics.savedViews.map((view) => (
             <button type="button" key={view.id} onClick={() => onApplyView(view)}>
               <strong>{view.name}</strong>
-              <span>{view.relationshipDepth} hops</span>
+              <span>{view.relationshipDepth} {bt("businessSupport.hops")}</span>
             </button>
           ))}
         </div>
@@ -134,21 +135,19 @@ export function KnowledgePanel({
       <div className="semantic-create">
         <p>
           {selectedTable
-            ? `Use ${selectedTable.key.name} as the selected root.`
-            : "Select a table to create a group or relationship view."}
+            ? bt("businessSupport.useAsTheSelectedRoot", { value0: selectedTable.key.name })
+            : bt("businessSupport.selectATableToCreateAGroupOrRelationship")}
         </p>
         <div className="semantic-create-row">
-          <label className="semantic-name">Business group
-          <input
-            aria-label="Business group"
+          <label className="semantic-name">{bt("businessSupport.businessGroup")}<input
+            aria-label={bt("businessSupport.businessGroup")}
             value={groupName}
             onChange={(event) => setGroupName(event.target.value)}
-            placeholder="Business group"
+            placeholder={bt("businessSupport.businessGroup")}
             disabled={!selectedTable || pending}
           /></label>
-          <label>Color
-          <input
-            aria-label="Group color"
+          <label>{bt("businessSupport.color")}<input
+            aria-label={bt("businessSupport.groupColor")}
             className="color-input"
             type="color"
             value={groupColor}
@@ -160,44 +159,38 @@ export function KnowledgePanel({
             disabled={!selectedTable || !groupName.trim() || pending}
             onClick={() => void createGroup()}
           >
-            Add group
-          </button>
+            {bt("businessSupport.addGroup")}</button>
         </div>
         <div className="semantic-create-row">
-          <label className="semantic-name">Relationship view
-          <input
-            aria-label="Saved relationship view"
+          <label className="semantic-name">{bt("businessSupport.relationshipView")}<input
+            aria-label={bt("businessSupport.savedRelationshipView")}
             value={viewName}
             onChange={(event) => setViewName(event.target.value)}
-            placeholder="Saved relationship view"
+            placeholder={bt("businessSupport.savedRelationshipView")}
             disabled={!selectedTable || pending}
           /></label>
-          <label>Depth
-          <select
-            aria-label="Relationship depth"
+          <label>{bt("businessSupport.depth")}<select
+            aria-label={bt("businessSupport.relationshipDepth")}
             value={depth}
             onChange={(event) => setDepth(Number(event.target.value))}
             disabled={!selectedTable || pending}
           >
-            <option value={0}>Root</option>
-            <option value={1}>1 hop</option>
-            <option value={2}>2 hops</option>
-            <option value={3}>3 hops</option>
+            <option value={0}>{bt("businessSupport.root")}</option>
+            <option value={1}>{bt("businessSupport.1Hop")}</option>
+            <option value={2}>{bt("businessSupport.2Hops")}</option>
+            <option value={3}>{bt("businessSupport.3Hops")}</option>
           </select></label>
           <button
             type="button"
             disabled={readOnly || !selectedTable || !viewName.trim() || pending}
             onClick={() => void createView()}
           >
-            Save view
-          </button>
+            {bt("businessSupport.saveView")}</button>
         </div>
       </div>
       {semantics.orphanedAnnotations.length > 0 ? (
         <p className="semantic-warning">
-          {semantics.orphanedAnnotations.length} annotations reference removed objects and remain
-          preserved.
-        </p>
+          {semantics.orphanedAnnotations.length} {bt("businessSupport.annotationsReferenceRemovedObjectsAndRemainPreserved")}</p>
       ) : null}
       {error ? <p className="error-message">{error}</p> : null}
     </section>

@@ -559,6 +559,7 @@ struct RelationshipValidation {
     suggested_cardinality: RelationshipCardinality,
     status: LogicalRelationshipStatus,
     messages: Vec<String>,
+    message_codes: Vec<&'static str>,
 }
 
 #[derive(Deserialize)]
@@ -887,6 +888,7 @@ fn prepare_connection_test(
     if input.password.is_empty() {
         let id = input.id.ok_or_else(|| {
             ConnectionFailure::new("database", "Enter the database password before testing.")
+                .with_code("passwordRequired")
         })?;
         input.password = credential_entry(id)
             .and_then(|entry| {
@@ -3725,11 +3727,13 @@ fn validate_relationship_against_snapshot(
     relationship_id: Option<Uuid>,
 ) -> RelationshipValidation {
     let mut messages = Vec::new();
+    let mut message_codes = Vec::new();
     if source.columns.is_empty()
         || target.columns.is_empty()
         || source.columns.len() != target.columns.len()
     {
         messages.push("Relationship endpoints require the same non-zero number of columns.".into());
+        message_codes.push("fieldCount");
         return RelationshipValidation {
             valid: false,
             compatible: false,
@@ -3738,10 +3742,12 @@ fn validate_relationship_against_snapshot(
             suggested_cardinality: RelationshipCardinality::Unspecified,
             status: LogicalRelationshipStatus::Orphaned,
             messages,
+            message_codes,
         };
     }
     if source == target {
         messages.push("A relationship cannot connect a field to itself.".into());
+        message_codes.push("selfReference");
         return RelationshipValidation {
             valid: false,
             compatible: true,
@@ -3750,12 +3756,14 @@ fn validate_relationship_against_snapshot(
             suggested_cardinality: RelationshipCardinality::Unspecified,
             status: LogicalRelationshipStatus::Conflicted,
             messages,
+            message_codes,
         };
     }
     let source_types = endpoint_column_types(snapshot, source);
     let target_types = endpoint_column_types(snapshot, target);
     if source_types.is_none() || target_types.is_none() {
         messages.push("One or more relationship tables or columns no longer exist.".into());
+        message_codes.push("missingField");
         return RelationshipValidation {
             valid: false,
             compatible: false,
@@ -3764,15 +3772,18 @@ fn validate_relationship_against_snapshot(
             suggested_cardinality: RelationshipCardinality::Unspecified,
             status: LogicalRelationshipStatus::Orphaned,
             messages,
+            message_codes,
         };
     }
     let compatible = source_types == target_types;
     if !compatible {
         messages.push("Source and target column types differ.".into());
+        message_codes.push("typeMismatch");
     }
     let physical_exists = physical_relationship_exists(snapshot, source, target);
     if physical_exists {
         messages.push("The database already contains this physical foreign key.".into());
+        message_codes.push("physicalExists");
     }
     let key = logical_relationship_key(source, target);
     let duplicate = existing.iter().any(|relationship| {
@@ -3780,6 +3791,7 @@ fn validate_relationship_against_snapshot(
     });
     if duplicate {
         messages.push("This logical relationship already exists.".into());
+        message_codes.push("duplicate");
     }
     let status = if physical_exists {
         LogicalRelationshipStatus::SupersededByPhysical
@@ -3796,6 +3808,7 @@ fn validate_relationship_against_snapshot(
         suggested_cardinality: suggested_cardinality(snapshot, source, target),
         status,
         messages,
+        message_codes,
     }
 }
 
@@ -5308,6 +5321,8 @@ mod tests {
             validate_relationship_against_snapshot(&mysql_snapshot, &[], &source, &target, None);
         assert!(!signedness.valid);
         assert!(!signedness.compatible);
+        assert_eq!(signedness.message_codes, ["typeMismatch"]);
+        assert_eq!(signedness.message_codes.len(), signedness.messages.len());
         assert_eq!(signedness.status, LogicalRelationshipStatus::Conflicted);
         mysql_snapshot.schemas[0].tables[1].columns[0].formatted_type = "INT UNSIGNED".into();
         assert!(

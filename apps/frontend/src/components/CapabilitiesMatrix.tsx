@@ -1,35 +1,39 @@
+import { capabilityMessages, capabilityTargetMessages, capabilityStatusMessages } from "../i18n/capabilities";
+import { useI18n } from "../i18n";
 import { useState } from "react";
 import type { DatabaseInfo, RuntimeInfo } from "../platform";
-import { capabilityDefinitions, capabilityStatusLabels, capabilityTargets, currentCapabilityTarget, type CapabilityId, type CapabilityStatus } from "../platform/capabilities";
+import { capabilityDefinitions, capabilityTargets, currentCapabilityTarget, type CapabilityId, type CapabilityStatus } from "../platform/capabilities";
 
 export function CapabilitiesMatrix({ runtime, database }: { runtime?: RuntimeInfo; database?: DatabaseInfo }) {
+  const { t } = useI18n();
+
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<CapabilityStatus | "">("");
   const [selected, setSelected] = useState<CapabilityId>("read-only-query");
   const current = currentCapabilityTarget(runtime?.kind, database?.databaseType);
   const definitions = capabilityDefinitions.filter((definition) =>
     (!status || capabilityTargets.some((target) => definition.targets[target.id].status === status))
-    && [definition.name, definition.category, ...capabilityTargets.map((target) => definition.targets[target.id].scope)].join(" ").toLowerCase().includes(query.trim().toLowerCase()));
+    && [definition.name, definition.category, t(capabilityMessages[definition.id].name), t(capabilityMessages[definition.id].category), ...capabilityTargets.map((target) => t(capabilityMessages[definition.id].targets[target.id])), ...capabilityTargets.map((target) => definition.targets[target.id].scope)].join(" ").toLowerCase().includes(query.trim().toLowerCase()));
   const detail = definitions.find((definition) => definition.id === selected) ?? definitions[0];
-  return <section className="capabilities-matrix" aria-label="Product capabilities">
-    <p>This build's support scope, compared across runtime and database dialect. Permissions, credentials, loaded snapshots, server metadata and policy still determine actual availability; this view does not test a connection.</p>
-    <p className="capabilities-current">Current context: {runtime ? runtime.kind === "desktop" ? "Desktop" : "Web" : "Runtime not detected"} · {database ? `${database.databaseType === "postgreSql" ? "PostgreSQL" : database.databaseType === "mySql" ? "MySQL" : "Unknown dialect"} ${database.version}` : "No loaded database"}. {current ? "The matching column is highlighted." : "No column selected; an unknown context is not treated as supported."}</p>
-    <p>Supported: available within the stated scope. Partial: limited metadata or functionality. Unavailable: absent or outside this runtime's scope. Open a feature's details for the exact limits.</p>
+  return <section className="capabilities-matrix" aria-label={t("capabilities.productCapabilities")}>
+    <p>{t("capabilities.thisBuildSSupportScopeComparedAcrossRuntime")}</p>
+    <p className="capabilities-current">{t("capabilities.currentContext")}{" "}{runtime ? runtime.kind === "desktop" ? t("settings.desktop") : t("capabilities.web") : t("capabilities.runtimeNotDetected")} · {database ? `${database.databaseType === "postgreSql" ? "PostgreSQL" : database.databaseType === "mySql" ? "MySQL" : t("capabilities.unknownDialect")} ${database.version}` : t("capabilities.noLoadedDatabase")}. {current ? t("capabilities.theMatchingColumnIsHighlighted") : t("capabilities.noColumnSelectedAnUnknownContextIsNot")}</p>
+    <p>{t("capabilities.supportedAvailableWithinTheStatedScopePartialLimited")}</p>
     <div className="capabilities-filters">
-      <label>Search capabilities<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-      <label>Status<select value={status} onChange={(event) => setStatus(event.target.value as CapabilityStatus | "")}><option value="">All statuses</option>{Object.entries(capabilityStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label>{t("capabilities.searchCapabilities")}<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+      <label>{t("capabilities.status")}<select value={status} onChange={(event) => setStatus(event.target.value as CapabilityStatus | "")}><option value="">{t("capabilities.allStatuses")}</option>{Object.entries(capabilityStatusMessages).map(([value, key]) => <option key={value} value={value}>{t(key)}</option>)}</select></label>
     </div>
-    <p>{definitions.length} of {capabilityDefinitions.length} capabilities · Status filter matches any of the four combinations.</p>
+    <p>{definitions.length} {t("capabilities.of")}{" "}{capabilityDefinitions.length} {t("capabilities.capabilitiesStatusFilterMatchesAnyOfTheFour")}</p>
     {definitions.length ? <>
-      <div className="capabilities-table-scroll" role="region" aria-label="Scrollable capability comparison" tabIndex={0}>
-        <table><caption>Capability matrix · current build</caption><thead><tr><th scope="col">Feature · select for details</th>{capabilityTargets.map((target) => <th key={target.id} scope="col" data-current={current === target.id || undefined}>{target.label}{current === target.id ? <> <small>Current</small></> : null}</th>)}</tr></thead>
-          <tbody>{definitions.map((definition) => <tr key={definition.id}><th scope="row"><button type="button" aria-pressed={detail?.id === definition.id} aria-controls="capability-detail" onClick={() => setSelected(definition.id)}>{definition.name}</button><small>{definition.category}</small></th>
-            {capabilityTargets.map((target) => <td key={target.id} data-current={current === target.id || undefined}><span className="capability-status" data-status={definition.targets[target.id].status}>{capabilityStatusLabels[definition.targets[target.id].status]}</span></td>)}
+      <div className="capabilities-table-scroll" role="region" aria-label={t("capabilities.scrollableCapabilityComparison")} tabIndex={0}>
+        <table><caption>{t("capabilities.capabilityMatrixCurrentBuild")}</caption><thead><tr><th scope="col">{t("capabilities.featureSelectForDetails")}</th>{capabilityTargets.map((target) => <th key={target.id} scope="col" data-current={current === target.id || undefined}>{t(capabilityTargetMessages[target.id])}{current === target.id ? <> <small>{t("capabilities.current")}</small></> : null}</th>)}</tr></thead>
+          <tbody>{definitions.map((definition) => <tr key={definition.id}><th scope="row"><button type="button" aria-pressed={detail?.id === definition.id} aria-controls="capability-detail" onClick={() => setSelected(definition.id)}>{t(capabilityMessages[definition.id].name)}</button><small>{t(capabilityMessages[definition.id].category)}</small></th>
+            {capabilityTargets.map((target) => <td key={target.id} data-current={current === target.id || undefined}><span className="capability-status" data-status={definition.targets[target.id].status}>{t(capabilityStatusMessages[definition.targets[target.id].status])}</span></td>)}
           </tr>)}</tbody></table>
       </div>
-      {detail ? <section className="capability-detail" id="capability-detail" aria-label="Capability details"><h3>{detail.name}</h3>
-        <div>{capabilityTargets.map((target) => <article key={target.id} data-current={current === target.id || undefined}><h4>{target.label}{current === target.id ? " · Current" : ""}</h4><span className="capability-status" data-status={detail.targets[target.id].status}>{capabilityStatusLabels[detail.targets[target.id].status]}</span><p>{detail.targets[target.id].scope}</p></article>)}</div>
+      {detail ? <section className="capability-detail" id="capability-detail" aria-label={t("capabilities.capabilityDetails")}><h3>{t(capabilityMessages[detail.id].name)}</h3>
+        <div>{capabilityTargets.map((target) => <article key={target.id} data-current={current === target.id || undefined}><h4>{t(capabilityTargetMessages[target.id])}{current === target.id ? t("capabilities.currentDetail") : ""}</h4><span className="capability-status" data-status={detail.targets[target.id].status}>{t(capabilityStatusMessages[detail.targets[target.id].status])}</span><p>{t(capabilityMessages[detail.id].targets[target.id])}</p></article>)}</div>
       </section> : null}
-    </> : <p>No capabilities match the current filters. Clear the search or change the status filter.</p>}
+    </> : <p>{t("capabilities.noCapabilitiesMatchTheCurrentFiltersClearThe")}</p>}
   </section>;
 }

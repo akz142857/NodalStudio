@@ -187,3 +187,23 @@ describe("inspector task identity", () => {
     await act(async () => { pending.resolve(tableAiResult); await pending.promise; }); expect(screen.queryByText(summary)).not.toBeInTheDocument(); expect(p.mocks.cancelTableExplanation).toHaveBeenCalledWith("fixture-request");
   });
 });
+
+it("retains question and in-flight answer across a language preference change", async () => {
+  const p = props();
+  const pending = deferred<TableAiResult>();
+  p.mocks.runTableExplanation.mockReturnValue(pending.promise);
+  const view = render(<TableAiAssistant {...p} />);
+  fireEvent.change(screen.getByRole("textbox", { name: "Question" }), { target: { value: "Keep this unsaved question" } });
+  await ready();
+  fireEvent.click(screen.getByRole("button", { name: "Send and answer" }));
+  const prepared = p.mocks.prepareTableExplanation.mock.calls.length;
+  const cancelled = p.mocks.cancelTableExplanation.mock.calls.length;
+  const settings = structuredClone(p.settings); settings.app.general.language = "zhCn";
+  view.rerender(<TableAiAssistant {...p} settings={settings} />);
+  expect(screen.getByRole("textbox")).toHaveValue("Keep this unsaved question");
+  expect(p.mocks.prepareTableExplanation).toHaveBeenCalledTimes(prepared);
+  expect(p.mocks.cancelTableExplanation).toHaveBeenCalledTimes(cancelled);
+  await act(async () => { pending.resolve(tableAiResult); await pending.promise; });
+  expect(screen.getByText(summary)).toBeVisible();
+  expect(p.mocks.runTableExplanation).toHaveBeenCalledOnce();
+});

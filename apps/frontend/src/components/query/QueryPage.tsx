@@ -1,3 +1,5 @@
+import { queryErrorMessages } from "../../i18n/query-errors";
+import { useI18n, type Translate } from "../../i18n";
 import { useEffect, useId, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import type { DatabaseSnapshot, QueryErrorKind, QueryExecutionResult, QueryHistoryEntry, NodalStudioPlatform } from "../../platform";
 import { QueryRunControls } from "./QueryRunControls";
@@ -27,17 +29,18 @@ interface QueryPageProps {
   onOpenAiSettings?: () => void;
 }
 
-function queryError(error: unknown): { kind: QueryErrorKind; message: string } {
+function queryError(bt: Translate, error: unknown): { kind: QueryErrorKind; message: string } {
   if (typeof error === "object" && error && "kind" in error && "message" in error) {
     return { kind: String(error.kind) as QueryErrorKind, message: String(error.message) };
   }
   if (typeof error === "string") {
-    try { return queryError(JSON.parse(error)); } catch { return { kind: "internal", message: error }; }
+    try { return queryError(bt, JSON.parse(error)); } catch { return { kind: "internal", message: error }; }
   }
-  return { kind: "internal", message: error instanceof Error ? error.message : "Query execution failed." };
+  return { kind: "internal", message: error instanceof Error ? error.message : bt("business.queryExecutionFailed") };
 }
 
 export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onConsumeOpenRequest, settings, semantics, selectedTable, draftSeed, onOpenAiSettings }: QueryPageProps) {
+  const { t: bt } = useI18n();
   const [drafting, setDrafting] = useState(Boolean(draftSeed && draftSeed.sourceId === snapshot?.sourceId && draftSeed.snapshotId === snapshot?.id));
   const draftBinding = JSON.stringify([settings?.source, settings?.app.privacy, semantics?.logicalRelationships, semantics?.domainGroups, semantics?.knowledge]);
   const [generatedRequest, setGeneratedRequest] = useState<{ sourceId: string; snapshotId: string; sql: string; binding: string }>();
@@ -71,7 +74,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   if (previousSourceId.current !== sourceId) {
     previousSourceId.current = sourceId;
     setDrafting(false);
-    setSession((current) => ({ ...current, result: undefined, outcome: undefined, message: "Data source changed. The SQL draft was preserved; run it again against the new source.", activeTab: "message" }));
+    setSession((current) => ({ ...current, result: undefined, outcome: undefined, message: bt("business.dataSourceChangedTheSQLDraftWasPreservedRun"), activeTab: "message" }));
   }
   useEffect(() => { saveQuerySession(sessionKey, session); }, [session]);
   useEffect(() => {
@@ -95,7 +98,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   async function run(sqlText: string) {
     if (!snapshot || !desktopReady || executing || activeQueryId.current || drafting || pendingOpen) return;
     if (!sqlText.trim()) {
-      setSession((current) => ({ ...current, message: "Enter one read-only SELECT statement before running the query.", activeTab: "message", outputCollapsed: false }));
+      setSession((current) => ({ ...current, message: bt("business.enterOneReadOnlySELECTStatementBeforeRunningThe"), activeTab: "message", outputCollapsed: false }));
       editorRef.current?.focus();
       return;
     }
@@ -106,17 +109,17 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     activeQueryId.current = queryId;
     setExecuting(true);
     setElapsedMs(0);
-    setSession((current) => ({ ...current, message: "Executing read-only query…", activeTab: "message", outputCollapsed: false }));
+    setSession((current) => ({ ...current, message: bt("business.executingReadOnlyQuery"), activeTab: "message", outputCollapsed: false }));
     try {
       const result: QueryExecutionResult = await platform.executeReadonlyQuery({ queryId, sourceId, sql: sqlText, rowLimit: session.rowLimit, timeoutMs: 30_000 });
       if (sourceRevision.current !== revision) return;
       setDraftExecution({ sourceId, snapshotId: snapshot.id, sql: sqlText, result });
-      const summary = `${result.rowCount} rows in ${result.durationMs} ms${result.truncated ? " · truncated at the selected row limit" : ""}.`;
+      const summary = bt("business.rowsInMs", { value0: result.rowCount, value1: result.durationMs, value2: result.truncated ? " · truncated at the selected row limit" : "" });
       setSession((current) => ({ ...current, result, outcome: "succeeded", message: [summary, ...result.notices].join("\n"), activeTab: "results", outputCollapsed: false }));
     } catch (error) {
       if (sourceRevision.current !== revision) return;
-      const normalized = queryError(error);
-      setSession((current) => ({ ...current, outcome: "failed", message: `${normalized.kind}: ${normalized.message}`, activeTab: "message", outputCollapsed: false }));
+      const normalized = queryError(bt, error);
+      setSession((current) => ({ ...current, outcome: "failed", message: `${bt(queryErrorMessages[normalized.kind])}: ${normalized.message}`, activeTab: "message", outputCollapsed: false }));
     } finally {
       activeQueryId.current = undefined;
       setExecuting(false);
@@ -127,7 +130,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
 
   function stopQuery() {
     if (activeQueryId.current) void platform.cancelQuery(activeQueryId.current).catch((error: unknown) => {
-      setSession((current) => ({ ...current, message: `Unable to stop query: ${queryError(error).message}`, activeTab: "message" }));
+      setSession((current) => ({ ...current, message: bt("business.unableToStopQuery", { value0: queryError(bt, error).message }), activeTab: "message" }));
     });
   }
   function showEditor() { setDrafting(false); setFocusOutput(false); }
@@ -156,12 +159,12 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   }
   const outputHeight = session.outputCollapsed ? "46px" : session.outputResized ? `${session.resultHeight}px` : "45%";
   const tabs: { id: QueryTab; label: string; count?: number }[] = [
-    { id: "results", label: "Results", count: session.result?.rowCount },
-    { id: "message", label: "Message" },
-    { id: "history", label: "History", count: history.length },
+    { id: "results", label: bt("business.results"), count: session.result?.rowCount },
+    { id: "message", label: bt("business.message") },
+    { id: "history", label: bt("business.history"), count: history.length },
   ];
 
-  return <section className="query-page" aria-label="Query workspace" data-focus-output={focusOutput || undefined} style={{ "--query-output-height": outputHeight } as CSSProperties} onKeyDownCapture={(event) => {
+  return <section className="query-page" aria-label={bt("business.queryWorkspace")} data-focus-output={focusOutput || undefined} style={{ "--query-output-height": outputHeight } as CSSProperties} onKeyDownCapture={(event) => {
     if (!(event.metaKey || event.ctrlKey) || event.altKey || event.nativeEvent.isComposing) return;
     const key = event.key.toLowerCase();
     if (key !== "r" && key !== "enter" && key !== ".") return;
@@ -174,58 +177,58 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     void run(key === "r" && event.shiftKey ? editorRef.current?.getCurrentStatementSql() ?? "" : editorRef.current?.getExecutableSql() ?? "");
   }}>
     <header className="query-toolbar">
-      <div className="query-source"><ActionIcon name="database" /><div><strong>{snapshot?.database.name ?? "Query"}</strong><span>{snapshot ? `${snapshot.database.databaseType === "postgreSql" ? "PostgreSQL" : "MySQL"} · ${snapshot.schemas.length} ${snapshot.schemas.length === 1 ? "schema" : "schemas"}` : "Select a data source to begin"}</span></div></div>
+      <div className="query-source"><ActionIcon name="database" /><div><strong>{snapshot?.database.name ?? bt("business.queryDetail")}</strong><span>{snapshot ? `${snapshot.database.databaseType === "postgreSql" ? "PostgreSQL" : "MySQL"} · ${snapshot.schemas.length === 1 ? bt("businessExtra.oneSchema") : bt("businessExtra.countSchemas", { count: snapshot.schemas.length })}` : bt("business.selectADataSourceToBegin")}</span></div></div>
       <div className="query-toolbar-actions">
 
-        <span className="query-readonly" title="Queries run in a read-only transaction"><ActionIcon name="shield" />Read only</span>
-        <label className="query-limit">Row limit<select value={[100, 500, 1000].includes(session.rowLimit) ? session.rowLimit : "custom"} onChange={(event) => setSession((current) => ({ ...current, rowLimit: event.target.value === "custom" ? 5000 : Number(event.target.value) }))}><option value={100}>100</option><option value={500}>500</option><option value={1000}>1,000</option><option value="custom">Custom…</option></select></label>
-        {![100, 500, 1000].includes(session.rowLimit) ? <label className="query-custom-limit"><input aria-label="Custom row limit" type="number" min={1} max={5000} value={session.rowLimit} onChange={(event) => setSession((current) => ({ ...current, rowLimit: Math.min(5000, Math.max(1, Number(event.target.value) || 1)) }))} /></label> : null}
+        <span className="query-readonly" title={bt("business.queriesRunInAReadOnlyTransaction")}><ActionIcon name="shield" />{bt("business.readOnly")}</span>
+        <label className="query-limit">{bt("business.rowLimit")}<select value={[100, 500, 1000].includes(session.rowLimit) ? session.rowLimit : "custom"} onChange={(event) => setSession((current) => ({ ...current, rowLimit: event.target.value === "custom" ? 5000 : Number(event.target.value) }))}><option value={100}>100</option><option value={500}>500</option><option value={1000}>1,000</option><option value="custom">{bt("business.custom")}</option></select></label>
+        {![100, 500, 1000].includes(session.rowLimit) ? <label className="query-custom-limit"><input aria-label={bt("business.customRowLimit")} type="number" min={1} max={5000} value={session.rowLimit} onChange={(event) => setSession((current) => ({ ...current, rowLimit: Math.min(5000, Math.max(1, Number(event.target.value) || 1)) }))} /></label> : null}
         <QueryRunControls executing={executing} disabled={!desktopReady || drafting || Boolean(pendingOpen)} onRun={() => void run(editorRef.current?.getExecutableSql() ?? "")} onRunCurrent={() => void run(editorRef.current?.getCurrentStatementSql() ?? "")} onStop={stopQuery} />
       </div>
     </header>
-    {!desktopReady ? <div className="query-runtime-notice">{runtimeKind === "web" ? "Query is available only in the desktop app. The web viewer never connects to your database." : capability.scope}</div> : null}
-    {!drafting && appliedDraft && appliedDraft.sourceId === sourceId && appliedDraft.snapshotId === snapshot?.id && session.draft === appliedDraft.sql ? <div className="query-draft-notice" role="status"><span>AI draft · Review the SQL, then choose Run when ready. Nothing has run.</span><button type="button" onClick={() => { setSession((current) => ({ ...current, draft: appliedDraft.previous })); setAppliedDraft(undefined); editorRef.current?.focus(); }}>Undo replacement</button></div> : null}
+    {!desktopReady ? <div className="query-runtime-notice">{runtimeKind === "web" ? bt("business.queryIsAvailableOnlyInTheDesktopAppThe") : capability.scope}</div> : null}
+    {!drafting && appliedDraft && appliedDraft.sourceId === sourceId && appliedDraft.snapshotId === snapshot?.id && session.draft === appliedDraft.sql ? <div className="query-draft-notice" role="status"><span>{bt("business.aIDraftReviewTheSQLThenChooseRunWhen")}</span><button type="button" onClick={() => { setSession((current) => ({ ...current, draft: appliedDraft.previous })); setAppliedDraft(undefined); editorRef.current?.focus(); }}>{bt("business.undoReplacement")}</button></div> : null}
     <div className="query-editor-heading">
-      <div className="query-input-tabs" role="tablist" aria-label="Query input" onKeyDown={(event) => {
+      <div className="query-input-tabs" role="tablist" aria-label={bt("business.queryInput")} onKeyDown={(event) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
         event.preventDefault();
         const next = canDraft && (event.key === "End" || (event.key !== "Home" && !drafting));
         setDrafting(next); setFocusOutput(false); (next ? draftTabRef : editorTabRef).current?.focus();
       }}>
-        <button ref={editorTabRef} type="button" role="tab" id={`${editorId}-sql`} aria-controls={`${editorId}-sql-panel`} aria-selected={!drafting} tabIndex={drafting ? -1 : 0} onClick={showEditor}>SQL editor</button>
-        {canDraft ? <button ref={draftTabRef} type="button" role="tab" id={`${editorId}-draft`} aria-controls={`${editorId}-draft-panel`} aria-selected={drafting} tabIndex={drafting ? 0 : -1} onClick={() => { setDrafting(true); setFocusOutput(false); }}><ActionIcon name="ai" />Draft query</button> : null}
+        <button ref={editorTabRef} type="button" role="tab" id={`${editorId}-sql`} aria-controls={`${editorId}-sql-panel`} aria-selected={!drafting} tabIndex={drafting ? -1 : 0} onClick={showEditor}>{bt("business.sQLEditor")}</button>
+        {canDraft ? <button ref={draftTabRef} type="button" role="tab" id={`${editorId}-draft`} aria-controls={`${editorId}-draft-panel`} aria-selected={drafting} tabIndex={drafting ? 0 : -1} onClick={() => { setDrafting(true); setFocusOutput(false); }}><ActionIcon name="ai" />{bt("business.draftQuery")}</button> : null}
       </div>
-      <span>{drafting ? "Generate a draft, then review it in SQL editor" : `Run a selection, or use ${queryKeys.current} for the current statement`}</span>
+      <span>{drafting ? bt("business.generateADraftThenReviewItInSQLEditor") : bt("business.runASelectionOrUseForTheCurrentStatement", { value0: queryKeys.current })}</span>
     </div>
     <div className="query-input-pane">
       <div className="query-editor-pane" role="tabpanel" id={`${editorId}-sql-panel`} aria-labelledby={`${editorId}-sql`} hidden={drafting}><SqlEditor ref={editorRef} value={session.draft} snapshot={snapshot} onChange={(draft) => setSession((current) => ({ ...current, draft }))} onRun={(sqlText) => void run(sqlText)} executing={executing} disabled={!desktopReady || Boolean(pendingOpen)} onStop={stopQuery} /></div>
       {canDraft && snapshot && settings && semantics ? <div className="query-draft-pane" role="tabpanel" id={`${editorId}-draft-panel`} aria-labelledby={`${editorId}-draft`} hidden={!drafting}><QueryDraftPanel platform={platform} snapshot={snapshot} settings={settings} semantics={semantics} seed={draftSeed} initialTable={selectedTable} execution={draftExecution?.sourceId === sourceId && draftExecution.snapshotId === snapshot.id ? draftExecution : undefined} onOpenSettings={() => onOpenAiSettings?.()} onUseSql={(sql) => setGeneratedRequest({ sourceId, snapshotId: snapshot.id, sql, binding: draftBinding })} /></div> : null}
     </div>
-    <div className="query-result-resizer" hidden={drafting} role="separator" aria-label="Resize query results" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={650} aria-valuenow={session.resultHeight} tabIndex={0} onMouseDown={beginResultResize} onKeyDown={(event) => {
+    <div className="query-result-resizer" hidden={drafting} role="separator" aria-label={bt("business.resizeQueryResults")} aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={650} aria-valuenow={session.resultHeight} tabIndex={0} onMouseDown={beginResultResize} onKeyDown={(event) => {
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
       event.preventDefault();
       setSession((current) => ({ ...current, outputCollapsed: false, outputResized: true, resultHeight: resizedQueryResultHeight(outputRef.current?.getBoundingClientRect().height || current.resultHeight, 0, event.key === "ArrowUp" ? -20 : 20) }));
     }}><span /></div>
-    <section ref={outputRef} hidden={drafting} className="query-output" aria-label="Query output pane" data-collapsed={session.outputCollapsed || undefined}>
+    <section ref={outputRef} hidden={drafting} className="query-output" aria-label={bt("business.queryOutputPane")} data-collapsed={session.outputCollapsed || undefined}>
       <header className="query-output-toolbar">
-        <div className="query-output-tabs" role="tablist" aria-label="Query output">{tabs.map((tab, index) => <button key={tab.id} type="button" role="tab" aria-label={`${tab.label}${tab.count !== undefined ? ` ${tab.count}` : ""}`} id={`${outputId}-${tab.id}`} aria-controls={`${outputId}-panel`} aria-selected={session.activeTab === tab.id} tabIndex={session.activeTab === tab.id ? 0 : -1} onClick={() => selectTab(tab.id)} onKeyDown={(event) => {
+        <div className="query-output-tabs" role="tablist" aria-label={bt("business.queryOutput")}>{tabs.map((tab, index) => <button key={tab.id} type="button" role="tab" aria-label={`${tab.label}${tab.count !== undefined ? ` ${tab.count}` : ""}`} id={`${outputId}-${tab.id}`} aria-controls={`${outputId}-panel`} aria-selected={session.activeTab === tab.id} tabIndex={session.activeTab === tab.id ? 0 : -1} onClick={() => selectTab(tab.id)} onKeyDown={(event) => {
           const next = event.key === "ArrowRight" ? (index + 1) % tabs.length : event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : undefined;
           if (next === undefined) return;
           event.preventDefault(); selectTab(tabs[next].id);
           document.getElementById(`${outputId}-${tabs[next].id}`)?.focus();
         }}>{tab.label}{tab.count !== undefined ? <span className="query-tab-count">{tab.count}</span> : null}</button>)}</div>
-        <span className="query-result-summary" role="status">{executing ? `Running · ${(elapsedMs / 1000).toFixed(1)} s` : session.outcome === "failed" ? "Query failed · See Message" : session.result ? `${session.result.rowCount} ${session.result.rowCount === 1 ? "row" : "rows"} · ${session.result.durationMs} ms${session.result.truncated ? " · Limit reached" : ""}` : "Ready"}</span>
+        <span className="query-result-summary" role="status">{executing ? bt("business.runningS", { value0: (elapsedMs / 1000).toFixed(1) }) : session.outcome === "failed" ? bt("business.queryFailedSeeMessage") : session.result ? bt("business.msDetail", { value0: session.result.rowCount, value1: session.result.rowCount === 1 ? bt("businessExtra.row") : bt("business.rows"), value2: session.result.durationMs, value3: session.result.truncated ? bt("businessExtra.limitReached") : "" }) : bt("business.ready")}</span>
         <div className="query-pane-actions">
-          <button type="button" aria-label={focusOutput ? "Restore split view" : "Expand output pane"} title={focusOutput ? "Restore split view" : "Expand output pane"} aria-pressed={focusOutput} onClick={() => { setFocusOutput(!focusOutput); setSession((current) => ({ ...current, outputCollapsed: false })); }}><ActionIcon name={focusOutput ? "split" : "expand"} /></button>
-          <button type="button" aria-label={session.outputCollapsed ? "Expand query output" : "Collapse query output"} title={session.outputCollapsed ? "Expand query output" : "Collapse query output"} aria-expanded={!session.outputCollapsed} onClick={() => { setFocusOutput(false); setSession((current) => ({ ...current, outputCollapsed: !current.outputCollapsed })); }}><span className="query-collapse-icon" data-collapsed={session.outputCollapsed || undefined}><ActionIcon name="chevronUp" /></span></button>
+          <button type="button" aria-label={focusOutput ? bt("business.restoreSplitView") : bt("business.expandOutputPane")} title={focusOutput ? bt("business.restoreSplitView") : bt("business.expandOutputPane")} aria-pressed={focusOutput} onClick={() => { setFocusOutput(!focusOutput); setSession((current) => ({ ...current, outputCollapsed: false })); }}><ActionIcon name={focusOutput ? "split" : "expand"} /></button>
+          <button type="button" aria-label={session.outputCollapsed ? bt("business.expandQueryOutput") : bt("business.collapseQueryOutput")} title={session.outputCollapsed ? bt("business.expandQueryOutput") : bt("business.collapseQueryOutput")} aria-expanded={!session.outputCollapsed} onClick={() => { setFocusOutput(false); setSession((current) => ({ ...current, outputCollapsed: !current.outputCollapsed })); }}><span className="query-collapse-icon" data-collapsed={session.outputCollapsed || undefined}><ActionIcon name="chevronUp" /></span></button>
         </div>
       </header>
-      {!session.outputCollapsed ? <div className="query-output-body" role="tabpanel" id={`${outputId}-panel`} aria-labelledby={`${outputId}-${session.activeTab}`} tabIndex={0}>{session.activeTab === "results" ? <QueryResultGrid result={session.result} platform={platform} /> : session.activeTab === "message" ? <pre className="query-message">{session.message}</pre> : <QueryHistory entries={history} onRestore={(draft) => { showEditor(); setSession((current) => ({ ...current, draft })); requestAnimationFrame(() => editorRef.current?.focus()); }} onDelete={(id) => { void platform.deleteQueryHistory(sourceId, id).then(() => setHistoryRecord((current) => ({ ...current, entries: current.entries.filter((item) => item.id !== id) }))); }} onClear={() => { if (window.confirm("Clear all local query history for this data source?")) void platform.clearQueryHistory(sourceId).then(() => setHistoryRecord({ sourceId, entries: [] })); }} />}</div> : null}
+      {!session.outputCollapsed ? <div className="query-output-body" role="tabpanel" id={`${outputId}-panel`} aria-labelledby={`${outputId}-${session.activeTab}`} tabIndex={0}>{session.activeTab === "results" ? <QueryResultGrid result={session.result} platform={platform} /> : session.activeTab === "message" ? <pre className="query-message">{session.message}</pre> : <QueryHistory entries={history} onRestore={(draft) => { showEditor(); setSession((current) => ({ ...current, draft })); requestAnimationFrame(() => editorRef.current?.focus()); }} onDelete={(id) => { void platform.deleteQueryHistory(sourceId, id).then(() => setHistoryRecord((current) => ({ ...current, entries: current.entries.filter((item) => item.id !== id) }))); }} onClear={() => { if (window.confirm(bt("business.clearAllLocalQueryHistoryForThisDataSource"))) void platform.clearQueryHistory(sourceId).then(() => setHistoryRecord({ sourceId, entries: [] })); }} />}</div> : null}
     </section>
 
-    {pendingOpen ? <div className="query-dialog-backdrop" role="presentation"><section className="query-dialog" role="dialog" aria-modal="true" aria-label="Open generated query" onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeOpen(); } }}><h3>{pendingGenerated ? "Use this SQL draft?" : session.draft.trim() ? "Editor already contains SQL" : "Preview table rows"}</h3><p>{pendingGenerated ? "This replaces the editor draft. You can undo the replacement. Review it in the editor, then choose Run to execute." : session.draft.trim() ? "Replace it, append the generated table query, or keep the current draft?" : "Open the generated read-only query in the editor?"}</p>{pendingGenerated ? <pre aria-label="SQL to insert">{pendingGenerated.sql}</pre> : null}<div><button type="button" onClick={() => {
+    {pendingOpen ? <div className="query-dialog-backdrop" role="presentation"><section className="query-dialog" role="dialog" aria-modal="true" aria-label={bt("business.openGeneratedQuery")} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeOpen(); } }}><h3>{pendingGenerated ? bt("business.useThisSQLDraft") : session.draft.trim() ? bt("business.editorAlreadyContainsSQL") : bt("business.previewTableRows")}</h3><p>{pendingGenerated ? bt("business.thisReplacesTheEditorDraftYouCanUndoThe") : session.draft.trim() ? bt("business.replaceItAppendTheGeneratedTableQueryOrKeep") : bt("business.openTheGeneratedReadOnlyQueryInTheEditor")}</p>{pendingGenerated ? <pre aria-label={bt("business.sQLToInsert")}>{pendingGenerated.sql}</pre> : null}<div><button type="button" onClick={() => {
       if (pendingGenerated) { setAppliedDraft({ ...pendingGenerated, previous: session.draft }); setDrafting(false); }
       showEditor(); setSession((current) => ({ ...current, draft: pendingOpen.sql })); closeOpen(); requestAnimationFrame(() => editorRef.current?.focus());
-    }}>Replace</button>{session.draft.trim() && !pendingGenerated ? <button type="button" onClick={() => { showEditor(); setSession((current) => ({ ...current, draft: `${current.draft.trimEnd()}\n\n${pendingOpen.sql}` })); closeOpen(); }}>Append</button> : null}<button type="button" autoFocus onClick={closeOpen}>Cancel</button></div></section></div> : null}
+    }}>{bt("business.replace")}</button>{session.draft.trim() && !pendingGenerated ? <button type="button" onClick={() => { showEditor(); setSession((current) => ({ ...current, draft: `${current.draft.trimEnd()}\n\n${pendingOpen.sql}` })); closeOpen(); }}>{bt("business.append")}</button> : null}<button type="button" autoFocus onClick={closeOpen}>{bt("business.cancel")}</button></div></section></div> : null}
   </section>;
 }

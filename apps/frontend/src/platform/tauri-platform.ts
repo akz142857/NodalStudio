@@ -65,7 +65,7 @@ export class TauriPlatform implements NodalStudioPlatform {
   listRelationshipBatches(sourceId: string): Promise<import("./relationship-batches").ReviewBatch[]> { return invoke("list_relationship_batches", { input: { sourceId } }); }
   undoRelationshipBatch(sourceId: string, batchId: string): Promise<import("./relationship-batches").ReviewBatch> { return invoke("undo_relationship_batch", { input: { sourceId, batchId } }); }
 
-  exportQueryResult(input: import("./types").QueryExportInput): Promise<string | null> { return invoke("export_query_result", { input: { ...input, result: { ...input.result, rows: input.result.rows.map((row) => row.map((cell) => cell.kind === "json" && cell.raw !== undefined ? { ...cell, value: null } : cell)) } } }); }
+  exportQueryResult(input: import("./types").QueryExportInput): Promise<string | null> { const { locale, ...exportInput } = input; return invoke("export_query_result", { ...(locale ? { locale } : {}), input: { ...exportInput, result: { ...input.result, rows: input.result.rows.map((row) => row.map((cell) => cell.kind === "json" && cell.raw !== undefined ? { ...cell, value: null } : cell)) } } }); }
   prepareKnowledgeDraft(input: import("./knowledge-types").KnowledgeDraftInput): Promise<import("./knowledge-types").KnowledgeDraft> { return invoke("prepare_knowledge_draft", { input }); }
   confirmKnowledgeDraft(id: string, text: string): Promise<ObjectAnnotation> { return invoke("confirm_knowledge_draft", { id, text }); }
   cancelKnowledgeDraft(id: string): Promise<void> { return invoke("cancel_knowledge_draft", { id }); }

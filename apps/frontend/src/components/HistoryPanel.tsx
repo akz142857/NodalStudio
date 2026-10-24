@@ -1,5 +1,5 @@
+import { useI18n } from "../i18n";
 import { useEffect, useRef, useState } from "react";
-import { formatSnapshotTime } from "./snapshot-presentation";
 import type {
   DatabaseSnapshot,
   SchemaChangeSet,
@@ -16,16 +16,6 @@ interface HistoryPanelProps {
   onCompare: (snapshot: DatabaseSnapshot, changeSet: SchemaChangeSet) => void;
 }
 
-function formatCapturedAt(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(new Date(value));
-}
 
 export function HistoryPanel({
   sourceId,
@@ -35,6 +25,7 @@ export function HistoryPanel({
   onSelect,
   onCompare,
 }: HistoryPanelProps) {
+  const { t: bt, formatDate } = useI18n();
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
   const [beforeId, setBeforeId] = useState("");
   const [afterId, setAfterId] = useState("");
@@ -100,20 +91,20 @@ export function HistoryPanel({
   }
 
   return (
-    <section className="history-panel" aria-label="Schema history">
+    <section className="history-panel" aria-label={bt("business.schemaHistory")}>
       <div className="section-heading">
-        <h2>History</h2>
+        <h2>{bt("business.history")}</h2>
         <span>{snapshots.length}</span>
       </div>
-      {activeSnapshot ? <section className="history-current-snapshot" aria-label="Viewing snapshot details">
-        <div className="history-current-heading"><strong>Viewing snapshot</strong>{snapshots[0] ? <span className="snapshot-version-badge">{snapshots[0].id === activeSnapshot.id ? "Latest captured" : "Historical"}</span> : null}</div>
-        <dl><div><dt>Captured</dt><dd><time dateTime={activeSnapshot.capturedAt}>{formatSnapshotTime(activeSnapshot.capturedAt)}</time></dd></div>
-          <div><dt>Tables</dt><dd>{activeSnapshot.schemas.reduce((n,schema) => n + schema.tables.length,0)}</dd></div>
-          <div><dt>Fingerprint</dt><dd className="history-fingerprint">{activeSnapshot.fingerprint}</dd></div></dl>
-        <p>A saved schema, not a data backup. Use Refresh schema in the toolbar to check the database again.</p>
+      {activeSnapshot ? <section className="history-current-snapshot" aria-label={bt("business.viewingSnapshotDetails")}>
+        <div className="history-current-heading"><strong>{bt("business.viewingSnapshot")}</strong>{snapshots[0] ? <span className="snapshot-version-badge">{snapshots[0].id === activeSnapshot.id ? bt("business.latestCaptured") : bt("business.historical")}</span> : null}</div>
+        <dl><div><dt>{bt("business.captured")}</dt><dd><time dateTime={activeSnapshot.capturedAt}>{formatDate(activeSnapshot.capturedAt)}</time></dd></div>
+          <div><dt>{bt("business.tables")}</dt><dd>{activeSnapshot.schemas.reduce((n,schema) => n + schema.tables.length,0)}</dd></div>
+          <div><dt>{bt("business.fingerprint")}</dt><dd className="history-fingerprint">{activeSnapshot.fingerprint}</dd></div></dl>
+        <p>{bt("business.aSavedSchemaNotADataBackupUseRefresh")}</p>
       </section> : null}
       {snapshots.length === 0 ? (
-        <p className="muted-copy">Capture a schema to establish its baseline.</p>
+        <p className="muted-copy">{bt("business.captureASchemaToEstablishItsBaseline")}</p>
       ) : (
         <>
           <div className="timeline-list">
@@ -127,11 +118,11 @@ export function HistoryPanel({
               >
                 <span className="timeline-dot" />
                 <span>
-                  <strong>{formatCapturedAt(snapshot.capturedAt)}</strong>
-                  {index === 0 ? <small>Latest captured</small> : null}
-                  {snapshot.id === (activeSnapshot?.id ?? revision) ? <small className="history-viewing-label">Viewing</small> : null}
+                  <strong>{formatDate(snapshot.capturedAt)}</strong>
+                  {index === 0 ? <small>{bt("business.latestCaptured")}</small> : null}
+                  {snapshot.id === (activeSnapshot?.id ?? revision) ? <small className="history-viewing-label">{bt("business.viewing")}</small> : null}
                   <small>
-                    {snapshot.tableCount} tables · {snapshot.fingerprint.slice(0, 8)}
+                    {snapshot.tableCount} {bt("business.tablesDetailDetailDetail")} {snapshot.fingerprint.slice(0, 8)}
                   </small>
                 </span>
               </button>
@@ -140,40 +131,36 @@ export function HistoryPanel({
           {snapshots.length > 1 ? (
             <div className="compare-controls">
               <label>
-                Before (baseline)
-                <select disabled={pending} value={beforeId} onChange={(event) => setBeforeId(event.target.value)}>
+                {bt("business.beforeBaseline")}<select className="ds-select" disabled={pending} value={beforeId} onChange={(event) => setBeforeId(event.target.value)}>
                   {snapshots.map((snapshot) => (
                     <option value={snapshot.id} key={snapshot.id}>
-                      {formatCapturedAt(snapshot.capturedAt)} · {snapshot.fingerprint.slice(0, 8)}
+                      {formatDate(snapshot.capturedAt)} · {snapshot.fingerprint.slice(0, 8)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                After (target)
-                <select disabled={pending} value={afterId} onChange={(event) => setAfterId(event.target.value)}>
+                {bt("business.afterTarget")}<select className="ds-select" disabled={pending} value={afterId} onChange={(event) => setAfterId(event.target.value)}>
                   {snapshots.map((snapshot) => (
                     <option value={snapshot.id} key={snapshot.id}>
-                      {formatCapturedAt(snapshot.capturedAt)} · {snapshot.fingerprint.slice(0, 8)}
+                      {formatDate(snapshot.capturedAt)} · {snapshot.fingerprint.slice(0, 8)}
                     </option>
                   ))}
                 </select>
               </label>
-              <p className="muted-copy">Before → After: additions and removals are relative to the baseline.</p>
+              <p className="muted-copy">{bt("business.beforeAfterAdditionsAndRemovalsAreRelativeToThe")}</p>
               <button
                 type="button"
                 disabled={pending}
                 onClick={() => { setBeforeId(afterId); setAfterId(beforeId); }}
               >
-                Swap direction
-              </button>
+                {bt("business.swapDirection")}</button>
               <button
                 type="button"
                 disabled={pending || !beforeId || !afterId || beforeId === afterId}
                 onClick={() => void compare()}
               >
-                Compare versions
-              </button>
+                {bt("business.compareVersions")}</button>
             </div>
           ) : null}
         </>

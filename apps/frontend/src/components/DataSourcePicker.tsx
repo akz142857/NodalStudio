@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { DataSourceProfile } from "../platform";
@@ -22,6 +23,7 @@ export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect, 
   onEdit?: (profile: DataSourceProfile) => void;
   onManage?: () => void;
 }) {
+  const { t: bt, locale } = useI18n();
   const trigger = useRef<HTMLButtonElement>(null);
   const menuId = useId();
   const activeSourceId = activeProfile?.id;
@@ -34,8 +36,8 @@ export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect, 
   }, []);
   return <>
     <button ref={trigger} type="button" className="source-navigation-picker" aria-disabled={disabled || undefined}
-      aria-label={activeProfile ? `Data source: ${activeProfile.database}` : "Select database"} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-      title={activeProfile ? `Switch database: ${activeProfile.database} — ${engine(activeProfile)} · ${activeProfile.displayName} · ${address(activeProfile)}` : "Select a database to open its saved model"}
+      aria-label={activeProfile ? bt("business.dataSourceDetail", { value0: activeProfile.database }) : bt("business.selectDatabase")} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
+      title={activeProfile ? bt("business.switchDatabase", { value0: activeProfile.database, value1: engine(activeProfile), value2: activeProfile.displayName, value3: address(activeProfile) }) : bt("business.selectADatabaseToOpenItsSavedModel")}
       onClick={() => { if (!disabled) setOpening(open ? undefined : { sourceId: activeSourceId, focus: "selected" }); }}
       onKeyDown={(event) => {
         if (disabled) return;
@@ -44,7 +46,7 @@ export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect, 
         setOpening({ sourceId: activeSourceId, focus: event.key === "ArrowDown" ? "first" : "last" });
       }}>
       <ActionIcon name="database" />
-      <span className="source-navigation-label"><strong>{activeProfile?.database ?? "Select database"}</strong><span>{activeProfile ? `${engine(activeProfile)} · ${activeProfile.displayName}` : `${profiles.length} saved connection${profiles.length === 1 ? "" : "s"}`}</span></span>
+      <span className="source-navigation-label"><strong>{activeProfile?.database ?? bt("business.selectDatabase")}</strong><span>{activeProfile ? `${engine(activeProfile)} · ${activeProfile.displayName}` : bt("business.savedConnection", { value0: profiles.length, value1: locale === "zh-CN" ? "" : (profiles.length === 1 ? "" : "s") })}</span></span>
       <ActionIcon name="chevronDown" />
     </button>
     {open && opening ? <DataSourceMenu id={menuId} trigger={trigger} profiles={profiles} activeSourceId={activeSourceId}
@@ -67,6 +69,7 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
   onEdit?: () => void;
   onManage?: () => void;
 }) {
+  const { t: bt } = useI18n();
   const root = useRef<HTMLDivElement>(null);
   const typeahead = useRef({ text: "", time: 0 });
   useLayoutEffect(() => {
@@ -116,7 +119,7 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
       window.removeEventListener("scroll", scroll, true);
     };
   }, [onClose, trigger]);
-  return createPortal(<div ref={root} id={id} className="data-source-menu" role="menu" aria-label="Switch database"
+  return createPortal(<div ref={root} id={id} className="data-source-menu" role="menu" aria-label={bt("business.switchDatabaseDetail")}
     onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}
     onKeyDown={(event) => {
       event.stopPropagation();
@@ -140,7 +143,7 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
         items[next]?.focus();
       }
     }}>
-    <div className="data-source-menu-heading" aria-hidden="true">Switch database</div>
+    <div className="data-source-menu-heading" aria-hidden="true">{bt("business.switchDatabaseDetail")}</div>
     {profiles.map((profile) => <button key={profile.id} type="button" role="menuitemradio" aria-checked={profile.id === activeSourceId}
       title={`${profile.database} — ${engine(profile)} · ${profile.displayName} · ${address(profile)}`}
       onClick={() => onSelect(profile)}>
@@ -148,9 +151,9 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
       <span className="data-source-menu-label"><strong>{profile.database}</strong><span>{engine(profile)} · {profile.displayName}</span><small>{address(profile)}</small></span>
       <span className="data-source-menu-check" aria-hidden="true">✓</span>
     </button>)}
-    {onEdit || onManage ? <div className="data-source-menu-actions" role="group" aria-label="Connection actions">
-      {onEdit ? <button type="button" role="menuitem" onClick={onEdit}><ActionIcon name="settings" />Edit current connection…</button> : null}
-      {onManage ? <button type="button" role="menuitem" onClick={onManage}><ActionIcon name="sliders" />Manage connections…</button> : null}
+    {onEdit || onManage ? <div className="data-source-menu-actions" role="group" aria-label={bt("business.connectionActions")}>
+      {onEdit ? <button type="button" role="menuitem" onClick={onEdit}><ActionIcon name="settings" />{bt("business.editCurrentConnection")}</button> : null}
+      {onManage ? <button type="button" role="menuitem" onClick={onManage}><ActionIcon name="sliders" />{bt("business.manageConnections")}</button> : null}
     </div> : null}
   </div>, document.body);
 }

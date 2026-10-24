@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import { BaseEdge, useStore, type EdgeProps } from "@xyflow/react";
 import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -43,6 +44,7 @@ export function SharedEdgeLayer({ enabled, activate, clear, children, graphScope
 }
 
 export function SharedEdge(props: EdgeProps<FieldEdge>) {
+  const { t: bt } = useI18n();
   const layer = useContext(Context);
   const target = props.selected ? layer?.selected : props.data?.relationshipKind === "inferred" ? layer?.inferred : layer?.normal;
   const group = useRef<SVGGElement>(null);
@@ -59,7 +61,7 @@ export function SharedEdge(props: EdgeProps<FieldEdge>) {
   const status = props.data?.changeStatus;
   return createPortal(<g ref={group} className={`react-flow__edge selectable nopan${props.selected ? " selected" : ""}${status ? ` comparison-edge comparison-edge-${status}` : ""}`}
     data-id={props.id} data-shared-edge="true" role="group" aria-roledescription="edge"
-    aria-label={`Edge from ${props.source} to ${props.target}`} tabIndex={0}
+    aria-label={bt("business.edgeFromTo", { value0: props.source, value1: props.target })} tabIndex={0}
     onClick={(event) => layer.activate(event, props.id, false)}
     onDoubleClick={(event) => layer.activate(event, props.id, true)}
     onKeyDown={(event) => {

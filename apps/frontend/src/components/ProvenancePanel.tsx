@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { type FormEvent, useState } from "react";
 import type { NodalStudioPlatform } from "../platform";
 
@@ -7,6 +8,7 @@ interface ProvenancePanelProps {
 }
 
 export function ProvenancePanel({ changeSetId, platform }: ProvenancePanelProps) {
+  const { t: bt } = useI18n();
   const [branch, setBranch] = useState("");
   const [commitSha, setCommitSha] = useState("");
   const [pullRequestUrl, setPullRequestUrl] = useState("");
@@ -34,12 +36,12 @@ export function ProvenancePanel({ changeSetId, platform }: ProvenancePanelProps)
 
   return (
     <form className="provenance-panel inspector-section" onSubmit={(event) => void save(event)}>
-      <label>Branch<input aria-label="Git branch" value={branch} onChange={(event) => setBranch(event.target.value)} placeholder="Branch" /></label>
-      <label>Commit<input aria-label="Commit SHA" value={commitSha} onChange={(event) => setCommitSha(event.target.value)} placeholder="Commit SHA" /></label>
-      <label>Pull request<input aria-label="Pull request URL" value={pullRequestUrl} onChange={(event) => setPullRequestUrl(event.target.value)} placeholder="Pull request URL" /></label>
-      <label>Migration files<input aria-label="Migration files" value={migrations} onChange={(event) => setMigrations(event.target.value)} placeholder="001.sql, 002.sql" /></label>
-      <div className="inspector-actions"><button type="submit" disabled={status === "saving"}>Save evidence</button></div>
-      <small>{status === "saved" ? "Evidence saved" : status === "error" ? (error ?? "Save failed") : "Optional metadata"}</small>
+      <label>{bt("businessSupport.branch")}<input aria-label={bt("businessSupport.gitBranch")} value={branch} onChange={(event) => setBranch(event.target.value)} placeholder={bt("businessSupport.branch")} /></label>
+      <label>{bt("businessSupport.commit")}<input aria-label={bt("businessSupport.commitSHA")} value={commitSha} onChange={(event) => setCommitSha(event.target.value)} placeholder={bt("businessSupport.commitSHA")} /></label>
+      <label>{bt("businessSupport.pullRequest")}<input aria-label={bt("businessSupport.pullRequestURL")} value={pullRequestUrl} onChange={(event) => setPullRequestUrl(event.target.value)} placeholder={bt("businessSupport.pullRequestURL")} /></label>
+      <label>{bt("businessSupport.migrationFiles")}<input aria-label={bt("businessSupport.migrationFiles")} value={migrations} onChange={(event) => setMigrations(event.target.value)} placeholder="001.sql, 002.sql" /></label>
+      <div className="inspector-actions"><button type="submit" disabled={status === "saving"}>{bt("businessSupport.saveEvidence")}</button></div>
+      <small>{status === "saved" ? bt("businessSupport.evidenceSaved") : status === "error" ? (error ?? bt("businessSupport.saveFailed")) : bt("businessSupport.optionalMetadata")}</small>
     </form>
   );
 }

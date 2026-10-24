@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { useRef } from "react";
 import type { NodalStudioPlatform } from "../platform";
 import { diagramPng, type DiagramSvg } from "../graph/diagram-export";
@@ -14,6 +15,7 @@ interface DiagramExportActionsProps {
 }
 
 export function DiagramExportActions({ platform, disabled, capture, fileName, scope = "diagram" }: DiagramExportActionsProps) {
+  const { t: bt } = useI18n();
   const operation = useOperation(scope);
   const formatRef = useRef<"svg" | "png">("svg");
   const exportDiagram = async (format: "svg" | "png") => {
@@ -36,13 +38,13 @@ export function DiagramExportActions({ platform, disabled, capture, fileName, sc
       const receipt = await platform.saveDiagramExport({ fileName: fileName(format), format, data });
       performance.measure("diagram-export:save", { start: saveStarted, end: performance.now() });
       return `${receipt.path ? `Saved to ${receipt.path}` : `Download started: ${fileName(format)}`} · ${artifact.width} × ${artifact.height}`;
-    }, { running: `Exporting diagram… ${format.toUpperCase()}`, success: (message) => message, failure: `Unable to export ${format.toUpperCase()} diagram.` });
+    }, { running: bt("business.exportingDiagram", { value0: format.toUpperCase() }), success: (message) => message, failure: bt("business.unableToExportDiagram", { value0: format.toUpperCase() }) });
   };
-  return <div className="diagram-export-actions" role="group" aria-label="Export current diagram">
+  return <div className="diagram-export-actions" role="group" aria-label={bt("business.exportCurrentDiagram")}>
     <div>
-      <button type="button" disabled={disabled || operation.busy} onClick={() => void exportDiagram("svg")} title="Export all tables in the current diagram, including those outside the viewport, with the current layout and legend">Export SVG</button>
-      <button type="button" disabled={disabled || operation.busy} onClick={() => void exportDiagram("png")} title="Export the current diagram as a PNG with its theme and legend">Export PNG</button>
+      <button type="button" disabled={disabled || operation.busy} onClick={() => void exportDiagram("svg")} title={bt("business.exportAllTablesInTheCurrentDiagramIncludingThose")}>{bt("business.exportSVG")}</button>
+      <button type="button" disabled={disabled || operation.busy} onClick={() => void exportDiagram("png")} title={bt("business.exportTheCurrentDiagramAsAPNGWithIts")}>{bt("business.exportPNG")}</button>
     </div>
-    <OperationFeedback label="Diagram export" state={operation.state} onRetry={() => void exportDiagram(formatRef.current)} retryLabel="Retry diagram export" retryDisabled={disabled} onDismiss={operation.dismiss} />
+    <OperationFeedback label={bt("business.diagramExport")} state={operation.state} onRetry={() => void exportDiagram(formatRef.current)} retryLabel={bt("business.retryDiagramExport")} retryDisabled={disabled} onDismiss={operation.dismiss} />
   </div>;
 }

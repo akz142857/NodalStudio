@@ -4,6 +4,8 @@ use serde::Serialize;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionFailure {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<&'static str>,
     pub stage: &'static str,
     pub message: String,
     pub ssh_connected: bool,
@@ -11,10 +13,15 @@ pub struct ConnectionFailure {
 impl ConnectionFailure {
     pub fn new(stage: &'static str, message: impl Into<String>) -> Self {
         Self {
+            code: None,
             stage,
             message: message.into(),
             ssh_connected: false,
         }
+    }
+    pub fn with_code(mut self, code: &'static str) -> Self {
+        self.code = Some(code);
+        self
     }
     pub fn after_ssh(mut self, connected: bool) -> Self {
         self.ssh_connected = connected;
@@ -28,36 +35,46 @@ impl std::fmt::Display for ConnectionFailure {
 }
 pub fn database(error: &sqlx::Error) -> ConnectionFailure {
     use sqlx::Error;
-    let (stage, message) = match error {
+    let (code, stage, message) = match error {
         Error::Tls(_) => (
+            "tlsHandshake",
             "tls",
             "TLS handshake or certificate verification failed. Check the CA certificate, database hostname, and client certificate/key.",
         ),
         Error::Database(error) => match error.code().as_deref() {
             Some("28P01" | "28000" | "1045" | "1698") => (
+                "authenticationRejected",
                 "database",
                 "Database authentication was rejected. Check the database username, password, and server access rules.",
             ),
-            Some("3D000" | "1049") => ("database", "The database does not exist. Check its name."),
+            Some("3D000" | "1049") => (
+                "databaseMissing",
+                "database",
+                "The database does not exist. Check its name.",
+            ),
             Some("42501" | "1044" | "1142") => (
+                "permissionDenied",
                 "database",
                 "The account does not have permission to access this database or read its metadata.",
             ),
             _ => (
+                "requestRejected",
                 "database",
                 "The database rejected the connection or metadata request. Check database access rules and permissions.",
             ),
         },
         Error::Io(_) | Error::PoolTimedOut => (
+            "unreachable",
             "database",
             "Could not reach the database or complete its handshake. Check its host, port, network, and server availability. With SSH enabled, the database must be reachable from the jump host.",
         ),
         _ => (
+            "identityUnavailable",
             "database",
             "Could not read database identity. Check server compatibility and metadata permissions.",
         ),
     };
-    ConnectionFailure::new(stage, message)
+    ConnectionFailure::new(stage, message).with_code(code)
 }
 pub fn postgres(error: postgres_adapter::PostgresAdapterError) -> ConnectionFailure {
     match error {
@@ -81,6 +98,7 @@ mod tests {
             std::io::Error::other("private-key-material").into(),
         ));
         assert_eq!(failure.stage, "tls");
+        assert_eq!(failure.code, Some("tlsHandshake"));
         assert!(!failure.message.contains("private-key-material"));
         assert!(!failure.ssh_connected);
     }
@@ -89,6 +107,10 @@ mod tests {
         let failure = database(&sqlx::Error::PoolTimedOut).after_ssh(true);
         assert_eq!(failure.stage, "database");
         assert!(failure.ssh_connected);
+        assert_eq!(
+            serde_json::to_value(&failure).unwrap()["code"],
+            "unreachable"
+        );
         assert!(failure.message.contains("jump host"));
     }
     #[tokio::test]

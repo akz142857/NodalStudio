@@ -1,3 +1,4 @@
+import { useI18n, useEventTranslator } from "../i18n";
 import { useEffect, useMemo, useState } from "react";
 import type { DatabaseSnapshot, DiscoveryOperation, EffectiveSettings, NodalStudioPlatform, SemanticBundle, TableDefinition } from "../platform";
 import { discoverTables, findKnownPath, knownRelationships, neighborhood, objectId, objectLabel } from "../graph/business-discovery";
@@ -25,6 +26,8 @@ export function BusinessExplorer(props: Props) {
   return <ExplorerSession key={JSON.stringify([props.snapshot, props.semantics.domainGroups, props.semantics.logicalRelationships, props.settings.source, props.settings.app.privacy, props.desktop, props.semantics.knowledge])} {...props} />;
 }
 function ExplorerSession({ snapshot, semantics, settings, platform, desktop, initialTable, sourceLabel, onClose, onLocate, onExplain, onOpenSettings, onDraftQuery }: Props) {
+  const { t: bt } = useI18n();
+  const eventBt = useEventTranslator(bt);
   const [question, setQuestion] = useState(""); const [searched, setSearched] = useState(false);
   const [terms, setTerms] = useState<string[]>([]); const [limit, setLimit] = useState(5);
   const [localDomain, setLocalDomain] = useState(""); const [aiDomain, setAiDomain] = useState("");
@@ -38,9 +41,9 @@ function ExplorerSession({ snapshot, semantics, settings, platform, desktop, ini
     let active = true;
     void platform.listSnapshots(snapshot.sourceId).then((items) => {
       if (active) setLatest(items[0]?.id === snapshot.id);
-    }).catch(() => { if (active) setLatestError("Unable to verify the latest snapshot; AI is unavailable."); });
+    }).catch(() => { if (active) setLatestError(eventBt("business.unableToVerifyTheLatestSnapshotAIIsUnavailable")); });
     return () => { active = false; };
-  }, [desktop, platform, snapshot.id, snapshot.sourceId]);
+  }, [desktop, platform, snapshot.id, snapshot.sourceId, eventBt]);
   const domains = semantics.domainGroups.filter((group) => group.sourceId === snapshot.sourceId);
   const tables = snapshot.schemas.flatMap((schema) => schema.tables);
   const root = tables.find((table) => objectId(table.key) === rootId);
@@ -67,53 +70,53 @@ function ExplorerSession({ snapshot, semantics, settings, platform, desktop, ini
   const allowed = settings.source?.ai.contextScope;
   const needsScope = operation !== "expand" && (allowed === "currentTable" || (allowed === "oneHop" && !root) || (allowed === "domain" && !aiDomain));
   const draftQuery = (table: TableDefinition, withPath = false) => onDraftQuery?.({ sourceId: snapshot.sourceId, snapshotId: snapshot.id, question, root: table.key, tables: withPath && path ? path.tables : [table.key], domainId: aiDomain || null });
-  return <section className="business-explorer" aria-label="Business table discovery">
-    <header className="discovery-header"><div><p className="eyebrow">UNDERSTAND A DATABASE</p><h2>Find tables by business question</h2></div><button type="button" onClick={onClose}>Back to previous view</button></header>
+  return <section className="business-explorer" aria-label={bt("business.businessTableDiscovery")}>
+    <header className="discovery-header"><div><p className="eyebrow">{bt("business.uNDERSTANDADATABASE")}</p><h2>{bt("business.findTablesByBusinessQuestion")}</h2></div><button type="button" onClick={onClose}>{bt("business.backToPreviousView")}</button></header>
     <div className="discovery-workspace">
       <div className="discovery-search-pane">
-        <p>{sourceLabel ?? snapshot.database.name} · Snapshot {snapshot.fingerprint.slice(0, 12)}</p>
-        <p className="ai-policy">Search the entire loaded snapshot, independent of canvas filters. Only current, locally confirmed team statements are reusable. No row data is read.</p>
+        <p>{sourceLabel ?? snapshot.database.name} {bt("business.snapshot")} {snapshot.fingerprint.slice(0, 12)}</p>
+        <p className="ai-policy">{bt("business.searchTheEntireLoadedSnapshotIndependentOfCanvasFilters")}</p>
         <form onSubmit={(event) => { event.preventDefault(); setSearched(true); setTerms([]); setLimit(5); }}>
-          <label className="ai-control">Business question<textarea rows={3} maxLength={2000} placeholder="订单支付相关的结构，从哪张表开始看？" value={question} onChange={(event) => { setQuestion(event.target.value); setSearched(false); setTerms([]); setLimit(5); }} /></label>
-          <label className="ai-control">Local search domain<select value={localDomain} onChange={(event) => { setLocalDomain(event.target.value); setLimit(5); }}><option value="">Entire loaded snapshot</option>{domains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label>
-          <button type="submit" disabled={!question.trim()}>Search locally</button>
+          <label className="ai-control">{bt("business.businessQuestion")}<textarea rows={3} maxLength={2000} placeholder={bt("businessExtra.whereShouldIStartExploringOrderAndPaymentStructures")} value={question} onChange={(event) => { setQuestion(event.target.value); setSearched(false); setTerms([]); setLimit(5); }} /></label>
+          <label className="ai-control">{bt("business.localSearchDomain")}<select value={localDomain} onChange={(event) => { setLocalDomain(event.target.value); setLimit(5); }}><option value="">{bt("business.entireLoadedSnapshot")}</option>{domains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label>
+          <button type="submit" disabled={!question.trim()}>{bt("business.searchLocally")}</button>
         </form>
-        {/account|账户|账号/i.test(question) ? <div className="discovery-ambiguity"><p>“Account” can mean login identity or a financial account. Choose a meaning to refine locally.</p><button type="button" onClick={() => { setQuestion(`${question} login identity 登录`); setSearched(true); setTerms(["login", "identity"]); }}>Login identity</button><button type="button" onClick={() => { setQuestion(`${question} ledger balance 财务`); setSearched(true); setTerms(["ledger", "balance"]); }}>Financial account</button></div> : null}
-        {terms.length ? <p className="ai-policy">Applied search terms · hypotheses: {terms.join(", ")}</p> : null}
-        <h3>Local candidates {searched ? `· ${candidates.length}` : ""}</h3>
-        {searched && !candidates.length ? <p role="status">No reliable local candidates. Try another term, remove the domain filter, or explicitly preview question-only term expansion. Uncollected schemas and other sources are not covered.</p> : null}
+        {/account|账户|账号/i.test(question) ? <div className="discovery-ambiguity"><p>{bt("business.accountCanMeanLoginIdentityOrAFinancialAccount")}</p><button type="button" onClick={() => { setQuestion(`${question} login identity 登录`); setSearched(true); setTerms(["login", "identity"]); }}>{bt("business.loginIdentity")}</button><button type="button" onClick={() => { setQuestion(`${question} ledger balance 财务`); setSearched(true); setTerms(["ledger", "balance"]); }}>{bt("business.financialAccount")}</button></div> : null}
+        {terms.length ? <p className="ai-policy">{bt("business.appliedSearchTermsHypotheses")} {terms.join(", ")}</p> : null}
+        <h3>{bt("business.localCandidates")} {searched ? `· ${candidates.length}` : ""}</h3>
+        {searched && !candidates.length ? <p role="status">{bt("business.noReliableLocalCandidatesTryAnotherTermRemoveThe")}</p> : null}
         {candidates.slice(0, limit).map((candidate) => <article className="discovery-candidate" key={objectId(candidate.table.key)}>
-          <h4>{objectLabel(candidate.table.key)}</h4><small>{sourceLabel ?? snapshot.database.name} · {candidate.direct ? "Direct metadata match" : "Term hypothesis · needs confirmation"} · local order</small>
-          {candidate.matchingColumns.length ? <p>Fields: {candidate.matchingColumns.join(", ")}</p> : null}
+          <h4>{objectLabel(candidate.table.key)}</h4><small>{sourceLabel ?? snapshot.database.name} · {candidate.direct ? bt("business.directMetadataMatch") : bt("business.termHypothesisNeedsConfirmation")} {bt("business.localOrder")}</small>
+          {candidate.matchingColumns.length ? <p>{bt("business.fieldsDetail")} {candidate.matchingColumns.join(", ")}</p> : null}
           <ul>{candidate.reasons.slice(0, 4).map((reason) => <li key={reason}>{reason}</li>)}</ul>
-          <div className="discovery-actions"><button type="button" onClick={() => onLocate(candidate.table)}>Locate table</button><button type="button" onClick={() => selectRoot(candidate.table)}>Expand relationships</button><button type="button" onClick={() => onExplain(candidate.table)} disabled={!desktop || !latest}>Explain this table</button>{onDraftQuery ? <button type="button" disabled={!question.trim()} onClick={() => draftQuery(candidate.table)}>Draft query</button> : null}</div>
+          <div className="discovery-actions"><button type="button" onClick={() => onLocate(candidate.table)}>{bt("business.locateTable")}</button><button type="button" onClick={() => selectRoot(candidate.table)}>{bt("business.expandRelationships")}</button><button type="button" onClick={() => onExplain(candidate.table)} disabled={!desktop || !latest}>{bt("business.explainThisTable")}</button>{onDraftQuery ? <button type="button" disabled={!question.trim()} onClick={() => draftQuery(candidate.table)}>{bt("business.draftQuery")}</button> : null}</div>
         </article>)}
-        {candidates.length > limit ? <button type="button" onClick={() => setLimit((n) => n + 10)}>Show more candidates</button> : null}
+        {candidates.length > limit ? <button type="button" onClick={() => setLimit((n) => n + 10)}>{bt("business.showMoreCandidates")}</button> : null}
         <section className="discovery-ai-controls">
-          <h3>Optional AI step</h3>
-          <label className="ai-control">AI operation<select value={operation} onChange={(event) => setOperation(event.target.value as DiscoveryOperation)}><option value="expand">Question-only term expansion</option><option value="rank">Rank permitted candidates</option><option value="path">Explain selected path</option></select></label>
-          {allowed === "domain" && operation !== "expand" ? <label className="ai-control">AI send domain<select value={aiDomain} onChange={(event) => setAiDomain(event.target.value)}><option value="">Select one domain explicitly…</option>{domains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label> : null}
+          <h3>{bt("business.optionalAIStep")}</h3>
+          <label className="ai-control">{bt("business.aIOperation")}<select value={operation} onChange={(event) => setOperation(event.target.value as DiscoveryOperation)}><option value="expand">{bt("business.questionOnlyTermExpansion")}</option><option value="rank">{bt("business.rankPermittedCandidates")}</option><option value="path">{bt("business.explainSelectedPath")}</option></select></label>
+          {allowed === "domain" && operation !== "expand" ? <label className="ai-control">{bt("business.aISendDomain")}<select value={aiDomain} onChange={(event) => setAiDomain(event.target.value)}><option value="">{bt("business.selectOneDomainExplicitly")}</option>{domains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label> : null}
           {latestError ? <p role="alert">{latestError}</p> : null}
-          {needsScope ? <p>Ranking and path explanation need OneHop with an explicit root, or one explicit Domain. CurrentTable supports the selected table’s explanation. <button type="button" onClick={onOpenSettings}>Change AI settings</button></p> : null}
-          {!canStep ? <p>{operation === "rank" ? "Run local search before ranking candidates." : "Select two tables with a known path before explaining it."}</p> : null}
+          {needsScope ? <p>{bt("business.rankingAndPathExplanationNeedOneHopWithAnExplicit")} <button type="button" onClick={onOpenSettings}>{bt("business.changeAISettings")}</button></p> : null}
+          {!canStep ? <p>{operation === "rank" ? bt("business.runLocalSearchBeforeRankingCandidates") : bt("business.selectTwoTablesWithAKnownPathBeforeExplaining")}</p> : null}
           {canStep && !needsScope ? <DiscoveryAssistant platform={platform} snapshot={snapshot} settings={settings} input={input} binding={JSON.stringify([localDomain, terms, depth, rootId, targetId, semantics.domainGroups, semantics.logicalRelationships, semantics.knowledge])} available={desktop && latest} onApplyTerms={(next) => { setTerms(next); setSearched(true); setLimit(5); }} onLocate={onLocate} onOpenSettings={onOpenSettings} /> : null}
-          {candidates.length > 100 && operation === "rank" ? <p>Only the first 100 local candidates are submitted for scope filtering; at most 20 tables fit one AI request. Remaining candidates stay local.</p> : null}
+          {candidates.length > 100 && operation === "rank" ? <p>{bt("business.onlyTheFirst100LocalCandidatesAreSubmittedFor")}</p> : null}
         </section>
       </div>
       <div className="discovery-map-pane">
         <div className="discovery-map-controls">
-          <label className="ai-control">Explicit root table<select value={rootId} onChange={(event) => { setRootId(event.target.value); setLocalSelection(tables.find((t) => objectId(t.key) === event.target.value)); setTargetId(""); setDepth(1); }}><option value="">Select a root…</option>{tables.map((table) => <option key={objectId(table.key)} value={objectId(table.key)}>{objectLabel(table.key)}</option>)}</select></label>
-          <label className="ai-control">Local graph depth<select value={depth} onChange={(event) => setDepth(Number(event.target.value))}><option value={1}>One hop</option><option value={2}>Two hops</option></select></label>
-          <label className="ai-control">Path destination<select value={targetId} onChange={(event) => setTargetId(event.target.value)} disabled={!root}><option value="">Select a destination…</option>{tables.filter((table) => objectId(table.key) !== rootId).map((table) => <option key={objectId(table.key)} value={objectId(table.key)}>{objectLabel(table.key)}</option>)}</select></label>
-          <p className="ai-policy">Temporary local view · full model layout and selection are preserved. Graph depth does not change AI scope.</p>
+          <label className="ai-control">{bt("business.explicitRootTable")}<select value={rootId} onChange={(event) => { setRootId(event.target.value); setLocalSelection(tables.find((t) => objectId(t.key) === event.target.value)); setTargetId(""); setDepth(1); }}><option value="">{bt("business.selectARoot")}</option>{tables.map((table) => <option key={objectId(table.key)} value={objectId(table.key)}>{objectLabel(table.key)}</option>)}</select></label>
+          <label className="ai-control">{bt("business.localGraphDepth")}<select value={depth} onChange={(event) => setDepth(Number(event.target.value))}><option value={1}>{bt("business.oneHop")}</option><option value={2}>{bt("business.twoHops")}</option></select></label>
+          <label className="ai-control">{bt("business.pathDestination")}<select value={targetId} onChange={(event) => setTargetId(event.target.value)} disabled={!root}><option value="">{bt("business.selectADestination")}</option>{tables.filter((table) => objectId(table.key) !== rootId).map((table) => <option key={objectId(table.key)} value={objectId(table.key)}>{objectLabel(table.key)}</option>)}</select></label>
+          <p className="ai-policy">{bt("business.temporaryLocalViewFullModelLayoutAndSelectionAre")}</p>
         </div>
-        {local ? <div className="discovery-local-canvas"><SchemaCanvas key={JSON.stringify([rootId, depth, targetId])} snapshot={local.snapshot} query="" selectedTable={localSelection && local.snapshot.schemas.some((s) => s.tables.includes(localSelection)) ? localSelection : undefined} onSelectTable={setLocalSelection} semantics={localSemantics} platform={platform} runtimeKind={desktop ? "desktop" : "web"} canvasSettings={settings.app.canvas} temporaryViewLabel="Business discovery · temporary local view; full model layout is preserved." /></div> : <div className="discovery-map-empty"><h3>A small map around your question</h3><p>Expand a candidate’s relationships to inspect one or two hops locally.</p></div>}
-        {local && local.omitted > 0 ? <p>{local.omitted} neighborhood tables omitted from the 100-table local view. The selected path is kept complete.</p> : null}
-        <section className="discovery-path" aria-label="Known relationship path">
-          <h3>Known structural path</h3>{onDraftQuery && root ? <button type="button" disabled={!question.trim()} onClick={() => draftQuery(root, true)}>Draft query with this context</button> : null}
-          {target && root && !path ? <p>No known relationship path in the current {depth}-hop range. This does not prove the tables are unrelated in the business.</p> : null}
-          {path ? <><p>{path.tables.map(objectLabel).join(" ↔ ")}</p><ol>{path.relationships.map((edge) => <li key={edge.id}><strong>{edge.kind === "physical" ? "Physical FK" : "Confirmed logical relationship · model only"}</strong><ol>{edge.sourceColumns.map((column, i) => <li key={i}>{objectLabel(edge.source)}.{column} → {objectLabel(edge.target)}.{edge.targetColumns[i]}</li>)}</ol></li>)}</ol><p>Arrows show reference direction, not business execution order. Cardinality and business meaning need supporting key, nullability and domain evidence.</p></> : <p>Select a root and destination to compute a path from existing relationships. Unconfirmed naming inferences are excluded from known paths.</p>}
-          {graph.gaps.length ? <details><summary>Snapshot information gaps ({graph.gaps.length})</summary><ul>{graph.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul></details> : null}
+        {local ? <div className="discovery-local-canvas"><SchemaCanvas key={JSON.stringify([rootId, depth, targetId])} snapshot={local.snapshot} query="" selectedTable={localSelection && local.snapshot.schemas.some((s) => s.tables.includes(localSelection)) ? localSelection : undefined} onSelectTable={setLocalSelection} semantics={localSemantics} platform={platform} runtimeKind={desktop ? "desktop" : "web"} canvasSettings={settings.app.canvas} temporaryViewKind="discovery" temporaryViewLabel={bt("businessExtra.discoveryTemporaryView")} /></div> : <div className="discovery-map-empty"><h3>{bt("business.aSmallMapAroundYourQuestion")}</h3><p>{bt("business.expandACandidateSRelationshipsToInspectOneOr")}</p></div>}
+        {local && local.omitted > 0 ? <p>{local.omitted} {bt("business.neighborhoodTablesOmittedFromThe100TableLocalView")}</p> : null}
+        <section className="discovery-path" aria-label={bt("business.knownRelationshipPath")}>
+          <h3>{bt("business.knownStructuralPath")}</h3>{onDraftQuery && root ? <button type="button" disabled={!question.trim()} onClick={() => draftQuery(root, true)}>{bt("business.draftQueryWithThisContext")}</button> : null}
+          {target && root && !path ? <p>{bt("business.noKnownRelationshipPathInTheCurrent")} {depth}{bt("business.hopRangeThisDoesNotProveTheTablesAre")}</p> : null}
+          {path ? <><p>{path.tables.map(objectLabel).join(" ↔ ")}</p><ol>{path.relationships.map((edge) => <li key={edge.id}><strong>{edge.kind === "physical" ? bt("business.physicalFK") : bt("business.confirmedLogicalRelationshipModelOnly")}</strong><ol>{edge.sourceColumns.map((column, i) => <li key={i}>{objectLabel(edge.source)}.{column} → {objectLabel(edge.target)}.{edge.targetColumns[i]}</li>)}</ol></li>)}</ol><p>{bt("business.arrowsShowReferenceDirectionNotBusinessExecutionOrderCardinality")}</p></> : <p>{bt("business.selectARootAndDestinationToComputeAPath")}</p>}
+          {graph.gaps.length ? <details><summary>{bt("business.snapshotInformationGaps")}{graph.gaps.length})</summary><ul>{graph.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul></details> : null}
         </section>
       </div>
     </div>

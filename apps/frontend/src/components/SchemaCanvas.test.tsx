@@ -1,3 +1,5 @@
+import { I18nProvider, useI18n } from "../i18n";
+import type { Language } from "../platform/settings-types";
 import { canvasToolButton, openCanvasTools } from "../test/canvas-tools";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
@@ -35,6 +37,30 @@ describe("SchemaCanvas table selection", () => {
     localStorage.clear();
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it.each(["web", "historical"])("preserves %s layout history and positions when the language changes", async (mode) => {
+    const canvasSettings = defaultAppSettings().canvas;
+    function LocalizedCanvas({ language }: { language: Language }) {
+      const i18n = useI18n(language);
+      return <I18nProvider value={i18n}><CanvasHarness canvasSettings={canvasSettings} runtimeKind={mode === "web" ? "web" : "desktop"}
+        temporaryViewKind={mode === "historical" ? "historical" : undefined}
+        temporaryViewLabel={mode === "historical" ? i18n.t("navigation.historicalSnapshot") : undefined} /></I18nProvider>;
+    }
+    const { container, rerender } = render(<LocalizedCanvas language="en" />);
+    await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
+    fireEvent.click(container.querySelector('.react-flow__node[data-id="public.orders"]')!);
+    fireEvent.click(canvasToolButton("Fix table positions"));
+    expect(screen.getByRole("button", { name: "Undo layout" })).toBeEnabled();
+    const calls = vi.mocked(layoutSchemaGraph).mock.calls.length;
+    const positions = [...container.querySelectorAll<HTMLElement>(".react-flow__node")].map((node) => node.style.transform);
+    rerender(<LocalizedCanvas language="zhCn" />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "撤销布局" })).toBeEnabled());
+    expect(screen.getByRole("button", { name: "撤销布局" })).toHaveAttribute("title", expect.stringContaining("固定表位置"));
+    expect(vi.mocked(layoutSchemaGraph)).toHaveBeenCalledTimes(calls);
+    expect([...container.querySelectorAll<HTMLElement>(".react-flow__node")].map((node) => node.style.transform)).toEqual(positions);
+    expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(1);
+    if (mode === "historical") expect(screen.getByRole("heading", { name: "历史模型" })).toBeVisible();
+  });
 
   it("pans the viewport on horizontal and vertical wheel input without moving tables or changing zoom", async () => {
     const save = vi.fn();

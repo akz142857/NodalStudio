@@ -1,3 +1,5 @@
+import { translateUiLabel } from "../../i18n/business-labels";
+import { useI18n } from "../../i18n";
 import { useState } from "react";
 import type { DatabaseSnapshot, RelationshipEndpoint } from "../../platform";
 
@@ -9,6 +11,7 @@ interface RelationshipTargetPickerProps {
 }
 
 export function RelationshipTargetPicker({ snapshot, source, onSelect, onCancel }: RelationshipTargetPickerProps) {
+  const { t: bt } = useI18n();
   const [query, setQuery] = useState("");
   const sourceColumn = snapshot.schemas.find((schema) => schema.name === source.schema)
     ?.tables.find((table) => table.key.name === source.table)
@@ -30,8 +33,8 @@ export function RelationshipTargetPicker({ snapshot, source, onSelect, onCancel 
   })();
 
   return <div className="relationship-target-picker nodrag nopan">
-    <header><div><strong>Select target field</strong><span>{source.schema}.{source.table}.{source.columns[0]}</span></div><button type="button" onClick={onCancel}>Cancel</button></header>
-    <input aria-label="Search target field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search schema, table, or field…" autoFocus />
-    {query.trim() ? <div role="listbox" aria-label="Target fields">{results.length ? results.map((result) => <button type="button" role="option" aria-selected="false" data-compatible={result.compatible || undefined} key={result.label} onClick={() => onSelect(result.endpoint)}><span>{result.label}</span><small>{result.formattedType} · {result.compatible ? "compatible" : "type differs"}</small></button>) : <p>No matching fields</p>}</div> : <p>Click a field on the canvas, or search above.</p>}
+    <header><div><strong>{bt("business.selectTargetField")}</strong><span>{source.schema}.{source.table}.{source.columns[0]}</span></div><button type="button" onClick={onCancel}>{bt("business.cancel")}</button></header>
+    <input aria-label={bt("business.searchTargetField")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={bt("business.searchSchemaTableOrField")} autoFocus />
+    {query.trim() ? <div role="listbox" aria-label={bt("business.targetFields")}>{results.length ? results.map((result) => <button type="button" role="option" aria-selected="false" data-compatible={result.compatible || undefined} key={result.label} onClick={() => onSelect(result.endpoint)}><span>{result.label}</span><small>{result.formattedType} · {result.compatible ? translateUiLabel("compatible", bt) : bt("business.typeDiffers")}</small></button>) : <p>{bt("business.noMatchingFields")}</p>}</div> : <p>{bt("business.clickAFieldOnTheCanvasOrSearchAbove")}</p>}
   </div>;
 }

@@ -1,3 +1,6 @@
+import { EmptyState } from "../design-system/EmptyState";
+import { Button } from "../design-system/Button";
+import { useI18n } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DataSourceProfile } from "../platform";
@@ -11,6 +14,7 @@ export function ConnectionManager({ profiles, activeSourceId, onClose, onCreate,
   onEdit: (profile: DataSourceProfile) => void;
   onOpen: (profile: DataSourceProfile) => void;
 }) {
+  const { t: bt } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const [query, setQuery] = useState("");
   useEffect(() => {
@@ -29,7 +33,7 @@ export function ConnectionManager({ profiles, activeSourceId, onClose, onCreate,
   // so its initial focus can land on the form rather than the sidebar.
   function leave(action: () => void) { dialog.current?.close(); action(); }
   const visible = profiles.filter((profile) => `${profile.displayName} ${profile.database}`.toLowerCase().includes(query.trim().toLowerCase()));
-  return createPortal(<dialog ref={dialog} className="connection-manager" aria-labelledby="connection-manager-title"
+  return createPortal(<dialog ref={dialog} className="ds-surface connection-manager" aria-labelledby="connection-manager-title"
     onContextMenu={(event) => event.stopPropagation()}
     onKeyDown={(event) => {
       event.stopPropagation();
@@ -37,17 +41,17 @@ export function ConnectionManager({ profiles, activeSourceId, onClose, onCreate,
       if (event.key === "Escape") { event.preventDefault(); onClose(); }
     }}
     onCancel={(event) => { event.preventDefault(); onClose(); }}>
-    <h2 id="connection-manager-title">Manage connections</h2>
-    <input type="search" aria-label="Find database connections" placeholder="Find databases…" value={query} onChange={(event) => setQuery(event.target.value)} />
+    <h2 id="connection-manager-title">{bt("business.manageConnectionsDetail")}</h2>
+    <input type="search" aria-label={bt("business.findDatabaseConnections")} placeholder={bt("business.findDatabases")} value={query} onChange={(event) => setQuery(event.target.value)} />
     <div className="connection-manager-list">
       {visible.map((profile) => <div className="connection-manager-row" key={profile.id}>
         <ActionIcon name="database" />
-        <div><strong title={profile.displayName}>{profile.displayName}</strong><span title={profile.database}>{profile.database}{profile.id === activeSourceId ? " · Current" : ""}</span></div>
-        <button type="button" aria-label={`Edit ${profile.displayName}`} onClick={() => leave(() => onEdit(profile))}>Edit…</button>
-        <button type="button" aria-label={`Open ${profile.displayName}`} onClick={() => leave(() => onOpen(profile))}>Open</button>
+        <div><strong title={profile.displayName}>{profile.displayName}</strong><span title={profile.database}>{profile.database}{profile.id === activeSourceId ? bt("business.current") : ""}</span></div>
+        <Button type="button" aria-label={bt("business.edit", { value0: profile.displayName })} onClick={() => leave(() => onEdit(profile))}>{bt("business.editDetail")}</Button>
+        <Button type="button" aria-label={bt("business.open", { value0: profile.displayName })} onClick={() => leave(() => onOpen(profile))}>{bt("business.openDetail")}</Button>
       </div>)}
-      {!visible.length ? <p>{profiles.length ? "No matching connections." : "No saved connections."}</p> : null}
+      {!visible.length ? <EmptyState compact title={profiles.length ? bt("business.noMatchingConnections") : bt("business.noSavedConnections")} /> : null}
     </div>
-    <footer><button type="button" onClick={() => leave(onCreate)}>Add database…</button><button type="button" onClick={onClose}>Done</button></footer>
+    <footer><Button type="button" onClick={() => leave(onCreate)}>{bt("business.addDatabaseDetail")}</Button><Button type="button" onClick={onClose}>{bt("business.done")}</Button></footer>
   </dialog>, document.body);
 }

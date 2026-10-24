@@ -2,9 +2,10 @@
 @import "./design-system/controls.css";
 
 :root {
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  /* Viewport units do not shrink with CSS zoom; keep shell and dialogs in view. */
+  --ds-viewport-height: calc(100vh / var(--ui-scale, 1));
+  --ds-viewport-width: calc(100vw / var(--ui-scale, 1));
+  font-family: var(--ds-font-ui);
   color: var(--ds-text);
   background: var(--ds-window);
   font-synthesis: none;
@@ -52,7 +53,7 @@ textarea {
 
 .app-shell {
   display: grid;
-  height: 100vh;
+  height: var(--ds-viewport-height);
   overflow: hidden;
   grid-template-rows: auto 1fr;
   container: app-shell / inline-size;
@@ -108,8 +109,10 @@ textarea {
 }
 
 .segmented button.active {
-  color: var(--ds-text);
-  background: var(--ds-selected-control);
+  color: var(--ds-selection-text);
+  background: var(--ds-selection);
+  box-shadow: inset 0 0 0 1px var(--ds-accent);
+  font-weight: var(--ds-weight-emphasis);
 }
 
 .segmented button:disabled {
@@ -277,7 +280,7 @@ textarea {
   top: calc(100% + 10px);
   right: 0;
   width: max-content;
-  max-width: min(300px, calc(100vw - 24px));
+  max-width: min(300px, calc(var(--ds-viewport-width) - 24px));
   padding: 9px 11px;
   border: 1px solid var(--ds-border);
   border-radius: 8px;
@@ -368,7 +371,7 @@ textarea {
 }
 
 .command-palette {
-  width: min(580px, calc(100vw - 48px));
+  width: min(580px, calc(var(--ds-viewport-width) - 48px));
   overflow: auto;
   border: 1px solid var(--ds-border);
   border-radius: 11px;
@@ -800,8 +803,8 @@ textarea {
 }
 
 .connection-dialog {
-  width: min(640px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
+  width: min(640px, calc(var(--ds-viewport-width) - 48px));
+  max-height: calc(var(--ds-viewport-height) - 48px);
   overflow: auto;
   box-sizing: border-box;
   padding: 24px;
@@ -1492,15 +1495,7 @@ textarea {
   font-size: 9px;
 }
 
-.compare-controls select {
-  min-width: 0;
-  padding: 6px;
-  border: 1px solid var(--ds-border);
-  border-radius: 5px;
-  color: var(--ds-text);
-  background: var(--ds-field);
-  font-size: 9px;
-}
+.compare-controls select { min-width: 0; width: 100%; }
 
 .compare-controls button {
   padding: 7px;
@@ -1617,7 +1612,6 @@ textarea {
 }
 
 .schema-canvas-flow .table-node,
-.schema-canvas-flow .table-node *,
 .schema-canvas-flow .react-flow__handle {
   cursor: default !important;
 }
@@ -2306,7 +2300,7 @@ textarea {
 
 @media (max-width: 640px) {
   .connection-dialog-backdrop { padding: 8px; }
-  .connection-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 16px; }
+  .connection-dialog { width: calc(var(--ds-viewport-width) - 16px); max-height: calc(var(--ds-viewport-height) - 16px); padding: 16px; }
   .connection-identity-grid,
   .connection-access-grid { grid-template-columns: minmax(0, 1fr); }
   .connection-database-field,
@@ -2690,7 +2684,7 @@ textarea {
 .diff-filters { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--ds-border); }
 .diff-filters label { display: grid; gap: 6px; min-width: 0; color: var(--ds-secondary); font-size: 11px; }
 .diff-filters label:first-child { flex: 1 1 190px; }
-.diff-filters input, .diff-filters select { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--ds-border); border-radius: 5px; color: var(--ds-text); background: var(--ds-field); font: inherit; }
+.diff-filters input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--ds-border); border-radius: 5px; color: var(--ds-text); background: var(--ds-field); font: inherit; }
 .schema-changes-panel button { cursor: pointer; }
 .schema-changes-panel button:disabled { cursor: default; opacity: 0.45; }
 .diff-filters button, .diff-pagination button, .diff-snapshot-context button { padding: 7px 10px; border: 1px solid var(--ds-border); border-radius: 5px; color: var(--ds-text); background: var(--ds-control); font-size: 11px; }
@@ -2788,7 +2782,7 @@ textarea {
 .diagram-selected-count { padding: 0 3px; font-size: 10px; white-space: nowrap; }
 .diagram-layout-tools { display: contents; }
 .diagram-toolbar-menu { position: relative; }
-.diagram-toolbar-popover { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; display: grid; gap: 5px; width: min(260px, calc(100vw - 32px)); padding: 8px; overflow-y: auto; border: 1px solid var(--ds-border); border-radius: 6px; color: var(--ds-text); background: var(--ds-surface); box-shadow: 0 6px 20px #0005; }
+.diagram-toolbar-popover { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; display: grid; gap: 5px; width: min(260px, calc(var(--ds-viewport-width) - 32px)); padding: 8px; overflow-y: auto; border: 1px solid var(--ds-border); border-radius: 6px; color: var(--ds-text); background: var(--ds-surface); box-shadow: 0 6px 20px #0005; }
 .diagram-toolbar-popover button { text-align: left; white-space: normal; }
 .diagram-toolbar-popover select { min-width: 0; width: 100%; }
 .diagram-toolbar .operation-feedback { display: flex; gap: 8px; flex-basis: 100%; min-width: 0; margin: 0; padding: 5px 8px; align-items: center; font-size: 10px; }
@@ -2840,10 +2834,10 @@ textarea {
 .diagram-export-actions { bottom: 64px; pointer-events: none; }
 .diagram-export-actions > div { pointer-events: auto; }
 .diagram-export-actions > .operation-feedback { display: block; margin-top: auto; max-width: min(420px, 75vw); max-height: 180px; overflow: auto; }
-.refresh-operation-result { position: absolute; z-index: 100; right: 16px; top: calc(100% + 8px); width: min(420px, calc(100vw - 32px)); max-height: 55vh; overflow: auto; box-shadow: 0 8px 24px #0004; }
+.refresh-operation-result { position: absolute; z-index: 100; right: 16px; top: calc(100% + 8px); width: min(420px, calc(var(--ds-viewport-width) - 32px)); max-height: 55vh; overflow: auto; box-shadow: 0 8px 24px #0004; }
 .refresh-operation-result .operation-feedback { margin: 0; }
 
-.ddl-import-page { height: 100vh; overflow: auto; padding: 24px; color: var(--ds-text); background: var(--ds-window); }
+.ddl-import-page { height: var(--ds-viewport-height); overflow: auto; padding: 24px; color: var(--ds-text); background: var(--ds-window); }
 .ddl-import-page > header { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
 .ddl-import-page h1 { margin: 0; font-size: 22px; }
 .ddl-import-page p { line-height: 1.55; overflow-wrap: anywhere; }
@@ -2872,8 +2866,8 @@ textarea {
   box-shadow: none;
 }
 .topbar > .segmented { align-items: center; padding: 2px; }
-.topbar > .segmented button { height: 26px; padding: 0 12px; border-radius: 6px; color: var(--ds-secondary); }
-.topbar > .segmented button.active { color: var(--ds-text); background: var(--ds-selected-control); }
+.topbar > .segmented button { min-height: var(--ds-control-height-small); height: auto; padding: var(--ds-control-padding-block) var(--ds-space-3); border-radius: var(--ds-radius-control); color: var(--ds-secondary); }
+.topbar > .segmented button.active { color: var(--ds-selection-text); background: var(--ds-selection); }
 .topbar > .segmented button:not(.active):not(:disabled):hover { color: var(--ds-text); background: var(--ds-hover); }
 .topbar > .segmented button:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 1px; }
 .topbar .global-search input { padding: 0 10px 0 32px; color: var(--ds-text); }
@@ -2899,7 +2893,7 @@ textarea {
 .schema-object-search button { position: absolute; right: 4px; top: 4px; }
 .schema-object-search button:hover, .schema-object-preview header button:hover { background: var(--ds-hover); }
 .schema-search-count, .schema-search-empty { margin: 2px 0 8px; padding: 0 6px; color: var(--ds-secondary); font-size: 11px; }
-.schema-object-menu { position: fixed; z-index: 2000; width: 240px; max-width: calc(100vw - 12px); padding: 5px; overflow: auto; border: 1px solid var(--ds-border); border-radius: 8px; color: var(--ds-text); background: var(--ds-control); box-shadow: 0 10px 32px #0006; font-size: 12px; }
+.schema-object-menu { position: fixed; z-index: 2000; width: 240px; max-width: calc(var(--ds-viewport-width) - 12px); padding: 5px; overflow: auto; border: 1px solid var(--ds-border); border-radius: 8px; color: var(--ds-text); background: var(--ds-control); box-shadow: 0 10px 32px #0006; font-size: 12px; }
 .schema-object-menu > p { overflow: hidden; margin: 3px 7px 6px; color: var(--ds-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .schema-object-menu > button { display: block; width: 100%; min-height: 32px; padding: 6px 9px; border: 0; border-radius: 4px; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .schema-object-menu > button:hover:not(:disabled), .schema-object-menu > button:focus-visible { outline: none; color: var(--ds-selection-text); background: var(--ds-selection); }
@@ -2974,3 +2968,8 @@ textarea {
 .changes-empty-actions button:disabled { opacity: .45; cursor: default; }
 .changes-empty-actions button:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
 .changes-empty-state .changes-empty-note { margin-top: 24px; font-size: 11px; }
+
+/* Lazy pages load within their own region; navigation and workspace stay mounted. */
+.workspace-loading { flex: 1; display: grid; place-items: center; min-width: 0; min-height: 0; color: var(--ds-secondary); }
+.page-loading-overlay { position: fixed; inset: 0; z-index: var(--ds-layer-settings); overflow: auto; background: var(--ds-window); }
+.page-loading-overlay > [role="status"] { padding: var(--ds-space-5); color: var(--ds-secondary); }

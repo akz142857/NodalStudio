@@ -9,7 +9,11 @@ function fixture() {
   return {draft,mocks,platform:mocks as unknown as NodalStudioPlatform,onSaved:vi.fn().mockResolvedValue(undefined),sourceId:"source",input};
 }
 afterEach(()=>vi.useRealTimers());
-async function prepare() { fireEvent.click(screen.getByRole("button",{name:"Review and confirm description"}));await screen.findByLabelText("Proposed description"); }
+async function prepare() {
+  // Flush preparation and passive expiry listeners before tests advance the clock.
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Review and confirm description" })); await Promise.resolve(); });
+  await screen.findByLabelText("Proposed description");
+}
 describe("local knowledge confirmation",()=>{
   it("compares old/new text, preserves uncertainty and requires explicit edited confirmation",async()=>{
     const p=fixture();render(<KnowledgeEditor {...p}/>);await prepare();expect(screen.getByText("Original team description")).toBeVisible();expect(screen.getByLabelText("Proposed description")).toHaveValue("May describe purchase intent");expect(p.mocks.confirmKnowledgeDraft).not.toHaveBeenCalled();

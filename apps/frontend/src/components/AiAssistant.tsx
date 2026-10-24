@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { useState } from "react";
 import type {
   AiExplanation,
@@ -15,6 +16,7 @@ interface AiAssistantProps {
 }
 
 export function AiAssistant({ platform, input, onConfirmCandidate, enabled, providerLabel, onOpenSettings }: AiAssistantProps) {
+  const { t: bt, formatDate } = useI18n();
   const [question, setQuestion] = useState("");
   const [depth, setDepth] = useState(1);
   const [result, setResult] = useState<AiExplanation>();
@@ -54,34 +56,33 @@ export function AiAssistant({ platform, input, onConfirmCandidate, enabled, prov
   return (
     <section className="ai-assistant inspector-section">
       <div className="annotation-heading">
-        <h3>AI explanation</h3>
-        <span className="ai-provider-status">{enabled ? providerLabel : "Off"}</span>
+        <h3>{bt("businessSupport.aIExplanation")}</h3>
+        <span className="ai-provider-status">{enabled ? providerLabel : bt("businessSupport.off")}</span>
       </div>
-      <p className="ai-policy">Disabled by default · schema metadata only · no rows or credentials. Team descriptions are excluded from change and domain explanations.</p>
+      <p className="ai-policy">{bt("businessSupport.disabledByDefaultSchemaMetadataOnlyNoRowsOr")}</p>
       {enabled ? (
         <>
           <textarea
             rows={2}
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Optional question about this structure…"
+            placeholder={bt("businessSupport.optionalQuestionAboutThisStructure")}
           />
           {input.targetType === "table" ? (
             <label className="ai-depth">
-              Relationship context
-              <select value={depth} onChange={(event) => setDepth(Number(event.target.value))}>
-                <option value={0}>Target only</option>
-                <option value={1}>1 hop</option>
-                <option value={2}>2 hops</option>
+              {bt("businessSupport.relationshipContext")}<select value={depth} onChange={(event) => setDepth(Number(event.target.value))}>
+                <option value={0}>{bt("businessSupport.targetOnly")}</option>
+                <option value={1}>{bt("businessSupport.1Hop")}</option>
+                <option value={2}>{bt("businessSupport.2Hops")}</option>
               </select>
             </label>
           ) : null}
           <button type="button" onClick={() => void explain()} disabled={status === "loading"}>
-            {status === "loading" ? "Analyzing…" : "Explain from metadata"}
+            {status === "loading" ? bt("businessSupport.analyzing") : bt("businessSupport.explainFromMetadata")}
           </button>
         </>
-      ) : <button type="button" className="panel-settings-link" onClick={onOpenSettings}>Configure in Settings → AI</button>}
-      {status === "error" ? <p className="error-message">{error ?? "Explanation failed."}</p> : null}
+      ) : <button type="button" className="panel-settings-link" onClick={onOpenSettings}>{bt("businessSupport.configureInSettingsAI")}</button>}
+      {status === "error" ? <p className="error-message">{error ?? bt("businessSupport.explanationFailed")}</p> : null}
       {result ? (
         <div className="ai-result">
           <strong>{result.title}</strong>
@@ -92,13 +93,12 @@ export function AiAssistant({ platform, input, onConfirmCandidate, enabled, prov
             ))}
           </ul>
           <small>
-            Inferred candidate · {result.provider}{result.model ? ` · ${result.model}` : ""}{result.generatedAt ? ` · ${new Date(result.generatedAt).toLocaleString()}` : ""} · Context: {result.contextPolicy.relationshipDepth} hop · rows: no · credentials: no
-          </small>
+            {bt("businessSupport.inferredCandidate")} {result.provider}{result.model ? ` · ${result.model}` : ""}{result.generatedAt ? ` · ${formatDate(result.generatedAt)}` : ""} {bt("businessSupport.context")} {result.contextPolicy.relationshipDepth} {bt("businessSupport.hopRowsNoCredentialsNo")}</small>
           {result.candidateAnnotation && onConfirmCandidate ? (
             <div className="candidate-annotation">
               <p>{result.candidateAnnotation}</p>
               <button type="button" onClick={() => void confirmCandidate()}>
-                {status === "confirmed" ? "Annotation confirmed" : "Confirm and save annotation"}
+                {status === "confirmed" ? bt("businessSupport.annotationConfirmed") : bt("businessSupport.confirmAndSaveAnnotation")}
               </button>
             </div>
           ) : null}

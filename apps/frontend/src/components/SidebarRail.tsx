@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { useEffect, useRef, type KeyboardEvent } from "react";
 
 export type SidebarSide = "left" | "right";
@@ -34,15 +35,17 @@ export function HeaderSidebarToggle({
   expanded,
   onToggle,
 }: HeaderSidebarToggleProps) {
-  const panelName = side === "left" ? "left sidebar" : "right inspector";
+  const { t } = useI18n();
+
+  const panelName = side === "left" ? t("navigation.leftSidebar") : t("navigation.rightInspector");
 
   return (
     <button
       type="button"
       className={`header-sidebar-toggle header-sidebar-toggle-${side}`}
-      aria-label={`${expanded ? "Collapse" : "Expand"} ${panelName}`}
+      aria-label={t(expanded ? "navigation.sidebar.collapse" : "navigation.sidebar.expand", { panel: panelName })}
       aria-expanded={expanded}
-      title={`${expanded ? "Hide" : "Show"} ${panelName}`}
+      title={t(expanded ? "navigation.sidebar.hide" : "navigation.sidebar.show", { panel: panelName })}
       onClick={onToggle}
     >
       <svg aria-hidden="true" viewBox="0 0 20 20">
@@ -62,6 +65,8 @@ export function SidebarRail({
   onResize,
   onToggle,
 }: SidebarRailProps) {
+  const { t } = useI18n();
+
   const drag = useRef<SidebarDrag | undefined>(undefined);
   const onResizeRef = useRef(onResize);
   const onToggleRef = useRef(onToggle);
@@ -143,14 +148,14 @@ export function SidebarRail({
     onResize(clamp(nextWidth, minWidth, maxWidth));
   }
 
-  const panelName = side === "left" ? "left sidebar" : "right inspector";
+  const panelName = side === "left" ? t("navigation.leftSidebar") : t("navigation.rightInspector");
 
   return (
     <div className={`sidebar-rail sidebar-rail-${side}`}>
       <div
         className="sidebar-resize-handle"
         role="separator"
-        aria-label={`Resize ${panelName}`}
+        aria-label={t("navigation.resize", { value0: panelName })}
         aria-orientation="vertical"
         aria-valuemin={0}
         aria-valuemax={maxWidth}

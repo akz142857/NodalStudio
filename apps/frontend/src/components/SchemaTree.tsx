@@ -1,3 +1,5 @@
+import { translateUiLabel } from "../i18n/business-labels";
+import { useI18n } from "../i18n";
 import { useCallback, useState, type MouseEvent, type KeyboardEvent, type ReactNode } from "react";
 import type { DatabaseSnapshot, ObjectKey, TableDefinition } from "../platform";
 import type { EnumDefinition, ViewDefinition } from "../platform/types";
@@ -17,13 +19,15 @@ interface SchemaTreeProps {
 }
 
 type OpenState = Record<string, boolean>;
-const TYPE_LABEL = { tables: "Tables", views: "Views", enums: "Enums" } as const;
-type ObjectType = keyof typeof TYPE_LABEL;
+
+type ObjectType = "tables" | "views" | "enums";
 type MenuObject = TableDefinition | ViewDefinition | EnumDefinition;
 type MenuTarget = { object: MenuObject; trigger: HTMLButtonElement; x: number; y: number; scope: string };
 
 /** Filtering expands matches without changing the user's normal disclosure state. */
 export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery, navigation }: SchemaTreeProps) {
+  const { t: bt } = useI18n();
+  const TYPE_LABEL = { tables: bt("business.tables"), views: bt("business.views"), enums: bt("business.enums") } as const;
   const [open, setOpen] = useState<OpenState>({});
   const [openFor, setOpenFor] = useState<string>();
   const [search, setSearch] = useState("");
@@ -78,41 +82,41 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
   const copyName = (key: ObjectKey) => {
     setLastCopy(key);
     void copy.run(async () => {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard writing is unavailable in this runtime.");
+      if (!navigator.clipboard?.writeText) throw new Error(bt("business.clipboardWritingIsUnavailableInThisRuntime"));
       const name = `${key.schema}.${key.name}`;
       await navigator.clipboard.writeText(name);
       return name;
-    }, { running: "Copying object name…", success: (name) => `Copied ${name}`, failure: "Unable to copy object name." });
+    }, { running: bt("business.copyingObjectName"), success: (name) => bt("business.copied", { value0: name }), failure: bt("business.unableToCopyObjectName") });
   };
   const actions: SchemaObjectMenuAction[] = activeMenu ? [
     ...("columns" in activeMenu.object ? [
-      { label: "Locate in diagram", run: () => chooseTable(activeMenu.object as TableDefinition) },
-      ...(onOpenQuery ? [{ label: "Open read-only query…", run: () => onOpenQuery(activeMenu.object as TableDefinition) }] : []),
-    ] : "values" in activeMenu.object ? [{ label: "Show enum details", run: () => showEnum(activeMenu.object as EnumDefinition) }]
-      : [{ label: "Show view definition", run: () => showView(activeMenu.object as ViewDefinition) }]),
-    { label: "Copy qualified name", run: () => copyName(activeMenu.object.key) },
+      { label: bt("business.locateInDiagram"), run: () => chooseTable(activeMenu.object as TableDefinition) },
+      ...(onOpenQuery ? [{ label: bt("business.openReadOnlyQuery"), run: () => onOpenQuery(activeMenu.object as TableDefinition) }] : []),
+    ] : "values" in activeMenu.object ? [{ label: bt("business.showEnumDetails"), run: () => showEnum(activeMenu.object as EnumDefinition) }]
+      : [{ label: bt("business.showViewDefinition"), run: () => showView(activeMenu.object as ViewDefinition) }]),
+    { label: bt("business.copyQualifiedName"), run: () => copyName(activeMenu.object.key) },
   ] : [];
 
-  return <section className="schema-tree" aria-label="Database structure" onContextMenu={(event) => {
+  return <section className="schema-tree" aria-label={bt("business.databaseStructure")} onContextMenu={(event) => {
     event.preventDefault();
   }}>
     {navigation}
-    <h2 className="navigation-section-title">Database objects</h2>
+    <h2 className="navigation-section-title">{bt("business.databaseObjects")}</h2>
     <div className="schema-object-search">
       <ActionIcon name="search" />
-      <input type="search" aria-label="Search tables and views" placeholder="Search tables and views…" value={search}
+      <input type="search" aria-label={bt("business.searchTablesAndViews")} placeholder={bt("business.searchTablesAndViewsDetail")} value={search}
         onChange={(event) => { setSearch(event.target.value); setSearchOpen({}); setContext(undefined); }}
         onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setSearch(""); setSearchOpen({}); } }} />
-      {search ? <button type="button" aria-label="Clear object search" onClick={() => { setSearch(""); setSearchOpen({}); }}>×</button> : null}
+      {search ? <button type="button" aria-label={bt("business.clearObjectSearch")} onClick={() => { setSearch(""); setSearchOpen({}); }}>×</button> : null}
     </div>
-    {filtering ? <p className="schema-search-count" role="status">{totals} {totals === 1 ? "match" : "matches"}</p> : null}
-    {filtering && !totals ? <p className="schema-search-empty">No matching tables or views.</p> : null}
-    {copy.state ? <OperationFeedback label="Object name copy" state={copy.state} onRetry={lastCopy ? () => copyName(lastCopy) : undefined} retryLabel="Retry name copy" onDismiss={copy.dismiss} /> : null}
-    {preview ? <section className="schema-object-preview schema-view-preview" aria-label={`Definition of ${preview.key.schema}.${preview.key.name}`} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closePreview(event); } }}>
-      <header><strong>{preview.materialized ? "Materialized view" : "View"} · {preview.key.schema}.{preview.key.name}</strong><button type="button" aria-label="Close view definition" onClick={closePreview}>×</button></header>
-      <p>Read-only definition · Views are not drawn in Diagram.</p>
+    {filtering ? <p className="schema-search-count" role="status">{totals} {translateUiLabel(totals === 1 ? "match" : "matches", bt)}</p> : null}
+    {filtering && !totals ? <p className="schema-search-empty">{bt("business.noMatchingTablesOrViews")}</p> : null}
+    {copy.state ? <OperationFeedback label={bt("business.objectNameCopy")} state={copy.state} onRetry={lastCopy ? () => copyName(lastCopy) : undefined} retryLabel={bt("business.retryNameCopy")} onDismiss={copy.dismiss} /> : null}
+    {preview ? <section className="schema-object-preview schema-view-preview" aria-label={bt("business.definitionOf", { value0: preview.key.schema, value1: preview.key.name })} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closePreview(event); } }}>
+      <header><strong>{preview.materialized ? bt("business.materializedView") : bt("business.view")} · {preview.key.schema}.{preview.key.name}</strong><button type="button" aria-label={bt("business.closeViewDefinition")} onClick={closePreview}>×</button></header>
+      <p>{bt("business.readOnlyDefinitionViewsAreNotDrawnInDiagram")}</p>
       {preview.comment ? <p>{preview.comment}</p> : null}
-      <pre tabIndex={0}>{preview.definition || "Definition is not available in this snapshot."}</pre>
+      <pre tabIndex={0}>{preview.definition || bt("business.definitionIsNotAvailableInThisSnapshot")}</pre>
     </section> : null}
     {enumPreview ? <SchemaEnumDetails snapshot={snapshot} item={enumPreview} onLocate={onSelectTable} onClose={closePreview} /> : null}
     {visible.map((schema) => {
@@ -132,17 +136,17 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
               aria-current={`${schema.name}.${table.key.name}` === selectedId ? "true" : undefined}
               onClick={() => chooseTable(table)} onDragStart={(event) => event.preventDefault()}>
               <span className="tree-label">{table.key.name}</span><small>{table.columns.length}</small>
-            </button><button type="button" className="tree-object-actions" aria-label={`Actions for ${table.key.schema}.${table.key.name}`} aria-haspopup="menu" aria-expanded={activeMenu?.object === table} onClick={(event) => showMenu(event, table)}>…</button></div>) : null}
+            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: table.key.schema, value1: table.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === table} onClick={(event) => showMenu(event, table)}>…</button></div>) : null}
             {typeOpen && type === "views" ? schema.views.map((view) => <div className="tree-object-row" key={view.key.name}><button type="button" key={view.key.name} className="tree-row tree-row-object" title={view.key.name}
               aria-current={preview?.key.schema === view.key.schema && preview.key.name === view.key.name ? "true" : undefined}
               onClick={() => showView(view)} onDragStart={(event) => event.preventDefault()}>
               <span className="tree-label">{view.key.name}</span>
-            </button><button type="button" className="tree-object-actions" aria-label={`Actions for ${view.key.schema}.${view.key.name}`} aria-haspopup="menu" aria-expanded={activeMenu?.object === view} onClick={(event) => showMenu(event, view)}>…</button></div>) : null}
+            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: view.key.schema, value1: view.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === view} onClick={(event) => showMenu(event, view)}>…</button></div>) : null}
             {typeOpen && type === "enums" ? schema.enums.map((item) => <div className="tree-object-row" key={item.key.name}><button type="button" className="tree-row tree-row-object" title={item.key.name} key={item.key.name}
               aria-current={enumPreview?.key.schema === item.key.schema && enumPreview.key.name === item.key.name ? "true" : undefined}
               onClick={() => showEnum(item)} onDragStart={(event) => event.preventDefault()}>
               <span className="tree-label">{item.key.name}</span>
-            </button><button type="button" className="tree-object-actions" aria-label={`Actions for ${item.key.schema}.${item.key.name}`} aria-haspopup="menu" aria-expanded={activeMenu?.object === item} onClick={(event) => showMenu(event, item)}>…</button></div>) : null}
+            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: item.key.schema, value1: item.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === item} onClick={(event) => showMenu(event, item)}>…</button></div>) : null}
           </div>;
         }) : null}
       </div>;

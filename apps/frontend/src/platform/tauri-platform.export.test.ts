@@ -19,3 +19,12 @@ it("retains compatibility with legacy number-array callers", async () => {
   await new TauriPlatform().saveDiagramExport(input);
   expect(invoke).toHaveBeenCalledWith("save_diagram_export", { input });
 });
+
+it.each([undefined, "zh-CN"] as const)("forwards optional native export locale %s separately from result data", async (locale) => {
+  const result = { rows: [] } as unknown as import("./types").QueryExecutionResult;
+  await new TauriPlatform().exportQueryResult({ result, format: "csv", selectedRows: null, protectFormulas: true, locale });
+  expect(invoke).toHaveBeenCalledWith("export_query_result", {
+    ...(locale ? { locale } : {}),
+    input: { result, format: "csv", selectedRows: null, protectFormulas: true },
+  });
+});

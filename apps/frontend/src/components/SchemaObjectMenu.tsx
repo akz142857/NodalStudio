@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { Fragment, useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
@@ -7,6 +8,7 @@ export interface SchemaObjectMenuAction { label: string; disabled?: boolean; sep
 export function SchemaObjectMenu({ x, y, name, actions, onClose }: {
   x: number; y: number; name: string; actions: SchemaObjectMenuAction[]; onClose: (restoreFocus: boolean) => void;
 }) {
+  const { t: bt } = useI18n();
   const root = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const menu = root.current;
@@ -26,7 +28,7 @@ export function SchemaObjectMenu({ x, y, name, actions, onClose }: {
     window.addEventListener("scroll", scroll, true);
     return () => { document.removeEventListener("pointerdown", outside); window.removeEventListener("resize", dismiss); window.removeEventListener("scroll", scroll, true); };
   }, [onClose]);
-  return createPortal(<div ref={root} className="schema-object-menu" role="menu" tabIndex={-1} aria-label={`Actions for ${name}`}
+  return createPortal(<div ref={root} className="schema-object-menu" role="menu" tabIndex={-1} aria-label={bt("business.actionsForDetail", { value0: name })}
     style={{ left: x, top: y }} onContextMenu={(event) => event.preventDefault()}
     onKeyDown={(event) => {
       const items = Array.from(root.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);

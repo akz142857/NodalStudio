@@ -326,6 +326,7 @@ pub fn generate(input: &Input) -> Result<Vec<u8>, String> {
 pub async fn export_query_result(
     app: tauri::AppHandle,
     input: Input,
+    locale: Option<String>,
 ) -> Result<Option<String>, String> {
     tokio::task::spawn_blocking(move || {
         let bytes = generate(&input)?;
@@ -333,13 +334,24 @@ pub async fn export_query_result(
         let Some(file) = app
             .dialog()
             .file()
-            .set_title("Export current query result")
+            .set_title(if locale.as_deref() == Some("zh-CN") {
+                "导出当前查询结果"
+            } else {
+                "Export current query result"
+            })
             .set_file_name(format!(
                 "query-result-{}.{}",
                 chrono::Local::now().format("%Y%m%d-%H%M%S"),
                 extension
             ))
-            .add_filter("Query result", &[extension])
+            .add_filter(
+                if locale.as_deref() == Some("zh-CN") {
+                    "查询结果"
+                } else {
+                    "Query result"
+                },
+                &[extension],
+            )
             .blocking_save_file()
         else {
             return Ok(None);

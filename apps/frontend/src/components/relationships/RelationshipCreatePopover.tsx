@@ -1,3 +1,4 @@
+import { useI18n } from "../../i18n";
 import { useUpdateBlocker } from "../../platform/update-guard";
 import { RelationshipEndpoints } from "./RelationshipPresentation";
 import "./relationships.css";
@@ -35,13 +36,7 @@ function defaultName(source: RelationshipEndpoint, target: RelationshipEndpoint)
   return `${source.table}_${source.columns.join("_")}_${target.table}_${target.columns.join("_")}`;
 }
 
-const cardinalityOptions: Array<{ value: RelationshipCardinality; label: string }> = [
-  { value: "manyToOne", label: "Many to one" },
-  { value: "oneToOne", label: "One to one" },
-  { value: "oneToMany", label: "One to many" },
-  { value: "manyToMany", label: "Many to many" },
-  { value: "unspecified", label: "Unspecified" },
-];
+
 
 export function RelationshipCreatePopover({
   sourceId,
@@ -50,7 +45,15 @@ export function RelationshipCreatePopover({
   onSave,
   onCancel,
 }: RelationshipCreatePopoverProps) {
-  useUpdateBlocker("save or close the model relationship editor", true);
+  const { t: bt } = useI18n();
+  const cardinalityOptions: Array<{ value: RelationshipCardinality; label: string }> = [
+  { value: "manyToOne", label: bt("business.manyToOne") },
+  { value: "oneToOne", label: bt("business.oneToOne") },
+  { value: "oneToMany", label: bt("business.oneToMany") },
+  { value: "manyToMany", label: bt("business.manyToMany") },
+  { value: "unspecified", label: bt("business.unspecified") },
+];
+  useUpdateBlocker(bt("business.saveOrCloseTheModelRelationshipEditor"), true);
   const existing = draft.relationship;
   const [name, setName] = useState(existing?.name ?? defaultName(draft.source, draft.target));
   const [cardinality, setCardinality] = useState<RelationshipCardinality>(existing?.cardinality ?? "unspecified");
@@ -120,25 +123,25 @@ export function RelationshipCreatePopover({
     <div className="relationship-dialog-backdrop nodrag nopan" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onCancel();
     }}>
-      <form className="ds-surface relationship-dialog" aria-label={existing ? "Edit logical relationship" : "Create logical relationship"} onSubmit={(event) => void submit(event)}>
+      <form className="ds-surface relationship-dialog" aria-label={existing ? bt("business.editLogicalRelationship") : bt("business.createLogicalRelationshipDetail")} onSubmit={(event) => void submit(event)}>
         <header>
           <div>
-            <p>MODEL ONLY · NO DATABASE CONSTRAINT</p>
-            <h2>{existing ? "Edit logical relationship" : "Create logical relationship"}</h2>
+            <p>{bt("business.mODELONLYNODATABASECONSTRAINT")}</p>
+            <h2>{existing ? bt("business.editLogicalRelationship") : bt("business.createLogicalRelationshipDetail")}</h2>
           </div>
-          <button type="button" aria-label="Close" onClick={onCancel}>×</button>
+          <button type="button" aria-label={bt("business.close")} onClick={onCancel}>×</button>
         </header>
-        <p className="relationship-fact-note">A user-defined link in this model. Creating or editing it does not add or change database foreign keys.</p>
+        <p className="relationship-fact-note">{bt("business.aUserDefinedLinkInThisModelCreatingOr")}</p>
         <RelationshipEndpoints source={draft.source} target={draft.target} />
-        <label>Name<input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} autoFocus /></label>
-        <label>Cardinality<select value={cardinality} onChange={(event) => setCardinality(event.target.value as RelationshipCardinality)}>{cardinalityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-        <label>Note<textarea rows={3} value={note} maxLength={2_000} onChange={(event) => setNote(event.target.value)} placeholder="Why does this relationship exist?" /></label>
-        {validation?.compatible === false ? <label className="relationship-mismatch"><input type="checkbox" checked={allowTypeMismatch} onChange={(event) => setAllowTypeMismatch(event.target.checked)} />Allow type mismatch and mark the relationship as conflicted</label> : null}
+        <label>{bt("business.name")}<input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} autoFocus /></label>
+        <label>{bt("business.cardinality")}<select value={cardinality} onChange={(event) => setCardinality(event.target.value as RelationshipCardinality)}>{cardinalityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        <label>{bt("business.note")}<textarea rows={3} value={note} maxLength={2_000} onChange={(event) => setNote(event.target.value)} placeholder={bt("business.whyDoesThisRelationshipExist")} /></label>
+        {validation?.compatible === false ? <label className="relationship-mismatch"><input type="checkbox" checked={allowTypeMismatch} onChange={(event) => setAllowTypeMismatch(event.target.checked)} />{bt("business.allowTypeMismatchAndMarkTheRelationshipAsConflicted")}</label> : null}
         {validation?.messages.length ? <ul className="relationship-validation" data-valid={validation.valid || undefined}>{validation.messages.map((message) => <li key={message}>{message}</li>)}</ul> : null}
         {error ? <p className="relationship-error" role="alert">{error}</p> : null}
         <footer>
-          <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="submit" className="ds-primary" disabled={!canSave}>{status === "saving" ? "Saving…" : existing ? "Save changes" : "Create"}</button>
+          <button type="button" onClick={onCancel}>{bt("business.cancel")}</button>
+          <button type="submit" className="ds-primary" disabled={!canSave}>{status === "saving" ? bt("business.saving") : existing ? bt("business.saveChanges") : bt("business.create")}</button>
         </footer>
       </form>
     </div>

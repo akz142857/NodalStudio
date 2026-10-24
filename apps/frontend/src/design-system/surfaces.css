@@ -1,0 +1,7 @@
+/* Shared business-page surfaces. Geometry-specific graph controls keep their own layout. */
+.ds-empty-state { display: grid; justify-items: center; align-content: center; gap: var(--ds-space-2); padding: var(--ds-empty-padding); color: var(--ds-secondary); text-align: center; overflow-wrap: anywhere; }
+.ds-empty-state > strong { color: var(--ds-text); font-size: var(--ds-text-heading); font-weight: var(--ds-weight-medium); }
+.ds-empty-state > p { margin: 0; max-width: 48ch; line-height: var(--ds-leading); }
+.ds-empty-state > svg { width: 24px; height: 24px; color: var(--ds-tertiary); }
+.ds-empty-state[data-compact] { padding: var(--ds-space-3); }
+.ds-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--ds-space-2); }

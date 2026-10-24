@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type { DatabaseSnapshot, DiscoveryInput, DiscoveryPreview, DiscoveryResult, EffectiveSettings, NodalStudioPlatform, QueryExecutionResult, SqlDraft, TableAiEvidence, TableDefinition } from "../platform";
 import { QueryDraftAnswer } from "./query/QueryDraftAnswer";
@@ -25,6 +26,7 @@ export function DiscoveryAssistant(props: Props) {
   return <DiscoveryRequest key={JSON.stringify([props.input, props.binding, props.snapshot.id, props.snapshot.sourceId, props.snapshot.fingerprint, props.settings.source, props.settings.app.privacy, props.available])} {...props} />;
 }
 function DiscoveryRequest({ platform, snapshot, settings, input, available, onApplyTerms, onLocate, onOpenSettings, onUseSql, autoPrepare = false, onSqlDraft, execution }: Props) {
+  const { t: bt, formatDate } = useI18n();
   const ai = settings.source?.ai;
   const remote = ai?.provider === "openAiCompatible";
   const enabled = available && settings.source?.sourceId === snapshot.sourceId && !!ai?.enabled && !(remote && settings.app.privacy.offlineMode);
@@ -58,11 +60,11 @@ function DiscoveryRequest({ platform, snapshot, settings, input, available, onAp
       if (current !== generation.current) { void platform.cancelDiscovery(next.requestId).catch(() => undefined); return; }
       if (next.sourceId !== snapshot.sourceId || next.snapshotId !== snapshot.id || next.fingerprint !== snapshot.fingerprint || next.context.operation !== input.task.operation || next.context.scope !== ai?.contextScope || next.provider !== (remote ? "openai-compatible" : "offline-schema") || (remote && next.model !== ai?.model)) {
         void platform.cancelDiscovery(next.requestId).catch(() => undefined);
-        throw new Error("The preview does not match this task or current settings. Prepare it again.");
+        throw new Error(bt("businessSupport.thePreviewDoesNotMatchThisTaskOrCurrent"));
       }
       if (input.task.operation === "draftSql" && (next.context.tables.length !== input.task.candidates.length || next.context.tables.some((table) => !input.task.candidates.some((candidate) => objectId(candidate) === objectId(table))))) {
         void platform.cancelDiscovery(next.requestId).catch(() => undefined);
-        throw new Error("The SQL preview changed the selected tables. Review a new request.");
+        throw new Error(bt("businessSupport.theSQLPreviewChangedTheSelectedTablesReviewA"));
       }
       if (!Number.isFinite(Date.parse(next.expiresAt)) || Date.parse(next.expiresAt) <= Date.now()) {
         void platform.cancelDiscovery(next.requestId).catch(() => undefined); invalidate("expired"); return;
@@ -91,7 +93,7 @@ function DiscoveryRequest({ platform, snapshot, settings, input, available, onAp
       const next = await platform.runDiscovery(preview.requestId);
       if (current !== generation.current) return;
       if (Date.now() >= Date.parse(preview.expiresAt)) { invalidate("expired"); return; }
-      if (next.requestId !== preview.requestId || next.sourceId !== snapshot.sourceId || next.snapshotId !== snapshot.id || next.operation !== input.task.operation || next.provider !== preview.provider || next.model !== preview.model) throw new Error("The returned answer belongs to a different task.");
+      if (next.requestId !== preview.requestId || next.sourceId !== snapshot.sourceId || next.snapshotId !== snapshot.id || next.operation !== input.task.operation || next.provider !== preview.provider || next.model !== preview.model) throw new Error(bt("businessSupport.theReturnedAnswerBelongsToADifferentTask"));
       setResult(next); setPhase("done");
       if (next.answer.sqlDraft) onSqlDraft?.(next.answer.sqlDraft);
     } catch (reason) { if (current === generation.current) { setError(String(reason instanceof Error ? reason.message : reason)); setPhase("error"); } }
@@ -101,49 +103,49 @@ function DiscoveryRequest({ platform, snapshot, settings, input, available, onAp
   const candidateFor = (id: string) => preview?.context.candidates.find((c) => c.id === id);
   const refs = (ids: string[]) => <span className="ai-evidence-links">{ids.map((id) => {
     const item = preview?.context.evidence.find((e) => e.id === id);
-    return item ? <button type="button" key={id} onClick={() => setEvidence(item)} aria-label={`Inspect discovery evidence ${id}`}>{id}</button> : null;
+    return item ? <button type="button" key={id} onClick={() => setEvidence(item)} aria-label={bt("businessSupport.inspectDiscoveryEvidence", { value0: id })}>{id}</button> : null;
   })}</span>;
   const focusedTable = evidence && tableFor(evidence.tableKey);
-  return <section className="ai-assistant discovery-assistant" aria-label="Business discovery AI">
-    {input.task.operation !== "draftSql" ? <h3>{input.task.operation === "expand" ? "Expand search terms" : input.task.operation === "rank" ? "Rank permitted candidates" : "Explain the complete path"}</h3> : null}
-    {input.task.operation !== "draftSql" ? <p className="ai-policy">{`AI scope: ${ai?.contextScope ?? "currentTable"}. Local search and graph depth do not expand this scope. Each step needs its own preview.`}</p> : null}
-    {!available ? <p>AI requires the latest desktop snapshot. Local results remain available.</p> : !enabled ? <button type="button" onClick={onOpenSettings}>Configure in Settings → AI</button> : <div className="ai-actions">
-      {!autoPrepare || ["error", "cancelled", "expired"].includes(phase) ? <button type="button" onClick={() => void prepare()} disabled={phase === "preparing" || phase === "running" || !input.task.question.trim()}>{input.task.operation === "draftSql" ? "Review AI request" : "Prepare discovery preview"}</button> : null}
-      {["preparing", "ready", "running"].includes(phase) ? <button type="button" onClick={() => invalidate("cancelled")}>Cancel AI step</button> : null}
+  return <section className="ai-assistant discovery-assistant" aria-label={bt("businessSupport.businessDiscoveryAI")}>
+    {input.task.operation !== "draftSql" ? <h3>{input.task.operation === "expand" ? bt("businessSupport.expandSearchTerms") : input.task.operation === "rank" ? bt("businessSupport.rankPermittedCandidates") : bt("businessSupport.explainTheCompletePath")}</h3> : null}
+    {input.task.operation !== "draftSql" ? <p className="ai-policy">{bt("businessSupport.aIScopeLocalSearchAndGraphDepthDoNot", { value0: ai?.contextScope ?? "currentTable" })}</p> : null}
+    {!available ? <p>{bt("businessSupport.aIRequiresTheLatestDesktopSnapshotLocalResultsRemain")}</p> : !enabled ? <button type="button" onClick={onOpenSettings}>{bt("businessSupport.configureInSettingsAI")}</button> : <div className="ai-actions">
+      {!autoPrepare || ["error", "cancelled", "expired"].includes(phase) ? <button type="button" onClick={() => void prepare()} disabled={phase === "preparing" || phase === "running" || !input.task.question.trim()}>{input.task.operation === "draftSql" ? bt("businessSupport.reviewAIRequest") : bt("businessSupport.prepareDiscoveryPreview")}</button> : null}
+      {["preparing", "ready", "running"].includes(phase) ? <button type="button" onClick={() => invalidate("cancelled")}>{bt("businessSupport.cancelAIStep")}</button> : null}
     </div>}
-    <p role="status">{phase === "ready" ? "Preview ready; nothing sent yet." : phase === "running" ? "Waiting for the model…" : phase === "preparing" ? "Preparing permitted context…" : phase === "cancelled" ? "Cancelled. A request already sent cannot be recalled." : phase === "expired" ? "Preview expired. Prepare again before sending." : phase === "done" && input.task.operation === "draftSql" ? result?.answer.sqlDraft?.sql ? "Draft ready to review below." : "More detail is needed. Review the questions below." : ""}</p>
+    <p role="status">{phase === "ready" ? bt("businessSupport.previewReadyNothingSentYet") : phase === "running" ? bt("businessSupport.waitingForTheModel") : phase === "preparing" ? bt("businessSupport.preparingPermittedContext") : phase === "cancelled" ? bt("businessSupport.cancelledARequestAlreadySentCannotBeRecalled") : phase === "expired" ? bt("businessSupport.previewExpiredPrepareAgainBeforeSending") : phase === "done" && input.task.operation === "draftSql" ? result?.answer.sqlDraft?.sql ? bt("businessSupport.draftReadyToReviewBelow") : bt("businessSupport.moreDetailIsNeededReviewTheQuestionsBelow") : ""}</p>
     {error ? <p role="alert">{error}</p> : null}
-    {preview ? <section className="ai-preview" aria-label="Discovery request scope">
+    {preview ? <section className="ai-preview" aria-label={bt("businessSupport.discoveryRequestScope")}>
       {input.task.operation === "draftSql" ? <>
-        <div className="query-send-summary"><div><strong>{phase === "done" ? "Request details" : "Ready to generate"}</strong><p>{preview.model ?? preview.provider} · {preview.context.tables.length} {preview.context.tables.length === 1 ? "table" : "tables"} · schema only</p></div>{phase === "ready" && enabled ? <button type="button" onClick={() => void run()}>Generate SQL</button> : null}</div>
-        <details><summary>Review what will be sent</summary><p>{preview.endpoint ?? "No network request"}</p><p>Expires {new Date(preview.expiresAt).toLocaleTimeString()}</p><ul>{preview.context.coverage.map((text, i) => <li key={i}>{text}</li>)}</ul><pre>{JSON.stringify(remote ? preview.requestBody : preview.context, null, 2)}</pre></details>
+        <div className="query-send-summary"><div><strong>{phase === "done" ? bt("businessSupport.requestDetails") : bt("businessSupport.readyToGenerate")}</strong><p>{preview.model ?? preview.provider} · {preview.context.tables.length} {bt("business.tablesDetail")} {bt("businessSupport.schemaOnly")}</p></div>{phase === "ready" && enabled ? <button type="button" onClick={() => void run()}>{bt("businessSupport.generateSQL")}</button> : null}</div>
+        <details><summary>{bt("businessSupport.reviewWhatWillBeSent")}</summary><p>{preview.endpoint ?? bt("businessSupport.noNetworkRequest")}</p><p>{bt("businessSupport.expires")} {formatDate(preview.expiresAt, "local", { timeStyle: "medium" })}</p><ul>{preview.context.coverage.map((text, i) => <li key={i}>{text}</li>)}</ul><pre>{JSON.stringify(remote ? preview.requestBody : preview.context, null, 2)}</pre></details>
       </> : <>
-      <h4>{remote ? "Actual request preview" : "Local context"}</h4>
-      <p>{preview.model ?? preview.provider} · {preview.endpoint ?? "No network request"}</p>
-      <p>{preview.context.tables.length} tables · {preview.context.evidence.length} evidence items · expires {new Date(preview.expiresAt).toLocaleTimeString()}</p>
+      <h4>{remote ? bt("businessSupport.actualRequestPreview") : bt("businessSupport.localContext")}</h4>
+      <p>{preview.model ?? preview.provider} · {preview.endpoint ?? bt("businessSupport.noNetworkRequest")}</p>
+      <p>{preview.context.tables.length} {bt("businessSupport.tables")} {preview.context.evidence.length} {bt("businessSupport.evidenceItemsExpires")} {new Date(preview.expiresAt).toLocaleTimeString()}</p>
       <ul>{preview.context.tables.map((key) => <li key={objectId(key)}>{objectLabel(key)}</li>)}</ul>
-      <details><summary>View exact request body (API key excluded)</summary><pre>{JSON.stringify(remote ? preview.requestBody : preview.context, null, 2)}</pre></details>
+      <details><summary>{bt("businessSupport.viewExactRequestBodyAPIKeyExcluded")}</summary><pre>{JSON.stringify(remote ? preview.requestBody : preview.context, null, 2)}</pre></details>
       <ul>{preview.context.coverage.map((text, i) => <li key={i}>{text}</li>)}</ul>
-      {phase === "ready" && enabled ? <button type="button" onClick={() => void run()}>{remote ? "Send this discovery request" : "Show local limitations"}</button> : null}
+      {phase === "ready" && enabled ? <button type="button" onClick={() => void run()}>{remote ? bt("businessSupport.sendThisDiscoveryRequest") : bt("businessSupport.showLocalLimitations")}</button> : null}
       </>}
     </section> : null}
-    {result && preview ? <section className="ai-result" aria-label="Discovery answer">
-      <h4>{input.task.operation === "draftSql" ? "Review your query draft" : "Model suggestions · unverified"}</h4>
+    {result && preview ? <section className="ai-result" aria-label={bt("businessSupport.discoveryAnswer")}>
+      <h4>{input.task.operation === "draftSql" ? bt("businessSupport.reviewYourQueryDraft") : bt("businessSupport.modelSuggestionsUnverified")}</h4>
       {result.answer.sqlDraft ? <QueryDraftAnswer draft={result.answer.sqlDraft} disabled={!enabled} onUseSql={onUseSql} result={execution && execution.sql.trim() === result.answer.sqlDraft.sql?.trim() ? execution.result : undefined} /> : null}
-      {result.answer.terms.length ? <><p>{result.answer.terms.join(" · ")}</p><button type="button" onClick={() => onApplyTerms(result.answer.terms)}>Apply terms to local search</button></> : null}
-      {result.answer.meanings.map((meaning) => <button type="button" key={meaning.label} onClick={() => onApplyTerms(meaning.terms)}>{meaning.label} · search locally</button>)}
-      {input.task.operation === "rank" ? <p>AI order covers only the candidates below. All other results keep their local order; this is not a whole-database ranking.</p> : null}
+      {result.answer.terms.length ? <><p>{result.answer.terms.join(" · ")}</p><button type="button" onClick={() => onApplyTerms(result.answer.terms)}>{bt("businessSupport.applyTermsToLocalSearch")}</button></> : null}
+      {result.answer.meanings.map((meaning) => <button type="button" key={meaning.label} onClick={() => onApplyTerms(meaning.terms)}>{meaning.label} {bt("businessSupport.searchLocally")}</button>)}
+      {input.task.operation === "rank" ? <p>{bt("businessSupport.aIOrderCoversOnlyTheCandidatesBelowAllOther")}</p> : null}
       <ol>{result.answer.rankings.map((ranking) => {
         const candidate = candidateFor(ranking.candidateId); const table = candidate && tableFor(candidate.tableKey);
         return table ? <li key={ranking.candidateId}><button type="button" onClick={() => onLocate(table)}>{objectLabel(table.key)}</button><p>{ranking.reason}</p>{refs(ranking.evidenceIds)}</li> : null;
       })}</ol>
       {result.answer.interpretations.map((claim, i) => <div key={i}><p>{claim.text}</p>{refs(claim.evidenceIds)}</div>)}
-      {result.answer.readingOrder.length ? <><h4>Suggested reading order · not execution order</h4><ol>{result.answer.readingOrder.map((id) => {
+      {result.answer.readingOrder.length ? <><h4>{bt("businessSupport.suggestedReadingOrderNotExecutionOrder")}</h4><ol>{result.answer.readingOrder.map((id) => {
         const candidate = candidateFor(id); const table = candidate && tableFor(candidate.tableKey);
         return table ? <li key={id}><button type="button" onClick={() => onLocate(table)}>{objectLabel(table.key)}</button></li> : null;
       })}</ol></> : null}
-      {result.answer.unknowns.length ? <><h4>Still to confirm</h4><ul>{result.answer.unknowns.map((item, i) => <li key={i}>{item}</li>)}</ul></> : null}
+      {result.answer.unknowns.length ? <><h4>{bt("businessSupport.stillToConfirm")}</h4><ul>{result.answer.unknowns.map((item, i) => <li key={i}>{item}</li>)}</ul></> : null}
     </section> : null}
-    {evidence && focusedTable ? <section className="discovery-evidence" aria-label="Located discovery evidence"><button type="button" onClick={() => setEvidence(undefined)}>Close evidence</button><h4>{evidence.label}</h4><p>{evidence.kind} · Snapshot {snapshot.fingerprint.slice(0, 12)}</p><pre>{evidence.detail}</pre><TableStructure table={focusedTable} focusedEvidence={evidence} /></section> : null}
+    {evidence && focusedTable ? <section className="discovery-evidence" aria-label={bt("businessSupport.locatedDiscoveryEvidence")}><button type="button" onClick={() => setEvidence(undefined)}>{bt("businessSupport.closeEvidence")}</button><h4>{evidence.label}</h4><p>{evidence.kind} {bt("businessSupport.snapshot")} {snapshot.fingerprint.slice(0, 12)}</p><pre>{evidence.detail}</pre><TableStructure table={focusedTable} focusedEvidence={evidence} /></section> : null}
   </section>;
 }

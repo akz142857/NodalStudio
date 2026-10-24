@@ -1,0 +1,8 @@
+.design-system-preview { container: settings-content / inline-size; width: min(900px, 100%); height: 100vh; overflow: auto; margin: 0 auto; padding: var(--ds-space-6); display: grid; gap: var(--ds-space-6); }
+.design-system-preview h1 { font-size: var(--ds-text-title); }
+.design-system-preview p { color: var(--ds-secondary); }
+.preview-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-space-2); }
+.preview-status, .preview-error, .preview-empty { padding: var(--ds-space-4); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); }
+.preview-status { color: var(--ds-positive); background: var(--ds-positive-soft); }
+.preview-error { color: var(--ds-danger); background: var(--ds-danger-soft); }
+.preview-empty { background: var(--ds-surface); }

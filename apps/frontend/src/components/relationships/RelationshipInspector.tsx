@@ -1,3 +1,5 @@
+import { translateUiLabel } from "../../i18n/business-labels";
+import { useI18n } from "../../i18n";
 import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import type { LogicalRelationship } from "../../platform";
@@ -34,6 +36,7 @@ export function RelationshipInspector({
   onIgnoreInferenceRule,
   onClose,
 }: RelationshipInspectorProps) {
+  const { t: bt } = useI18n();
   const inspectorRef = useRef<HTMLElement>(null);
   const [position, setPosition] = useState({ left: 12, top: 12 });
   const [positioned, setPositioned] = useState(false);
@@ -92,13 +95,13 @@ export function RelationshipInspector({
   const data = edge.data;
   if (!data) return null;
   const kindLabel = data.relationshipKind === "physical"
-    ? "Physical FK"
+    ? bt("business.physicalFK")
     : data.relationshipKind === "logical"
-      ? "Logical relationship"
-      : "Inferred candidate";
+      ? bt("business.logicalRelationship")
+      : bt("business.inferredCandidate");
   return createPortal(
-    <aside ref={inspectorRef} className="ds-surface relationship-inspector nodrag nopan" aria-label="Relationship details" style={{ ...position, visibility: positioned ? "visible" : "hidden" }}>
-      <header className="relationship-inspector-drag-handle" data-dragging={dragging || undefined} tabIndex={0} aria-label="Move relationship details" title="Drag to move · Arrow keys move 10 px · Shift + arrow keys move 1 px"
+    <aside ref={inspectorRef} className="ds-surface relationship-inspector nodrag nopan" aria-label={bt("business.relationshipDetails")} style={{ ...position, visibility: positioned ? "visible" : "hidden" }}>
+      <header className="relationship-inspector-drag-handle" data-dragging={dragging || undefined} tabIndex={0} aria-label={bt("business.moveRelationshipDetails")} title={bt("business.dragToMoveArrowKeysMove10PxShift")}
         onPointerDown={(event) => {
           if (event.button !== 0 || event.isPrimary === false || (event.target instanceof Element && event.target.closest("button"))) return;
           const measured = measurePanel();
@@ -124,23 +127,23 @@ export function RelationshipInspector({
           const step = event.shiftKey ? 1 : 10;
           movePanel({ left: measured.bounds.left + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0), top: measured.bounds.top + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0) });
         }}
-      ><div><span className="relationship-kind" data-kind={data.relationshipKind}>{kindLabel}</span><h2>{data.relationshipKind === "logical" ? "Model relationship" : data.relationshipKind === "physical" ? "Database foreign key" : "Suggested relationship"}</h2></div><button type="button" aria-label="Close relationship details" onClick={onClose}>×</button></header>
-      {data.relationshipKind === "logical" ? <p className="relationship-fact-note">User-defined link · model only. This dashed line is independent of database foreign key constraints.</p> : null}
+      ><div><span className="relationship-kind" data-kind={data.relationshipKind}>{kindLabel}</span><h2>{data.relationshipKind === "logical" ? bt("business.modelRelationship") : data.relationshipKind === "physical" ? bt("business.databaseForeignKey") : bt("business.suggestedRelationship")}</h2></div><button type="button" aria-label={bt("business.closeRelationshipDetails")} onClick={onClose}>×</button></header>
+      {data.relationshipKind === "logical" ? <p className="relationship-fact-note">{bt("business.userDefinedLinkModelOnlyThisDashedLineIs")}</p> : null}
       {data.constraintName ? <p className="relationship-name">{data.constraintName}</p> : null}
       <RelationshipEndpoints source={logicalRelationship?.source ?? { schema: "", table: edge.source, columns: [data.sourceColumn] }} target={logicalRelationship?.target ?? { schema: "", table: edge.target, columns: [data.targetColumn] }} />
       <dl>
-        {data.changeStatus ? <div><dt>Change</dt><dd>{data.changeStatus} · {data.snapshotSide === "before" ? "Before snapshot" : "After snapshot"}</dd></div> : null}
-        {data.cardinality ? <div><dt>Cardinality</dt><dd>{relationshipCardinalityLabel(data.cardinality)}</dd></div> : null}
-        {data.relationshipStatus ? <div><dt>Status</dt><dd>{relationshipStatusLabels[data.relationshipStatus]}</dd></div> : null}
-        {data.onDelete ? <div><dt>On delete</dt><dd>{data.onDelete}</dd></div> : null}
-        {data.onUpdate ? <div><dt>On update</dt><dd>{data.onUpdate}</dd></div> : null}
+        {data.changeStatus ? <div><dt>{bt("business.change")}</dt><dd>{data.changeStatus} · {data.snapshotSide === "before" ? bt("business.beforeSnapshot") : bt("business.afterSnapshot")}</dd></div> : null}
+        {data.cardinality ? <div><dt>{bt("business.cardinality")}</dt><dd>{translateUiLabel(relationshipCardinalityLabel(data.cardinality), bt)}</dd></div> : null}
+        {data.relationshipStatus ? <div><dt>{bt("business.statusDetail")}</dt><dd>{translateUiLabel(relationshipStatusLabels[data.relationshipStatus], bt)}</dd></div> : null}
+        {data.onDelete ? <div><dt>{bt("business.onDelete")}</dt><dd>{data.onDelete}</dd></div> : null}
+        {data.onUpdate ? <div><dt>{bt("business.onUpdate")}</dt><dd>{data.onUpdate}</dd></div> : null}
       </dl>
       {data.note ? <p>{data.note}</p> : null}
       {data.evidence?.length ? <ul>{data.evidence.map((item) => <li key={item}>{item}</li>)}</ul> : null}
-      {data.relationshipKind === "physical" ? <p className="relationship-fact-note">Database constraint · read only</p> : null}
-      {data.relationshipKind === "logical" && !readOnly ? <div className="relationship-actions"><button type="button" className="ds-primary" title="You can also double-click the relationship line" onClick={onEditLogical}>Edit</button><button type="button" onClick={onToggleLogical}>{data.relationshipStatus === "disabled" ? "Enable" : "Disable"}</button><button type="button" className="danger" title="Delete or Backspace also removes the selected logical relationship" onClick={onDeleteLogical}>Delete…</button></div> : null}
-      {data.relationshipKind === "inferred" ? <p className="relationship-fact-note">Naming suggestion · business meaning and stored data have not been verified.</p> : null}
-      {data.relationshipKind === "inferred" && !readOnly ? <div className="relationship-actions"><button type="button" className="ds-primary" onClick={onConfirmInference}>Review candidate</button><button type="button" onClick={onDismissInference}>Ignore candidate</button><details><summary>More</summary><button type="button" onClick={onIgnoreInferenceRule}>Stop suggesting this source field</button></details></div> : null}
+      {data.relationshipKind === "physical" ? <p className="relationship-fact-note">{bt("business.databaseConstraintReadOnly")}</p> : null}
+      {data.relationshipKind === "logical" && !readOnly ? <div className="relationship-actions"><button type="button" className="ds-primary" title={bt("business.youCanAlsoDoubleClickTheRelationshipLine")} onClick={onEditLogical}>{bt("business.editDetailDetail")}</button><button type="button" onClick={onToggleLogical}>{data.relationshipStatus === "disabled" ? bt("business.enable") : bt("business.disable")}</button><button type="button" className="danger" title={bt("business.deleteOrBackspaceAlsoRemovesTheSelectedLogicalRelationship")} onClick={onDeleteLogical}>{bt("business.deleteDetailDetail")}</button></div> : null}
+      {data.relationshipKind === "inferred" ? <p className="relationship-fact-note">{bt("business.namingSuggestionBusinessMeaningAndStoredDataHaveNot")}</p> : null}
+      {data.relationshipKind === "inferred" && !readOnly ? <div className="relationship-actions"><button type="button" className="ds-primary" onClick={onConfirmInference}>{bt("business.reviewCandidate")}</button><button type="button" onClick={onDismissInference}>{bt("business.ignoreCandidate")}</button><details><summary>{bt("business.moreDetail")}</summary><button type="button" onClick={onIgnoreInferenceRule}>{bt("business.stopSuggestingThisSourceField")}</button></details></div> : null}
     </aside>,
     document.body,
   );

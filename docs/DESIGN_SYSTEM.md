@@ -1,5 +1,7 @@
 # UI design system
 
+For the localization architecture and application-wide migration plan, see [多语言与统一 UI 系统方案](LOCALIZATION_AND_UI_SYSTEM.md). The first implementation covers the Settings interface and main navigation; [Stage 1 acceptance](LOCALIZATION_STAGE1_ACCEPTANCE.md) records its scope and verification limits. Component coverage across the rest of the application is still partial.
+
 Settings, the inspector and relationship detail/edit/delete surfaces share an opt-in design system. The implementation follows macOS conventions for compact controls, restrained color, grouped preferences, readable hierarchy, keyboard focus, and adaptive layouts. It remains a React/WebView interface, not a native AppKit settings window.
 
 References: [Apple Settings](https://developer.apple.com/design/human-interface-guidelines/settings), [Typography](https://developer.apple.com/design/human-interface-guidelines/typography), [Color](https://developer.apple.com/design/human-interface-guidelines/color), and [Layout](https://developer.apple.com/design/human-interface-guidelines/layout).
@@ -8,13 +10,16 @@ References: [Apple Settings](https://developer.apple.com/design/human-interface-
 
 - `apps/frontend/src/design-system/tokens.css`: semantic colors, system font stacks, type scale, spacing, radii, density and motion. Light, dark and system themes are defined here. Prefer semantic names such as `--ds-secondary` and `--ds-danger` over raw colors in components.
 - `apps/frontend/src/design-system/controls.css`: opt-in `.ds-surface` controls, keyboard focus, disabled/pressed/hover states, primary buttons and checkbox switches. Native input semantics and keyboard behavior remain intact.
-- `apps/frontend/src/components/settings/SettingsControls.tsx`: reusable section, group, toggle, selection, range, number, text and secret-field compositions. Labels and descriptions are programmatically associated with controls.
+- `apps/frontend/src/design-system/forms.tsx` and `forms.css`: reusable section, group, toggle, selection, range, number, text and secret-field compositions. Labels and descriptions are programmatically associated with controls. `components/settings/SettingsControls.tsx` retains compatibility exports.
+- `apps/frontend/src/design-system/Button.tsx`: native button wrapper with primary, secondary, ghost and danger variants, normal/small sizes and a disabled pending state. Use within `.ds-surface`; supply the translated visible label. Existing `components/IconButton.tsx` remains the shared named icon action with keyboard/pointer tooltips.
 - `apps/frontend/src/components/settings/settings.css`: Settings layout and component composition, including the capability matrix.
 - `apps/frontend/src/components/inspector.css`: inspector composition, using the same shared tokens.
 
 `styles.css` imports the shared foundation. Existing surfaces outside Settings and the inspector retain their current styles; migrate them deliberately by adding `.ds-surface` and replacing their local values with semantic tokens. Do not introduce new global tag overrides.
 
 The type scale uses the existing root `--ui-font-size` preference: at the default 13px, body text is 13px, controls 12px, supporting text at least 11px, section headings 14px, and page titles 20px. Changing the preference scales these sizes. Density changes row height; long labels can still expand. Focus uses an explicit outline, and status colors always accompany text. Motion respects both the application preference and the operating system preference. Increased contrast strengthens separators and borders.
+
+UI fonts include PingFang SC, Microsoft YaHei and Noto Sans CJK SC fallbacks. Use `--ds-control-padding-*`, `--ds-control-height-small`, `--ds-focus-ring`, `--ds-shadow-popover`, `--ds-shadow-dialog`, `--ds-overlay` and `--ds-layer-*` when extending controls/overlays. These additions establish shared values; legacy overlays outside the migrated surfaces still require deliberate migration. Shared form rows use minimum heights and responsive columns, and button labels may wrap instead of reducing their font size.
 
 ## Settings composition
 
@@ -49,6 +54,8 @@ Run `pnpm dev:desktop` or the frontend development server, then visit `/settings
 
 Fixture query parameters: `theme=light|dark|system`, `font=18`, `density=compact`, `source=none`, `runtime=web`, `managed=1`, and `bootstrap=1` (shows account creation fields). Use the page controls for normal navigation and theme/font interactions. `/inspector-preview.html` remains available to check the other consumer of the shared tokens.
 
+Settings also accepts `language=en|zh-CN`; omission follows the system. `/design-system-preview.html` is a development-only catalog of shared forms, button variants, disabled/pending states, feedback and an empty state. It supports `language`, `theme`, `font` and `density`, with interactive controls and an editable mixed Chinese/English identifier. It neither persists settings nor calls the platform. Use keyboard focus and pointer hover to inspect interaction states. Both fixtures remain outside the production entry point.
+
 Check all categories in light and dark themes, narrow and desktop windows, larger fonts, managed/disabled states, and both populated and empty source contexts. Confirm form labels, visible focus, keyboard navigation, local save feedback and explicit draft saving. Run the frontend tests, lint and production build after implementation changes.
 
 
@@ -59,3 +66,25 @@ Canvas scrolling pans the viewport freely on both axes at the input's native spe
 `components/relationships/relationships.css` uses the same semantic tokens for relationship details, editing and deletion confirmation. `--ds-logical` identifies model-only dashed links. Endpoints show table identity separately from columns; cardinality and status use readable labels. The deletion confirmation is an HTML modal dialog, independent of `window.confirm` support in the desktop WebView. It defaults focus to Cancel, blocks duplicate submissions, retains errors for retry, and leaves database foreign keys unchanged. Details, manager and keyboard entry points share this confirmation. `/relationship-preview.html` exercises the real canvas with an in-memory model and a simulated failure option.
 
 Entire visible field rows initiate and receive model connections. A 6 CSS-pixel drag threshold preserves clicks; table headers move tables, and Space retains canvas panning. `use-field-row-connection.ts` separates DOM row hit testing from edge anchors and feeds the existing React Flow connection preview. Sources use `--ds-logical`, compatible targets use `--ds-positive`, and type warnings use `--ds-warning`; the confirmation form remains authoritative for duplicate and type validation. Escape, window blur, scope changes, blank drops and self-field drops cancel without saving. Fixed table positions still allow relationships, while read-only/export/comparison surfaces do not. Row gestures avoid mounting extra ports on every column and retain the right-click target picker as an alternative.
+
+## Business surfaces and localization (stage 2)
+
+Business pages now share the application i18n context. Keep translations at the presentation boundary: database identifiers, SQL, user-authored content, enum values and DOM selectors must remain stable. Async effects use `useEventTranslator` when they need feedback without restarting work on a locale change. CodeMirror changes its language compartment without recreating editor state.
+
+`design-system/EmptyState.tsx` provides a localized-by-caller title, description, icon and optional actions, styled by `surfaces.css`. Connection lists, query results and query history use this shared empty-state surface. `Button` accepts native button refs and is reused by connection management, relationship deletion and result export. Dialog padding/radius, empty-state spacing, overlays, shadows and control typography are shared tokens. Avoid applying generic control sizing to React Flow handles or table geometry.
+
+Open `/business-preview.html?language=zh-CN&theme=light` to review synthetic model, connection, relationship, query and history screens. The fixture also accepts `language=en`, `theme=dark` and `font=18`. It performs no database or network operations. Scope and verification boundaries are documented in [stage 2 acceptance](LOCALIZATION_STAGE2_ACCEPTANCE.md).
+
+### 原生 WebView 下拉控件
+
+`select.ds-select` 保留原生选择器语义，但显式设置 `appearance: none`、共享控件高度、圆角、字号、焦点和箭头。适用于历史版本、变更筛选及关系类型；修复 macOS WebKit 原生外观忽略 padding 导致的高度不一致。强制颜色模式恢复原生外观。
+
+### 应用缩放与视口
+
+应用通过 `--ui-scale` 与 CSS zoom 调整界面；布局和弹窗使用 `--ds-viewport-width` / `--ds-viewport-height`，避免原始 viewport 单位在放大后超出窗口。React Flow 的几何坐标取消外层 CSS zoom，图表大小由自身视口控制，保持字段端点和鼠标坐标一致。
+
+### 导航与可点击反馈
+
+分段导航的当前项统一使用 selection 背景、文字色和 accent 内描边，不依赖 hover 或浏览器焦点。所有原生按钮、链接、下拉框、checkbox/radio、summary 及 button/tab/menuitem/switch 语义控件共享 pointer 指针；禁用控件使用 default。文本输入、画布拖动和尺寸调整保留各自的光标。画布不再用通配选择器覆盖子按钮的指针。
+
+懒加载页面必须在自己的内容区或覆盖层设置 Suspense 边界。加载查询、设置或 DDL 不能替换整个应用外壳；DDL 期间背景工作区保持挂载并设为 inert。

@@ -1,5 +1,5 @@
 /* Settings composition. Colors, typography and controls come from design-system/. */
-.settings-page { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; min-width: 0; background: var(--ds-window); overflow: hidden; }
+.settings-page { position: fixed; inset: 0; z-index: var(--ds-layer-settings); display: flex; flex-direction: column; min-width: 0; background: var(--ds-window); overflow: hidden; }
 .settings-page :is(h1, h2, h3, h4, p) { margin: 0; }
 .settings-page :is(h2, h3, h4, strong, b, legend) { font-weight: var(--ds-weight-emphasis); }
 .settings-page h1 { font-size: var(--ds-text-heading); font-weight: var(--ds-weight-emphasis); }
@@ -28,31 +28,6 @@
 .settings-category-picker { display: none; }
 .settings-content { container: settings-content / inline-size; min-width: 0; padding: var(--ds-space-8); overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; overflow-wrap: anywhere; }
 .settings-section, .settings-content > [role="alert"], .settings-content > [role="status"] { width: 100%; max-width: 780px; margin: 0 auto; }
-.settings-section > header { display: grid; gap: var(--ds-space-1); margin-bottom: var(--ds-space-6); }
-.settings-section > header > p { max-width: 65ch; font-size: var(--ds-text-control); }
-.settings-card { display: grid; gap: var(--ds-space-5); min-width: 0; margin: 0; padding: 0 0 var(--ds-space-8); border: 0; }
-.settings-group { min-width: 0; margin: 0; padding: 0; border: 0; }
-.settings-group > legend { padding: 0 0 var(--ds-space-2) var(--ds-space-1); font-size: var(--ds-text-control); }
-.settings-group-description { margin-bottom: var(--ds-space-2) !important; font-size: var(--ds-text-caption); }
-.settings-group-content { overflow: hidden; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-group); background: var(--ds-surface); }
-.setting-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 42%); align-items: center; gap: var(--ds-space-4); min-width: 0; min-height: var(--ds-row-height); margin: 0; padding: var(--ds-space-3) var(--ds-space-4); }
-.setting-row + .setting-row { border-top: 1px solid var(--ds-separator); }
-.setting-row > :is(span, label), .setting-row > :is(input, select), .secret-setting { min-width: 0; }
-.setting-row strong { font-weight: var(--ds-weight-normal); }
-.setting-row :is(small, em), .managed-section { display: block; margin-top: 3px; font-size: var(--ds-text-caption); color: var(--ds-secondary); font-style: normal; }
-.setting-row em, .managed-section { color: var(--ds-warning); }
-.setting-row > :is(input, select) { width: 100%; }
-.setting-toggle { grid-template-columns: minmax(0, 1fr) auto; cursor: pointer; }
-.setting-toggle > input { width: 32px; }
-.setting-row:has(:disabled) { cursor: default; }
-.setting-number > input { justify-self: end; max-width: 120px; font-variant-numeric: tabular-nums; }
-.setting-range-control { display: flex; align-items: center; gap: var(--ds-space-3); }
-.setting-range-control input { min-width: 0; width: 100%; }
-.setting-range-control output { min-width: 4ch; text-align: right; font-size: var(--ds-text-control); font-variant-numeric: tabular-nums; }
-.secret-setting { display: flex; gap: var(--ds-space-2); }
-.secret-setting input { width: 100%; }
-.setting-action-row { display: flex; flex-wrap: wrap; gap: var(--ds-space-2); align-items: center; }
-.settings-group-content > .setting-action-row { padding: var(--ds-space-3) var(--ds-space-4); }
 .settings-page :is(.secondary-setting-action, .danger-setting-action) { justify-self: start; }
 .settings-page .danger-setting-action { color: var(--ds-danger); }
 .settings-page .setting-inline-note { font-size: var(--ds-text-caption); }
@@ -64,7 +39,6 @@
 .settings-page .settings-status-card, .settings-page .settings-empty { display: grid; gap: var(--ds-space-1); }
 .settings-status-card > strong { font-size: var(--ds-text-control); }
 .settings-status-card > span, .settings-empty > span { color: var(--ds-secondary); font-size: var(--ds-text-control); }
-.settings-group-content > .settings-status-card { margin: var(--ds-space-3) var(--ds-space-4); background: var(--ds-window); }
 .settings-page .external-capabilities > h3 { margin-bottom: var(--ds-space-2); }
 .settings-page :is(.external-capabilities, .sync-diagnostics) > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--ds-space-3); padding: var(--ds-space-2) 0; font-size: var(--ds-text-control); }
 .settings-page :is(.external-capabilities, .sync-diagnostics) > div + div { border-top: 1px solid var(--ds-separator); }
@@ -136,12 +110,16 @@
   .settings-content { padding: var(--ds-space-5) var(--ds-space-3); }
 }
 /* Fixed-size trailing values and actions must not collapse beside flexible fields. */
-.setting-range-control output { flex: 0 0 auto; white-space: nowrap; }
-.secret-setting input { flex: 1 1 0; width: 0; }
-.secret-setting button { flex: 0 0 auto; white-space: nowrap; }
 .settings-navigation-group > button[aria-current="page"]:hover:not(:disabled) { background: var(--ds-selection); color: var(--ds-selection-text); }
 .settings-disclosure { padding: var(--ds-space-3) var(--ds-space-4); border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-group); background: var(--ds-surface); font-size: var(--ds-text-control); }
 .settings-disclosure summary { cursor: pointer; font-weight: var(--ds-weight-medium); }
 .settings-disclosure p { margin-top: var(--ds-space-2); }
-.settings-group-content > .project-policy { border: 0; border-radius: 0; border-top: 1px solid var(--ds-separator); }
 .settings-empty-inline { padding: var(--ds-space-4); font-size: var(--ds-text-control); }
+
+.settings-header .settings-back { flex: 0 0 auto; }
+.settings-navigation-group > button { height: auto; }
+
+.settings-group-content > .settings-status-card { margin: var(--ds-space-3) var(--ds-space-4); background: var(--ds-window); }
+.settings-group-content > .project-policy { border: 0; border-radius: 0; border-top: 1px solid var(--ds-separator); }
+
+.settings-navigation-group > button.ds-button { justify-content: flex-start; }

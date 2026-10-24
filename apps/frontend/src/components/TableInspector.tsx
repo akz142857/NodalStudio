@@ -1,3 +1,5 @@
+import { translateUiLabel } from "../i18n/business-labels";
+import { useI18n } from "../i18n";
 import { useUpdateBlocker } from "../platform/update-guard";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { ObjectAnnotation, SaveAnnotationInput, TableAiEvidence, TableDefinition } from "../platform";
@@ -22,6 +24,7 @@ interface TableKnowledgeFormProps {
  * structure is read-only and comes from the snapshot, the form is authored.
  */
 export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStructureProps) {
+  const { t: bt } = useI18n();
   const structure = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const target = structure.current?.querySelector<HTMLElement>('[data-evidence-target="true"]')
@@ -41,33 +44,33 @@ export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStr
       <p className="inspector-comment" tabIndex={-1} data-evidence-target={focusedEvidence?.kind !== "logicalRelationship" && focused("table", table.key.name) ? "true" : undefined}>{table.comment ?? `${table.key.schema}.${table.key.name}`}</p>
       <dl className="snapshot-summary">
         <div>
-          <dt>Kind</dt>
-          <dd>{table.tableKind}</dd>
+          <dt>{bt("business.kind")}</dt>
+          <dd>{translateUiLabel(table.tableKind, bt)}</dd>
         </div>
         <div>
-          <dt>Columns</dt>
+          <dt>{bt("business.columnsDetail")}</dt>
           <dd>{table.columns.length}</dd>
         </div>
         <div>
-          <dt>Relationships</dt>
+          <dt>{bt("business.relationships")}</dt>
           <dd>{table.foreignKeys.length}</dd>
         </div>
       </dl>
-      {onOpenQuery ? <div className="inspector-actions"><button type="button" className="inspector-query-button" onClick={() => onOpenQuery(table)}>Preview rows in Query</button></div> : null}
+      {onOpenQuery ? <div className="inspector-actions"><button type="button" className="inspector-query-button" onClick={() => onOpenQuery(table)}>{bt("business.previewRowsInQuery")}</button></div> : null}
 
       <section className="inspector-section">
-        <h3>Columns</h3>
+        <h3>{bt("business.columnsDetail")}</h3>
         <div className="inspector-columns">
           {table.columns.map((column) => (
             <div key={column.name} tabIndex={-1} data-evidence-target={focused("column", column.name) || logicalField === column.name ? "true" : undefined} data-evidence-focus={focused("column", column.name) || focusedEvidence?.columns.includes(column.name) ? "true" : undefined}>
               <span>
-                {primaryColumns.has(column.name) ? <b>PK</b> : null}
-                {foreignColumns.has(column.name) ? <b>FK</b> : null}
+                {primaryColumns.has(column.name) ? <b>{bt("business.pKDetail")}</b> : null}
+                {foreignColumns.has(column.name) ? <b>{bt("business.fK")}</b> : null}
                 <strong>{column.name}</strong>
               </span>
               <small>
                 {column.formattedType}
-                {column.nullable ? "" : " · not null"}
+                {column.nullable ? "" : bt("business.notNullDetail")}
               </small>
               {column.comment ? <p>{column.comment}</p> : null}
             </div>
@@ -77,7 +80,7 @@ export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStr
 
       {table.foreignKeys.length > 0 ? (
         <section className="inspector-section">
-          <h3>Relationships</h3>
+          <h3>{bt("business.relationships")}</h3>
           <ul className="inspector-list">
             {table.foreignKeys.map((key) => (
               <li key={key.name} tabIndex={-1} data-evidence-target={focused("foreignKey", key.name) ? "true" : undefined} data-evidence-focus={focused("foreignKey", key.name) ? "true" : undefined}>
@@ -94,14 +97,14 @@ export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStr
 
       {table.indexes.length > 0 ? (
         <section className="inspector-section">
-          <h3>Indexes</h3>
+          <h3>{bt("business.indexes")}</h3>
           <ul className="inspector-list">
             {table.indexes.map((index) => (
               <li key={index.name} tabIndex={-1} data-evidence-target={focused("index", index.name) ? "true" : undefined} data-evidence-focus={focused("index", index.name) ? "true" : undefined}>
                 <strong>{index.name}</strong>
                 <span>
                   {index.method} · {index.columns.join(", ")}
-                  {index.unique ? " · unique" : ""}
+                  {index.unique ? bt("business.uniqueDetail") : ""}
                 </span>
               </li>
             ))}
@@ -111,7 +114,7 @@ export function TableStructure({ table, onOpenQuery, focusedEvidence }: TableStr
 
       {table.constraints.length > 0 ? (
         <section className="inspector-section">
-          <h3>Constraints</h3>
+          <h3>{bt("business.constraints")}</h3>
           <ul className="inspector-list">
             {table.constraints.map((constraint) => (
               <li key={constraint.name} tabIndex={-1} data-evidence-target={focused("constraint", constraint.name) ? "true" : undefined} data-evidence-focus={focused("constraint", constraint.name) ? "true" : undefined}>
@@ -133,6 +136,7 @@ export function TableKnowledgeForm({
   annotation,
   onSaveAnnotation,
 }: TableKnowledgeFormProps) {
+  const { t: bt } = useI18n();
   const [description, setDescription] = useState(annotation?.description ?? "");
   const [tags, setTags] = useState(annotation?.tags.join(", ") ?? "");
   const [owner, setOwner] = useState(annotation?.owner ?? "");
@@ -141,7 +145,7 @@ export function TableKnowledgeForm({
   const [error, setError] = useState<string>();
 
   const normalizedTags = tags.split(",").map((tag) => tag.trim()).filter(Boolean);
-  useUpdateBlocker("save or discard table knowledge edits", status === "saving" || description !== (annotation?.description ?? "") || JSON.stringify(normalizedTags) !== JSON.stringify(annotation?.tags ?? []) || owner !== (annotation?.owner ?? "") || isCore !== (annotation?.isCore ?? false));
+  useUpdateBlocker(bt("business.saveOrDiscardTableKnowledgeEdits"), status === "saving" || description !== (annotation?.description ?? "") || JSON.stringify(normalizedTags) !== JSON.stringify(annotation?.tags ?? []) || owner !== (annotation?.owner ?? "") || isCore !== (annotation?.isCore ?? false));
 
   async function saveAnnotation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -165,40 +169,37 @@ export function TableKnowledgeForm({
   return (
     <form className="annotation-form" onSubmit={(event) => void saveAnnotation(event)}>
       <div className="annotation-heading">
-        <h3>Team knowledge</h3>
+        <h3>{bt("business.teamKnowledge")}</h3>
         <span data-status={status}>
           {status === "saving"
-            ? "Saving…"
+            ? bt("business.saving")
             : status === "saved"
-              ? "Saved"
+              ? bt("business.saved")
               : status === "error"
-                ? (error ?? "Save failed")
-                : "Editable"}
+                ? (error ?? bt("business.saveFailed"))
+                : bt("business.editable")}
         </span>
       </div>
       <label>
-        Description
-        <textarea
+        {bt("business.description")}<textarea
           rows={3}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
-          placeholder="What business role does this table play?"
+          placeholder={bt("business.whatBusinessRoleDoesThisTablePlay")}
         />
       </label>
       <label>
-        Tags
-        <input
+        {bt("business.tags")}<input
           value={tags}
           onChange={(event) => setTags(event.target.value)}
-          placeholder="identity, billing, core"
+          placeholder={bt("business.identityBillingCore")}
         />
       </label>
       <label>
-        Owner
-        <input
+        {bt("business.owner")}<input
           value={owner}
           onChange={(event) => setOwner(event.target.value)}
-          placeholder="Team or person"
+          placeholder={bt("business.teamOrPerson")}
         />
       </label>
       <label className="core-toggle">
@@ -207,11 +208,9 @@ export function TableKnowledgeForm({
           checked={isCore}
           onChange={(event) => setIsCore(event.target.checked)}
         />
-        Mark as a core table
-      </label>
+        {bt("business.markAsACoreTable")}</label>
       <div className="inspector-actions"><button className="inspector-primary" type="submit" disabled={status === "saving"}>
-        Save knowledge
-      </button></div>
+        {bt("business.saveKnowledge")}</button></div>
     </form>
   );
 }

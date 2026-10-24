@@ -1,3 +1,4 @@
+import { I18nProvider, useI18n } from "../i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -164,4 +165,19 @@ describe("SchemaChangesPanel", () => {
     expect(cells[0]).toHaveTextContent("'ready'::text");
     expect(cells[1]).toHaveTextContent("'pending'::text");
   });
+});
+
+function ChineseChanges() {
+  const i18n = useI18n("zhCn");
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  return <I18nProvider value={i18n}><QueryClientProvider client={client}><SchemaChangesPanel changeSet={changes()} currentSnapshot={after} platform={{ getSnapshot: vi.fn().mockResolvedValue(before) } as unknown as NodalStudioPlatform} runtimeKind="desktop" /></QueryClientProvider></I18nProvider>;
+}
+it("translates risk summaries and details while retaining CSS risk identifiers", async () => {
+  const { container } = render(<ChineseChanges />);
+  await screen.findByRole("table", { name: "变更前后属性" });
+  expect(container.querySelector(".diff-risk-summary")).toHaveTextContent("1 中");
+  const detail = container.querySelector(".diff-operation-detail .diff-risk") ?? container.querySelector("[aria-label='变更详情'] .diff-risk");
+  expect(detail).toHaveAttribute("data-risk", "medium");
+  expect(detail).toHaveTextContent("中");
+  expect(container.querySelectorAll("select.ds-select")).toHaveLength(2);
 });

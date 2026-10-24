@@ -10,6 +10,7 @@ const initial = defaultEffectiveSettings(params.get("source") === "none" ? undef
 initial.app.general.theme = params.get("theme") === "light" ? "light" : params.get("theme") === "system" ? "system" : "dark";
 initial.app.appearance.uiFontSize = params.get("font") === "18" ? 18 : 13;
 initial.app.appearance.density = params.get("density") === "compact" ? "compact" : "comfortable";
+initial.app.general.language = params.get("language") === "zh-CN" ? "zhCn" : params.get("language") === "en" ? "en" : "system";
 initial.app.notifications.quietHoursEnabled = true;
 initial.app.advanced.betaFeatures = true;
 if (initial.source) {

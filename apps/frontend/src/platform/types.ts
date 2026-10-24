@@ -282,6 +282,7 @@ export interface SaveLogicalRelationshipInput {
 }
 
 export interface RelationshipValidation {
+  messageCodes?: string[];
   valid: boolean;
   compatible: boolean;
   duplicate: boolean;
@@ -541,7 +542,7 @@ export interface QueryHistoryEntry {
   errorKind: QueryErrorKind | null;
 }
 
-export interface QueryExportInput { result: QueryExecutionResult; format: "csv" | "json" | "xlsx"; selectedRows: number[] | null; protectFormulas: boolean }
+export interface QueryExportInput { locale?: "en" | "zh-CN"; result: QueryExecutionResult; format: "csv" | "json" | "xlsx"; selectedRows: number[] | null; protectFormulas: boolean }
 
 export interface NodalStudioPlatform {
   exportQueryResult(input: QueryExportInput): Promise<string | null>;

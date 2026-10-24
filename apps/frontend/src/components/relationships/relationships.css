@@ -1,5 +1,5 @@
 /* Model relationship surfaces use the same semantic tokens as Settings/Inspector. */
-.ds-surface.relationship-inspector { position: fixed; z-index: 70; display: grid; gap: var(--ds-space-3); width: 360px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow: auto; padding: var(--ds-space-4); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: 0 12px 38px #0003; font-size: var(--ds-text-control); overflow-wrap: anywhere; }
+.ds-surface.relationship-inspector { position: fixed; z-index: 70; display: grid; gap: var(--ds-space-3); width: 360px; max-width: calc(var(--ds-viewport-width) - 24px); max-height: calc(var(--ds-viewport-height) - 24px); overflow: auto; padding: var(--ds-space-4); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: 0 12px 38px #0003; font-size: var(--ds-text-control); overflow-wrap: anywhere; }
 .relationship-inspector > header { display: flex; align-items: start; justify-content: space-between; gap: var(--ds-space-3); }
 .relationship-inspector-drag-handle { cursor: grab; touch-action: none; user-select: none; border-radius: var(--ds-radius-control); }
 .relationship-inspector-drag-handle[data-dragging="true"] { cursor: grabbing; }
@@ -31,14 +31,14 @@
 .relationship-inspector .relationship-actions button { padding: 4px 10px; border-color: var(--ds-border); color: var(--ds-text); background: var(--ds-control); }
 .relationship-inspector .relationship-actions .ds-primary { border-color: var(--ds-accent-fill); color: var(--ds-on-accent); background: var(--ds-accent-fill); }
 .relationship-inspector .relationship-actions .danger { margin-left: auto; color: var(--ds-danger); }
-.ds-surface.relationship-delete-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 32px); margin: auto; padding: var(--ds-space-5); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: 0 20px 60px #0005; overflow: auto; overflow-wrap: anywhere; }
+.ds-surface.relationship-delete-dialog { width: min(420px, calc(var(--ds-viewport-width) - 32px)); max-height: calc(var(--ds-viewport-height) - 32px); margin: auto; padding: var(--ds-space-5); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: 0 20px 60px #0005; overflow: auto; overflow-wrap: anywhere; }
 .relationship-delete-dialog[open] { display: grid; gap: var(--ds-space-4); }
-.relationship-delete-dialog::backdrop { background: #0006; }
+.relationship-delete-dialog::backdrop { background: var(--ds-overlay); }
 .relationship-delete-dialog > p { font-size: var(--ds-text-control); color: var(--ds-secondary); }
 .relationship-delete-dialog footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ds-space-2); }
 .relationship-delete-dialog .relationship-delete-action { color: var(--ds-danger); }
 .ds-surface .relationship-error { margin: 0; color: var(--ds-danger); font-size: var(--ds-text-control); }
-.ds-surface.relationship-dialog { max-height: calc(100vh - 32px); overflow: auto; width: min(480px, calc(100vw - 32px)); padding: var(--ds-space-5); gap: var(--ds-space-4); color: var(--ds-text); background: var(--ds-surface); border-color: var(--ds-border); border-radius: var(--ds-radius-group); font-size: var(--ds-text-control); }
+.ds-surface.relationship-dialog { max-height: calc(var(--ds-viewport-height) - 32px); overflow: auto; width: min(480px, calc(var(--ds-viewport-width) - 32px)); padding: var(--ds-space-5); gap: var(--ds-space-4); color: var(--ds-text); background: var(--ds-surface); border-color: var(--ds-border); border-radius: var(--ds-radius-group); font-size: var(--ds-text-control); }
 .ds-surface.relationship-dialog h2 { font-size: var(--ds-text-heading); font-weight: var(--ds-weight-emphasis); }
 .ds-surface.relationship-dialog header { align-items: start; }
 .ds-surface.relationship-dialog header p { color: var(--ds-secondary); font-size: var(--ds-text-caption); letter-spacing: normal; }

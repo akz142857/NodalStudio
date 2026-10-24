@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import {
   Handle,
   NodeResizer,
@@ -14,6 +15,7 @@ import { useBatchedNodeInternals } from "./use-batched-node-internals";
 import { useCanvasSettings } from "./CanvasSettingsContext";
 
 function TableNodeComponent({ id, data, selected, width, height, exportIndexesExpanded }: NodeProps<TableNodeType> & { exportIndexesExpanded?: boolean }) {
+  const { t: bt } = useI18n();
   const settings = useCanvasSettings();
   const { spacePanMode, rowConnectionActive, layoutEditingDisabled, overviewEnabled, exportRendering, exportReplica } = useCanvasInteraction();
   const exportDetail = useExportTableDetail(id);
@@ -152,14 +154,14 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
       <header>
         {settings.showSchema ? <span>{data.schema}</span> : null}
         <strong>{data.isCore ? "★ " : ""}{data.table.key.name}</strong>
-        {data.layoutPinned ? <span className="table-pin-badge" title="Position fixed · Unlock to move or resize" aria-label="Table position fixed">⌖ Fixed</span> : null}
-        {data.changeStatus ? <em className="comparison-badge" data-change={data.changeStatus} title={data.changeStatus === "deleted" ? "Deleted table · Before snapshot" : "Compared Before → After"}>{changeMarker(data.changeStatus)} {data.changeStatus}</em> : null}
+        {data.layoutPinned ? <span className="table-pin-badge" title={bt("business.positionFixedUnlockToMoveOrResize")} aria-label={bt("business.tablePositionFixed")}>{bt("business.fixed")}</span> : null}
+        {data.changeStatus ? <em className="comparison-badge" data-change={data.changeStatus} title={data.changeStatus === "deleted" ? bt("business.deletedTableBeforeSnapshot") : bt("business.comparedBeforeAfter")}>{changeMarker(data.changeStatus)} {data.changeStatus}</em> : null}
         {data.onOpenQuery ? <div className="table-node-actions nodrag nopan">
-          <button type="button" aria-label={`Query ${data.table.key.name}`} aria-expanded={actionsOpen} onClick={(event) => { event.stopPropagation(); setActionsOpen((value) => !value); }}>•••</button>
-          {actionsOpen ? <div role="menu"><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>Preview rows</button><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>Open in Query</button></div> : null}
+          <button type="button" aria-label={bt("business.query", { value0: data.table.key.name })} aria-expanded={actionsOpen} onClick={(event) => { event.stopPropagation(); setActionsOpen((value) => !value); }}>•••</button>
+          {actionsOpen ? <div role="menu"><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>{bt("business.previewRows")}</button><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>{bt("business.openInQuery")}</button></div> : null}
         </div> : null}
       </header>
-      {compact ? <p className="table-overview-summary">{data.table.columns.length} fields · Zoom in for details{data.columnChanges ? ` · ${Object.keys(data.columnChanges).length} changed` : ""}</p> : null}
+      {compact ? <p className="table-overview-summary">{data.table.columns.length} {bt("business.fieldsZoomInForDetails")}{data.columnChanges ? bt("business.changed", { value0: Object.keys(data.columnChanges).length }) : ""}</p> : null}
       {!compact && settings.showTableComments && data.table.comment ? (
         <p className="table-node-comment">{data.table.comment}</p>
       ) : null}
@@ -177,25 +179,25 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
             data-column-name={column.name}
             data-row-connectable={data.relationshipsEditable && !spacePanMode && !exportRendering || undefined}
             data-change={changeStatus}
-            title={data.columnNotes?.[column.name] ?? (data.relationshipsEditable ? "Drag this field to another field to create a model relationship" : undefined)}
+            title={data.columnNotes?.[column.name] ?? (data.relationshipsEditable ? bt("business.dragThisFieldToAnotherFieldToCreateA") : undefined)}
             data-relationship-column={data.relationshipColumn === column.name || undefined}
             data-connect-target={data.relationshipConnectTargets?.[column.name]}
             onMouseEnter={() => showColumnHandles(column.name)}
             onMouseLeave={() => hideColumnHandlesSoon(column.name)}
           >
             <span className="column-name">
-              {settings.showKeyBadges && primaryColumns.has(column.name) ? <b title="Primary key">PK</b> : null}
-              {settings.showKeyBadges && foreignColumns.has(column.name) ? <b className="fk-badge" title="Physical foreign key">FK</b> : null}
-              {settings.showKeyBadges && !primaryColumns.has(column.name) && uniqueColumns.has(column.name) ? <b title="Unique index member">UQ</b> : null}
-              {settings.showKeyBadges && !primaryColumns.has(column.name) && !uniqueColumns.has(column.name) && indexedColumns.has(column.name) ? <b title="Index member">IX</b> : null}
+              {settings.showKeyBadges && primaryColumns.has(column.name) ? <b title={bt("business.primaryKey")}>{bt("business.pKDetail")}</b> : null}
+              {settings.showKeyBadges && foreignColumns.has(column.name) ? <b className="fk-badge" title={bt("business.physicalForeignKey")}>{bt("business.fK")}</b> : null}
+              {settings.showKeyBadges && !primaryColumns.has(column.name) && uniqueColumns.has(column.name) ? <b title={bt("business.uniqueIndexMember")}>UQ</b> : null}
+              {settings.showKeyBadges && !primaryColumns.has(column.name) && !uniqueColumns.has(column.name) && indexedColumns.has(column.name) ? <b title={bt("business.indexMember")}>IX</b> : null}
               {settings.showKeyBadges && !foreignColumns.has(column.name) && !logicalColumns.has(column.name) && inferredColumns.has(column.name) ? (
-                <b className="inferred-fk-badge" title="Inferred from naming; not a database constraint">?FK</b>
+                <b className="inferred-fk-badge" title={bt("business.inferredFromNamingNotADatabaseConstraint")}>?FK</b>
               ) : null}
               {settings.showKeyBadges && !foreignColumns.has(column.name) && logicalColumns.has(column.name) ? (
-                <b className="logical-fk-badge" title="Logical relationship; no database constraint">LR</b>
+                <b className="logical-fk-badge" title={bt("business.logicalRelationshipNoDatabaseConstraint")}>LR</b>
               ) : null}
-              {settings.showKeyBadges && column.generated ? <b title="Generated column">GEN</b> : null}
-              {settings.showKeyBadges && /(?:@deprecated|\bdeprecated\b)/i.test(column.comment ?? "") ? <b title="Deprecated column marker">DEP</b> : null}
+              {settings.showKeyBadges && column.generated ? <b title={bt("business.generatedColumn")}>GEN</b> : null}
+              {settings.showKeyBadges && /(?:@deprecated|\bdeprecated\b)/i.test(column.comment ?? "") ? <b title={bt("business.deprecatedColumnMarker")}>DEP</b> : null}
               {column.name}
               {changeStatus ? <em className="comparison-badge" data-change={changeStatus}>{changeMarker(changeStatus)} {changeStatus}</em> : null}
             </span>
@@ -204,7 +206,7 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
               {settings.showColumnNullable && !column.nullable ? " · NN" : ""}
             </span>
             {settings.showColumnDefaults && column.defaultValue ? (
-              <small className="column-default">default {column.defaultValue}</small>
+              <small className="column-default">{bt("business.defaultDetail")} {column.defaultValue}</small>
             ) : null}
             {settings.showColumnComments && column.comment ? (
               <small className="column-comment">{column.comment}</small>
@@ -213,15 +215,14 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
           );
         })}
         {data.table.columns.length > visibleColumns.length ? (
-          <p className="table-columns-more">+{data.table.columns.length - visibleColumns.length} more {data.columnChanges ? "unchanged " : ""}fields</p>
+          <p className="table-columns-more">+{data.table.columns.length - visibleColumns.length} {bt("business.more")} {data.columnChanges ? bt("business.unchanged") : ""}{bt("business.fields")}</p>
         ) : null}
       </div> : null}
       {!compact && data.table.indexes.length > 0 && settings.indexes !== "hidden" ? (
-        <div className="table-indexes" aria-label="Indexes">
+        <div className="table-indexes" aria-label={bt("business.indexes")}>
           {settings.indexes === "collapsed" ? (
             <button type="button" className="table-index-toggle" onClick={() => setIndexesExpanded((value) => !value)}>
-              {showIndexes ? "Hide" : "Show"} {data.table.indexes.length} indexes
-            </button>
+              {showIndexes ? bt("business.hide") : bt("business.show")} {data.table.indexes.length} {bt("business.indexesDetail")}</button>
           ) : null}
           {showIndexes || settings.indexes === "expanded" ? data.table.indexes.slice(0, 5).map((index) => (
             <div key={index.name} title={`${index.name} (${index.columns.join(", ")})`}>
@@ -231,7 +232,7 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
             </div>
           )) : null}
           {(showIndexes || settings.indexes === "expanded") && data.table.indexes.length > 5 ? (
-            <p>+{data.table.indexes.length - 5} more indexes</p>
+            <p>+{data.table.indexes.length - 5} {bt("business.moreIndexes")}</p>
           ) : null}
         </div>
       ) : null}

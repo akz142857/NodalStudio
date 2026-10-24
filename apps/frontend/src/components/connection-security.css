@@ -22,7 +22,7 @@
 .connection-panel .connection-file-field button { color: var(--ds-text); background: var(--ds-control); border: 1px solid var(--ds-border); border-radius: 7px; }
 .connection-panel .connection-file-field button:hover:not(:disabled) { background: var(--ds-hover); }
 /* A bounded sheet: only the selected tab scrolls; actions stay in view. */
-section.connection-dialog { width: min(760px, calc(100vw - 48px)); height: min(680px, calc(100vh - 48px)); display: flex; flex-direction: column; overflow: hidden; padding: 20px; }
+section.connection-dialog { width: min(760px, calc(var(--ds-viewport-width) - 48px)); height: min(680px, calc(var(--ds-viewport-height) - 48px)); display: flex; flex-direction: column; overflow: hidden; padding: 20px; }
 .connection-dialog > header { flex: none; }
 .connection-dialog > .dialog-description { flex: none; margin: 8px 0 16px; }
 .connection-dialog > .connection-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0; }
@@ -45,7 +45,7 @@ section.connection-dialog { width: min(760px, calc(100vw - 48px)); height: min(6
 .connection-dialog .connection-panel > .error-message { flex: none; max-height: 60px; overflow: auto; margin: 8px 0 0; }
 .connection-dialog .connection-panel > footer { flex: none; padding-top: 14px; margin-top: 12px; border-top: 1px solid var(--ds-separator); }
 @media (max-width: 560px) {
-  section.connection-dialog { width: calc(100vw - 16px); height: calc(100vh - 16px); padding: 16px; }
+  section.connection-dialog { width: calc(var(--ds-viewport-width) - 16px); height: calc(var(--ds-viewport-height) - 16px); padding: 16px; }
   .connection-security-content .connection-form-grid { grid-template-columns: minmax(0,1fr); }
 }
 .connection-panel .connection-tabs button { cursor: pointer; transition: background-color 120ms ease, box-shadow 120ms ease, color 120ms ease; }

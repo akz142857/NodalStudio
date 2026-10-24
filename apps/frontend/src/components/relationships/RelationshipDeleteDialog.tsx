@@ -1,3 +1,5 @@
+import { Button } from "../../design-system/Button";
+import { useI18n } from "../../i18n";
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { LogicalRelationship } from "../../platform";
@@ -11,6 +13,7 @@ export function RelationshipDeleteDialog({ relationship, onDelete, onDeleted, on
   onDeleted: () => void;
   onCancel: () => void;
 }) {
+  const { t: bt } = useI18n();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const pending = useRef(false);
@@ -47,11 +50,11 @@ export function RelationshipDeleteDialog({ relationship, onDelete, onDeleted, on
   }
 
   return createPortal(<dialog ref={dialogRef} className="ds-surface relationship-delete-dialog" aria-labelledby="relationship-delete-title" aria-describedby="relationship-delete-description" aria-busy={busy} onKeyDown={(event) => event.stopPropagation()} onCancel={(event) => { event.preventDefault(); if (!pending.current) onCancel(); }}>
-    <h2 id="relationship-delete-title">Delete model relationship?</h2>
-    <p id="relationship-delete-description">Removes this user-defined link from the model. Database tables, data and foreign key constraints stay unchanged.</p>
+    <h2 id="relationship-delete-title">{bt("business.deleteModelRelationship")}</h2>
+    <p id="relationship-delete-description">{bt("business.removesThisUserDefinedLinkFromTheModelDatabase")}</p>
     <p className="relationship-name">{relationship.name}</p>
     <RelationshipEndpoints source={relationship.source} target={relationship.target} />
     {error ? <p className="relationship-error" role="alert">{error}</p> : null}
-    <footer><button type="button" ref={cancelRef} disabled={busy} onClick={onCancel}>Cancel</button><button type="button" className="relationship-delete-action" disabled={busy} onClick={() => void remove()}>{busy ? "Deleting…" : "Delete relationship"}</button></footer>
+    <footer><Button type="button" ref={cancelRef} disabled={busy} onClick={onCancel}>{bt("business.cancel")}</Button><Button type="button" variant="danger" className="relationship-delete-action" busy={busy} onClick={() => void remove()}>{busy ? bt("business.deleting") : bt("business.deleteRelationship")}</Button></footer>
   </dialog>, document.body);
 }

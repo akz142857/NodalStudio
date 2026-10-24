@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { MiniMap, Panel, useStore, useStoreApi, type ReactFlowState } from "@xyflow/react";
 import { XYMinimap, type Rect } from "@xyflow/system";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -5,7 +6,8 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 /** Dense diagrams need one drawing and one subscription, rather than a mounted
  * React component and store subscription for every offscreen table. */
 export const DiagramMiniMap = memo(function DiagramMiniMap({ dense }: { dense: boolean }) {
-  return dense ? <DenseMiniMap /> : <MiniMap pannable zoomable />;
+  const { t } = useI18n();
+  return dense ? <DenseMiniMap /> : <MiniMap pannable zoomable ariaLabel={t("business.miniMap")} />;
 });
 
 type Miniature = Rect & { selected: boolean; seen: number };
@@ -49,6 +51,7 @@ function snapshot(state: ReactFlowState, cache: ReturnType<typeof drawingCache>)
 }
 
 function DenseMiniMap() {
+  const { t: bt } = useI18n();
   const store = useStoreApi();
   const panZoom = useStore((state) => state.panZoom);
   const svg = useRef<SVGSVGElement>(null);
@@ -81,7 +84,7 @@ function DenseMiniMap() {
     return () => { unsubscribe(); instance.destroy(); };
   }, [store, panZoom]);
   return <Panel position="bottom-right" className="react-flow__minimap" data-testid="rf__minimap" data-minimap-nodes={drawing.count}>
-    <svg ref={svg} width={200} height={150} viewBox={drawing.viewBox} className="react-flow__minimap-svg" role="img" aria-label="Mini Map">
+    <svg ref={svg} width={200} height={150} viewBox={drawing.viewBox} className="react-flow__minimap-svg" role="img" aria-label={bt("business.miniMap")}>
       <path className="react-flow__minimap-node" d={drawing.paths} />
       <path className="react-flow__minimap-node selected" d={drawing.selected} />
       <path className="react-flow__minimap-mask" d={drawing.mask} fillRule="evenodd" pointerEvents="none" />

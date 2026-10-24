@@ -1,8 +1,10 @@
+import { useI18n } from "../i18n";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 /** A small, keyboard-accessible disclosure, constrained to its diagram toolbar. */
 export function DiagramToolbarMenu({ label, title, disabled, children, icon, closeOnAction = false, inline = false }: { label: string; title?: string; disabled?: boolean; children: ReactNode; icon?: ActionIconName; closeOnAction?: boolean; inline?: boolean }) {
+  const { t: bt } = useI18n();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null); const popup = useRef<HTMLDivElement>(null); const trigger = useRef<HTMLButtonElement>(null);
   const id = useId();
@@ -28,7 +30,7 @@ export function DiagramToolbarMenu({ label, title, disabled, children, icon, clo
   }, [open, inline]);
   return <div className={`diagram-toolbar-menu${inline ? " diagram-toolbar-inline" : ""}`} ref={root} onKeyDown={(event) => { if (inline && open && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus(); } }} onBlur={(event) => { if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
     <button ref={trigger} type="button" title={title} disabled={disabled} aria-expanded={open && !disabled} aria-label={label} aria-controls={id} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); requestAnimationFrame(() => popup.current?.querySelector<HTMLElement>("button:not(:disabled), select:not(:disabled)")?.focus()); } }} onClick={() => setOpen((value) => !value)}>{icon ? <ActionIcon name={icon} /> : <>{label} <span aria-hidden="true">▾</span></>}</button>
-    {open && !disabled ? <div className="diagram-toolbar-popover" id={id} ref={popup} role="group" aria-label={`${label} actions`} onClick={(event) => { if (closeOnAction && event.target instanceof Element && event.target.closest("button:not(:disabled)")) { setOpen(false); trigger.current?.focus(); } }} onKeyDown={(event) => {
+    {open && !disabled ? <div className="diagram-toolbar-popover" id={id} ref={popup} role="group" aria-label={bt("business.actions", { value0: label })} onClick={(event) => { if (closeOnAction && event.target instanceof Element && event.target.closest("button:not(:disabled)")) { setOpen(false); trigger.current?.focus(); } }} onKeyDown={(event) => {
       if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) || event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement) return;
       const items = [...(popup.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
       if (!items.length) return;

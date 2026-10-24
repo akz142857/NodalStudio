@@ -1,8 +1,10 @@
+import { translateUiLabel } from "../i18n/business-labels";
+import { useI18n, type Translate } from "../i18n";
 import { OperationFeedback } from "./OperationFeedback";
 import { useMemo, useState } from "react";
 import type { DatabaseSnapshot, NodalStudioPlatform, RuntimeInfo, SchemaChangeSet, SchemaOperation } from "../platform";
 import type { RiskLevel } from "../platform/types";
-import { changeLabel, operationProperties, PROPERTY_LABELS, propertyValue, snapshotDate } from "./schema-change-details";
+import { changeLabel, operationProperties, PROPERTY_LABELS, propertyValue } from "./schema-change-details";
 import { useComparisonSnapshot, type SnapshotState } from "./use-comparison-snapshot";
 
 interface SchemaChangesPanelProps {
@@ -18,27 +20,29 @@ const RISKS: RiskLevel[] = ["high", "medium", "low", "informational"];
 function SnapshotContext({ label, id, state, runtimeKind }: {
   label: string; id: string; state: SnapshotState; runtimeKind?: RuntimeInfo["kind"];
 }) {
+  const { t: bt, formatDate } = useI18n();
   return (
     <div className="diff-snapshot-context">
       <strong>{label}</strong>
       <code title={id}>{id}</code>
       {state.snapshot ? (
         <>
-          <span>{state.snapshot.database.name} · {snapshotDate(state.snapshot.capturedAt)}</span>
-          <small title={state.snapshot.fingerprint}>Fingerprint: {state.snapshot.fingerprint.slice(0, 12)}</small>
+          <span>{state.snapshot.database.name} · {formatDate(state.snapshot.capturedAt)}</span>
+          <small title={state.snapshot.fingerprint}>{bt("business.fingerprintDetail")} {state.snapshot.fingerprint.slice(0, 12)}</small>
         </>
-      ) : <OperationFeedback label={`${label} snapshot load`} state={state.loading ? { phase: "running", summary: "Loading snapshot…" } : { phase: runtimeKind === "web" ? "info" : "error", summary: runtimeKind === "web" ? "Snapshot not included in this share." : "Snapshot details unavailable.", details: state.error }} onRetry={runtimeKind === "desktop" ? state.retry : undefined} retryLabel={`Retry ${label.toLowerCase()} snapshot`} />}
+      ) : <OperationFeedback label={bt("business.snapshotLoad", { value0: label })} state={state.loading ? { phase: "running", summary: bt("business.loadingSnapshot") } : { phase: runtimeKind === "web" ? "info" : "error", summary: runtimeKind === "web" ? bt("business.snapshotNotIncludedInThisShare") : bt("business.snapshotDetailsUnavailable"), details: state.error }} onRetry={runtimeKind === "desktop" ? state.retry : undefined} retryLabel={bt("business.retrySnapshot", { value0: label.toLowerCase() })} />}
     </div>
   );
 }
 
-function detailStatus(state: SnapshotState, operation: SchemaOperation, side: "before" | "after"): string {
-  if (state.loading) return "Loading…";
-  if (!state.snapshot) return "Snapshot unavailable";
-  return operation[side] === null ? "Not present" : "Object details unavailable";
+function detailStatus(bt: Translate, state: SnapshotState, operation: SchemaOperation, side: "before" | "after"): string {
+  if (state.loading) return bt("business.loading");
+  if (!state.snapshot) return bt("business.snapshotUnavailable");
+  return operation[side] === null ? bt("business.notPresent") : bt("business.objectDetailsUnavailable");
 }
 
 function OperationDetail({ operation, before, after }: { operation: SchemaOperation; before: SnapshotState; after: SnapshotState }) {
+  const { t: bt } = useI18n();
   const [showUnchanged, setShowUnchanged] = useState(false);
   const beforeProperties = before.snapshot ? operationProperties(before.snapshot, operation, "before") : undefined;
   const afterProperties = after.snapshot ? operationProperties(after.snapshot, operation, "after") : undefined;
@@ -53,53 +57,54 @@ function OperationDetail({ operation, before, after }: { operation: SchemaOperat
   const replacement = Boolean(beforeProperties && afterProperties && /^(add|drop)/.test(operation.operationType));
 
   return (
-    <article className="diff-detail" aria-label="Change details">
+    <article className="diff-detail" aria-label={bt("business.changeDetails")}>
       <header>
         <div className="diff-detail-heading">
-          <h3>{changeLabel(operation.operationType)}</h3>
-          <span className="diff-risk" data-risk={operation.risk}>{operation.risk} risk</span>
+          <h3>{translateUiLabel(changeLabel(operation.operationType), bt)}</h3>
+          <span className="diff-risk" data-risk={operation.risk}>{translateUiLabel(operation.risk, bt)} {bt("business.risk")}</span>
         </div>
         <p className="diff-object-name">{operation.object.schema}.{operation.object.name}</p>
-        <small>{changeLabel(operation.object.kind)}</small>
+        <small>{translateUiLabel(changeLabel(operation.object.kind), bt)}</small>
       </header>
       {operation.operationType === "renameColumn" ? (
-        <p className="diff-explanation">Inferred rename: matching column definitions suggest a rename; the original DDL was not recorded.</p>
+        <p className="diff-explanation">{bt("business.inferredRenameMatchingColumnDefinitionsSuggestARenameThe")}</p>
       ) : null}
-      {replacement ? <p className="diff-explanation">This object exists in both snapshots. Its replacement is recorded as separate drop and add operations.</p> : null}
+      {replacement ? <p className="diff-explanation">{bt("business.thisObjectExistsInBothSnapshotsItsReplacementIs")}</p> : null}
       <div className="diff-summaries">
-        <div><strong>Before summary</strong><pre>{operation.before ?? "No summary (addition)"}</pre></div>
-        <div><strong>After summary</strong><pre>{operation.after ?? "No summary (removal)"}</pre></div>
+        <div><strong>{bt("business.beforeSummary")}</strong><pre>{operation.before ?? bt("business.noSummaryAddition")}</pre></div>
+        <div><strong>{bt("business.afterSummary")}</strong><pre>{operation.after ?? bt("business.noSummaryRemoval")}</pre></div>
       </div>
       <div className="diff-property-controls">
-        <h4>Snapshot properties</h4>
-        <label><input type="checkbox" checked={showUnchanged} onChange={(event) => setShowUnchanged(event.target.checked)} />Show unchanged properties</label>
+        <h4>{bt("business.snapshotProperties")}</h4>
+        <label><input type="checkbox" checked={showUnchanged} onChange={(event) => setShowUnchanged(event.target.checked)} />{bt("business.showUnchangedProperties")}</label>
       </div>
-      <p className="diff-explanation">Values describe the selected Before → After snapshots.</p>
+      <p className="diff-explanation">{bt("business.valuesDescribeTheSelectedBeforeAfterSnapshots")}</p>
       {!beforeProperties || !afterProperties ? (
         <p className="diff-explanation" role="status">
-          {!beforeProperties ? `Before: ${detailStatus(before, operation, "before")}. ` : ""}
-          {!afterProperties ? `After: ${detailStatus(after, operation, "after")}.` : ""}
+          {!beforeProperties ? bt("business.before", { value0: detailStatus(bt, before, operation, "before") }) : ""}
+          {!afterProperties ? bt("business.afterDetail", { value0: detailStatus(bt, after, operation, "after") }) : ""}
         </p>
       ) : null}
       {visibleRows.length ? (
-        <table className="diff-properties" aria-label="Before and after properties">
-          <thead><tr><th scope="col">Property</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+        <table className="diff-properties" aria-label={bt("business.beforeAndAfterProperties")}>
+          <thead><tr><th scope="col">{bt("business.property")}</th><th scope="col">{bt("business.beforeDetail")}</th><th scope="col">{bt("business.after")}</th></tr></thead>
           <tbody>{visibleRows.map(({ key, changed }) => (
             <tr key={key} data-changed={changed}>
-              <th scope="row">{PROPERTY_LABELS[key] ?? changeLabel(key)}{changed ? <> <small>Changed</small></> : null}</th>
-              <td><pre>{beforeProperties ? propertyValue(beforeProperties[key]) : detailStatus(before, operation, "before")}</pre></td>
-              <td><pre>{afterProperties ? propertyValue(afterProperties[key]) : detailStatus(after, operation, "after")}</pre></td>
+              <th scope="row">{translateUiLabel(PROPERTY_LABELS[key] ?? changeLabel(key), bt)}{changed ? <> <small>{bt("business.changedDetail")}</small></> : null}</th>
+              <td><pre>{beforeProperties ? propertyValue(beforeProperties[key], bt) : detailStatus(bt, before, operation, "before")}</pre></td>
+              <td><pre>{afterProperties ? propertyValue(afterProperties[key], bt) : detailStatus(bt, after, operation, "after")}</pre></td>
             </tr>
           ))}</tbody>
         </table>
       ) : (
-        <p className="diff-empty">{keys.length ? "No changed properties. Show unchanged properties to inspect the full definition." : "Property details are unavailable; the operation summaries remain available above."}</p>
+        <p className="diff-empty">{keys.length ? bt("business.noChangedPropertiesShowUnchangedPropertiesToInspectThe") : bt("business.propertyDetailsAreUnavailableTheOperationSummariesRemainAvailable")}</p>
       )}
     </article>
   );
 }
 
 export function SchemaChangesPanel({ changeSet, currentSnapshot, platform, runtimeKind }: SchemaChangesPanelProps) {
+  const { t: bt } = useI18n();
   const before = useComparisonSnapshot(changeSet.beforeSnapshotId, currentSnapshot, platform, runtimeKind);
   const after = useComparisonSnapshot(changeSet.afterSnapshotId, currentSnapshot, platform, runtimeKind);
   const [search, setSearch] = useState("");
@@ -114,8 +119,8 @@ export function SchemaChangesPanel({ changeSet, currentSnapshot, platform, runti
     return operations.map((operation, index) => ({ operation, index })).filter(({ operation }) =>
       (risk === "all" || operation.risk === risk) && (type === "all" || operation.operationType === type) &&
       (!term || [operation.object.schema, operation.object.name, operation.object.kind,
-        operation.operationType, changeLabel(operation.operationType), operation.before, operation.after].join(" ").toLowerCase().includes(term)));
-  }, [operations, risk, search, type]);
+        operation.operationType, translateUiLabel(changeLabel(operation.operationType), bt), operation.before, operation.after].join(" ").toLowerCase().includes(term)));
+  }, [operations, risk, search, type, bt]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const activePage = Math.min(page, pageCount - 1);
   const visible = filtered.slice(activePage * PAGE_SIZE, (activePage + 1) * PAGE_SIZE);
@@ -124,42 +129,42 @@ export function SchemaChangesPanel({ changeSet, currentSnapshot, platform, runti
   function goToPage(nextPage: number) { setPage(nextPage); setSelectedIndex(undefined); }
 
   return (
-    <section className="schema-changes-panel" aria-label="Schema comparison">
+    <section className="schema-changes-panel" aria-label={bt("business.schemaComparison")}>
       <header className="diff-header">
-        <h2>{operations.length} structural changes</h2>
-        <p>Changes are read from <strong>Before → After</strong>. Added and removed objects follow this direction, regardless of capture date.</p>
-        <div className="diff-direction" aria-label="Comparison direction">
-          <SnapshotContext label="Before" id={changeSet.beforeSnapshotId} state={before} runtimeKind={runtimeKind} />
+        <h2>{operations.length} {bt("business.structuralChanges")}</h2>
+        <p>{bt("business.changesAreReadFrom")} <strong>{bt("business.beforeAfterDetail")}</strong>{bt("businessExtra.addedAndRemovedObjectsFollowThisDirectionRegardlessOfCapture")}</p>
+        <div className="diff-direction" aria-label={bt("business.comparisonDirection")}>
+          <SnapshotContext label={bt("business.beforeDetail")} id={changeSet.beforeSnapshotId} state={before} runtimeKind={runtimeKind} />
           <span className="diff-direction-arrow" aria-hidden="true">→</span>
-          <SnapshotContext label="After" id={changeSet.afterSnapshotId} state={after} runtimeKind={runtimeKind} />
+          <SnapshotContext label={bt("business.after")} id={changeSet.afterSnapshotId} state={after} runtimeKind={runtimeKind} />
         </div>
         {runtimeKind === "web" && (!before.snapshot || !after.snapshot) ? (
-          <p className="diff-explanation">This share includes one snapshot. Historical properties are unavailable; all change summaries and available snapshot properties are shown.</p>
+          <p className="diff-explanation">{bt("business.thisShareIncludesOneSnapshotHistoricalPropertiesAreUnavailable")}</p>
         ) : null}
-        <div className="diff-risk-summary">{RISKS.map((level) => <span key={level} className="diff-risk" data-risk={level}>{changeSet.riskSummary[level]} {level}</span>)}</div>
+        <div className="diff-risk-summary">{RISKS.map((level) => <span key={level} className="diff-risk" data-risk={level}>{changeSet.riskSummary[level]} {translateUiLabel(level, bt)}</span>)}</div>
       </header>
       <div className="diff-filters">
-        <label>Search changes<input type="search" placeholder="Object, schema or summary" value={search} onChange={(event) => { setSearch(event.target.value); resetPage(); }} /></label>
-        <label>Risk<select value={risk} onChange={(event) => { setRisk(event.target.value as RiskLevel | "all"); resetPage(); }}><option value="all">All risks</option>{RISKS.map((level) => <option key={level} value={level}>{changeLabel(level)}</option>)}</select></label>
-        <label>Operation<select value={type} onChange={(event) => { setType(event.target.value); resetPage(); }}><option value="all">All operations</option>{types.map((value) => <option key={value} value={value}>{changeLabel(value)}</option>)}</select></label>
-        {search || risk !== "all" || type !== "all" ? <button type="button" onClick={() => { setSearch(""); setRisk("all"); setType("all"); resetPage(); }}>Clear filters</button> : null}
+        <label>{bt("business.searchChanges")}<input type="search" placeholder={bt("business.objectSchemaOrSummary")} value={search} onChange={(event) => { setSearch(event.target.value); resetPage(); }} /></label>
+        <label>{bt("business.riskDetail")}<select className="ds-select" value={risk} onChange={(event) => { setRisk(event.target.value as RiskLevel | "all"); resetPage(); }}><option value="all">{bt("business.allRisks")}</option>{RISKS.map((level) => <option key={level} value={level}>{translateUiLabel(changeLabel(level), bt)}</option>)}</select></label>
+        <label>{bt("business.operation")}<select className="ds-select" value={type} onChange={(event) => { setType(event.target.value); resetPage(); }}><option value="all">{bt("business.allOperations")}</option>{types.map((value) => <option key={value} value={value}>{translateUiLabel(changeLabel(value), bt)}</option>)}</select></label>
+        {search || risk !== "all" || type !== "all" ? <button type="button" onClick={() => { setSearch(""); setRisk("all"); setType("all"); resetPage(); }}>{bt("business.clearFilters")}</button> : null}
       </div>
       <div className="diff-content">
         <div className="diff-list-pane">
-          <p className="diff-count" role="status">{filtered.length ? `Showing ${activePage * PAGE_SIZE + 1}–${activePage * PAGE_SIZE + visible.length} of ${filtered.length} changes` : "0 changes"}{filtered.length !== operations.length ? ` (${operations.length} total)` : ""}</p>
-          <ol key={`${activePage}:${risk}:${type}:${search}`} className="diff-operation-list" aria-label="All schema changes" start={activePage * PAGE_SIZE + 1}>
+          <p className="diff-count" role="status">{filtered.length ? bt("business.showingOfChanges", { value0: activePage * PAGE_SIZE + 1, value1: activePage * PAGE_SIZE + visible.length, value2: filtered.length }) : bt("business.0Changes")}{filtered.length !== operations.length ? bt("business.total", { value0: operations.length }) : ""}</p>
+          <ol key={`${activePage}:${risk}:${type}:${search}`} className="diff-operation-list" aria-label={bt("business.allSchemaChanges")} start={activePage * PAGE_SIZE + 1}>
             {visible.map(({ operation, index }) => (
               <li key={index}><button type="button" aria-pressed={selected?.index === index} onClick={() => setSelectedIndex(index)}>
-                <span className="diff-operation-heading"><strong>{changeLabel(operation.operationType)}</strong><span className="diff-risk" data-risk={operation.risk}>{operation.risk}</span></span>
+                <span className="diff-operation-heading"><strong>{translateUiLabel(changeLabel(operation.operationType), bt)}</strong><span className="diff-risk" data-risk={operation.risk}>{translateUiLabel(operation.risk, bt)}</span></span>
                 <span className="diff-object-name">{operation.object.schema}.{operation.object.name}</span>
               </button></li>
             ))}
           </ol>
-          {!filtered.length ? <p className="diff-empty">{operations.length ? "No changes match these filters." : "No structural changes between these snapshots."}</p> : null}
-          {pageCount > 1 ? <nav className="diff-pagination" aria-label="Change pages">
-            <button type="button" disabled={activePage === 0} onClick={() => goToPage(activePage - 1)}>Previous</button>
-            <span>Page {activePage + 1} of {pageCount}</span>
-            <button type="button" disabled={activePage + 1 === pageCount} onClick={() => goToPage(activePage + 1)}>Next</button>
+          {!filtered.length ? <p className="diff-empty">{operations.length ? bt("business.noChangesMatchTheseFilters") : bt("business.noStructuralChangesBetweenTheseSnapshots")}</p> : null}
+          {pageCount > 1 ? <nav className="diff-pagination" aria-label={bt("business.changePages")}>
+            <button type="button" disabled={activePage === 0} onClick={() => goToPage(activePage - 1)}>{bt("business.previous")}</button>
+            <span>{bt("business.page")} {activePage + 1} {bt("business.of")} {pageCount}</span>
+            <button type="button" disabled={activePage + 1 === pageCount} onClick={() => goToPage(activePage + 1)}>{bt("business.next")}</button>
           </nav> : null}
         </div>
         {selected ? <OperationDetail key={selected.index} operation={selected.operation} before={before} after={after} /> : null}

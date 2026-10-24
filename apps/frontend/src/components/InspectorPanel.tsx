@@ -1,3 +1,5 @@
+import { translateUiLabel } from "../i18n/business-labels";
+import { useI18n } from "../i18n";
 import { KnowledgeReview } from "./KnowledgeReview";
 import { useCallback, useEffect, useState } from "react";
 import type {
@@ -23,12 +25,7 @@ import { TableKnowledgeForm, TableStructure } from "./TableInspector";
 
 type InspectorSegment = "structure" | "semantics" | "history" | "ai";
 
-const SEGMENTS = [
-  { value: "structure", label: "Table" },
-  { value: "semantics", label: "Semantics" },
-  { value: "history", label: "History" },
-  { value: "ai", label: "AI" },
-] as const satisfies readonly { value: InspectorSegment; label: string }[];
+
 
 interface InspectorPanelProps {
   explainRequest?: number;
@@ -95,6 +92,13 @@ export function InspectorPanel({
   onCompareSnapshots,
   onReviewChanges,
 }: InspectorPanelProps) {
+  const { t: bt } = useI18n();
+  const SEGMENTS = [
+  { value: "structure", label: bt("business.table") },
+  { value: "semantics", label: bt("business.semantics") },
+  { value: "history", label: bt("business.history") },
+  { value: "ai", label: "AI" },
+] as const satisfies readonly { value: InspectorSegment; label: string }[];
   const [segment, setSegment] = useState<InspectorSegment>("structure");
   const [handledExplainRequest, setHandledExplainRequest] = useState(explainRequest);
   if (explainRequest !== handledExplainRequest) {
@@ -120,13 +124,13 @@ export function InspectorPanel({
   const annotation = findAnnotation(semantics, selectedTable);
   const aiEnabled = Boolean(settings.source?.ai.enabled) && !(settings.app.privacy.offlineMode && settings.source?.ai.provider !== "offline");
   const aiProviderLabel =
-    settings.source?.ai.provider === "openAiCompatible" ? "Remote" : "Offline";
+    settings.source?.ai.provider === "openAiCompatible" ? bt("business.remote") : bt("business.offline");
 
   if (!snapshot) {
     return (
       <div className="ds-surface inspector-view inspector-empty">
-        <h2>Inspector</h2>
-        <p>Connect a data source to inspect its model.</p>
+        <h2>{bt("business.inspector")}</h2>
+        <p>{bt("business.connectADataSourceToInspectItsModel")}</p>
       </div>
     );
   }
@@ -134,12 +138,12 @@ export function InspectorPanel({
   return (
     <div className="ds-surface inspector-view">
       <header className="inspector-header">
-        <span className="inspector-context">{selectedTable ? `${(segment === "structure" && evidenceTable ? evidenceTable : selectedTable).key.schema} · Table` : "Database"}</span>
+        <span className="inspector-context">{selectedTable ? bt("business.tableDetail", { value0: (segment === "structure" && evidenceTable ? evidenceTable : selectedTable).key.schema }) : bt("business.database")}</span>
         <h2 className="inspector-title">{segment === "structure" && evidenceTable ? `${evidenceTable.key.schema}.${evidenceTable.key.name}` : selectedTable ? selectedTable.key.name : snapshot.database.name}</h2>
-        {historicalSelection ? <p className="historical-selection-note">Deleted table · Before snapshot</p> : null}
+        {historicalSelection ? <p className="historical-selection-note">{bt("business.deletedTableBeforeSnapshot")}</p> : null}
         <div className="inspector-segments">
           <Segmented
-            label="Inspector section"
+            label={bt("business.inspectorSection")}
             value={segment}
             options={SEGMENTS}
             onChange={setSegment}
@@ -151,26 +155,26 @@ export function InspectorPanel({
       {segment === "structure" ? (
         selectedTable ? (
           <>
-            {focusedEvidence && evidenceTable ? <section className="ai-evidence-source" aria-label="Located evidence">
+            {focusedEvidence && evidenceTable ? <section className="ai-evidence-source" aria-label={bt("business.locatedEvidence")}>
               <strong>{focusedEvidence.id} · {focusedEvidence.label}</strong>
-              <p>{focusedEvidence.kind} · Snapshot {snapshot.fingerprint.slice(0, 12)}</p>
+              <p>{focusedEvidence.kind} {bt("business.snapshot")} {snapshot.fingerprint.slice(0, 12)}</p>
               <pre>{focusedEvidence.detail}</pre>
-              <button type="button" onClick={() => setSegment("ai")}>Back to AI explanation</button>
+              <button type="button" onClick={() => setSegment("ai")}>{bt("business.backToAIExplanation")}</button>
             </section> : null}
             <TableStructure table={evidenceTable || selectedTable} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
           </>
         ) : (
           <dl className="snapshot-summary">
             <div>
-              <dt>Database</dt>
+              <dt>{bt("business.database")}</dt>
               <dd>{snapshot.database.name}</dd>
             </div>
             <div>
-              <dt>Schemas</dt>
+              <dt>{bt("business.schemas")}</dt>
               <dd>{snapshot.schemas.length}</dd>
             </div>
             <div>
-              <dt>Tables</dt>
+              <dt>{bt("business.tables")}</dt>
               <dd>
                 {snapshot.schemas.reduce((total, schema) => total + schema.tables.length, 0)}
               </dd>
@@ -180,7 +184,7 @@ export function InspectorPanel({
       ) : null}
 
       {segment === "semantics" ? (
-        historicalSelection ? <p>This deleted table belongs to Before. Its historical structure is read only.</p> : <>
+        historicalSelection ? <p>{bt("business.thisDeletedTableBelongsToBeforeItsHistoricalStructure")}</p> : <>
           {selectedTable ? (
             <TableKnowledgeForm
               key={`${selectedTable.key.schema}.${selectedTable.key.name}:${annotation?.updatedAt ?? "new"}`}
@@ -208,22 +212,22 @@ export function InspectorPanel({
         <>
           {changeSet ? (
             <section className="change-summary">
-              <h3>{changeSet.operations.length} structural changes</h3>
+              <h3>{changeSet.operations.length} {bt("business.structuralChanges")}</h3>
               <div className="risk-grid">
                 {(["high", "medium", "low", "informational"] as const).map((risk) => (
                   <div key={risk} data-risk={risk}>
                     <strong>{changeSet.riskSummary[risk]}</strong>
-                    <span title={risk === "informational" ? "Informational" : undefined}>{risk === "informational" ? "Info" : risk}</span>
+                    <span title={risk === "informational" ? bt("business.informational") : undefined}>{risk === "informational" ? bt("business.info") : translateUiLabel(risk, bt)}</span>
                   </div>
                 ))}
               </div>
-              <p className="muted-copy">Compare Before and After in the change list.</p>
-              {onReviewChanges ? <button className="review-changes-button" type="button" onClick={onReviewChanges}>Review all changes</button> : null}
+              <p className="muted-copy">{bt("business.compareBeforeAndAfterInTheChangeList")}</p>
+              {onReviewChanges ? <button className="review-changes-button" type="button" onClick={onReviewChanges}>{bt("business.reviewAllChanges")}</button> : null}
             </section>
           ) : null}
           {changeSet && runtime?.kind === "desktop"
             && settings.app.advanced.extensions.migrationProvenance ? (
-              <details className="inspector-disclosure"><summary>Git & migration evidence</summary><ProvenancePanel changeSetId={changeSet.id} platform={platform} /></details>
+              <details className="inspector-disclosure"><summary>{bt("business.gitMigrationEvidence")}</summary><ProvenancePanel changeSetId={changeSet.id} platform={platform} /></details>
             ) : null}
           <HistoryPanel
             key={snapshot.sourceId}
@@ -252,7 +256,7 @@ export function InspectorPanel({
         />
       </div> : null}
       {segment === "ai" && (!selectedTable || historicalSelection) ? (
-        historicalSelection ? <p>Review this deleted table’s Before properties in the change list.</p> : changeSet ? (
+        historicalSelection ? <p>{bt("business.reviewThisDeletedTableSBeforePropertiesInThe")}</p> : changeSet ? (
           <AiAssistant
             platform={platform}
             input={{ snapshotId: snapshot.id, targetType: "changeSet", changeSet }}
@@ -261,7 +265,7 @@ export function InspectorPanel({
             onOpenSettings={() => onOpenSettings("ai")}
           />
         ) : (
-          <p>Select a table to explain, or compare two snapshots to explain a change set.</p>
+          <p>{bt("business.selectATableToExplainOrCompareTwoSnapshots")}</p>
         )
       ) : null}
       </div>

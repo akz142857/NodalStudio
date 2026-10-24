@@ -1,7 +1,11 @@
 /* Shared application palette. Components consume semantic tokens in every theme.
    System follows the OS through CSS, including changes while the app is open. */
 :root {
-  --ds-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ds-dialog-padding: 20px;
+  --ds-empty-padding: 24px;
+  --ds-radius-dialog: 12px;
+  --ds-radius-menu: 8px;
+  --ds-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --ds-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --ds-text-body: 1rem;
   --ds-text-control: .923rem;
@@ -24,6 +28,17 @@
   --ds-control-height: max(28px, 2.154rem);
   --ds-row-height: 52px;
   --ds-motion-fast: 120ms;
+  --ds-control-padding-block: 4px;
+  --ds-control-padding-inline: 10px;
+  --ds-control-height-small: max(26px, 2rem);
+  --ds-toolbar-height: max(32px, 2.462rem);
+  --ds-focus-ring: 2px solid var(--ds-accent);
+  --ds-shadow-popover: 0 6px 20px #0005;
+  --ds-shadow-dialog: 0 12px 40px #0004;
+  --ds-overlay: #0005;
+  --ds-layer-settings: 80;
+  --ds-layer-popover: 100;
+  --ds-layer-tooltip: 2000;
   --ds-color-scheme: dark;
   --ds-window: #111318;
   --ds-sidebar: #171a20;

@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { KnowledgeEditor } from "./KnowledgeReview";
 import type { DatabaseSnapshot, DomainGroup, EffectiveSettings, NodalStudioPlatform, TableAiEvidence, TableAiPreview, TableAiResult, TableDefinition } from "../platform";
@@ -15,14 +16,14 @@ type Phase = "idle" | "preparing" | "ready" | "running" | "error" | "cancelled" 
 
 export function TableAiAssistant(props: Props) {
   const { snapshot, table, settings } = props;
-  return <TableSession key={JSON.stringify([snapshot.sourceId, snapshot.id, snapshot.fingerprint, table.key, settings.source, settings.app.privacy.offlineMode, settings.app.general.language])} {...props} />;
+  return <TableSession key={JSON.stringify([snapshot.sourceId, snapshot.id, snapshot.fingerprint, table.key, settings.source, settings.app.privacy.offlineMode])} {...props} />;
 }
 function TableSession({ platform, snapshot, table, settings, domains, desktop, active = true, onOpenSettings, onLocateEvidence, onTaskChange, onKnowledgeSaved }: Props) {
   const ai = settings.source?.ai;
   const remote = ai?.provider === "openAiCompatible";
   const settingsReady = settings.source?.sourceId === snapshot.sourceId;
   const enabled = desktop && settingsReady && Boolean(ai?.enabled) && !(remote && settings.app.privacy.offlineMode);
-  const chinese = settings.app.general.language === "zhCn" || (settings.app.general.language === "system" && navigator.language.toLowerCase().startsWith("zh"));
+  const chinese = useI18n(settings.app.general.language).locale === "zh-CN";
   const t = (en: string, zh: string) => chinese ? zh : en;
   const questions = [t("What does one row represent?", "这一行代表什么？"), t("How is this table related?", "这张表怎么关联其他表？"), t("Explain a field", "解释一个字段")];
   const scopeLabels = { currentTable: t("Current table", "当前表"), oneHop: t("Table + direct neighbors", "当前表及直接关联表"), domain: t("Selected business domain", "所选业务域") };
