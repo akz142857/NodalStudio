@@ -33,9 +33,9 @@ try {
     if (-not (Test-Path $binary)) { throw 'Installed application not found.' }
     $binaryReceipt = $null
     if (-not $BaselineInstaller) {
-    $binaryReceipt = & node "$PSScriptRoot/windows_bundle_hash.mjs" $binary $manifest.applicationSha256 | ConvertFrom-Json
-    if ($LASTEXITCODE -ne 0) { throw 'Installed binary differs from the expected NSIS payload.' }
-    if ((Get-AuthenticodeSignature $binary).Status -ne 'NotSigned') { throw 'Unexpected signature status.' }
+        $binaryReceipt = & node "$PSScriptRoot/windows_bundle_hash.mjs" $binary $manifest.applicationSha256 | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0) { throw 'Installed binary differs from the expected NSIS payload.' }
+        if ((Get-AuthenticodeSignature $binary).Status -ne 'NotSigned') { throw 'Unexpected signature status.' }
     }
     $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $installDirectory 'smoke-webview-data'
     foreach ($phase in @('seed', 'verify')) {

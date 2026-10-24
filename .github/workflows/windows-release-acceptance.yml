@@ -20,7 +20,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 40092100247 --repo akz142857/NodalStudio --name Nodal-Studio-windows-x64-unsigned-809c50400cf2ec64af1e6a9ce5cc791a90deb51a --dir dist/releases/windows-0.2.3-test
+          gh run download 40092100247 --repo akz142857/NodalStudio --name Nodal-Studio-windows-x64-unsigned-809c50400cf2ec64af1e6a9ce5cc791a90deb51a --dir dist/releases
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $manifest = Get-Content dist/releases/windows-0.2.3-test/manifest.json -Raw | ConvertFrom-Json
           if ($manifest.sourceCommit -ne '809c50400cf2ec64af1e6a9ce5cc791a90deb51a' -or $manifest.sourceDirty -or $manifest.version -ne '0.2.3') { throw 'Unexpected release provenance.' }
