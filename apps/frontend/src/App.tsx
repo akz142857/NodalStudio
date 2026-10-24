@@ -716,6 +716,7 @@ export function App() {
   const ignoreRelationshipInference = useCallback(async (relationshipKey: string) => {
     if (!snapshot) return;
     const ignored = await platform.ignoreRelationshipInference(snapshot.sourceId, relationshipKey);
+    if (activeSemanticSession.current !== semanticSession) return;
     setSemantics((current) => ({
       ...current,
       ignoredRelationshipInferences: [
@@ -723,7 +724,16 @@ export function App() {
         ...current.ignoredRelationshipInferences.filter((item) => item.relationshipKey !== relationshipKey),
       ],
     }));
-  }, [snapshot]);
+  }, [snapshot, semanticSession]);
+
+  const restoreRelationshipInference = useCallback(async (relationshipKey: string) => {
+    if (!snapshot) throw new Error("Select a data source to restore this candidate.");
+    await platform.restoreRelationshipInference(snapshot.sourceId, relationshipKey);
+    if (activeSemanticSession.current !== semanticSession) return;
+    setSemantics((current) => ({ ...current,
+      ignoredRelationshipInferences: current.ignoredRelationshipInferences.filter((item) => item.relationshipKey !== relationshipKey),
+    }));
+  }, [snapshot, semanticSession]);
 
   const saveCanvasLayout = useCallback(async (positions: Record<string, import("./platform/types").CanvasNodeLayout>, viewport?: import("./platform/types").CanvasLayout["viewport"]) => {
     if (!snapshot || historyPreview || mode !== "explore") throw new Error("Historical layouts are temporary. Return to the latest model to save.");
@@ -1067,6 +1077,7 @@ export function App() {
               onUpdateLogicalRelationship={runtime.data?.kind === "desktop" ? updateLogicalRelationship : undefined}
               onDeleteLogicalRelationship={runtime.data?.kind === "desktop" ? deleteLogicalRelationship : undefined}
               onIgnoreRelationshipInference={runtime.data?.kind === "desktop" ? ignoreRelationshipInference : undefined}
+              onRestoreRelationshipInference={runtime.data?.kind === "desktop" ? restoreRelationshipInference : undefined}
               onClearSearch={() => setQuery("")}
             />
           ) : (

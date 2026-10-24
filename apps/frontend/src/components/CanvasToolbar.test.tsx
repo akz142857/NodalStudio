@@ -68,7 +68,7 @@ describe("canvas toolbar", () => {
     expect(logical).toBeChecked();
     physical.focus(); screen.getByRole("button", { name: "View all" }).focus();
     expect(screen.getByRole("group", { name: "Relationships" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Manage logical relationships" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Manage relationships" })).toBeVisible();
     physical.focus(); fireEvent.keyDown(physical, { key: "Escape" });
     expect(trigger).toHaveFocus();
     expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -83,7 +83,7 @@ describe("canvas toolbar", () => {
     render(<Fixture onManage={onManage} onViewAll={onViewAll} onAutoLayout={onAutoLayout} />);
     fireEvent.click(canvasToolButton("View all"));
     fireEvent.click(canvasToolButton("Auto layout"));
-    fireEvent.click(canvasToolButton("Manage logical relationships"));
+    fireEvent.click(canvasToolButton("Manage relationships"));
     expect(onManage).toHaveBeenCalledOnce(); expect(onViewAll).toHaveBeenCalledOnce(); expect(onAutoLayout).toHaveBeenCalledOnce();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Canvas tools" })).toHaveFocus();

@@ -1043,6 +1043,26 @@ impl LocalSnapshotStore {
         Ok(())
     }
 
+    /// Restores one dismissed candidate or naming rule for a data source.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `SQLite` deletion fails.
+    pub async fn restore_relationship_inference(
+        &self,
+        source_id: Uuid,
+        relationship_key: &str,
+    ) -> Result<bool, SnapshotStoreError> {
+        Ok(sqlx::query(
+            "DELETE FROM ignored_relationship_inferences WHERE source_id = ? AND relationship_key = ?",
+        )
+        .bind(source_id.to_string())
+        .bind(relationship_key)
+        .execute(&self.pool)
+        .await?
+        .rows_affected() > 0)
+    }
+
     /// Lists dismissed inferred relationship candidates for a data source.
     ///
     /// # Errors
@@ -3087,7 +3107,53 @@ mod tests {
                 .list_ignored_relationship_inferences(source_id)
                 .await
                 .unwrap(),
-            [ignored]
+            [ignored.clone()]
+        );
+        let rule = IgnoredRelationshipInference {
+            relationship_key: "rule:naming-id:public.orders.user_id".into(),
+            ..ignored.clone()
+        };
+        store
+            .save_ignored_relationship_inference(&rule)
+            .await
+            .unwrap();
+        assert!(
+            !store
+                .restore_relationship_inference(other_source, &ignored.relationship_key)
+                .await
+                .unwrap()
+        );
+        assert!(
+            store
+                .restore_relationship_inference(source_id, &ignored.relationship_key)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !store
+                .restore_relationship_inference(source_id, &ignored.relationship_key)
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            store
+                .list_ignored_relationship_inferences(source_id)
+                .await
+                .unwrap(),
+            [rule.clone()]
+        );
+        assert!(
+            store
+                .restore_relationship_inference(source_id, &rule.relationship_key)
+                .await
+                .unwrap()
+        );
+        assert!(
+            store
+                .list_ignored_relationship_inferences(source_id)
+                .await
+                .unwrap()
+                .is_empty()
         );
         assert!(
             store

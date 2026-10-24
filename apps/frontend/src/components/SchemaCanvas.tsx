@@ -140,6 +140,7 @@ export interface SchemaCanvasProps {
   onUpdateLogicalRelationship?: (input: SaveLogicalRelationshipInput) => Promise<LogicalRelationship>;
   onDeleteLogicalRelationship?: (relationshipId: string) => Promise<void>;
   onIgnoreRelationshipInference?: (relationshipKey: string) => Promise<void>;
+  onRestoreRelationshipInference?: (relationshipKey: string) => Promise<void>;
   onClearSearch?: () => void;
   onAddTablesToDomain?: (domainId: string, tableKeys: ObjectKey[]) => Promise<DomainGroup>;
 }
@@ -190,6 +191,7 @@ function SchemaCanvasInner({
   onUpdateLogicalRelationship,
   onDeleteLogicalRelationship,
   onIgnoreRelationshipInference,
+  onRestoreRelationshipInference,
   onClearSearch,
   onAddTablesToDomain,
 }: SchemaCanvasProps) {
@@ -226,6 +228,12 @@ function SchemaCanvasInner({
   const [relationshipRebindSourceSelection, setRelationshipRebindSourceSelection] = useState<LogicalRelationship>();
   const [showMiniMap, setShowMiniMap] = useState(true);
   const [relationshipManagerOpen, setRelationshipManagerOpen] = useState(false);
+  const [relationshipReviewRequest, setRelationshipReviewRequest] = useState<{ revision: number; candidateKey?: string }>();
+  function openInferenceReview(candidateKey?: string) {
+    setSelectedEdgeId(undefined);
+    setRelationshipReviewRequest((current) => ({ revision: (current?.revision ?? 0) + 1, candidateKey }));
+    setRelationshipManagerOpen(true);
+  }
   const [relationshipManagerSource, setRelationshipManagerSource] = useState(snapshot.sourceId);
   if (relationshipManagerSource !== snapshot.sourceId) { setRelationshipManagerSource(snapshot.sourceId); setRelationshipManagerOpen(false); }
   const [relationshipToDelete, setRelationshipToDelete] = useState<{ relationship: LogicalRelationship; sourceId: string; snapshotId: string }>();
@@ -899,6 +907,7 @@ function SchemaCanvasInner({
         onViewAll={() => window.dispatchEvent(new Event("nodalstudio:view-all-tables"))}
         onAutoLayout={() => autoLayoutTables(false)}
         onManageRelationships={relationshipsEditable ? () => setRelationshipManagerOpen(true) : undefined}
+        onReviewInferences={relationshipsEditable && onIgnoreRelationshipInference && onRestoreRelationshipInference ? () => openInferenceReview() : undefined}
         status={denseGesture ? "Moving tables · Showing connected relationships" : edgesRendering && layoutReady ? "Drawing relationships…" : undefined}
         filters={[
           { id: "physical", label: readOnlyPreview ? "Declared foreign keys" : "Physical relationships", count: graph.physicalRelationshipCount, description: changeSet ? "Declared constraints · Before and after versions" : "Foreign keys declared in the database", checked: showPhysicalRelationships, onChange: () => setPhysicalRelationshipOverride(!showPhysicalRelationships) },
@@ -1171,6 +1180,10 @@ function SchemaCanvasInner({
           }}
           onConfirmInference={() => {
             if (selectedEdge.data?.relationshipKind !== "inferred") return;
+            if (onIgnoreRelationshipInference && onRestoreRelationshipInference) {
+              openInferenceReview(logicalRelationshipKey(selectedEdge.source, selectedEdge.data.sourceColumn, selectedEdge.target, selectedEdge.data.targetColumn));
+              return;
+            }
             const source = endpointFromHandle(selectedEdge.source, `source:${selectedEdge.data.sourceColumn}:right`);
             const target = endpointFromHandle(selectedEdge.target, `target:${selectedEdge.data.targetColumn}:left`);
             if (source && target) setRelationshipDraft({ source, target, origin: "confirmedInference", evidence: selectedEdge.data.evidence });
@@ -1192,6 +1205,12 @@ function SchemaCanvasInner({
         open={relationshipManagerOpen}
         snapshot={snapshot}
         relationships={semantics?.logicalRelationships ?? []}
+        ignoredInferences={semantics?.ignoredRelationshipInferences}
+        reviewRequest={relationshipReviewRequest}
+        visibleTableIds={graph.nodes.map((node) => node.id)}
+        selectedTableId={selectedTable ? `${selectedTable.key.schema}.${selectedTable.key.name}` : undefined}
+        onIgnore={onIgnoreRelationshipInference}
+        onRestore={onRestoreRelationshipInference}
         onValidate={onValidateLogicalRelationship}
         canEdit={Boolean(onUpdateLogicalRelationship)}
         onSave={async (input) => {

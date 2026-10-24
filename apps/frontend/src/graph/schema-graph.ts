@@ -550,7 +550,8 @@ export function inferRelationships(
       if (!resolved) continue;
       const targetColumn = resolved.table.columns.find((candidate) => candidate.name === "id");
       const typeMatches = targetColumn?.typeName === column.typeName
-        && targetColumn.typeSchema === column.typeSchema;
+        && targetColumn.typeSchema === column.typeSchema
+        && /\bunsigned\b/i.test(targetColumn.formattedType) === /\bunsigned\b/i.test(column.formattedType);
       const sourceId = tableNodeId(schema, table.key.name);
       const targetId = tableNodeId(resolved.schema, resolved.table.key.name);
       relationships.push({
@@ -563,7 +564,7 @@ export function inferRelationships(
         evidence: [
           `Column name ${column.name} matches ${resolved.table.key.name}.id`,
           typeMatches ? "Source and target column types match" : "Source and target column types differ",
-          "Target column is a primary key",
+          resolved.table.primaryKey?.columns.length === 1 ? "Target column is a primary key" : "Target column participates in a composite primary key",
         ],
       });
     }

@@ -134,13 +134,13 @@ export function RelationshipInspector({
         {data.relationshipStatus ? <div><dt>Status</dt><dd>{relationshipStatusLabels[data.relationshipStatus]}</dd></div> : null}
         {data.onDelete ? <div><dt>On delete</dt><dd>{data.onDelete}</dd></div> : null}
         {data.onUpdate ? <div><dt>On update</dt><dd>{data.onUpdate}</dd></div> : null}
-        {data.confidence ? <div><dt>Confidence</dt><dd>{Math.round(data.confidence * 100)}%</dd></div> : null}
       </dl>
       {data.note ? <p>{data.note}</p> : null}
       {data.evidence?.length ? <ul>{data.evidence.map((item) => <li key={item}>{item}</li>)}</ul> : null}
       {data.relationshipKind === "physical" ? <p className="relationship-fact-note">Database constraint · read only</p> : null}
       {data.relationshipKind === "logical" && !readOnly ? <div className="relationship-actions"><button type="button" className="ds-primary" title="You can also double-click the relationship line" onClick={onEditLogical}>Edit</button><button type="button" onClick={onToggleLogical}>{data.relationshipStatus === "disabled" ? "Enable" : "Disable"}</button><button type="button" className="danger" title="Delete or Backspace also removes the selected logical relationship" onClick={onDeleteLogical}>Delete…</button></div> : null}
-      {data.relationshipKind === "inferred" && !readOnly ? <div className="relationship-actions"><button type="button" onClick={onConfirmInference}>Confirm as logical</button><button type="button" onClick={onDismissInference}>Dismiss</button><button type="button" onClick={onIgnoreInferenceRule}>Ignore naming rule</button></div> : null}
+      {data.relationshipKind === "inferred" ? <p className="relationship-fact-note">Naming suggestion · business meaning and stored data have not been verified.</p> : null}
+      {data.relationshipKind === "inferred" && !readOnly ? <div className="relationship-actions"><button type="button" className="ds-primary" onClick={onConfirmInference}>Review candidate</button><button type="button" onClick={onDismissInference}>Ignore candidate</button><details><summary>More</summary><button type="button" onClick={onIgnoreInferenceRule}>Stop suggesting this source field</button></details></div> : null}
     </aside>,
     document.body,
   );

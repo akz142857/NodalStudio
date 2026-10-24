@@ -21,6 +21,7 @@ interface CanvasToolbarProps {
   onViewAll: () => void;
   onAutoLayout: () => void;
   onManageRelationships?: () => void;
+  onReviewInferences?: () => void;
   status?: string;
   context?: ReactNode;
   selectedCount?: number;
@@ -30,7 +31,7 @@ interface CanvasToolbarProps {
 }
 
 /** A stable bottom dock. Collapsing is presentation-only and never clears selection. */
-export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, layoutDisabled, onViewAll, onAutoLayout, onManageRelationships, status, context, selectedCount = 0, createViewAction, selectionActions, navigationControls, minimapVisible, onToggleMinimap }: CanvasToolbarProps) {
+export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, layoutDisabled, onViewAll, onAutoLayout, onManageRelationships, onReviewInferences, status, context, selectedCount = 0, createViewAction, selectionActions, navigationControls, minimapVisible, onToggleMinimap }: CanvasToolbarProps) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -103,7 +104,8 @@ export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, 
           <span><strong>{filter.label}</strong><small id={`${id}-${filter.id}`}>{filter.description}</small></span>
           {filter.count !== undefined ? <span className="canvas-command-badge">{filter.count}</span> : null}
         </label>)}</div>
-        {onManageRelationships ? <button type="button" className="canvas-command-manage" onClick={() => { close(); onManageRelationships(); }}><ActionIcon name="sliders" />Manage logical relationships<ActionIcon name="chevronRight" /></button> : null}
+        {onReviewInferences ? <button type="button" className="canvas-command-manage" disabled={disabled} onClick={() => { close(); onReviewInferences(); }}><ActionIcon name="relationships" />Review candidates<ActionIcon name="chevronRight" /></button> : null}
+        {onManageRelationships ? <button type="button" className="canvas-command-manage" onClick={() => { close(); onManageRelationships(); }}><ActionIcon name="sliders" />Manage relationships<ActionIcon name="chevronRight" /></button> : null}
       </div>
     </div>
     <button ref={restore} type="button" className="canvas-command-restore" hidden={!collapsed} disabled={disabled} aria-label="Expand canvas toolbar" title="Expand toolbar; selection is preserved" onClick={() => { setCollapsed(false); requestAnimationFrame(() => trigger.current?.focus()); }}><ActionIcon name="sliders" />Tools{selectedCount > 0 ? <span className="canvas-command-badge">{selectedCount}</span> : null}</button>

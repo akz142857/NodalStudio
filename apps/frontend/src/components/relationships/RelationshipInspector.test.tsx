@@ -78,7 +78,7 @@ describe("draggable relationship details", () => {
   it("does not drag from contents, the close button, or a secondary pointer", () => {
     render(<RelationshipInspector edge={edge} anchor={{ x: 400, y: 400 }} {...actions} />);
     const initial = position();
-    for (const target of [screen.getByRole("button", { name: "Close relationship details" }), screen.getByText("Confidence")]) {
+    for (const target of [screen.getByRole("button", { name: "Close relationship details" }), screen.getByText(/^Naming suggestion/)]) {
       fireEvent.pointerDown(target, { button: 0, pointerId: 1 });
       fireEvent.pointerMove(handle(), { pointerId: 1, clientX: 900, clientY: 700 });
       expect(position()).toEqual(initial);

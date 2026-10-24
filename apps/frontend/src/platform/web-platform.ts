@@ -262,6 +262,10 @@ export class WebPlatform implements NodalStudioPlatform {
     return Promise.resolve([]);
   }
 
+  restoreRelationshipInference(): Promise<boolean> {
+    return Promise.reject(new Error("Relationship review requires the desktop app."));
+  }
+
   saveAnnotation(): Promise<ObjectAnnotation> {
     return Promise.reject(new Error("Annotations require the desktop app."));
   }

@@ -38,7 +38,7 @@ describe("RelationshipManager", () => {
     render(<Harness save={save} />);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "archive" } });
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    expect(screen.getByRole("dialog", { name: "Logical relationships" })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "Relationships" })).toBeVisible();
     fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Reviewed mapping" } });
     await waitFor(() => expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -46,7 +46,7 @@ describe("RelationshipManager", () => {
     expect(screen.queryByRole("form")).not.toBeInTheDocument();
     expect(screen.getByRole("searchbox")).toHaveValue("archive");
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ id: relationship.id, note: "Reviewed mapping", origin: "confirmedInference", evidence: relationship.evidence }));
-    fireEvent.click(screen.getByRole("button", { name: "Close logical relationships" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close relationships" }));
     fireEvent.click(screen.getByRole("button", { name: "Reopen manager" }));
     expect(screen.getByRole("searchbox")).toHaveValue("archive");
     expect(screen.getByText("Reviewed mapping")).toBeVisible();
@@ -60,7 +60,7 @@ describe("RelationshipManager", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Discard unsaved changes?");
     fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
     expect(screen.getByLabelText("Note")).toHaveValue("Unsaved note");
-    fireEvent.click(screen.getByRole("button", { name: "Close logical relationships" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close relationships" }));
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

@@ -3668,7 +3668,7 @@ fn physical_relationship_exists(
 fn endpoint_column_types(
     snapshot: &DatabaseSnapshot,
     endpoint: &RelationshipEndpoint,
-) -> Option<Vec<(String, String)>> {
+) -> Option<Vec<(String, String, bool)>> {
     let table = relationship_table(snapshot, endpoint)?;
     endpoint
         .columns
@@ -3682,6 +3682,10 @@ fn endpoint_column_types(
                     (
                         column.type_schema.to_ascii_lowercase(),
                         column.type_name.to_ascii_lowercase(),
+                        column
+                            .formatted_type
+                            .split_whitespace()
+                            .any(|part| part.eq_ignore_ascii_case("unsigned")),
                     )
                 })
         })
@@ -4062,6 +4066,38 @@ async fn ignore_relationship_inference(
     )
     .await?;
     Ok(ignored)
+}
+
+#[tauri::command]
+async fn restore_relationship_inference(
+    input: IgnoreRelationshipInferenceInput,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let key = input.relationship_key.trim();
+    if key.is_empty() || key.len() > 1_000 {
+        return Err("Choose an ignored candidate or naming rule to restore.".into());
+    }
+    let restored = state
+        .store
+        .restore_relationship_inference(input.source_id, key)
+        .await
+        .map_err(safe_store_error)?;
+    if restored {
+        enqueue_sync_event(
+            &state.store,
+            input.source_id,
+            "logical_relationship.restore_inference",
+            &format!(
+                "{}:{}:{}",
+                input.source_id,
+                key,
+                Utc::now().timestamp_millis()
+            ),
+            serde_json::json!({ "sourceId": input.source_id, "relationshipKey": key }),
+        )
+        .await?;
+    }
+    Ok(restored)
 }
 
 #[tauri::command]
@@ -4989,6 +5025,7 @@ pub fn run() {
                 update_logical_relationship,
                 delete_logical_relationship,
                 ignore_relationship_inference,
+                restore_relationship_inference,
                 list_ignored_relationship_inferences,
                 save_annotation,
                 save_domain_group,
@@ -5247,6 +5284,25 @@ mod tests {
         assert_eq!(
             validation.suggested_cardinality,
             RelationshipCardinality::ManyToOne
+        );
+
+        let mut mysql_snapshot = snapshot.clone();
+        mysql_snapshot.database.database_type = DatabaseType::MySql;
+        for table in &mut mysql_snapshot.schemas[0].tables {
+            table.columns[0].type_name = "int".into();
+            table.columns[0].type_schema = String::new();
+            table.columns[0].formatted_type = "int".into();
+        }
+        mysql_snapshot.schemas[0].tables[0].columns[0].formatted_type = "int unsigned".into();
+        let signedness =
+            validate_relationship_against_snapshot(&mysql_snapshot, &[], &source, &target, None);
+        assert!(!signedness.valid);
+        assert!(!signedness.compatible);
+        assert_eq!(signedness.status, LogicalRelationshipStatus::Conflicted);
+        mysql_snapshot.schemas[0].tables[1].columns[0].formatted_type = "INT UNSIGNED".into();
+        assert!(
+            validate_relationship_against_snapshot(&mysql_snapshot, &[], &source, &target, None)
+                .valid
         );
 
         let now = Utc::now();

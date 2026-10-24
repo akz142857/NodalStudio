@@ -234,6 +234,10 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke<IgnoredRelationshipInference[]>("list_ignored_relationship_inferences", { input: { sourceId } });
   }
 
+  restoreRelationshipInference(sourceId: string, relationshipKey: string): Promise<boolean> {
+    return invoke<boolean>("restore_relationship_inference", { input: { sourceId, relationshipKey } });
+  }
+
   saveAnnotation(input: SaveAnnotationInput): Promise<ObjectAnnotation> {
     return invoke<ObjectAnnotation>("save_annotation", { input });
   }

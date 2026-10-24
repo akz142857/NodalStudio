@@ -7,6 +7,7 @@ import type { FieldEdge, TableNode } from "../graph/schema-graph";
 import { defaultAppSettings } from "../platform";
 import { reportSemantics, reportSnapshot } from "../test/schema-report-fixture";
 import { SchemaCanvas, type SchemaCanvasProps } from "./SchemaCanvas";
+import { inferenceReviewSnapshot } from "../test/inference-review-fixture";
 
 // Keep the real store and components; deliver edge activation without jsdom geometry.
 const flow = vi.hoisted(() => ({ props: undefined as ReactFlowProps<TableNode, FieldEdge> | undefined }));
@@ -46,6 +47,18 @@ describe("Model relationship deletion", () => {
     onValidateLogicalRelationship: vi.fn(),
     onCreateLogicalRelationship: vi.fn(),
   };
+
+  it("opens the inferred review queue without enabling canvas suggestions", async () => {
+    render(<CanvasHarness snapshot={inferenceReviewSnapshot} semantics={{ ...reportSemantics, logicalRelationships: [] }} canvasSettings={{ ...defaultAppSettings().canvas, showInferredRelationships: false }}
+      onValidateLogicalRelationship={vi.fn().mockResolvedValue({ valid: true, compatible: true, duplicate: false, physicalExists: false, suggestedCardinality: "manyToOne", status: "active", messages: [] })}
+      onCreateLogicalRelationship={vi.fn()} onIgnoreRelationshipInference={vi.fn()} onRestoreRelationshipInference={vi.fn()} />);
+    fireEvent.click(canvasToolButton("Review candidates"));
+    expect(screen.getByRole("dialog", { name: "Relationships" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Inferred · 4" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("navigation", { name: "Inferred candidates" })).toBeVisible();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Confirm and next" })).toBeEnabled());
+    expect(flow.props?.edges?.some((edge) => edge.data?.relationshipKind === "inferred")).toBe(false);
+  });
 
   it("deletes a model relationship through app confirmation even when window.confirm is unavailable", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
@@ -97,7 +110,7 @@ describe("Model relationship deletion", () => {
   it("confirms manager deletion and drops the pending request when the source changes", () => {
     const remove = vi.fn();
     const { rerender } = render(<CanvasHarness {...relationshipActions} onDeleteLogicalRelationship={remove} />);
-    fireEvent.click(canvasToolButton("Manage logical relationships"));
+    fireEvent.click(canvasToolButton("Manage relationships"));
     fireEvent.click(screen.getByLabelText("More relationship actions"));
     fireEvent.click(screen.getByRole("button", { name: "Delete relationship…" }));
     expect(screen.getByRole("dialog", { name: "Delete model relationship?" })).toBeVisible();

@@ -587,6 +587,7 @@ export interface NodalStudioPlatform {
   updateLogicalRelationship(input: SaveLogicalRelationshipInput): Promise<LogicalRelationship>;
   deleteLogicalRelationship(sourceId: string, relationshipId: string): Promise<boolean>;
   ignoreRelationshipInference(sourceId: string, relationshipKey: string): Promise<IgnoredRelationshipInference>;
+  restoreRelationshipInference(sourceId: string, relationshipKey: string): Promise<boolean>;
   listIgnoredRelationshipInferences(sourceId: string): Promise<IgnoredRelationshipInference[]>;
   saveAnnotation(input: SaveAnnotationInput): Promise<ObjectAnnotation>;
   saveDomainGroup(input: SaveDomainGroupInput): Promise<DomainGroup>;
