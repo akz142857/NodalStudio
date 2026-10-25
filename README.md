@@ -68,11 +68,21 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
 ```
 
-Build the desktop application bundle:
+Build the development desktop application bundle:
 
 ```bash
 pnpm --filter @nodalstudio/desktop tauri build --bundles app
 ```
+
+Default desktop builds use `com.claycosmos.nodalstudio.dev` and the app name
+**Nodal Studio Dev**, with a separate application data directory. Existing production
+data is not automatically copied to development builds. The signed macOS release,
+Mac App Store and Windows packaging scripts explicitly select the production
+identity `com.claycosmos.nodalstudio` and app name **Nodal Studio**. For a manual
+production bundle, add `--config src-tauri/tauri.release.conf.json`; for MAS, use
+the dedicated App Store packaging script. Keep development builds on the default
+identity so TestFlight and LaunchServices cannot mistake them for the installed app.
+
 
 ## Windows x64 test package
 

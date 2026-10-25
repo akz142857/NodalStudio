@@ -339,7 +339,7 @@ validate_project_configuration() {
   plutil -lint "$ENTITLEMENTS_FILE" "$INFO_PLIST_FILE" >/dev/null
 
   local configured_bundle configured_team configured_app_id sandbox network files encryption
-  configured_bundle="$(node -p "require('$TAURI_CONFIG').identifier")"
+  configured_bundle="$(node -p "({...require('$TAURI_CONFIG'), ...require('$TAURI_DIRECTORY/tauri.appstore.conf.json')}).identifier")"
   configured_team="$(/usr/libexec/PlistBuddy -c \
     'Print :com.apple.developer.team-identifier' "$ENTITLEMENTS_FILE")"
   configured_app_id="$(/usr/libexec/PlistBuddy -c \

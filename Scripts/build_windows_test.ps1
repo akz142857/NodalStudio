@@ -20,7 +20,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Unable to install the Windows x64 Rust target.' }
     & pnpm install --frozen-lockfile
     if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
-    & pnpm --filter '@nodalstudio/desktop' tauri build --target $target --bundles nsis -- --locked
+    & pnpm --filter '@nodalstudio/desktop' tauri build --config src-tauri/tauri.release.conf.json --target $target --bundles nsis -- --locked
     if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
 
     $binary = Join-Path $root "target/$target/release/nodalstudio-desktop.exe"

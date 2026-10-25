@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Nodal Studio",
+  "productName": "Nodal Studio Dev",
   "version": "0.2.4",
-  "identifier": "com.claycosmos.nodalstudio",
+  "identifier": "com.claycosmos.nodalstudio.dev",
   "build": {
     "beforeDevCommand": "pnpm --dir ../frontend dev",
     "devUrl": "http://127.0.0.1:1420",

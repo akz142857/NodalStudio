@@ -297,7 +297,7 @@ fi
 
 info "Building, signing, notarizing, and stapling Nodal Studio"
 # Keep the app bundle for signature, ticket, and Gatekeeper verification below.
-BUILD_ARGS=(--bundles "app,$BUNDLE_FORMAT")
+BUILD_ARGS=(--bundles "app,$BUNDLE_FORMAT" --config src-tauri/tauri.release.conf.json)
 if [[ "$BUILD_TARGET" != "host" ]]; then
   BUILD_ARGS+=(--target "$BUILD_TARGET")
 fi
@@ -311,6 +311,8 @@ pnpm --filter @nodalstudio/desktop tauri build "${BUILD_ARGS[@]}" -- --locked
 BUNDLE_ROOT="$(bundle_root)"
 APP_PATH="$BUNDLE_ROOT/macos/Nodal Studio.app"
 [[ -d "$APP_PATH" ]] || fail "App bundle was not generated: $APP_PATH"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Contents/Info.plist")" == \
+    "com.claycosmos.nodalstudio" ]] || fail "Release bundle has the wrong application identifier"
 
 # Tauri retains older release artifacts in this directory. Never publish the
 # first arbitrary DMG under a new version's name.
