@@ -17,16 +17,24 @@ interface Props {
   onOpenSettings: () => void;
   onUseSql?: (sql: string) => void;
   autoPrepare?: boolean;
+  directSend?: boolean;
   onSqlDraft?: (draft: SqlDraft) => void;
   execution?: { sql: string; result: QueryExecutionResult };
 }
 
 /** Key every input and policy dependency, including the local search revision. */
 export function DiscoveryAssistant(props: Props) {
-  return <DiscoveryRequest key={JSON.stringify([props.input, props.binding, props.snapshot.id, props.snapshot.sourceId, props.snapshot.fingerprint, props.settings.source, props.settings.app.privacy, props.available])} {...props} />;
+  // Invalidating a request must never replay the user's send action.
+  const automaticStarted = useRef(false);
+  const claimAutomaticPreparation = useCallback(() => {
+    if (!props.autoPrepare || automaticStarted.current) return false;
+    automaticStarted.current = true;
+    return true;
+  }, [props.autoPrepare]);
+  return <DiscoveryRequest key={JSON.stringify([props.input, props.binding, props.snapshot.id, props.snapshot.sourceId, props.snapshot.fingerprint, props.settings.source, props.settings.app.privacy, props.available])} {...props} claimAutomaticPreparation={claimAutomaticPreparation} />;
 }
-function DiscoveryRequest({ platform, snapshot, settings, input, available, onApplyTerms, onLocate, onOpenSettings, onUseSql, autoPrepare = false, onSqlDraft, execution }: Props) {
-  const { t: bt, formatDate } = useI18n();
+function DiscoveryRequest({ platform, snapshot, settings, input, available, onApplyTerms, onLocate, onOpenSettings, onUseSql, autoPrepare = false, directSend = false, onSqlDraft, execution, claimAutomaticPreparation }: Props & { claimAutomaticPreparation: () => boolean }) {
+  const { t: bt, formatDate, locale } = useI18n();
   const ai = settings.source?.ai;
   const remote = ai?.provider === "openAiCompatible";
   const enabled = available && settings.source?.sourceId === snapshot.sourceId && !!ai?.enabled && !(remote && settings.app.privacy.offlineMode);
@@ -56,7 +64,7 @@ function DiscoveryRequest({ platform, snapshot, settings, input, available, onAp
     if (busy.current || !enabled) return;
     invalidate(); const current = generation.current; busy.current = true; setPhase("preparing");
     try {
-      const next = await platform.prepareDiscovery(input);
+      const next = await platform.prepareDiscovery({ ...input, replyLanguage: input.replyLanguage ?? { currentQuestion: input.task.question, uiLocale: locale } });
       if (current !== generation.current) { void platform.cancelDiscovery(next.requestId).catch(() => undefined); return; }
       if (next.sourceId !== snapshot.sourceId || next.snapshotId !== snapshot.id || next.fingerprint !== snapshot.fingerprint || next.context.operation !== input.task.operation || next.context.scope !== ai?.contextScope || next.provider !== (remote ? "openai-compatible" : "offline-schema") || (remote && next.model !== ai?.model)) {
         void platform.cancelDiscovery(next.requestId).catch(() => undefined);
@@ -69,7 +77,11 @@ function DiscoveryRequest({ platform, snapshot, settings, input, available, onAp
       if (!Number.isFinite(Date.parse(next.expiresAt)) || Date.parse(next.expiresAt) <= Date.now()) {
         void platform.cancelDiscovery(next.requestId).catch(() => undefined); invalidate("expired"); return;
       }
-      request.current = next.requestId; setPreview(next); setPhase("ready");
+      request.current = next.requestId; setPreview(next);
+      if (directSend) {
+        busy.current = false;
+        await run(next);
+      } else setPhase("ready");
     } catch (reason) { if (current === generation.current) { setError(String(reason instanceof Error ? reason.message : reason)); setPhase("error"); } }
     finally { if (current === generation.current) busy.current = false; }
   }
@@ -82,18 +94,19 @@ function DiscoveryRequest({ platform, snapshot, settings, input, available, onAp
   useEffect(() => {
     if (!autoPrepare || !enabled) return;
     let active = true;
-    queueMicrotask(() => { if (active) prepareAutomatically(); });
+    queueMicrotask(() => { if (active && claimAutomaticPreparation()) prepareAutomatically(); });
     return () => { active = false; cancelAutomatic(); };
-  }, [autoPrepare, enabled]);
-  async function run() {
-    if (!preview || phase !== "ready" || busy.current || !enabled) return;
-    if (Date.now() >= Date.parse(preview.expiresAt)) { invalidate("expired"); return; }
+  }, [autoPrepare, enabled, claimAutomaticPreparation]);
+  async function run(prepared?: DiscoveryPreview) {
+    const selected = prepared ?? preview;
+    if (!selected || (!prepared && phase !== "ready") || busy.current || !enabled) return;
+    if (Date.now() >= Date.parse(selected.expiresAt)) { invalidate("expired"); return; }
     const current = generation.current; busy.current = true; setPhase("running");
     try {
-      const next = await platform.runDiscovery(preview.requestId);
+      const next = await platform.runDiscovery(selected.requestId);
       if (current !== generation.current) return;
-      if (Date.now() >= Date.parse(preview.expiresAt)) { invalidate("expired"); return; }
-      if (next.requestId !== preview.requestId || next.sourceId !== snapshot.sourceId || next.snapshotId !== snapshot.id || next.operation !== input.task.operation || next.provider !== preview.provider || next.model !== preview.model) throw new Error(bt("businessSupport.theReturnedAnswerBelongsToADifferentTask"));
+      if (Date.now() >= Date.parse(selected.expiresAt)) { invalidate("expired"); return; }
+      if (next.requestId !== selected.requestId || next.sourceId !== snapshot.sourceId || next.snapshotId !== snapshot.id || next.operation !== input.task.operation || next.provider !== selected.provider || next.model !== selected.model) throw new Error(bt("businessSupport.theReturnedAnswerBelongsToADifferentTask"));
       setResult(next); setPhase("done");
       if (next.answer.sqlDraft) onSqlDraft?.(next.answer.sqlDraft);
     } catch (reason) { if (current === generation.current) { setError(String(reason instanceof Error ? reason.message : reason)); setPhase("error"); } }
@@ -110,14 +123,14 @@ function DiscoveryRequest({ platform, snapshot, settings, input, available, onAp
     {input.task.operation !== "draftSql" ? <h3>{input.task.operation === "expand" ? bt("businessSupport.expandSearchTerms") : input.task.operation === "rank" ? bt("businessSupport.rankPermittedCandidates") : bt("businessSupport.explainTheCompletePath")}</h3> : null}
     {input.task.operation !== "draftSql" ? <p className="ai-policy">{bt("businessSupport.aIScopeLocalSearchAndGraphDepthDoNot", { value0: ai?.contextScope ?? "currentTable" })}</p> : null}
     {!available ? <p>{bt("businessSupport.aIRequiresTheLatestDesktopSnapshotLocalResultsRemain")}</p> : !enabled ? <button type="button" onClick={onOpenSettings}>{bt("businessSupport.configureInSettingsAI")}</button> : <div className="ai-actions">
-      {!autoPrepare || ["error", "cancelled", "expired"].includes(phase) ? <button type="button" onClick={() => void prepare()} disabled={phase === "preparing" || phase === "running" || !input.task.question.trim()}>{input.task.operation === "draftSql" ? bt("businessSupport.reviewAIRequest") : bt("businessSupport.prepareDiscoveryPreview")}</button> : null}
+      {!autoPrepare || ["idle", "error", "cancelled", "expired"].includes(phase) ? <button type="button" onClick={() => void prepare()} disabled={phase === "preparing" || phase === "running" || !input.task.question.trim()}>{input.task.operation === "draftSql" ? bt(directSend ? "businessSupport.sendAIRequest" : "businessSupport.reviewAIRequest") : bt("businessSupport.prepareDiscoveryPreview")}</button> : null}
       {["preparing", "ready", "running"].includes(phase) ? <button type="button" onClick={() => invalidate("cancelled")}>{bt("businessSupport.cancelAIStep")}</button> : null}
     </div>}
     <p role="status">{phase === "ready" ? bt("businessSupport.previewReadyNothingSentYet") : phase === "running" ? bt("businessSupport.waitingForTheModel") : phase === "preparing" ? bt("businessSupport.preparingPermittedContext") : phase === "cancelled" ? bt("businessSupport.cancelledARequestAlreadySentCannotBeRecalled") : phase === "expired" ? bt("businessSupport.previewExpiredPrepareAgainBeforeSending") : phase === "done" && input.task.operation === "draftSql" ? result?.answer.sqlDraft?.sql ? bt("businessSupport.draftReadyToReviewBelow") : bt("businessSupport.moreDetailIsNeededReviewTheQuestionsBelow") : ""}</p>
     {error ? <p role="alert">{error}</p> : null}
     {preview ? <section className="ai-preview" aria-label={bt("businessSupport.discoveryRequestScope")}>
       {input.task.operation === "draftSql" ? <>
-        <div className="query-send-summary"><div><strong>{phase === "done" ? bt("businessSupport.requestDetails") : bt("businessSupport.readyToGenerate")}</strong><p>{preview.model ?? preview.provider} · {preview.context.tables.length} {bt("business.tablesDetail")} {bt("businessSupport.schemaOnly")}</p></div>{phase === "ready" && enabled ? <button type="button" onClick={() => void run()}>{bt("businessSupport.generateSQL")}</button> : null}</div>
+        <div className="query-send-summary"><div><strong>{phase === "ready" ? bt("businessSupport.readyToGenerate") : bt("businessSupport.requestDetails")}</strong><p>{preview.model ?? preview.provider} · {preview.context.tables.length} {bt("business.tablesDetail")} {bt("businessSupport.schemaOnly")}</p></div>{phase === "ready" && enabled ? <button type="button" onClick={() => void run()}>{bt("businessSupport.generateSQL")}</button> : null}</div>
         <details><summary>{bt("businessSupport.reviewWhatWillBeSent")}</summary><p>{preview.endpoint ?? bt("businessSupport.noNetworkRequest")}</p><p>{bt("businessSupport.expires")} {formatDate(preview.expiresAt, "local", { timeStyle: "medium" })}</p><ul>{preview.context.coverage.map((text, i) => <li key={i}>{text}</li>)}</ul><pre>{JSON.stringify(remote ? preview.requestBody : preview.context, null, 2)}</pre></details>
       </> : <>
       <h4>{remote ? bt("businessSupport.actualRequestPreview") : bt("businessSupport.localContext")}</h4>

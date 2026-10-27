@@ -6,6 +6,7 @@ export interface TableAiInput {
   focusColumn: string | null;
   domainId: string | null;
   question: string;
+  uiLocale?: "en" | "zh-CN";
 }
 
 export interface TableAiEvidence {

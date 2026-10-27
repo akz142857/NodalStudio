@@ -39,7 +39,7 @@
 .query-composer-width { width: 100%; max-width: 824px; margin: 0 auto; position: relative; }
 .query-composer { border: 1px solid var(--ds-border); border-radius: 16px; background: var(--ds-surface); box-shadow: var(--ds-shadow); overflow: hidden; }
 .query-composer:focus-within { border-color: var(--ds-accent); box-shadow: 0 0 0 2px var(--ds-accent-soft); }
-.query-draft-panel .query-composer textarea { box-sizing: border-box; display: block; width: 100%; min-width: 0; padding: 14px 16px 6px; min-height: 70px; max-height: min(180px, 22vh); resize: none; overflow-y: auto; border: 0; border-radius: 0; background: transparent; color: var(--ds-text); font: 14px/1.6 var(--ds-font-ui); outline: none; box-shadow: none; }
+.query-draft-panel .query-composer textarea { box-sizing: border-box; display: block; width: 100%; min-width: 0; padding: 14px 16px 6px; min-height: 70px; max-height: min(180px, 22vh); resize: none; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 0; border-radius: 0; background: transparent; color: var(--ds-text); font: 14px/1.6 var(--ds-font-ui); outline: none; box-shadow: none; }
 .query-composer-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 12px 12px; }
 .query-composer-footer > span { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--ds-secondary); font-size: 11px; overflow-wrap: anywhere; }
 .query-composer-footer svg { width: 15px; height: 15px; flex-shrink: 0; }

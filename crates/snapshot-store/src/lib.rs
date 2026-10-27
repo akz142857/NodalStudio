@@ -17,11 +17,12 @@ use sqlx::{Row, SqlitePool, sqlite::SqliteConnectOptions, sqlite::SqlitePoolOpti
 use thiserror::Error;
 use uuid::Uuid;
 
+pub mod change_review;
 mod knowledge;
 pub mod relationship_batches;
 mod snapshot_history;
 
-const LOCAL_SCHEMA_VERSION: i64 = 5;
+const LOCAL_SCHEMA_VERSION: i64 = 6;
 
 #[derive(Debug, Error)]
 pub enum SnapshotStoreError {
@@ -408,6 +409,7 @@ impl LocalSnapshotStore {
                 .await?;
             }
         }
+        change_review::receipt_in(&mut tx, &snapshot).await?;
         knowledge::states_in(&mut tx, snapshot.source_id).await?;
         tx.commit().await?;
         Ok(StoredSnapshotCapture {
@@ -804,6 +806,18 @@ impl LocalSnapshotStore {
         let source = source_id.to_string();
         let mut transaction = self.pool.begin().await?;
         let mut affected = 0_u64;
+        if delete_history || delete_semantics || delete_connection {
+            for statement in [
+                "DELETE FROM change_review_baselines WHERE source_id=?",
+                "DELETE FROM change_review_events WHERE source_id=?",
+                "DELETE FROM change_review_receipts WHERE source_id=?",
+            ] {
+                sqlx::query(statement)
+                    .bind(&source)
+                    .execute(&mut *transaction)
+                    .await?;
+            }
+        }
         if delete_history {
             affected += sqlx::query(
                 "DELETE FROM change_provenance WHERE change_set_id IN (SELECT c.id FROM schema_change_sets c JOIN schema_snapshots s ON s.id = c.after_snapshot_id WHERE s.source_id = ?)",
@@ -875,6 +889,9 @@ impl LocalSnapshotStore {
         let mut transaction = self.pool.begin().await?;
         let mut affected = 0_u64;
         for statement in [
+            "DELETE FROM change_review_baselines",
+            "DELETE FROM change_review_events",
+            "DELETE FROM change_review_receipts",
             "DELETE FROM change_provenance",
             "DELETE FROM schema_change_sets",
             "DELETE FROM schema_snapshots",
@@ -1434,6 +1451,12 @@ impl LocalSnapshotStore {
             })
             .map(|(_, row)| row.get("id"))
             .collect();
+        let review_snapshot: Option<String> = sqlx::query_scalar("SELECT json_extract(payload_json,'$.snapshot') FROM change_review_baselines WHERE source_id=?")
+            .bind(source_id.to_string()).fetch_optional(&mut **transaction).await?;
+        retained.extend(review_snapshot);
+        let knowledge_snapshots: Vec<String> = sqlx::query_scalar("SELECT json_extract(payload_json,'$.snapshotId') FROM annotation_confirmations WHERE source_id=?")
+            .bind(source_id.to_string()).fetch_all(&mut **transaction).await?;
+        retained.extend(knowledge_snapshots);
         if preserve_high_risk {
             let changes = sqlx::query(
                 "SELECT c.before_snapshot_id, c.after_snapshot_id, c.payload_json FROM schema_change_sets c JOIN schema_snapshots s ON s.id = c.after_snapshot_id WHERE s.source_id = ?",
@@ -2143,6 +2166,7 @@ impl LocalSnapshotStore {
         }
         self.initialize_semantic_tables().await?;
         self.initialize_knowledge().await?;
+        self.initialize_change_review().await?;
         self.initialize_relationship_batches().await?;
         self.initialize_sync_tables().await?;
         self.initialize_extension_tables().await?;
@@ -2159,7 +2183,7 @@ impl LocalSnapshotStore {
         .bind(Utc::now().to_rfc3339())
         .execute(&self.pool)
         .await?;
-        sqlx::query("PRAGMA user_version = 5")
+        sqlx::query("PRAGMA user_version = 6")
             .execute(&self.pool)
             .await?;
         Ok(())

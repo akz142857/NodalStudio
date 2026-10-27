@@ -83,7 +83,7 @@ mod tests {
         let missing = std::env::temp_dir().join(format!("nodal-missing-{}", uuid::Uuid::new_v4()));
         assert_eq!(
             save(&report("schema.html"), &missing).err().unwrap(),
-            "The Downloads directory is unavailable."
+            "The selected export directory is unavailable."
         );
     }
 }

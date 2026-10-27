@@ -134,7 +134,11 @@ mod tests {
             .err()
             .unwrap();
         assert_eq!(error.stage, "ssh");
-        assert!(error.message.contains("password"));
+        assert!(error.message.contains(if crate::purchase::IS_MAS {
+            "known_hosts"
+        } else {
+            "password"
+        }));
         assert!(!error.ssh_connected);
     }
 }

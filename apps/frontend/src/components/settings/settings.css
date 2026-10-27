@@ -26,7 +26,8 @@
 .settings-navigation-group > button[aria-current="page"] svg { color: inherit; }
 .settings-navigation footer { display: flex; justify-content: space-between; margin-top: auto; padding: var(--ds-space-3) var(--ds-space-2) 0; color: var(--ds-tertiary); font-size: var(--ds-text-caption); }
 .settings-category-picker { display: none; }
-.settings-content { container: settings-content / inline-size; min-width: 0; padding: var(--ds-space-8); overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; overflow-wrap: anywhere; }
+.settings-detail-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.settings-content { flex: 1; min-height: 0; container: settings-content / inline-size; min-width: 0; padding: var(--ds-space-8); overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; overflow-wrap: anywhere; }
 .settings-section, .settings-content > [role="alert"], .settings-content > [role="status"] { width: 100%; max-width: 780px; margin: 0 auto; }
 .settings-page :is(.secondary-setting-action, .danger-setting-action) { justify-self: start; }
 .settings-page .danger-setting-action { color: var(--ds-danger); }
@@ -135,3 +136,11 @@
 
 /* Nested disclosures retain the same inset as other grouped settings. */
 .settings-group-content > .settings-disclosure { margin: var(--ds-space-4); }
+
+.ai-reply-instructions { display: grid; gap: var(--ds-space-2); min-width: 0; padding: var(--ds-space-3) var(--ds-space-4); border-top: 1px solid var(--ds-separator); font-size: var(--ds-text-control); }
+.settings-page .ai-reply-instructions strong { font-weight: var(--ds-weight-normal); }
+.ai-reply-instructions textarea { width: 100%; box-sizing: border-box; min-height: 96px; max-height: 240px; resize: vertical; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-reply-instructions small { color: var(--ds-secondary); }
+
+.settings-ai-save-bar { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; gap: var(--ds-space-3); padding: var(--ds-space-3) var(--ds-space-5); border-top: 1px solid var(--ds-separator); background: var(--ds-sidebar); }
+.settings-ai-save-bar > span { flex: 1; min-width: 160px; color: var(--ds-secondary); font-size: var(--ds-text-control); }

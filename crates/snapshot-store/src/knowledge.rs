@@ -96,100 +96,126 @@ impl LocalSnapshotStore {
         text: &str,
         origin: &KnowledgeOrigin,
     ) -> Result<ObjectAnnotation> {
-        let text = text.trim();
-        if text.is_empty() || text.chars().count() > 2000 {
-            return Err(conflict("Use a description of 1–2,000 characters."));
-        }
         let mut tx = self.pool.begin().await?;
-        let identity = identity_in(&mut tx, source).await?;
-        if basis
-            .source_identity
-            .as_ref()
-            .is_some_and(|expected| expected != &identity)
-        {
-            return Err(conflict(
-                "The database connection changed. Review a fresh draft.",
-            ));
-        }
-        let states = states_in(&mut tx, source).await?;
-        let mut annotation = annotation_in(&mut tx, source, target).await?;
-        // A lost command response can be retried without a duplicate confirmation/write.
-        if states.iter().any(|s| {
-            s.object_key == *target
-                && s.status == KnowledgeStatus::Confirmed
-                && s.confirmation
-                    .as_ref()
-                    .is_some_and(|c| c.id == id && c.final_text == text)
-        }) {
-            return annotation.ok_or_else(|| conflict("The confirmed object is unavailable."));
-        }
-        if annotation_version(annotation.as_ref()) != expected_version {
-            return Err(conflict(
-                "The annotation was edited elsewhere. Reopen the comparison before confirming.",
-            ));
-        }
-        let snapshot = snapshot_in(&mut tx, source)
-            .await?
-            .ok_or_else(|| conflict("No current snapshot is available."))?;
-        if owning_table(&snapshot, target).is_none()
-            || !basis.structure_matches(&snapshot, &relationships_in(&mut tx, source).await?)
-            || !notes_match(basis, &states)
-        {
-            return Err(conflict(
-                "The target or supporting evidence changed. Review a fresh draft.",
-            ));
-        }
-        if !basis
-            .tables
-            .iter()
-            .any(|(key, _)| Some(key.clone()) == owning_table(&snapshot, target))
-        {
-            return Err(conflict("The draft has no evidence for its target."));
-        }
-        // A new confirmation must not invalidate one of the very notes it relies on.
-        if basis
-            .notes
-            .iter()
-            .any(|(key, _, _)| key == target || depends_on(key, target, &states, &mut Vec::new()))
-        {
-            return Err(conflict(
-                "This draft depends on circular team notes. Review against structure independently.",
-            ));
-        }
-        let mut annotation = annotation.take().unwrap_or(ObjectAnnotation {
-            source_id: source,
-            object_key: target.clone(),
-            description: None,
-            tags: vec![],
-            owner: None,
-            is_core: false,
-            updated_at: Utc::now(),
-        });
-        annotation.description = Some(text.into());
-        annotation.updated_at = Utc::now();
-        let mut basis = basis.clone();
-        basis.source_identity = Some(identity);
-        let record = KnowledgeConfirmation {
+        let result = confirm_in(
+            &mut tx,
             id,
-            source_id: source,
-            object_key: target.clone(),
-            final_text: text.into(),
-            description_digest: digest(&annotation.description),
-            snapshot_id: snapshot.id,
-            fingerprint: snapshot.fingerprint,
-            confirmed_at: Utc::now(),
+            source,
+            target,
+            expected_version,
             basis,
-            origin: origin.clone(),
-        };
-        sqlx::query("INSERT INTO object_annotations(source_id,object_key,updated_at,payload_json) VALUES(?,?,?,?) ON CONFLICT(source_id,object_key) DO UPDATE SET updated_at=excluded.updated_at,payload_json=excluded.payload_json")
-            .bind(source.to_string()).bind(serde_json::to_string(target)?).bind(annotation.updated_at.to_rfc3339()).bind(serde_json::to_string(&annotation)?).execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO annotation_confirmations(source_id,object_key,payload_json,invalid_reason) VALUES(?,?,?,NULL) ON CONFLICT(source_id,object_key) DO UPDATE SET payload_json=excluded.payload_json,invalid_reason=NULL")
-            .bind(source.to_string()).bind(serde_json::to_string(target)?).bind(serde_json::to_string(&record)?).execute(&mut *tx).await?;
-        states_in(&mut tx, source).await?;
+            text,
+            origin,
+        )
+        .await?;
         tx.commit().await?;
-        Ok(annotation)
+        Ok(result)
     }
 }
+
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+pub(super) async fn confirm_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    id: Uuid,
+    source: Uuid,
+    target: &ObjectKey,
+    expected_version: &str,
+    basis: &KnowledgeBasis,
+    text: &str,
+    origin: &KnowledgeOrigin,
+) -> Result<ObjectAnnotation> {
+    let text = text.trim();
+    if text.is_empty() || text.chars().count() > 2000 {
+        return Err(conflict("Use a description of 1–2,000 characters."));
+    }
+    let identity = identity_in(tx, source).await?;
+    if basis
+        .source_identity
+        .as_ref()
+        .is_some_and(|expected| expected != &identity)
+    {
+        return Err(conflict(
+            "The database connection changed. Review a fresh draft.",
+        ));
+    }
+    let states = states_in(tx, source).await?;
+    let mut annotation = annotation_in(tx, source, target).await?;
+    // A lost command response can be retried without a duplicate confirmation/write.
+    if states.iter().any(|s| {
+        s.object_key == *target
+            && s.status == KnowledgeStatus::Confirmed
+            && s.confirmation
+                .as_ref()
+                .is_some_and(|c| c.id == id && c.final_text == text)
+    }) {
+        return annotation.ok_or_else(|| conflict("The confirmed object is unavailable."));
+    }
+    if annotation_version(annotation.as_ref()) != expected_version {
+        return Err(conflict(
+            "The annotation was edited elsewhere. Reopen the comparison before confirming.",
+        ));
+    }
+    let snapshot = snapshot_in(tx, source)
+        .await?
+        .ok_or_else(|| conflict("No current snapshot is available."))?;
+    if owning_table(&snapshot, target).is_none()
+        || !basis.structure_matches(&snapshot, &relationships_in(tx, source).await?)
+        || !notes_match(basis, &states)
+    {
+        return Err(conflict(
+            "The target or supporting evidence changed. Review a fresh draft.",
+        ));
+    }
+    if !basis
+        .tables
+        .iter()
+        .any(|(key, _)| Some(key.clone()) == owning_table(&snapshot, target))
+    {
+        return Err(conflict("The draft has no evidence for its target."));
+    }
+    // A new confirmation must not invalidate one of the very notes it relies on.
+    if basis
+        .notes
+        .iter()
+        .any(|(key, _, _)| key == target || depends_on(key, target, &states, &mut Vec::new()))
+    {
+        return Err(conflict(
+            "This draft depends on circular team notes. Review against structure independently.",
+        ));
+    }
+    let mut annotation = annotation.take().unwrap_or(ObjectAnnotation {
+        source_id: source,
+        object_key: target.clone(),
+        description: None,
+        tags: vec![],
+        owner: None,
+        is_core: false,
+        updated_at: Utc::now(),
+    });
+    annotation.description = Some(text.into());
+    annotation.updated_at = Utc::now();
+    let mut basis = basis.clone();
+    basis.source_identity = Some(identity);
+    let record = KnowledgeConfirmation {
+        id,
+        source_id: source,
+        object_key: target.clone(),
+        final_text: text.into(),
+        description_digest: digest(&annotation.description),
+        snapshot_id: snapshot.id,
+        fingerprint: snapshot.fingerprint,
+        confirmed_at: Utc::now(),
+        basis,
+        origin: origin.clone(),
+    };
+    sqlx::query("INSERT INTO object_annotations(source_id,object_key,updated_at,payload_json) VALUES(?,?,?,?) ON CONFLICT(source_id,object_key) DO UPDATE SET updated_at=excluded.updated_at,payload_json=excluded.payload_json")
+            .bind(source.to_string()).bind(serde_json::to_string(target)?).bind(annotation.updated_at.to_rfc3339()).bind(serde_json::to_string(&annotation)?).execute(&mut **tx).await?;
+    sqlx::query("INSERT INTO annotation_confirmations(source_id,object_key,payload_json,invalid_reason) VALUES(?,?,?,NULL) ON CONFLICT(source_id,object_key) DO UPDATE SET payload_json=excluded.payload_json,invalid_reason=NULL")
+            .bind(source.to_string()).bind(serde_json::to_string(target)?).bind(serde_json::to_string(&record)?).execute(&mut **tx).await?;
+    states_in(tx, source).await?;
+    Ok(annotation)
+}
+
 fn depends_on(
     key: &ObjectKey,
     target: &ObjectKey,
@@ -222,7 +248,7 @@ fn notes_match(basis: &KnowledgeBasis, states: &[KnowledgeState]) -> bool {
         })
     })
 }
-async fn identity_in(tx: &mut Transaction<'_, Sqlite>, source: Uuid) -> Result<String> {
+pub(super) async fn identity_in(tx: &mut Transaction<'_, Sqlite>, source: Uuid) -> Result<String> {
     let row = sqlx::query("SELECT payload_json FROM data_sources WHERE id=?")
         .bind(source.to_string())
         .fetch_optional(&mut **tx)
@@ -232,7 +258,7 @@ async fn identity_in(tx: &mut Transaction<'_, Sqlite>, source: Uuid) -> Result<S
         .transpose()?;
     Ok(source_identity(profile.as_ref()))
 }
-async fn snapshot_in(
+pub(super) async fn snapshot_in(
     tx: &mut Transaction<'_, Sqlite>,
     source: Uuid,
 ) -> Result<Option<DatabaseSnapshot>> {
@@ -241,7 +267,7 @@ async fn snapshot_in(
         .map(|r| serde_json::from_str(r.get("payload_json")))
         .transpose()?)
 }
-async fn relationships_in(
+pub(super) async fn relationships_in(
     tx: &mut Transaction<'_, Sqlite>,
     source: Uuid,
 ) -> Result<Vec<LogicalRelationship>> {
@@ -252,7 +278,7 @@ async fn relationships_in(
             .await?,
     )
 }
-async fn annotation_in(
+pub(super) async fn annotation_in(
     tx: &mut Transaction<'_, Sqlite>,
     source: Uuid,
     target: &ObjectKey,

@@ -64,7 +64,7 @@ function TableSession({ platform, snapshot, table, settings, domains, desktop, a
     if (busy.current || pendingId.current || !enabled || !active || !question.trim() || (ai?.contextScope === "domain" && !domainId)) return;
     const current = epoch.current; busy.current = true; setPhase("preparing");
     try {
-      const next = await platform.prepareTableExplanation({ snapshotId: snapshot.id, target: table.key, question, focusColumn: focusColumn || null, domainId: domainId || null });
+      const next = await platform.prepareTableExplanation({ snapshotId: snapshot.id, target: table.key, question, uiLocale: chinese ? "zh-CN" : "en", focusColumn: focusColumn || null, domainId: domainId || null });
       if (current !== epoch.current) { void platform.cancelTableExplanation(next.requestId).catch(() => undefined); return; }
       if (next.sourceId !== snapshot.sourceId || next.snapshotId !== snapshot.id || next.fingerprint !== snapshot.fingerprint || next.context.target.schema !== table.key.schema || next.context.target.name !== table.key.name || next.context.focusColumn !== (focusColumn || null)) {
         void platform.cancelTableExplanation(next.requestId).catch(() => undefined);

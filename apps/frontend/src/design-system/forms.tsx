@@ -5,13 +5,13 @@ import { useId, type ReactNode } from "react";
 
 type ManagedSetting = { source: string; reason: string };
 
-export function SettingsSection({ title, description, children, managed }: { title: string; description: string; children: ReactNode; managed?: ManagedSetting }) {
+export function SettingsSection({ title, description, children, managed, disabled = false }: { disabled?: boolean; title: string; description: string; children: ReactNode; managed?: ManagedSetting }) {
   const { t } = useI18n();
 
   const titleId = useId();
   return <section className="settings-section" aria-labelledby={titleId}>
     <header><h2 id={titleId}>{title}</h2><p>{description}</p>{managed ? <em className="managed-section" title={managed.reason}>{t("settings.managed")}{" "}{managed.source}</em> : null}</header>
-    <fieldset className="settings-card" disabled={Boolean(managed)} aria-label={t("settings.preferences", { value0: title })}>{children}</fieldset>
+    <fieldset className="settings-card" disabled={Boolean(managed) || disabled} aria-label={t("settings.preferences", { value0: title })}>{children}</fieldset>
   </section>;
 }
 
@@ -40,8 +40,8 @@ export function NumberRow({ label, value, min, max, unit, onChange }: { label: s
   return <label className="setting-row setting-number"><span><strong>{label}</strong>{unit ? <small>{unit}</small> : null}</span><input aria-label={label} type="number" value={value} min={min} max={max} onChange={(event) => onChange(Number(event.target.value))} /></label>;
 }
 
-export function TextRow({ label, value, placeholder, onChange }: { label: string; value: string; placeholder?: string; onChange: (value: string) => void }) {
-  return <label className="setting-row"><span><strong>{label}</strong></span><input type="text" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} /></label>;
+export function TextRow({ label, value, placeholder, readOnly, onChange }: { label: string; value: string; placeholder?: string; readOnly?: boolean; onChange: (value: string) => void }) {
+  return <label className="setting-row"><span><strong>{label}</strong></span><input readOnly={readOnly} type="text" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 export function SecretRow({ label, value, configured, onChange, onSave, showSave = true }: { label: string; value: string; configured: boolean; onChange: (value: string) => void; onSave: () => void; showSave?: boolean }) {

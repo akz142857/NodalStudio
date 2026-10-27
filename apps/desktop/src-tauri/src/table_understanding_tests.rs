@@ -40,6 +40,7 @@ async fn fixture(endpoint: &str) -> (AppState, TableInput, DataSourceSettings) {
     settings.ai.model = "fixture-model".into();
     store.save_data_source_settings(&settings).await.unwrap();
     let input = TableInput {
+        ui_locale: None,
         snapshot_id: snapshot.id,
         target: ObjectKey::table("public", "orders"),
         focus_column: None,

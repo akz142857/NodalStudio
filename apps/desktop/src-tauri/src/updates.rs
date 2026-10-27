@@ -112,6 +112,9 @@ fn transport_allowed(url: &reqwest::Url, app_id: &str) -> bool {
         && url.password().is_none()
 }
 async fn feed(app: &tauri::AppHandle, state: &AppState, online: bool) -> Result<Feed, String> {
+    if crate::purchase::IS_MAS {
+        return Err("Updates are managed by the Mac App Store.".into());
+    }
     let effective = crate::effective_settings(&state.store, None).await?;
     if online && effective.app.privacy.offline_mode {
         return Err("Update checks and downloads are blocked by completely offline mode.".into());
@@ -191,6 +194,15 @@ pub async fn get_update_status(
     state: State<'_, AppState>,
     updates: State<'_, UpdateState>,
 ) -> Result<UpdateStatus, String> {
+    if crate::purchase::IS_MAS {
+        return Ok(UpdateStatus {
+            phase: "idle",
+            current_version: app.package_info().version.to_string(),
+            source: Some("Mac App Store".into()),
+            configuration_message: Some("Updates are managed by the Mac App Store.".into()),
+            ..Default::default()
+        });
+    }
     let selected = feed(&app, &state, false).await;
     let mut result = updates
         .session

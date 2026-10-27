@@ -1,3 +1,4 @@
+import { ChangeReviewWorkspace } from "./components/change-review/ChangeReviewWorkspace";
 import { findDocumentObject } from "./components/object-document-model";
 import { ObjectDocument, ObjectDocumentProperties } from "./components/ObjectDocument";
 import { capabilityMessages } from "./i18n/capabilities";
@@ -111,6 +112,7 @@ export function App() {
     const observer = new ResizeObserver(update); observer.observe(topbar); update();
     return () => observer.disconnect();
   }, [ddlMounted]);
+  const [reviewView, setReviewView] = useState<"review" | "history">("review");
   const [changesView, setChangesView] = useState<"list" | "diagram">("list");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -182,7 +184,7 @@ export function App() {
     queryFn: () => platform.getRuntimeInfo(),
   });
   const availableUpdate = useAvailableUpdate(platform,
-    settingsAvailable && runtime.data?.kind === "desktop" && settings.app.updates.automaticChecks && !settings.app.privacy.offlineMode,
+    settingsAvailable && runtime.data?.kind === "desktop" && runtime.data.distribution !== "macAppStore" && settings.app.updates.automaticChecks && !settings.app.privacy.offlineMode,
     settings.app.updates);
   const updateNotificationsEnabled = settings.app.notifications.updateAvailable && !isQuietHours(settings.app.notifications);
   const showUpdateBanner = Boolean(availableUpdate && updateNotificationsEnabled && dismissedUpdate !== availableUpdate);
@@ -191,6 +193,12 @@ export function App() {
     queryFn: () => platform.listSnapshots(snapshot!.sourceId),
     enabled: runtime.data?.kind === "desktop" && !!snapshot,
   });
+  useEffect(() => {
+    const openReview = () => { setReviewView("review"); setMode("changes"); setPreflightOpen(false); };
+    window.addEventListener("nodalstudio:change-review", openReview);
+    return () => window.removeEventListener("nodalstudio:change-review", openReview);
+  }, [setPreflightOpen]);
+  const pendingUnderstandingCount = (semantics.knowledge ?? []).filter(state => state.status !== "confirmed" && [...semantics.annotations, ...semantics.orphanedAnnotations].some(a => a.description?.trim() && a.objectKey.kind === state.objectKey.kind && a.objectKey.schema === state.objectKey.schema && a.objectKey.name === state.objectKey.name)).length;
   const queryCapability = resolveCapability("read-only-query", runtime.data?.kind, snapshot?.database.databaseType);
   const queryTarget = currentCapabilityTarget(runtime.data?.kind, snapshot?.database.databaseType);
   const queryScope = queryTarget ? t(capabilityMessages["read-only-query"].targets[queryTarget]) : t("navigation.query.unknown");
@@ -570,7 +578,7 @@ export function App() {
         publishNotice({ id: "storage-warning", title: translate("navigation.localStorageWarning"), message: translate("navigation.nodalStudioLocalDataUses", { value0: formatAppBytes(totalBytes) }), createdAt: new Date().toISOString() });
       }
       if (!snapshot || !settings.source) return;
-      if (settings.app.notifications.cloudFailures) {
+      if (runtime.data?.distribution !== "macAppStore" && settings.app.notifications.cloudFailures) {
         const queue = await platform.listSyncDiagnostics(snapshot.sourceId);
         if (active && queue.some((item) => item.state === "conflict" || item.attempts > 0)) {
           publishNotice({ id: `cloud-queue-${snapshot.sourceId}`, title: translate("navigation.cloudSyncNeedsAttention"), message: translate("navigation.queuedItemSIncludingFailedOrConflictedMetadata", { value0: queue.length }), createdAt: new Date().toISOString() });
@@ -609,7 +617,7 @@ export function App() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [publishNotice, runtime.data?.kind, settings.app.history.storageWarningMegabytes, settings.app.notifications.cloudFailures, settings.app.notifications.gitConflicts, settings.app.notifications.storageWarnings, settings.source, settingsLoaded, snapshot, translate]);
+  }, [publishNotice, runtime.data?.kind, runtime.data?.distribution, settings.app.history.storageWarningMegabytes, settings.app.notifications.cloudFailures, settings.app.notifications.gitConflicts, settings.app.notifications.storageWarnings, settings.source, settingsLoaded, snapshot, translate]);
 
   useEffect(() => {
     function openFromLocation() {
@@ -849,6 +857,7 @@ export function App() {
     setSnapshot(afterSnapshot);
     setChangeSet(comparison);
     setChangesView("list");
+    setReviewView("history");
     setMode("changes");
     setSelectedTable(undefined);
     setLocateRequest(undefined);
@@ -951,6 +960,7 @@ export function App() {
           </div> : null}
         </label>
         <div className="runtime-actions" role="group" aria-label={t("navigation.applicationTools")}>
+          {snapshot && runtime.data?.kind === "desktop" && !historyPreview ? <button className="review-entry" onClick={() => window.dispatchEvent(new Event("nodalstudio:change-review"))}>{i18n.locale === "zh-CN" ? "复核理解" : "Review understanding"}{pendingUnderstandingCount > 0 ? ` · ${pendingUnderstandingCount}` : ""}</button> : null}
           {snapshot && runtime.data?.kind === "desktop" && discoveryLatest.data?.[0]?.id === snapshot.id && mode === "explore" && !preflightOpen && semanticsSettledSnapshot === snapshot ? <IconButton icon="question" label={t("navigation.businessQuestion")} description={t("navigation.findRelevantTablesFromABusinessQuestion")} aria-pressed={Boolean(discoverySnapshot)} onClick={() => { setSearchOpen(false); setDiscoverySnapshot(snapshot); }} /> : null}
           <IconButton icon="import" label={t("navigation.importDDL")} onClick={() => setDdlPreviewOpen(true)} description={t("navigation.openATemporaryPostgreSQLMySQLFileOrClipboard")} />
           {refreshOperation.state?.phase === "error" ? <div className="refresh-operation-result"><OperationFeedback label={t("navigation.snapshotRefresh")} state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel={t("navigation.retrySnapshotRefresh")} onDismiss={refreshOperation.dismiss} /></div> : null}
@@ -1057,9 +1067,10 @@ export function App() {
           }
         />
 
-        <section className={`canvas-placeholder${snapshot && mode === "explore" ? " database-workspace" : ""}${mode === "changes" && changeSet ? " changes-workspace" : ""}`}>
+        <section className={`canvas-placeholder${snapshot && mode === "explore" ? " database-workspace" : ""}${mode === "changes" ? " changes-workspace" : ""}`}>
           {historyPreview && snapshot ? <div className="workspace-history-banner" role="status"><span>{t("navigation.historicalWorkspaceLayoutChangesAreTemporary")}</span><button type="button" onClick={() => { void returnToLatestModel().catch((reason: unknown) => publishNotice({ id: "return-latest-failed", title: t("navigation.unableToOpenLatestModel"), message: noticeReason(reason), createdAt: new Date().toISOString() })); }}>{t("navigation.returnToLatestModel")}</button></div> : null}
-          {!preflightOpen && mode === "changes" && changeSet ? (
+          {mode === "changes" ? <div className="changes-view-toolbar"><button aria-pressed={reviewView === "review"} onClick={() => setReviewView("review")}>{i18n.locale === "zh-CN" ? "本轮复核" : "Current review"}</button><button aria-pressed={reviewView === "history"} onClick={() => setReviewView("history")}>{i18n.locale === "zh-CN" ? "历史比较" : "History comparison"}</button></div> : null}
+          {!preflightOpen && mode === "changes" && reviewView === "history" && changeSet ? (
             <div className="changes-view-toolbar">
               <Segmented
                 label={t("navigation.changesView")}
@@ -1077,7 +1088,13 @@ export function App() {
               const table = snapshot.schemas.flatMap((schema) => schema.tables).find((item) => item.key.schema === key.schema && item.key.name === key.name);
               if (table) locateSearchResult({ schema: key.schema, table, matchingColumns: [] });
             }} /> : null}
-          {mode === "query" ? (
+          {mode === "changes" && reviewView === "review" && snapshot ? (
+            runtime.data?.kind === "desktop" && !historyPreview ? <ChangeReviewWorkspace platform={platform} sourceId={snapshot.sourceId} revision={JSON.stringify([snapshot.id, semantics])} onChanged={refreshSemantics} onRefresh={() => void refreshActive()} onLocate={(key) => {
+              const table = snapshot.schemas.flatMap(s => s.tables).find(t => t.key.schema === key.schema && (t.key.name === key.name || key.name.startsWith(`${t.key.name}.`)));
+              if (table) locateSearchResult({ schema: table.key.schema, table, matchingColumns: [] });
+              return Boolean(table);
+            }} /> : <p>{i18n.locale === "zh-CN" ? "请返回桌面应用中的最新数据库模型进行复核。" : "Return to the latest connected desktop model to review changes."}</p>
+          ) : mode === "query" ? (
             <Suspense fallback={<div className="workspace-loading" role="status">{t("navigation.loadingWorkspace")}</div>}><QueryPage
               platform={platform}
               snapshot={snapshot}
@@ -1220,7 +1237,7 @@ export function App() {
             onOpenSettings={openSettings}
             onSelectSnapshot={handleHistorySnapshot}
             onCompareSnapshots={handleComparison}
-            onReviewChanges={() => { setMode("changes"); setChangesView("list"); }}
+            onReviewChanges={() => { setReviewView("history"); setMode("changes"); setChangesView("list"); }}
           />
           </div>
         </aside>

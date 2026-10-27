@@ -66,6 +66,8 @@ export class TauriPlatform implements NodalStudioPlatform {
   undoRelationshipBatch(sourceId: string, batchId: string): Promise<import("./relationship-batches").ReviewBatch> { return invoke("undo_relationship_batch", { input: { sourceId, batchId } }); }
 
   exportQueryResult(input: import("./types").QueryExportInput): Promise<string | null> { const { locale, ...exportInput } = input; return invoke("export_query_result", { ...(locale ? { locale } : {}), input: { ...exportInput, result: { ...input.result, rows: input.result.rows.map((row) => row.map((cell) => cell.kind === "json" && cell.raw !== undefined ? { ...cell, value: null } : cell)) } } }); }
+  getChangeReview(sourceId: string, query?: import("./change-review-types").ChangeReviewQuery): Promise<import("./change-review-types").ChangeReviewWorkspace> { return invoke("get_change_review", { sourceId, query }); }
+  applyChangeReview(input: import("./change-review-types").ChangeReviewRequest, query?: import("./change-review-types").ChangeReviewQuery): Promise<import("./change-review-types").ChangeReviewWorkspace> { return invoke("apply_change_review", { input, query }); }
   prepareKnowledgeDraft(input: import("./knowledge-types").KnowledgeDraftInput): Promise<import("./knowledge-types").KnowledgeDraft> { return invoke("prepare_knowledge_draft", { input }); }
   confirmKnowledgeDraft(id: string, text: string): Promise<ObjectAnnotation> { return invoke("confirm_knowledge_draft", { id, text }); }
   cancelKnowledgeDraft(id: string): Promise<void> { return invoke("cancel_knowledge_draft", { id }); }
@@ -111,6 +113,7 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke<void>("reveal_app_directory", { input: { kind } });
   }
 
+  pickWorkspacePath(kind: "openSettings" | "saveSettings" | "openBackup" | "saveBackup" | "repository"): Promise<string | null> { return invoke("pick_workspace_path", { kind }); }
   pickConnectionFile(): Promise<string | null> {
     return invoke<string | null>("pick_connection_file");
   }
@@ -432,6 +435,9 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke<BackupReceipt>("import_portable_backup", { input: { sourceId: null, path } });
   }
 
+  openAppStore(): Promise<void> { return invoke("open_app_store"); }
+  getPurchaseStatus(): Promise<import("./purchase-types").PurchaseStatus> { return invoke("get_purchase_status"); }
+  restoreAppPurchase(): Promise<import("./purchase-types").PurchaseStatus> { return invoke("restore_app_purchase"); }
   getUpdateStatus(): Promise<import("./settings-types").UpdateStatus> { return invoke("get_update_status"); }
   openUpdateReleases(): Promise<void> { return invoke("open_update_releases"); }
   downloadUpdate(): Promise<void> { return invoke("download_update"); }

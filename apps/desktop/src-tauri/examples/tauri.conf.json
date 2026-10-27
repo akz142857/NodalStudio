@@ -1,0 +1,27 @@
+{
+  "productName": "Nodal Sandbox Compatibility",
+  "version": "0.2.4",
+  "identifier": "com.claycosmos.nodaltest",
+  "build": {
+    "frontendDist": "sandbox-ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Nodal Sandbox Compatibility",
+        "width": 1000,
+        "height": 720
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "icon": [
+      "../icons/icon.png"
+    ]
+  }
+}

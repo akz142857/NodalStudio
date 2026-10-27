@@ -2941,3 +2941,5 @@ textarea {
 
 /* Keep opened routine details below the sticky object search field. */
 .schema-program-preview { scroll-margin-top: 4rem; }
+
+.query-editor-action-message { position: absolute; top: 0; right: 12px; z-index: 5; max-width: 85%; padding: 8px 12px; border: 1px solid var(--ds-border); border-radius: 6px; background: var(--ds-control); color: var(--ds-text); font-size: 12px; }

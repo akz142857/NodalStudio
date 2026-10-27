@@ -25,14 +25,14 @@ describe("discovery request lifecycle", () => {
     expect(screen.getByRole("region", { name: "Located discovery evidence" })).toBeVisible();
     expect(document.activeElement).toHaveAttribute("data-evidence-target", "true");
     expect(document.activeElement).toHaveTextContent("customer_id");
-    expect(p.mocks.prepareDiscovery).toHaveBeenCalledExactlyOnceWith(p.input);
+    expect(p.mocks.prepareDiscovery).toHaveBeenCalledExactlyOnceWith({ ...p.input, replyLanguage: { currentQuestion: p.input.task.question, uiLocale: "en" } });
   });
-  it("cleans up a preparation that arrives after cancellation", async () => {
+  it.each([false, true])("cleans up preparation after cancellation (direct send: %s)", async (directSend) => {
     const p = props(); const pending = deferred<DiscoveryPreview>(); const preview = discoveryPreview(p.input);
-    p.mocks.prepareDiscovery.mockReturnValue(pending.promise); render(<DiscoveryAssistant {...p} />);
+    p.mocks.prepareDiscovery.mockReturnValue(pending.promise); render(<DiscoveryAssistant {...p} directSend={directSend} />);
     fireEvent.click(screen.getByRole("button", { name: "Prepare discovery preview" })); fireEvent.click(screen.getByRole("button", { name: "Cancel AI step" }));
     await act(async () => { pending.resolve(preview); await pending.promise; });
-    expect(p.mocks.cancelDiscovery).toHaveBeenCalledWith(preview.requestId); expect(screen.queryByRole("button", { name: "Send this discovery request" })).toBeNull();
+    expect(p.mocks.runDiscovery).not.toHaveBeenCalled(); expect(p.mocks.cancelDiscovery).toHaveBeenCalledWith(preview.requestId); expect(screen.queryByRole("button", { name: "Send this discovery request" })).toBeNull();
   });
   it("discards a late answer after cancel and accepts only the new task", async () => {
     const p = props(); const pending = deferred<DiscoveryResult>(); const old = discoveryPreview(p.input);

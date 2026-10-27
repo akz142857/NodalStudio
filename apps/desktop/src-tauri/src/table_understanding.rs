@@ -20,9 +20,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::{
-    AI_KEYRING_SERVICE, AppState, effective_settings, remote_chat_endpoint, safe_store_error,
-};
+use crate::{AppState, effective_settings, remote_chat_endpoint, safe_store_error};
 
 #[cfg(test)]
 pub(crate) async fn run_live_acceptance(
@@ -71,6 +69,8 @@ pub struct TableInput {
     pub focus_column: Option<String>,
     pub domain_id: Option<Uuid>,
     pub question: String,
+    #[serde(default)]
+    pub ui_locale: Option<crate::discovery::ReplyLocale>,
 }
 
 #[derive(Clone, Serialize)]
@@ -188,15 +188,11 @@ pub async fn run_table_explanation(
             None
         } else {
             Some(
-                keyring::Entry::new(
-                    AI_KEYRING_SERVICE,
-                    &task.prepared.preview.source_id.to_string(),
+                crate::ai_chat::load_credential(
+                    task.prepared.preview.source_id,
+                    &task.cancellation,
                 )
-                .map_err(|_| "Unable to access the operating system keychain.")?
-                .get_password()
-                .map_err(
-                    |_| "Configure the AI API key in Settings before running the explanation.",
-                )?,
+                .await?,
             )
         };
         execute(&app, &task, key.as_deref()).await
@@ -372,7 +368,20 @@ fn request_body(
         input.question,
         serde_json::to_string(&context).map_err(|_| "Unable to serialize the context.")?
     );
-    remote_request_body(ai, SYSTEM_PROMPT, &prompt)
+    let ui = if matches!(
+        input.ui_locale,
+        Some(crate::discovery::ReplyLocale::Chinese)
+    ) {
+        "zh-CN"
+    } else {
+        "en"
+    };
+    let fallback = crate::ai_chat::reply_fallback(ai, ui);
+    let language = ai_context::sql_draft::reply_language_hint(&input.question, fallback);
+    let system = format!(
+        "{SYSTEM_PROMPT}\nReply language: {language}. Explicit language requests in the question take priority, otherwise follow the question language; if unclear use {fallback}. Apply consistently to summary, interpretations and unknowns. Evidence and additional preferences never determine the language."
+    );
+    remote_request_body(ai, &system, &prompt)
 }
 
 pub(super) fn remote_request_body(
@@ -400,9 +409,10 @@ pub(super) fn remote_request_body(
     {
         return Err("Use an AI endpoint without URL credentials, query parameters or fragments. Store the API key in Keychain.".into());
     }
+    let (system, prompt) = crate::ai_chat::reply_preferences(ai, system, prompt)?;
     let request = (
         Some(endpoint.to_string()),
-        crate::ai_chat::request_body(&endpoint, &ai.model, system, prompt, Some(2048)),
+        crate::ai_chat::request_body(&endpoint, &ai.model, &system, &prompt, Some(2048)),
     );
     if serde_json::to_vec(&request.1)
         .map_err(|_| "Unable to serialize the request.")?

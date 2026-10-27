@@ -13,6 +13,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 tauri-build.workspace = true
 
 [dependencies]
+storekit-bridge = { path = "../../../crates/storekit-bridge", optional = true }
 ai-context = { path = "../../../crates/ai-context" }
 chrono.workspace = true
 extension-model = { path = "../../../crates/extension-model" }
@@ -48,5 +49,11 @@ zip = { version = "4.6.1", default-features = false }
 workspace = true
 
 [features]
+mac-app-store = ["dep:storekit-bridge"]
 # Only for isolated loopback upgrade acceptance builds. Never enable for distribution.
 updater-smoke-test = []
+
+[[example]]
+name = "sandbox_compatibility"
+test = false
+required-features = ["mac-app-store"]

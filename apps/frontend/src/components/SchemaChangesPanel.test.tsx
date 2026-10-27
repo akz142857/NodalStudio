@@ -41,6 +41,11 @@ function mount(options: { before?: DatabaseSnapshot; after?: DatabaseSnapshot; c
 }
 
 describe("SchemaChangesPanel", () => {
+  it.each([0, 1, 2])("uses the correct structural-change heading for %i changes", (count) => {
+    mount({ changeSet: changes(Array.from({ length: count }, () => operation)) });
+    expect(screen.getByRole("heading", { name: `${count} structural ${count === 1 ? "change" : "changes"}` })).toBeVisible();
+  });
+
   it("reveals defaults and comments that the identical operation summaries omit", async () => {
     const { getSnapshot } = mount();
     const properties = await screen.findByRole("table", { name: "Before and after properties" });

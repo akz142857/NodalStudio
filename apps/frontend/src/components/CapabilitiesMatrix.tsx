@@ -12,6 +12,7 @@ export function CapabilitiesMatrix({ runtime, database }: { runtime?: RuntimeInf
   const [selected, setSelected] = useState<CapabilityId>("read-only-query");
   const current = currentCapabilityTarget(runtime?.kind, database?.databaseType);
   const definitions = capabilityDefinitions.filter((definition) =>
+    (runtime?.distribution !== "macAppStore" || definition.id !== "cloud-publish") &&
     (!status || capabilityTargets.some((target) => definition.targets[target.id].status === status))
     && [definition.name, definition.category, t(capabilityMessages[definition.id].name), t(capabilityMessages[definition.id].category), ...capabilityTargets.map((target) => t(capabilityMessages[definition.id].targets[target.id])), ...capabilityTargets.map((target) => definition.targets[target.id].scope)].join(" ").toLowerCase().includes(query.trim().toLowerCase()));
   const detail = definitions.find((definition) => definition.id === selected) ?? definitions[0];

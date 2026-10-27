@@ -36,6 +36,7 @@ describe("App capability integration", () => {
     await mount("desktop");
     fireEvent.click(screen.getByRole("button", { name: "Load MySQL fixture" }));
     fireEvent.click(screen.getByRole("button", { name: "Changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "History comparison" }));
     expect(await screen.findByText(count === 1 ? "Your first snapshot is the starting point." : "Choose two snapshots to compare.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Open history" }));
     expect(screen.getByRole("button", { name: "History" })).toHaveAttribute("aria-pressed", "true");

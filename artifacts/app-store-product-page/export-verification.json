@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-25",
+  "revision": "AI-era database model positioning",
+  "files": [
+    {
+      "file": "en-US/01-database-structure.png",
+      "size": [
+        2880,
+        1800
+      ],
+      "mode": "RGB",
+      "source_alpha_extrema": [
+        255,
+        255
+      ],
+      "rgb_pixels_unchanged": true,
+      "sha256": "92deda1944d9e5320ec7b999d3a286d24f8df66ddd577d8a71370f0d9b6f4b5d"
+    },
+    {
+      "file": "en-US/02-change-review.png",
+      "size": [
+        2880,
+        1800
+      ],
+      "mode": "RGB",
+      "source_alpha_extrema": [
+        255,
+        255
+      ],
+      "rgb_pixels_unchanged": true,
+      "sha256": "46c40bb9aa86a5660f4644accea42bc1de3e6e9f0c53c149b9ad7db6ea4cc24c"
+    },
+    {
+      "file": "en-US/03-field-context.png",
+      "size": [
+        2880,
+        1800
+      ],
+      "mode": "RGB",
+      "source_alpha_extrema": [
+        255,
+        255
+      ],
+      "rgb_pixels_unchanged": true,
+      "sha256": "04f790339bda17fc932da8500392bfe5f90f1f2a7cf8392b9567e35595f68e05"
+    },
+    {
+      "file": "en-US/04-ai-sql-drafts.png",
+      "size": [
+        2880,
+        1800
+      ],
+      "mode": "RGB",
+      "source_alpha_extrema": [
+        255,
+        255
+      ],
+      "rgb_pixels_unchanged": true,
+      "sha256": "b135dfdbd16522906c0def9813769b7f762d8ea3c18611ef05b4e633b6314e65"
+    },
+    {
+      "file": "en-US/05-query-charts.png",
+      "size": [
+        2880,
+        1800
+      ],
+      "mode": "RGB",
+      "source_alpha_extrema": [
+        255,
+        255
+      ],
+      "rgb_pixels_unchanged": true,
+      "sha256": "5a3fbf70e47ba464aee9e477c35fbce99e889a52e040c2687c4cad64f2234d11"
+    }
+  ]
+}

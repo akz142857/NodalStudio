@@ -2,11 +2,13 @@ import { useI18n } from "../i18n";
 import { useState } from "react";
 import type {
   AiExplanation,
+  DataSourceSettings,
   ExplainSchemaInput,
   NodalStudioPlatform,
 } from "../platform";
 
 interface AiAssistantProps {
+  ai?: DataSourceSettings["ai"];
   platform: NodalStudioPlatform;
   input: Omit<ExplainSchemaInput, "aiEnabled" | "question" | "relationshipDepth">;
   onConfirmCandidate?: (candidate: string) => Promise<void>;
@@ -15,15 +17,26 @@ interface AiAssistantProps {
   onOpenSettings: () => void;
 }
 
-export function AiAssistant({ platform, input, onConfirmCandidate, enabled, providerLabel, onOpenSettings }: AiAssistantProps) {
-  const { t: bt, formatDate } = useI18n();
+export function AiAssistant(props: AiAssistantProps) {
   const [question, setQuestion] = useState("");
   const [depth, setDepth] = useState(1);
+  return <AiAssistantSession question={question} setQuestion={setQuestion} depth={depth} setDepth={setDepth} key={JSON.stringify([props.input, props.ai, props.enabled])} {...props} />;
+}
+
+function AiAssistantSession({ ai, platform, input, onConfirmCandidate, enabled, providerLabel, onOpenSettings, question, setQuestion, depth, setDepth }: AiAssistantProps & { question: string; setQuestion: (value: string) => void; depth: number; setDepth: (value: number) => void }) {
+  const { t: bt, formatDate } = useI18n();
   const [result, setResult] = useState<AiExplanation>();
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "confirmed">("idle");
   const [error, setError] = useState<string>();
 
+  const [preview, setPreview] = useState<string>();
+  const remote = ai?.provider === "openAiCompatible";
+  const requestKey = JSON.stringify({ input, question, depth, ai });
+  const previewVisible = preview === requestKey;
+
   async function explain() {
+    if (remote && !previewVisible) { setPreview(requestKey); return; }
+    setPreview(undefined);
     setStatus("loading");
     try {
       setResult(
@@ -32,6 +45,7 @@ export function AiAssistant({ platform, input, onConfirmCandidate, enabled, prov
           aiEnabled: enabled,
           question: question || undefined,
           relationshipDepth: depth,
+          remoteConsent: remote && ai ? { endpoint: ai.endpoint, model: ai.model, includeComments: ai.includeComments } : undefined,
         }),
       );
       setStatus("idle");
@@ -77,8 +91,17 @@ export function AiAssistant({ platform, input, onConfirmCandidate, enabled, prov
               </select>
             </label>
           ) : null}
+          {previewVisible && remote ? <div className="data-boundary" role="region" aria-label={bt("submission.aiPreview")}>
+            <h4>{bt("submission.aiPreview")}</h4>
+            <p>{bt("submission.aiDestination")}: {ai?.endpoint} · {ai?.model}</p>
+            <p>{bt("submission.aiScope")}</p>
+            <p>{bt("submission.aiComments")}: {ai?.includeComments ? bt("settings.enabled") : bt("settings.off")}</p>
+            <p>{question || bt("submission.noQuestion")}</p>
+            <p>{bt("submission.sensitiveInput")}</p>
+            <button type="button" onClick={() => setPreview(undefined)}>{bt("submission.cancel")}</button>
+          </div> : null}
           <button type="button" onClick={() => void explain()} disabled={status === "loading"}>
-            {status === "loading" ? bt("businessSupport.analyzing") : bt("businessSupport.explainFromMetadata")}
+            {status === "loading" ? bt("businessSupport.analyzing") : previewVisible && remote ? bt("submission.send") : remote ? bt("submission.aiPreview") : bt("businessSupport.explainFromMetadata")}
           </button>
         </>
       ) : <button type="button" className="panel-settings-link" onClick={onOpenSettings}>{bt("businessSupport.configureInSettingsAI")}</button>}

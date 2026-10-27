@@ -69,7 +69,7 @@ pub fn from_binary(
     })
 }
 
-/// Save only a generated diagram in Downloads, without replacing an existing file.
+/// Save only a generated diagram in the selected directory, without replacing an existing file.
 pub fn save(input: &DiagramExportInput, directory: &Path) -> Result<DiagramExportReceipt, String> {
     let extension = match input.format {
         DiagramFormat::Svg => "svg",

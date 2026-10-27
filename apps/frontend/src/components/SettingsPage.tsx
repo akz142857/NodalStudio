@@ -1,8 +1,11 @@
+import { AiReplyPreferences } from "./settings/AiReplyPreferences";
 import { Button } from "../design-system/Button";
 import { I18nProvider, useI18n, type Locale, formatDate } from "../i18n";
+import applicationLicense from "../../../../LICENSE?raw";
+import { PrivacyPolicy } from "./settings/PrivacyPolicy";
 import { UpdatePanel } from "./settings/UpdatePanel";
 import { useUpdateBlocker } from "../platform/update-guard";
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
 import { SettingsSection, SettingsGroup, ToggleRow, SelectRow, RangeRow, NumberRow, TextRow, SecretRow } from "./settings/SettingsControls";
 import "./settings/settings.css";
@@ -28,6 +31,8 @@ import {
   type ExternalAccessRecord,
 } from "../platform";
 
+const ThirdPartyNotices = lazy(() => import("./settings/ThirdPartyNotices"));
+
 const categories = [
   ["general", "General", "language theme startup date time"],
   ["appearance", "Appearance", "density font sidebar inspector motion contrast"],
@@ -35,7 +40,7 @@ const categories = [
   ["data-sources", "Data Sources", "database refresh timeout ssl connection"],
   ["history", "History & Storage", "snapshot retention backup cache disk"],
   ["git", "Git", "repository merge driver conflict fingerprint"],
-  ["ai", "AI", "provider model context privacy explanation"],
+  ["ai", "AI", "provider model context privacy explanation reply preferences instructions language detail terminology"],
   ["cloud", "Cloud Sync", "team project sync offline queue conflict"],
   ["privacy", "Privacy & Security", "offline diagnostics token keychain log"],
   ["notifications", "Notifications", "schema change conflict warning quiet"],
@@ -53,7 +58,7 @@ const categoryIcons: Record<SettingsCategory, ActionIconName> = {
   notifications: "bell", shortcuts: "command", updates: "info", capabilities: "grid", advanced: "sliders",
 };
 const categoryMessages = {"general":"settings.category.general","appearance":"settings.category.appearance","canvas":"settings.category.canvas","data-sources":"settings.category.data-sources","history":"settings.category.history","git":"settings.category.git","ai":"settings.category.ai","cloud":"settings.category.cloud","privacy":"settings.category.privacy","notifications":"settings.category.notifications","shortcuts":"settings.category.shortcuts","updates":"settings.category.updates","capabilities":"settings.category.capabilities","advanced":"settings.category.advanced"} as const;
-const categoryAliases: Record<SettingsCategory, string> = {"general":"语言 主题 启动 日期 时间 language theme startup date time","appearance":"密度 字体 侧栏 详情 动效 对比度","canvas":"字段 外键 索引 关系 布局 注释","data-sources":"数据库 刷新 超时 连接","history":"快照 保留 备份 缓存 磁盘","git":"仓库 合并 冲突 指纹","ai":"提供方 模型 上下文 隐私 解释","cloud":"团队 项目 同步 离线 队列 冲突","privacy":"诊断 令牌 密钥 凭据 日志 安全","notifications":"结构 变更 冲突 警告 免打扰","shortcuts":"键盘 命令 聚焦 刷新 侧栏","updates":"版本 更新 通道 许可证 日志","capabilities":"支持 范围 矩阵 查询 图 导出 预检 限制","advanced":"性能 实验 重置 恢复"};
+const categoryAliases: Record<SettingsCategory, string> = {"general":"语言 主题 启动 日期 时间 language theme startup date time","appearance":"密度 字体 侧栏 详情 动效 对比度","canvas":"字段 外键 索引 关系 布局 注释","data-sources":"数据库 刷新 超时 连接","history":"快照 保留 备份 缓存 磁盘","git":"仓库 合并 冲突 指纹","ai":"提供方 模型 上下文 隐私 解释 回复 偏好 附加 指令 语言 详略 术语","cloud":"团队 项目 同步 离线 队列 冲突","privacy":"诊断 令牌 密钥 凭据 日志 安全","notifications":"结构 变更 冲突 警告 免打扰","shortcuts":"键盘 命令 聚焦 刷新 侧栏","updates":"版本 更新 通道 许可证 日志","capabilities":"支持 范围 矩阵 查询 图 导出 预检 限制","advanced":"性能 实验 重置 恢复"};
 const navigationGroups = [
   { title: "settings.group.workspace", items: categories.slice(0, 5) },
   { title: "settings.group.services", items: categories.slice(5, 8) },
@@ -102,6 +107,7 @@ function SettingsContent({
 }: SettingsPageProps) {
   const { t, locale, plural } = useI18n();
 
+  const isMas = runtime?.distribution === "macAppStore";
   const commandLabels: Record<string, string> = { openSettings: t("settings.command.openSettings"), focusSearch: t("settings.command.focusSearch"), refreshSchema: t("settings.command.refreshSchema"), toggleLeftSidebar: t("settings.command.toggleLeftSidebar"), toggleRightInspector: t("settings.command.toggleRightInspector"), fitCanvas: t("settings.command.fitCanvas"), focusSelectedTable: t("settings.command.focusSelectedTable"), relayoutCanvas: t("settings.command.relayoutCanvas"), largeModelVirtualization: t("settings.command.largeModelVirtualization"), relationshipInferenceV2: t("settings.command.relationshipInferenceV2"), environmentDrift: t("settings.command.environmentDrift"), migrationProvenance: t("settings.command.migrationProvenance"), codeLineage: t("settings.command.codeLineage") };
   const commandLabel = (key: string) => commandLabels[key] ?? humanize(key);
   const contentRef = useRef<HTMLElement>(null);
@@ -113,6 +119,7 @@ function SettingsContent({
   const [securityStatus, setSecurityStatus] = useState<SecurityStatus>();
   const [mergeStatus, setMergeStatus] = useState<MergeDriverStatus>();
   const [conflictReport, setConflictReport] = useState<{ path: string; contents: string }>();
+  const aiSavePending = useRef(false);
   const [aiSecret, setAiSecret] = useState("");
   const [cloudSecret, setCloudSecret] = useState("");
   const [operationError, setOperationError] = useState("");
@@ -124,6 +131,7 @@ function SettingsContent({
   const [externalAccess, setExternalAccess] = useState<ExternalAccessRecord[]>([]);
   const [aiTestResult, setAiTestResult] = useState<AiProviderTestResult>();
   const [diagnosticInfo, setDiagnosticInfo] = useState<DiagnosticInfo>();
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [aboutDocument, setAboutDocument] = useState<"releaseNotes" | "license" | "notices">();
   const [performanceSnapshot, setPerformanceSnapshot] = useState<{ uptimeMs: number; domNodes: number; resourceEntries: number; heapBytes: number | null }>();
   const [eventTriggerScript, setEventTriggerScript] = useState("");
@@ -137,10 +145,11 @@ function SettingsContent({
   const [shortcutQuery, setShortcutQuery] = useState("");
   const filteredCategories = useMemo(() => {
     const normalized = query.trim().toLowerCase();
+    const available = categories.filter(([id]) => !isMas || id !== "cloud");
     return normalized
-      ? categories.filter((item) => `${item[1]} ${item[2]} ${t(categoryMessages[item[0]])} ${categoryAliases[item[0]]}`.toLowerCase().includes(normalized))
-      : categories;
-  }, [query, t]);
+      ? available.filter((item) => `${item[1]} ${item[2]} ${t(categoryMessages[item[0]])} ${categoryAliases[item[0]]}`.toLowerCase().includes(normalized))
+      : available;
+  }, [query, t, isMas]);
   const visibleCategory = filteredCategories.some(([id]) => id === category)
     ? category
     : filteredCategories[0]?.[0];
@@ -192,6 +201,27 @@ function SettingsContent({
   const app = settings.app;
   const source = settings.source;
   const ai = aiDraft ?? source?.ai;
+  const aiDirty = JSON.stringify(ai) !== JSON.stringify(source?.ai) || Boolean(aiSecret);
+  async function saveAiConfiguration() {
+    if (!source || !ai || aiSavePending.current) return;
+    aiSavePending.current = true;
+    setSaveError(undefined);
+    setSaveState("saving");
+    try {
+      await onUpdateSource({ ...source, ai: { ...ai, credentialConfigured: source.ai.credentialConfigured } });
+      if (aiSecret.trim()) {
+        await platform.saveAiCredential(source.sourceId, aiSecret);
+        setAiSecret("");
+        await onReload();
+      }
+      setSaveState("saved");
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : String(reason));
+      setSaveState("error");
+    } finally {
+      aiSavePending.current = false;
+    }
+  }
   const cloud = cloudDraft ?? source?.cloud;
   const historySettings = source?.storage ?? app.history;
   const isManaged = (path: string) => settings.managed.find((item) => item.path === path || path.startsWith(`${item.path}.`));
@@ -248,10 +278,7 @@ function SettingsContent({
     await saveApp({ ...app, notifications: { ...app.notifications, systemNotifications: enabled } });
   }
 
-  async function updateDiagnostics(enabled: boolean) {
-    if (enabled && !window.confirm(t("settings.enableAnonymousDiagnosticsAllowedFieldsAppVersionRuntime"))) return;
-    await saveApp({ ...app, privacy: { ...app.privacy, diagnosticsEnabled: enabled } });
-  }
+
 
   function updateShortcut(command: string, binding: string) {
     const normalized = binding.trim().toLowerCase();
@@ -320,6 +347,7 @@ function SettingsContent({
           </footer>
         </nav>
 
+        <div className="settings-detail-pane">
         <main className="settings-content" ref={contentRef} tabIndex={-1}>
           {!filteredCategories.length ? <div className="settings-no-results"><ActionIcon name="search" /><h2>{t("settings.noSettingsFound")}</h2><p>{t("settings.tryAnotherSearchTerm")}</p><Button type="button" onClick={() => setQuery("")}>{t("settings.clearSearch")}</Button></div> : null}
           {operationError ? <p className="settings-operation-error" role="alert">{t("settings.operationFailed")} <span>{operationError}</span></p> : null}
@@ -436,7 +464,8 @@ function SettingsContent({
               </SettingsGroup>
               <SettingsGroup title={t("settings.storageBackup")}>
               <NumberRow label={t("settings.storageWarning")} value={app.history.storageWarningMegabytes} min={128} max={102400} unit="MB" onChange={(storageWarningMegabytes) => void saveApp({ ...app, history: { ...app.history, storageWarningMegabytes } })} />
-              <TextRow label={t("settings.portableBackupPath")} value={backupPath} placeholder="/absolute/path/model.nodalmodel" onChange={setBackupPath} />
+              <TextRow readOnly={isMas} label={t("settings.portableBackupPath")} value={backupPath} placeholder="/absolute/path/model.nodalmodel" onChange={setBackupPath} />
+              <div className="setting-action-row"><Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("saveBackup"); if (path) setBackupPath(path); })}>{t("submission.saveLocation")}</Button><Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("openBackup"); if (path) setBackupPath(path); })}>{t("submission.openFile")}</Button></div>
               <div className="setting-action-row"><Button type="button" onClick={() => void runOperation(async () => setStorageUsage(await platform.getStorageUsage()))}>{t("settings.viewStorageUsage")}</Button><Button type="button" disabled={!activeSourceId || !backupPath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const receipt = await platform.exportPortableBackup(activeSourceId, backupPath); setOperationMessage(t("settings.backedUpSnapshotsAndAnnotations", { value0: receipt.snapshots, value1: receipt.annotations })); })}>{t("settings.exportBackup")}</Button><Button type="button" disabled={!backupPath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { const preview = await platform.previewPortableBackup(backupPath); const identity = [preview.sourceLabel, preview.databaseName, preview.databaseType].filter(Boolean).join(" · "); const accepted = window.confirm(t("settings.importBackupFormatVExportedSnapshotsAnnotationsViews", { value0: identity || preview.sourceId, value1: preview.formatVersion, value2: formatDate(preview.exportedAt, locale, app.general.dateTimeFormat), value3: preview.snapshots, value4: preview.annotations, value5: preview.savedViews, value6: preview.willUpdateExistingSource ? t("settings.backup.updateSource") : t("settings.backup.createSource"), value7: preview.conflictStrategy })); if (!accepted) return; const receipt = await platform.importPortableBackup(backupPath); await onReload(); setOperationMessage(t("settings.restoredSnapshotsAndAnnotations", { value0: receipt.snapshots, value1: receipt.annotations })); })}>{t("settings.previewImport")}</Button><Button type="button" onClick={() => void runOperation(async () => { const cleared = await platform.clearRegenerableCache(); setOperationMessage(cleared ? t("settings.clearedCacheRecords", { value0: cleared }) : t("settings.noRegenerableCacheIsCurrentlyStored")); })}>{t("settings.clearCache")}</Button><Button type="button" onClick={() => void runOperation(async () => { if (!window.confirm(t("settings.clearSavedCanvasLayoutsSnapshotsAndSemanticsWill"))) return; await platform.clearLayouts(activeSourceId); setStorageUsage(await platform.getStorageUsage()); })}>{t("settings.clearLayouts")}</Button><Button type="button" onClick={() => void runOperation(async () => { const info = await platform.getDiagnosticInfo(); setDiagnosticInfo(info); setOperationMessage(t("settings.localDatabaseDirectory", { value0: info.dataDirectory })); })}>{t("settings.showLocalDatabaseLocation")}</Button></div>
               {storageUsage ? <StorageUsageCard usage={storageUsage} /> : null}
               </SettingsGroup>
@@ -449,44 +478,46 @@ function SettingsContent({
               <StatusCard status={source?.git.repositoryPath ? t("settings.configured") : t("settings.off")} label={t("settings.manualExportAndImportNodalStudioNeverCommits")} />
               {source ? <>
               <SettingsGroup title={t("settings.repository")}>
-                <TextRow label={t("settings.repositoryPath")} value={source.git.repositoryPath} placeholder="/path/to/repository" onChange={(repositoryPath) => void saveSource({ ...source, git: { ...source.git, repositoryPath } })} />
+                <TextRow readOnly={isMas} label={t("settings.repositoryPath")} value={source.git.repositoryPath} placeholder="/path/to/repository" onChange={(repositoryPath) => void saveSource({ ...source, git: { ...source.git, repositoryPath } })} />
+                <Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("repository"); if (path) await saveSource({ ...source, git: { ...source.git, repositoryPath: path } }); })}>{t("submission.chooseFolder")}</Button>
                 <ToggleRow label={t("settings.commitReminder")} checked={source.git.commitReminders} onChange={(commitReminders) => void saveSource({ ...source, git: { ...source.git, commitReminders } })} />
-                <div className="setting-action-row"><Button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; setMergeStatus(await platform.checkMergeDriver(activeSourceId, source.git.repositoryPath)); })}>{t("settings.checkRepositoryMergeDriver")}</Button><Button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const preview = await platform.previewGitExport(activeSourceId, source.git.repositoryPath); if (!window.confirm(t("settings.exportGitWorkspaceAddedModifiedRemovedUnchangedManaged", { value0: preview.addedFiles, value1: preview.modifiedFiles, value2: preview.removedFiles, value3: preview.unchangedFiles, value4: preview.schemaFingerprint }))) return; const receipt = await platform.exportGitWorkspace(activeSourceId, source.git.repositoryPath); setOperationMessage(t("settings.exportedManagedFilesRemovedStaleFiles", { value0: receipt.writtenFiles, value1: receipt.removedStaleFiles })); })}>{t("settings.previewExport")}</Button><Button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const preview = await platform.previewGitImport(activeSourceId, source.git.repositoryPath); if (!window.confirm(t("settings.importReviewedSemanticsAnnotationsDomainsViewsProvenanceRecords", { value0: preview.annotations, value1: preview.domainGroups, value2: preview.savedViews, value3: preview.provenance, value4: preview.lineageLinks, value5: preview.logicalRelationships, value6: preview.relationshipConflicts.length, value7: preview.relationshipConflicts.length ? `\n${preview.relationshipConflicts.join("\n")}` : "", value8: preview.fingerprintMatches ? t("settings.git.fingerprintMatches") : t("settings.git.fingerprintWarning"), value9: preview.workspaceFingerprint }))) return; const receipt = await platform.importGitWorkspace(activeSourceId, source.git.repositoryPath); await onReload(); setOperationMessage(t("settings.importedAnnotationsViewsAndLogicalRelationships", { value0: receipt.importedAnnotations, value1: receipt.importedSavedViews, value2: receipt.importedLogicalRelationships })); })}>{t("settings.previewImport")}</Button></div>
+                <div className="setting-action-row"><Button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; setMergeStatus(await platform.checkMergeDriver(activeSourceId, source.git.repositoryPath)); })}>{t(isMas ? "submission.checkGit" : "settings.checkRepositoryMergeDriver")}</Button><Button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const preview = await platform.previewGitExport(activeSourceId, source.git.repositoryPath); if (!window.confirm(t("settings.exportGitWorkspaceAddedModifiedRemovedUnchangedManaged", { value0: preview.addedFiles, value1: preview.modifiedFiles, value2: preview.removedFiles, value3: preview.unchangedFiles, value4: preview.schemaFingerprint }))) return; const receipt = await platform.exportGitWorkspace(activeSourceId, source.git.repositoryPath); setOperationMessage(t("settings.exportedManagedFilesRemovedStaleFiles", { value0: receipt.writtenFiles, value1: receipt.removedStaleFiles })); })}>{t("settings.previewExport")}</Button><Button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const preview = await platform.previewGitImport(activeSourceId, source.git.repositoryPath); if (!window.confirm(t("settings.importReviewedSemanticsAnnotationsDomainsViewsProvenanceRecords", { value0: preview.annotations, value1: preview.domainGroups, value2: preview.savedViews, value3: preview.provenance, value4: preview.lineageLinks, value5: preview.logicalRelationships, value6: preview.relationshipConflicts.length, value7: preview.relationshipConflicts.length ? `\n${preview.relationshipConflicts.join("\n")}` : "", value8: preview.fingerprintMatches ? t("settings.git.fingerprintMatches") : t("settings.git.fingerprintWarning"), value9: preview.workspaceFingerprint }))) return; const receipt = await platform.importGitWorkspace(activeSourceId, source.git.repositoryPath); await onReload(); setOperationMessage(t("settings.importedAnnotationsViewsAndLogicalRelationships", { value0: receipt.importedAnnotations, value1: receipt.importedSavedViews, value2: receipt.importedLogicalRelationships })); })}>{t("settings.previewImport")}</Button></div>
               </SettingsGroup>
-                {mergeStatus ? <><MergeStatusCard status={mergeStatus} /><div className="setting-action-row"><Button type="button" disabled={!mergeStatus.installCommand} onClick={() => void runOperation(async () => { await navigator.clipboard.writeText(mergeStatus.installCommand); setOperationMessage(t("settings.mergeDriverInstallationCommandCopiedReviewAndRun")); })}>{t("settings.copyInstallCommand")}</Button></div>{mergeStatus.conflictReports.map((report) => <div className="settings-status-card" key={report}><strong>{report}</strong><span>{t("settings.semanticMergeConflictsRequireExplicitReview")}</span><div className="setting-action-row"><Button type="button" onClick={() => void runOperation(async () => setConflictReport({ path: report, contents: await platform.readGitConflictReport(source.git.repositoryPath, report) }))}>{t("settings.reviewReport")}</Button><Button type="button" variant="danger" className="danger-setting-action" onClick={() => void runOperation(async () => { if (!window.confirm(t("settings.deleteOnlyAfterResolvingEveryListedSemanticField", { value0: report }))) return; await platform.deleteGitConflictReport(source.git.repositoryPath, report); setConflictReport(undefined); if (activeSourceId) setMergeStatus(await platform.checkMergeDriver(activeSourceId, source.git.repositoryPath)); })}>{t("settings.confirmResolvedDelete")}</Button></div></div>)}{conflictReport ? <div className="data-boundary"><h3>{conflictReport.path}</h3><pre>{conflictReport.contents}</pre></div> : null}</> : null}
+                {mergeStatus ? <><MergeStatusCard status={mergeStatus} isMas={isMas} />{!isMas ? <div className="setting-action-row"><Button type="button" disabled={!mergeStatus.installCommand} onClick={() => void runOperation(async () => { await navigator.clipboard.writeText(mergeStatus.installCommand); setOperationMessage(t("settings.mergeDriverInstallationCommandCopiedReviewAndRun")); })}>{t("settings.copyInstallCommand")}</Button></div> : <p>{t("submission.masGit")}</p>}{mergeStatus.conflictReports.map((report) => <div className="settings-status-card" key={report}><strong>{report}</strong><span>{t("settings.semanticMergeConflictsRequireExplicitReview")}</span><div className="setting-action-row"><Button type="button" onClick={() => void runOperation(async () => setConflictReport({ path: report, contents: await platform.readGitConflictReport(source.git.repositoryPath, report) }))}>{t("settings.reviewReport")}</Button><Button type="button" variant="danger" className="danger-setting-action" onClick={() => void runOperation(async () => { if (!window.confirm(t("settings.deleteOnlyAfterResolvingEveryListedSemanticField", { value0: report }))) return; await platform.deleteGitConflictReport(source.git.repositoryPath, report); setConflictReport(undefined); if (activeSourceId) setMergeStatus(await platform.checkMergeDriver(activeSourceId, source.git.repositoryPath)); })}>{t("settings.confirmResolvedDelete")}</Button></div></div>)}{conflictReport ? <div className="data-boundary"><h3>{conflictReport.path}</h3><pre>{conflictReport.contents}</pre></div> : null}</> : null}
                 <DataBoundary />
               </> : <Unavailable runtime={runtime} />}
             </SettingsSection>
           ) : null}
 
           {visibleCategory === "ai" ? (
-            <SettingsSection title="AI" description={t("settings.explanationsAreOptionalAndAlwaysRequireConfirmationBefore")}>
+            <SettingsSection title="AI" disabled={saveState === "saving"} description={t("settings.explanationsAreOptionalAndAlwaysRequireConfirmationBefore")}>
               <StatusCard status={app.privacy.offlineMode ? t("settings.offline") : source?.ai.enabled ? t("settings.configured") : t("settings.off")} label={t("settings.noDatabaseCredentialsOrRowDataAreSent")} />
               {source && ai ? <>
               <SettingsGroup title={t("settings.provider")}>
-                <ToggleRow label={t("settings.enableAIExplanations")} checked={source.ai.enabled} managed={isManaged("ai.enabled")} onChange={(enabled) => void saveSource({ ...source, ai: { ...source.ai, enabled } })} />
+                <ToggleRow label={t("settings.enableAIExplanations")} checked={ai.enabled} managed={isManaged("ai.enabled")} onChange={(enabled) => setAiDraft({ ...ai, enabled })} />
                 <SelectRow label={t("settings.provider")} value={ai.provider} onChange={(provider) => setAiDraft({ ...ai, provider: provider as DataSourceSettings["ai"]["provider"] })} options={[['offline',t("settings.offlineProvider")],['openAiCompatible',t("settings.provider.openAiCompatible")]]} />
-                {ai.provider === "openAiCompatible" ? <><TextRow label={t("settings.endpoint")} value={ai.endpoint} placeholder="https://…" onChange={(endpoint) => setAiDraft({ ...ai, endpoint })} /><TextRow label={t("settings.model")} value={ai.model} onChange={(model) => setAiDraft({ ...ai, model })} /><SecretRow label={t("settings.aPIKey")} value={aiSecret} configured={source.ai.credentialConfigured} onChange={setAiSecret} onSave={() => void runOperation(async () => { if (!activeSourceId) return; await platform.saveAiCredential(activeSourceId, aiSecret); setAiSecret(""); await onReload(); })} /></> : null}
+                {ai.provider === "openAiCompatible" ? <><TextRow label={t("settings.endpoint")} value={ai.endpoint} placeholder="https://…" onChange={(endpoint) => setAiDraft({ ...ai, endpoint })} /><TextRow label={t("settings.model")} value={ai.model} onChange={(model) => setAiDraft({ ...ai, model })} /><SecretRow label={t("settings.aPIKey")} value={aiSecret} configured={source.ai.credentialConfigured} onChange={setAiSecret} showSave={false} onSave={() => undefined} /></> : null}
               </SettingsGroup>
               <SettingsGroup title={t("settings.context")}>
                 <SelectRow label={t("settings.contextScope")} value={ai.contextScope} onChange={(contextScope) => setAiDraft({ ...ai, contextScope: contextScope as DataSourceSettings["ai"]["contextScope"] })} options={[['currentTable',t("settings.currentTable")],['oneHop',t("settings.oneRelationshipHop")],['domain',t("settings.currentBusinessDomain")]]} />
                 <ToggleRow label={t("settings.includeComments")} checked={ai.includeComments} onChange={(includeComments) => setAiDraft({ ...ai, includeComments })} />
                 <ToggleRow label={t("settings.includeConfirmedSemantics")} checked={ai.includeConfirmedSemantics} onChange={(includeConfirmedSemantics) => setAiDraft({ ...ai, includeConfirmedSemantics })} />
               </SettingsGroup>
+              <AiReplyPreferences value={ai.replyPreferences} onChange={(replyPreferences) => setAiDraft({ ...ai, replyPreferences })} />
               <SettingsGroup title={t("settings.requestLimits")}>
                 <NumberRow label={t("settings.requestTimeout")} value={ai.timeoutSeconds} min={1} max={300} unit={t("settings.seconds")} onChange={(timeoutSeconds) => setAiDraft({ ...ai, timeoutSeconds })} />
                 <NumberRow label={t("settings.maximumRetries")} value={ai.maxRetries} min={0} max={5} onChange={(maxRetries) => setAiDraft({ ...ai, maxRetries })} />
                 <NumberRow label={t("settings.maximumConcurrency")} value={ai.maxConcurrency} min={1} max={8} onChange={(maxConcurrency) => setAiDraft({ ...ai, maxConcurrency })} />
               </SettingsGroup>
                 <AiRequestBoundary ai={ai} />
-                <div className="setting-action-row"><Button type="button" variant="primary" onClick={() => void saveSource({ ...source, ai: { ...ai, enabled: source.ai.enabled, credentialConfigured: source.ai.credentialConfigured } })}>{t("settings.saveAIConfiguration")}</Button><Button type="button" onClick={() => setAiDraft(source.ai)}>{t("settings.cancelDraft")}</Button></div>
-                <div className="setting-action-row"><Button type="button" disabled={!activeSourceId || !source.ai.enabled || (app.privacy.offlineMode && source.ai.provider !== "offline")} onClick={() => void runOperation(async () => { if (!activeSourceId) return; setAiTestResult(await platform.testAiProvider(activeSourceId)); })}>{t("settings.testProvider")}</Button></div>
+
+                <div className="setting-action-row"><Button type="button" disabled={aiDirty || !activeSourceId || !source.ai.enabled || (app.privacy.offlineMode && source.ai.provider !== "offline")} onClick={() => void runOperation(async () => { if (!activeSourceId) return; setAiTestResult(await platform.testAiProvider(activeSourceId)); })}>{t("settings.testProvider")}</Button></div>
                 {aiTestResult ? <p className="setting-inline-note">{t("settings.ai.testResult", { provider: aiTestResult.provider, model: aiTestResult.model ? ` · ${aiTestResult.model}` : "", date: formatSettingsDate(aiTestResult.testedAt, app.general.dateTimeFormat, locale), network: aiTestResult.networkUsed ? "" : t("settings.noNetworkUsed") })}</p> : null}
               </> : <Unavailable runtime={runtime} />}
             </SettingsSection>
           ) : null}
 
-          {visibleCategory === "cloud" ? (
+          {visibleCategory === "cloud" && !isMas ? (
             <SettingsSection title={t("settings.cloudSync")} description={t("settings.optionalMetadataCollaborationWithAnExplicitSyncAllowlist")}>
               <details className="settings-disclosure"><summary>{t("settings.howSharedDescriptionsAreReviewed")}</summary><p>{t("settings.sharedDescriptionsContainTextOnlyWithoutPerObject")}</p></details>
               <StatusCard status={app.privacy.offlineMode ? t("settings.offline") : source?.cloud.enabled ? t("settings.configured") : t("settings.off")} label={t("settings.cloudSyncIsDisabledByDefault")} />
@@ -529,14 +560,15 @@ function SettingsContent({
 
           {visibleCategory === "privacy" ? (
             <SettingsSection title={t("settings.privacySecurity")} description={t("settings.aSingleViewOfEveryExternalCapabilityAnd")}>
+              <Button onClick={() => setPrivacyOpen(!privacyOpen)}>{t("submission.privacyPolicy")}</Button>
+              {privacyOpen ? <PrivacyPolicy isMas={isMas} /> : null}
               <SettingsGroup title={t("settings.networkDiagnostics")}>
               <ToggleRow label={t("settings.completelyOffline")} description={t("settings.blocksAICloudUpdateChecksAndDiagnosticsDatabase")} checked={app.privacy.offlineMode} managed={isManaged("privacy.offlineMode")} onChange={(offlineMode) => void saveApp({ ...app, privacy: { ...app.privacy, offlineMode } })} />
-              <ToggleRow label={t("settings.anonymousDiagnostics")} description={t("settings.versionRuntimeDurationBucketOutcomeClassAndRedacted")} checked={app.privacy.diagnosticsEnabled} managed={isManaged("privacy.diagnosticsEnabled")} onChange={(diagnosticsEnabled) => void updateDiagnostics(diagnosticsEnabled)} />
-              <ToggleRow label={t("settings.crashReports")} checked={app.privacy.crashReportsEnabled} onChange={(crashReportsEnabled) => void saveApp({ ...app, privacy: { ...app.privacy, crashReportsEnabled } })} />
+              <p className="setting-inline-note">{t("submission.diagnosticsNote")}{isMas ? ` ${t("submission.storeNetwork")}` : ""}</p>
               <SelectRow label={t("settings.logLevel")} value={app.privacy.logLevel} onChange={(logLevel) => void saveApp({ ...app, privacy: { ...app.privacy, logLevel: logLevel as AppSettings["privacy"]["logLevel"] } })} options={[['error',t("settings.error")],['warn',t("settings.warning")],['info',t("settings.info")],['debug',t("settings.debug")]]} />
               <NumberRow label={t("settings.logRetention")} value={app.privacy.logRetentionDays} min={1} max={365} unit={t("settings.days")} onChange={(logRetentionDays) => void saveApp({ ...app, privacy: { ...app.privacy, logRetentionDays } })} />
               </SettingsGroup>
-              <ExternalCapabilities app={app} source={source} access={externalAccess} dateTimeFormat={app.general.dateTimeFormat} />
+              <ExternalCapabilities isMas={isMas} app={app} source={source} access={externalAccess} dateTimeFormat={app.general.dateTimeFormat} />
               <div className="setting-action-row"><Button type="button" onClick={() => void runOperation(async () => { setSecurityStatus(await platform.getSecurityStatus(activeSourceId)); setExternalAccess(await platform.listExternalAccess()); })}>{t("settings.runLocalSecurityAudit")}</Button></div>
               {securityStatus ? <SecurityStatusCard status={securityStatus} /> : null}
               <Button type="button" variant="danger" className="danger-setting-action" disabled={!activeSourceId || runtime?.kind === "web"} onClick={() => void runOperation(async () => { if (!activeSourceId || !window.confirm(t("settings.removeDatabaseSSHAIAndCloudCredentialsFor"))) return; await platform.clearCredentials(activeSourceId, { database: true, ai: true, cloud: true }); await onReload(); setSecurityStatus(await platform.getSecurityStatus(activeSourceId)); })}>{t("settings.removeAllSavedCredentials")}</Button>
@@ -548,7 +580,7 @@ function SettingsContent({
               <SettingsGroup title={t("settings.events")}>
               <SelectRow label={t("settings.schemaChanges")} value={app.notifications.schemaChanges} onChange={(schemaChanges) => void saveApp({ ...app, notifications: { ...app.notifications, schemaChanges: schemaChanges as AppSettings["notifications"]["schemaChanges"] } })} options={[['all',t("settings.allChanges")],['highRisk',t("settings.highRiskOnly")],['off',t("settings.off")]]} />
               <ToggleRow label={t("settings.gitFingerprintAndConflicts")} checked={app.notifications.gitConflicts} onChange={(gitConflicts) => void saveApp({ ...app, notifications: { ...app.notifications, gitConflicts } })} />
-              <ToggleRow label={t("settings.cloudSyncFailures")} checked={app.notifications.cloudFailures} onChange={(cloudFailures) => void saveApp({ ...app, notifications: { ...app.notifications, cloudFailures } })} />
+              {!isMas ? <ToggleRow label={t("settings.cloudSyncFailures")} checked={app.notifications.cloudFailures} onChange={(cloudFailures) => void saveApp({ ...app, notifications: { ...app.notifications, cloudFailures } })} /> : null}
               <ToggleRow label={t("settings.storageWarnings")} checked={app.notifications.storageWarnings} onChange={(storageWarnings) => void saveApp({ ...app, notifications: { ...app.notifications, storageWarnings } })} />
               <ToggleRow label={t("settings.updateAvailable")} checked={app.notifications.updateAvailable} onChange={(updateAvailable) => void saveApp({ ...app, notifications: { ...app.notifications, updateAvailable } })} />
               </SettingsGroup>
@@ -596,19 +628,26 @@ function SettingsContent({
               </SettingsGroup>
               <SettingsGroup title={t("settings.experiments")}>
               <ToggleRow label={t("settings.betaFeatures")} checked={app.advanced.betaFeatures} onChange={(betaFeatures) => void saveApp({ ...app, advanced: { ...app.advanced, betaFeatures } })} />
-              <SelectRow label={t("settings.applicationUpdateChannel")} value={app.updates.channel} onChange={(channel) => void saveApp({ ...app, updates: { ...app.updates, channel: channel as AppSettings["updates"]["channel"] } })} options={[['stable',t("settings.stable")],['beta',t("settings.betaPreRelease")]]} />
+              {!isMas ? <SelectRow label={t("settings.applicationUpdateChannel")} value={app.updates.channel} onChange={(channel) => void saveApp({ ...app, updates: { ...app.updates, channel: channel as AppSettings["updates"]["channel"] } })} options={[['stable',t("settings.stable")],['beta',t("settings.betaPreRelease")]]} /> : null}
               {app.advanced.betaFeatures ? <div className="project-policy"><h3>{t("settings.experimentalFeatures")}</h3>{Object.entries(app.advanced.experimentalFeatures).map(([feature, enabled]) => <ToggleRow key={feature} label={commandLabel(feature)} description={t("settings.experimentalBehaviorAndStoredRepresentationMayChange")} checked={enabled} onChange={(value) => void saveApp({ ...app, advanced: { ...app.advanced, experimentalFeatures: { ...app.advanced.experimentalFeatures, [feature]: value } } })} />)}</div> : null}
               </SettingsGroup>
               <div className="project-policy"><h3>{t("settings.builtInExtensions")}</h3><p>{t("settings.onlySignedBundledCapabilitiesAreListedNodalStudio")}</p>{Object.entries(app.advanced.extensions).map(([extension, enabled]) => <ToggleRow key={extension} label={commandLabel(extension)} checked={enabled} onChange={(value) => void saveApp({ ...app, advanced: { ...app.advanced, extensions: { ...app.advanced.extensions, [extension]: value } } })} />)}</div>
               {settings.managed.length > 0 ? <div className="external-capabilities"><h3>{t("settings.managedByProjectOrOrganization")}</h3>{settings.managed.map((item) => <div key={`${item.source}:${item.path}`}><span>{item.path}</span><b title={item.reason}>{item.source}</b></div>)}</div> : null}
               <SettingsGroup title={t("settings.settingsTransfer")}>
-              <TextRow label={t("settings.settingsJSONPath")} value={settingsFilePath} placeholder="/absolute/path/settings.json" onChange={setSettingsFilePath} />
+              <TextRow label={t("settings.settingsJSONPath")} readOnly={isMas} value={settingsFilePath} placeholder="/absolute/path/settings.json" onChange={setSettingsFilePath} />
+              <div className="setting-action-row"><Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("saveSettings"); if (path) setSettingsFilePath(path); })}>{t("submission.saveLocation")}</Button><Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("openSettings"); if (path) setSettingsFilePath(path); })}>{t("submission.openFile")}</Button></div>
               <div className="setting-action-row"><Button type="button" disabled={!settingsFilePath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { const receipt = await platform.exportSettingsFile(settingsFilePath); setOperationMessage(t("settings.exportedNonSensitiveSettingsForSources", { value0: receipt.sourceSettings })); })}>{t("settings.exportSettings")}</Button><Button type="button" disabled={!settingsFilePath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { const preview = await platform.previewSettingsFile(settingsFilePath); if (!window.confirm(t("settings.importSettingsFormatVExportedTheAppSettings", { value0: preview.formatVersion, value1: formatDate(preview.exportedAt, locale, app.general.dateTimeFormat), value2: preview.sourceSettings }))) return; const receipt = await platform.importSettingsFile(settingsFilePath); await onReload(); setOperationMessage(t("settings.importedSettingsForSources", { value0: receipt.sourceSettings })); })}>{t("settings.previewImport")}</Button></div>
               </SettingsGroup>
               <div className="settings-danger-zone"><h3>{t("settings.dangerZone")}</h3><p>{t("settings.resettingSettingsDoesNotDeleteSnapshotsSemanticsOr")}</p><Button type="button" onClick={() => void onResetApp()}>{t("settings.resetAllSettings")}</Button>{source ? <Button type="button" onClick={() => void onResetSource()}>{t("settings.resetActiveSourceSettings")}</Button> : null}<Button type="button" variant="danger" className="danger-setting-action" disabled={runtime?.kind === "web"} onClick={() => void runOperation(async () => { const confirmation = window.prompt(t("settings.factoryResetDeletesAllLocalConnectionsSnapshotsSemantics")); if (confirmation !== "DELETE LOCAL DATA") return; await platform.factoryReset(confirmation); await onFactoryReset(); })}>{t("settings.factoryReset")}</Button></div>
             </SettingsSection>
           ) : null}
         </main>
+      {source && ai && (visibleCategory === "ai" || aiDirty) ? <footer className="settings-ai-save-bar" aria-label={t("settings.saveAIConfiguration")}>
+        <span aria-live="polite">{t(saveState === "saving" ? "settings.ai.savingDraft" : aiDirty ? "settings.ai.unsavedDraft" : "settings.ai.noDraft")}</span>
+        <Button type="button" disabled={!aiDirty || saveState === "saving"} onClick={() => { setAiDraft(source.ai); setAiSecret(""); setSaveError(undefined); setSaveState("idle"); }}>{t("settings.cancelDraft")}</Button>
+        <Button type="button" variant="primary" disabled={!aiDirty || saveState === "saving"} onClick={() => void saveAiConfiguration()}>{t("settings.saveAIConfiguration")}</Button>
+      </footer> : null}
+        </div>
       </div>
     </section>
   );
@@ -627,9 +666,9 @@ function DataBoundary() {
 function AiRequestBoundary({ ai }: { ai: DataSourceSettings["ai"] }) {
   const { t } = useI18n();
  return <div className="data-boundary"><h3>{t("settings.requestPreviewPolicy")}</h3><p><b>{t("settings.selected")}</b> {t("settings.ai.contextDescription", { scope: ai.contextScope === "currentTable" ? t("settings.currentTableOnly") : ai.contextScope === "oneHop" ? t("settings.currentTableAndOneRelationshipHop") : t("settings.currentBusinessDomainDetail"), comments: ai.includeComments ? t("settings.databaseComments") : "", semantics: ai.includeConfirmedSemantics ? t("settings.confirmedSemantics") : "" })}</p><p><b>{t("settings.neverSent")}</b> {t("settings.passwordsConnectionStringsBusinessRowDataUnrelatedSchemas")}</p><p>{t("settings.everyGeneratedExplanationRecordsTheProviderModelGeneration")}</p></div>; }
-function ExternalCapabilities({ app, source, access, dateTimeFormat }: { app: AppSettings; source: DataSourceSettings | null; access: ExternalAccessRecord[]; dateTimeFormat: AppSettings["general"]["dateTimeFormat"] }) {
+function ExternalCapabilities({ app, source, access, dateTimeFormat, isMas }: { isMas: boolean; app: AppSettings; source: DataSourceSettings | null; access: ExternalAccessRecord[]; dateTimeFormat: AppSettings["general"]["dateTimeFormat"] }) {
   const { t, locale } = useI18n();
- const items = [["AI", "ai", source?.ai.enabled], [t("settings.cloudSync"), "cloud", source?.cloud.enabled], [t("settings.updateChecks"), "updates", app.updates.automaticChecks], [t("settings.diagnostics"), "diagnostics", app.privacy.diagnosticsEnabled]] as const; return <div className="external-capabilities"><h3>{t("settings.externalCapabilities")}</h3>{items.map(([name, capability, enabled]) => { const last = access.find((item) => item.capability === capability); return <div key={name}><span>{name}{last ? <small>{t("settings.lastAccess")}{" "}{formatSettingsDate(last.lastAccessAt, dateTimeFormat, locale)}</small> : <small>{t("settings.neverAccessedByThisInstallation")}</small>}</span><b>{app.privacy.offlineMode ? t("settings.blockedByOfflineMode") : enabled ? t("settings.enabled") : t("settings.off")}</b></div>; })}</div>; }
+ const items = [["AI", "ai", source?.ai.enabled], [t("settings.cloudSync"), "cloud", !isMas && source?.cloud.enabled], [t("settings.updateChecks"), "updates", !isMas && app.updates.automaticChecks], [t("settings.diagnostics"), "diagnostics", false]] as const; return <div className="external-capabilities"><h3>{t("settings.externalCapabilities")}</h3>{items.filter(([, capability]) => !isMas || capability !== "cloud").map(([name, capability, enabled]) => { const last = access.find((item) => item.capability === capability); return <div key={name}><span>{name}{last ? <small>{t("settings.lastAccess")}{" "}{formatSettingsDate(last.lastAccessAt, dateTimeFormat, locale)}</small> : <small>{t("settings.neverAccessedByThisInstallation")}</small>}</span><b>{isMas && capability === "updates" ? "App Store" : app.privacy.offlineMode ? t("settings.blockedByOfflineMode") : enabled ? t("settings.enabled") : t("settings.off")}</b></div>; })}</div>; }
 function StorageUsageCard({ usage }: { usage: StorageUsage }) {
   const { t } = useI18n();
  const rows = [[t("settings.snapshots"), usage.snapshotBytes], [t("settings.semantics"), usage.semanticBytes], [t("settings.layouts"), usage.layoutBytes], [t("settings.syncQueue"), usage.syncQueueBytes], [t("settings.settings"), usage.settingsBytes]] as const; return <div className="external-capabilities"><h3>{t("settings.storage.count", { count: usage.snapshotCount })}</h3>{rows.map(([name, bytes]) => <div key={name}><span>{name}</span><b>{formatBytes(bytes)}</b></div>)}</div>; }
@@ -649,15 +688,15 @@ function CloudShareManager({ platform, sourceId, viewerUrl, offline, dateTimeFor
   async function copyShare(token: string, message: string) { const url = shareUrl(token); setLatestUrl(url); await navigator.clipboard.writeText(url); onMessage(message); }
   return <div className="project-policy"><h3>{t("settings.readOnlyShareLinks")}</h3><p>{t("settings.linksExpireAfterSevenDaysByDefaultRotate")}</p><div className="setting-action-row"><Button type="button" disabled={!sourceId || !viewerUrl || offline} onClick={() => void run(async () => { if (!sourceId) return; const share = await platform.createCloudShare(sourceId); await copyShare(share.token, t("settings.aSevenDayReadOnlyLinkWasCreated")); setShares(await platform.listCloudShares(sourceId)); })}>{t("settings.create7DayLink")}</Button><Button type="button" disabled={!sourceId || offline} onClick={() => void run(async () => { if (sourceId) setShares(await platform.listCloudShares(sourceId)); })}>{t("settings.refreshLinks")}</Button></div>{!viewerUrl ? <p className="setting-inline-note">{t("settings.configureAndSaveTheWebViewerURLBefore")}</p> : null}{latestUrl ? <p className="setting-inline-note">{t("settings.latestLink")}{" "}<code>{latestUrl}</code></p> : null}{shares.length ? <div className="sync-diagnostics" aria-label={t("settings.cloudShareLinks")}>{shares.map((share) => <div key={share.id}><span>{share.revokedAt ? t("settings.revoked") : new Date(share.expiresAt) <= new Date() ? t("settings.expired") : t("settings.active")} {t("settings.expires")}{" "}{formatSettingsDate(share.expiresAt, dateTimeFormat, locale)}{share.lastAccessAt ? t("settings.lastOpened", { value0: formatSettingsDate(share.lastAccessAt, dateTimeFormat, locale) }) : ""}</span><b><Button type="button" disabled={Boolean(share.revokedAt)} onClick={() => void run(async () => { if (!sourceId || !window.confirm(t("settings.revokeThisShareLinkNow"))) return; await platform.revokeCloudShare(sourceId, share.id); setShares(await platform.listCloudShares(sourceId)); })}>{t("settings.revoke")}</Button><Button type="button" disabled={Boolean(share.revokedAt) || !viewerUrl} onClick={() => void run(async () => { if (!sourceId || !window.confirm(t("settings.rotateThisLinkAndInvalidateTheOldToken"))) return; const replacement = await platform.rotateCloudShare(sourceId, share.id); await copyShare(replacement.token, t("settings.shareLinkRotatedTheReplacementWasCopied")); setShares(await platform.listCloudShares(sourceId)); })}>{t("settings.rotate")}</Button></b></div>)}</div> : null}</div>;
 }
-function MergeStatusCard({ status }: { status: MergeDriverStatus }) {
+function MergeStatusCard({ status, isMas }: { status: MergeDriverStatus; isMas: boolean }) {
   const { t } = useI18n();
- const versionMatches = status.driverVersion === status.expectedVersion; return <div className="external-capabilities"><h3>{t("settings.gitReadiness")}</h3><div><span>{t("settings.gitRepository")}</span><b>{status.repositoryIsGit ? t("settings.ready") : t("settings.notDetected")}</b></div><div><span>{t("settings.workspaceManifest")}</span><b>{status.manifestPresent ? t("settings.present") : t("settings.missing")}</b></div><div><span>{t("settings.mergeDriver")}</span><b>{!status.driverVersion ? t("settings.notInstalled") : !versionMatches ? t("settings.versionMismatch", { value0: status.driverVersion, value1: status.expectedVersion }) : status.driverConfigured && status.attributesConfigured ? t("settings.installedConfigured") : t("settings.installedSetupRequired")}</b></div><div><span>.gitattributes</span><b>{status.attributesConfigured ? t("settings.configured") : t("settings.missing")}</b></div><div><span>{t("settings.schemaFingerprint")}</span><b>{status.fingerprintMatches === null ? t("settings.unknown") : status.fingerprintMatches ? t("settings.matches") : t("settings.different")}</b></div></div>; }
+ const versionMatches = status.driverVersion === status.expectedVersion; return <div className="external-capabilities"><h3>{t("settings.gitReadiness")}</h3><div><span>{t("settings.gitRepository")}</span><b>{status.repositoryIsGit ? t("settings.ready") : t("settings.notDetected")}</b></div><div><span>{t("settings.workspaceManifest")}</span><b>{status.manifestPresent ? t("settings.present") : t("settings.missing")}</b></div>{!isMas ? <div><span>{t("settings.mergeDriver")}</span><b>{!status.driverVersion ? t("settings.notInstalled") : !versionMatches ? t("settings.versionMismatch", { value0: status.driverVersion, value1: status.expectedVersion }) : status.driverConfigured && status.attributesConfigured ? t("settings.installedConfigured") : t("settings.installedSetupRequired")}</b></div> : null}<div><span>.gitattributes</span><b>{status.attributesConfigured ? t("settings.configured") : t("settings.missing")}</b></div><div><span>{t("settings.schemaFingerprint")}</span><b>{status.fingerprintMatches === null ? t("settings.unknown") : status.fingerprintMatches ? t("settings.matches") : t("settings.different")}</b></div></div>; }
 function ProjectPolicyCard({ project, projectId, onSave }: { project: EffectiveSettings["project"]; projectId: string; onSave: (project: NonNullable<EffectiveSettings["project"]>) => void }) {
   const { t } = useI18n();
  const value = project ?? defaultProjectSettings(projectId); return <div className="project-policy"><h3>{t("settings.teamProjectPolicy")}</h3><p>{t("settings.sharedRulesOverridePersonalAndSourcePreferencesOrganization")}</p><ToggleRow label={t("settings.allowSnapshotSync")} checked={value.allowSnapshotSync} onChange={(allowSnapshotSync) => onSave({ ...value, allowSnapshotSync, updatedAt: new Date().toISOString() })} /><ToggleRow label={t("settings.allowSharedLayouts")} checked={value.allowSharedLayouts} onChange={(allowSharedLayouts) => onSave({ ...value, allowSharedLayouts, updatedAt: new Date().toISOString() })} /><ToggleRow label={t("settings.allowRemoteAI")} checked={value.allowRemoteAi} onChange={(allowRemoteAi) => onSave({ ...value, allowRemoteAi, updatedAt: new Date().toISOString() })} /><Button type="button" className="secondary-setting-action" onClick={() => onSave({ ...value, sharedCanvas: value.sharedCanvas ? null : defaultAppSettings().canvas, updatedAt: new Date().toISOString() })}>{value.sharedCanvas ? t("settings.stopSharingERDisplayRules") : t("settings.shareDefaultERDisplayRules")}</Button></div>; }
 function AboutDocument({ kind, onClose }: { kind: "releaseNotes" | "license" | "notices"; onClose: () => void }) {
   const { t } = useI18n();
- const content = kind === "releaseNotes" ? { title: t("settings.releaseNotes010"), body: t("settings.initialLocalFirstReleasePostgreSQLAndMySQLSchema") } : kind === "license" ? { title: t("settings.license"), body: t("settings.nodalStudioSourceCodeIsDistributedUnderThe") } : { title: t("settings.thirdPartyNotices"), body: t("settings.thisApplicationUsesRustTauriReactTypeScriptVite") }; return <div className="data-boundary" role="region" aria-label={content.title}><h3>{content.title}</h3><p>{content.body}</p><Button type="button" onClick={onClose}>{t("settings.close")}</Button></div>; }
+ const content = kind === "releaseNotes" ? { title: t("settings.releaseNotes010"), body: t("settings.initialLocalFirstReleasePostgreSQLAndMySQLSchema") } : kind === "license" ? { title: t("settings.license"), body: applicationLicense } : { title: t("settings.thirdPartyNotices"), body: "" }; return <div className="data-boundary" role="region" aria-label={content.title}><h3>{content.title}</h3>{kind === "notices" ? <Suspense fallback={<p>…</p>}><ThirdPartyNotices /></Suspense> : <p>{content.body}</p>}<Button type="button" onClick={onClose}>{t("settings.close")}</Button></div>; }
 function redactedDiagnosticSummary(info: DiagnosticInfo, app: AppSettings) { return JSON.stringify({ application: "Nodal Studio", version: info.appVersion, rustVersion: info.rustVersion, target: info.target, offlineMode: app.privacy.offlineMode, diagnosticsEnabled: app.privacy.diagnosticsEnabled, updateChannel: app.updates.channel, logLevel: app.privacy.logLevel }, null, 2); }
 function capturePerformanceSnapshot() { const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory; return { uptimeMs: performance.now(), domNodes: document.querySelectorAll("*").length, resourceEntries: performance.getEntriesByType("resource").length, heapBytes: memory?.usedJSHeapSize ?? null }; }
 function formatSettingsDate(value: string, format: AppSettings["general"]["dateTimeFormat"], locale: Locale) { return formatDate(value, locale, format); }

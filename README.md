@@ -146,6 +146,23 @@ App Sandbox, embeds the Mac App Store provisioning profile, signs the `.app`
 with the distribution identity contained in that profile, and signs the final
 `.pkg` with a Mac Installer Distribution identity.
 
+The App Store configuration enables the `mac-app-store` Cargo feature and requires
+macOS 13 or later. This channel verifies the paid app download using native
+StoreKit AppTransaction and exposes **Settings → Updates & About → Version &
+purchase** for explicit purchase recovery. It does not implement an In-App
+Purchase product or a NodalStudio account/license server. A free App Store app
+would need a separate IAP entitlement implementation before selling Pro unlocks.
+
+The MAS channel does not register the GitHub updater plugin; update commands are
+also rejected at the native boundary. Community builds retain their existing
+update flow and do not require an App Store purchase. Existing data inspection,
+backup/export and recovery settings remain accessible when MAS purchase proof
+is unavailable. Purchase proof is never stored as an activation flag in project
+data. Offline startup depends on Apple's locally available verified evidence;
+real signed-device acceptance is required before claiming the offline guarantee.
+See [purchase implementation and acceptance](docs/MAC_APP_STORE_PURCHASE_ACCEPTANCE.md)
+for the exact verification scope and remaining release blockers.
+
 Create the private configuration:
 
 ```bash
@@ -252,3 +269,5 @@ snapshot.
 
 See [docs/GIT_WORKSPACE.md](./docs/GIT_WORKSPACE.md) for the format, privacy
 boundary, merge behavior, and Git configuration.
+
+Mac App Store submission remediation and remaining acceptance gates: [docs/MAC_APP_STORE_REMEDIATION_ACCEPTANCE.md](docs/MAC_APP_STORE_REMEDIATION_ACCEPTANCE.md).

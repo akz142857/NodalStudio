@@ -65,6 +65,7 @@ describe("App schema changes", () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);
     await screen.findByText("Desktop runtime");
     fireEvent.click(screen.getByRole("button", { name: "Capture fixture" }));
+    fireEvent.click(screen.getByRole("button", { name: "History comparison" }));
     expect(screen.getByRole("region", { name: "Schema comparison" })).toBeVisible();
     expect(await screen.findByText("Order data")).toBeVisible();
 

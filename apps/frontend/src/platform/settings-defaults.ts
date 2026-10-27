@@ -1,4 +1,8 @@
-import type { AppSettings, DataSourceSettings, EffectiveSettings, ProjectSettings } from "./settings-types";
+import type { AiReplyPreferences, AppSettings, DataSourceSettings, EffectiveSettings, ProjectSettings } from "./settings-types";
+
+export function defaultAiReplyPreferences(): AiReplyPreferences {
+  return { language: "interface", detail: "balanced", terminology: "technical", additionalInstructions: "" };
+}
 
 export function defaultAppSettings(): AppSettings {
   return {
@@ -25,7 +29,7 @@ export function defaultDataSourceSettings(sourceId: string): DataSourceSettings 
     refresh: { intervalSeconds: 30, pauseInBackground: true, changeNotifications: "highRisk", connectionTimeoutSeconds: 15, introspectionTimeoutSeconds: 60, autoConnect: false },
     storage: { capturePolicy: "onChange", retention: "forever", retentionValue: 100, preserveHighRisk: true },
     git: { repositoryPath: "", commitReminders: false },
-    ai: { enabled: false, provider: "offline", endpoint: "", model: "", timeoutSeconds: 30, maxRetries: 1, maxConcurrency: 2, contextScope: "currentTable", includeComments: true, includeConfirmedSemantics: true, credentialConfigured: false },
+    ai: { enabled: false, provider: "offline", endpoint: "", model: "", timeoutSeconds: 30, maxRetries: 1, maxConcurrency: 2, contextScope: "currentTable", replyPreferences: defaultAiReplyPreferences(), includeComments: true, includeConfirmedSemantics: true, credentialConfigured: false },
     cloud: { enabled: false, endpoint: "", viewerUrl: "", accountLabel: "", teamId: "", projectId: "", syncSemantics: true, syncDomains: true, syncSavedViews: true, syncChangeSets: true, syncSnapshots: false, syncSharedLayouts: true, syncPersonalLayouts: false, conflictStrategy: "ask", credentialConfigured: false, baseVersion: 0, lastSuccessAt: null },
   };
 }

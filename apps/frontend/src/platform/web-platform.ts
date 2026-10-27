@@ -118,8 +118,11 @@ export class WebPlatform implements NodalStudioPlatform {
   listRelationshipBatches(): Promise<import("./relationship-batches").ReviewBatch[]> { return Promise.resolve([]); }
   undoRelationshipBatch(): Promise<import("./relationship-batches").ReviewBatch> { return Promise.reject(new Error("Batch review requires the desktop app.")); }
 
+  pickWorkspacePath(): Promise<string | null> { return Promise.reject(new Error("File selection requires the desktop app.")); }
   pickConnectionFile(): Promise<string | null> { return Promise.reject(new Error("Local certificate files require the desktop app.")); }
   exportQueryResult(): Promise<string | null> { return Promise.reject(new Error("Query result export requires the desktop app.")); }
+  getChangeReview(): Promise<never> { return Promise.reject(new Error("Change review requires a connected desktop source.")); }
+  applyChangeReview(): Promise<never> { return Promise.reject(new Error("Change review requires a connected desktop source.")); }
   prepareKnowledgeDraft(): Promise<never> { return Promise.reject(new Error("Knowledge confirmation requires the desktop app.")); }
   confirmKnowledgeDraft(): Promise<never> { return Promise.reject(new Error("Knowledge confirmation requires the desktop app.")); }
   cancelKnowledgeDraft(): Promise<void> { return Promise.resolve(); }
@@ -467,6 +470,9 @@ export class WebPlatform implements NodalStudioPlatform {
     return Promise.reject(new Error("Portable backup import requires the desktop app."));
   }
 
+  openAppStore(): Promise<void> { return Promise.reject(new Error("The Mac App Store requires macOS.")); }
+  getPurchaseStatus(): Promise<import("./purchase-types").PurchaseStatus> { return Promise.resolve({ distribution: "community", state: "community", reason: null, environment: null, checkedAt: null, canUsePaidFeatures: false, busy: false }); }
+  restoreAppPurchase(): Promise<import("./purchase-types").PurchaseStatus> { return Promise.reject(new Error("Purchases require the Mac App Store app.")); }
   getUpdateStatus(): Promise<import("./settings-types").UpdateStatus> { return Promise.reject(new Error("Updates require the desktop app.")); }
   openUpdateReleases(): Promise<void> { return Promise.reject(new Error("Updates require the desktop app.")); }
   downloadUpdate(): Promise<void> { return Promise.reject(new Error("Updates require the desktop app.")); }

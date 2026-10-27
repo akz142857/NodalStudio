@@ -16,6 +16,7 @@ export interface SchemaReportExportInput {
 }
 
 export interface RuntimeInfo {
+  distribution?: "community" | "macAppStore";
   kind: "desktop" | "web";
   label: string;
   version: string;
@@ -345,6 +346,7 @@ export interface ExplainSchemaInput {
   question?: string;
   relationshipDepth: number;
   aiEnabled: boolean;
+  remoteConsent?: { endpoint: string; model: string; includeComments: boolean };
 }
 
 export interface CloudViewBundle {
@@ -566,6 +568,8 @@ export interface NodalStudioPlatform {
   prepareDiscovery(input: import("./discovery-types").DiscoveryInput): Promise<import("./discovery-types").DiscoveryPreview>;
   runDiscovery(requestId: string): Promise<import("./discovery-types").DiscoveryResult>;
   cancelDiscovery(requestId: string): Promise<void>;
+  getChangeReview(sourceId: string, query?: import("./change-review-types").ChangeReviewQuery): Promise<import("./change-review-types").ChangeReviewWorkspace>;
+  applyChangeReview(input: import("./change-review-types").ChangeReviewRequest, query?: import("./change-review-types").ChangeReviewQuery): Promise<import("./change-review-types").ChangeReviewWorkspace>;
   prepareKnowledgeDraft(input: import("./knowledge-types").KnowledgeDraftInput): Promise<import("./knowledge-types").KnowledgeDraft>;
   confirmKnowledgeDraft(id: string, text: string): Promise<ObjectAnnotation>;
   cancelKnowledgeDraft(id: string): Promise<void>;
@@ -577,6 +581,7 @@ export interface NodalStudioPlatform {
   getRuntimeInfo(): Promise<RuntimeInfo>;
   getDiagnosticInfo(): Promise<import("./settings-types").DiagnosticInfo>;
   revealAppDirectory(kind: "data" | "logs"): Promise<void>;
+  pickWorkspacePath(kind: "openSettings" | "saveSettings" | "openBackup" | "saveBackup" | "repository"): Promise<string | null>;
   pickConnectionFile(): Promise<string | null>;
   listDataSources(): Promise<DataSourceProfile[]>;
   renameDataSource(sourceId: string, displayName: string): Promise<DataSourceProfile>;
@@ -671,6 +676,9 @@ export interface NodalStudioPlatform {
   previewPortableBackup(path: string): Promise<import("./settings-types").BackupPreview>;
   importPortableBackup(path: string): Promise<import("./settings-types").BackupReceipt>;
   checkForUpdates(): Promise<import("./settings-types").UpdateCheckResult>;
+  openAppStore(): Promise<void>;
+  getPurchaseStatus(): Promise<import("./purchase-types").PurchaseStatus>;
+  restoreAppPurchase(): Promise<import("./purchase-types").PurchaseStatus>;
   getUpdateStatus(): Promise<import("./settings-types").UpdateStatus>;
   openUpdateReleases(): Promise<void>;
   downloadUpdate(): Promise<void>;

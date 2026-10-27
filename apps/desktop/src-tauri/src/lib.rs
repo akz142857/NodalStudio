@@ -62,12 +62,16 @@ mod connection_diagnostics;
 mod connection_tests;
 use connection_diagnostics::ConnectionFailure;
 mod connection_security;
+mod file_access;
 pub use connection_security::run_askpass_helper;
+mod change_review;
 mod diagram_export;
 mod discovery;
 mod export_file;
+mod git_readiness;
 mod github_releases;
 mod knowledge;
+mod purchase;
 mod query_export;
 mod relationship_batches;
 mod schema_report;
@@ -80,10 +84,7 @@ async fn save_schema_report(
     app: tauri::AppHandle,
     input: schema_report::SchemaReportExportInput,
 ) -> Result<schema_report::SchemaReportExportReceipt, String> {
-    let directory = app
-        .path()
-        .download_dir()
-        .map_err(|_| "The Downloads directory is unavailable.".to_owned())?;
+    let directory = file_access::export_directory(&app).await?;
     tokio::task::spawn_blocking(move || schema_report::save(&input, &directory))
         .await
         .map_err(|_| "Unable to finish the schema report export.".to_owned())?
@@ -94,10 +95,7 @@ async fn save_diagram_export(
     app: tauri::AppHandle,
     input: diagram_export::DiagramExportInput,
 ) -> Result<diagram_export::DiagramExportReceipt, String> {
-    let directory = app
-        .path()
-        .download_dir()
-        .map_err(|_| "The Downloads directory is unavailable.".to_owned())?;
+    let directory = file_access::export_directory(&app).await?;
     tokio::task::spawn_blocking(move || diagram_export::save(&input, &directory))
         .await
         .map_err(|_| "Unable to finish the diagram export.".to_owned())?
@@ -109,10 +107,7 @@ async fn save_diagram_export_binary(
     request: tauri::ipc::Request<'_>,
 ) -> Result<diagram_export::DiagramExportReceipt, String> {
     let input = diagram_export::from_binary(request.body(), request.headers())?;
-    let directory = app
-        .path()
-        .download_dir()
-        .map_err(|_| "The Downloads directory is unavailable.".to_owned())?;
+    let directory = file_access::export_directory(&app).await?;
     tokio::task::spawn_blocking(move || diagram_export::save(&input, &directory))
         .await
         .map_err(|_| "Unable to finish the diagram export.".to_owned())?
@@ -156,6 +151,7 @@ async fn acquire_cloud_operation(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeInfo {
+    distribution: &'static str,
     kind: &'static str,
     label: &'static str,
     version: String,
@@ -582,6 +578,15 @@ struct ExplainSchemaInput {
     #[allow(dead_code)]
     relationship_depth: u8,
     ai_enabled: bool,
+    remote_consent: Option<RemoteAiConsent>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteAiConsent {
+    endpoint: String,
+    model: String,
+    include_comments: bool,
 }
 
 #[derive(Deserialize)]
@@ -742,6 +747,11 @@ fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
     RuntimeInfo {
         kind: "desktop",
         label: "Tauri desktop runtime",
+        distribution: if purchase::IS_MAS {
+            "macAppStore"
+        } else {
+            "community"
+        },
         version: app.package_info().version.to_string(),
     }
 }
@@ -1093,7 +1103,16 @@ async fn capture_snapshot(
     input: CaptureSnapshotInput,
     state: &AppState,
 ) -> Result<CaptureSnapshotResult, String> {
-    capture_snapshot_using(input, state, None).await
+    let source = input.source_id;
+    let result = capture_snapshot_using(input, state, None).await;
+    if result.is_err() {
+        state
+            .store
+            .record_review_capture_failure(source)
+            .await
+            .map_err(safe_store_error)?;
+    }
+    result
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1536,6 +1555,7 @@ async fn export_git_workspace(
     input: ExportGitWorkspaceInput,
     state: State<'_, AppState>,
 ) -> Result<ExportReceipt, String> {
+    let _access = file_access::access(std::path::Path::new(input.repository_path.trim()))?;
     let (_, workspace) = render_local_workspace(&state.store, input.source_id).await?;
     write_workspace(
         std::path::Path::new(input.repository_path.trim()),
@@ -1595,6 +1615,7 @@ async fn preview_git_export(
     input: ExportGitWorkspaceInput,
     state: State<'_, AppState>,
 ) -> Result<WorkspacePreview, String> {
+    let _access = file_access::access(std::path::Path::new(input.repository_path.trim()))?;
     let (_, workspace) = render_local_workspace(&state.store, input.source_id).await?;
     preview_workspace(
         std::path::Path::new(input.repository_path.trim()),
@@ -1608,6 +1629,7 @@ async fn preview_git_import(
     input: ExportGitWorkspaceInput,
     state: State<'_, AppState>,
 ) -> Result<GitImportPreview, String> {
+    let _access = file_access::access(std::path::Path::new(input.repository_path.trim()))?;
     let snapshot = state
         .store
         .latest_snapshot(input.source_id)
@@ -1661,6 +1683,7 @@ async fn import_git_workspace(
     input: ExportGitWorkspaceInput,
     state: State<'_, AppState>,
 ) -> Result<ImportGitWorkspaceResult, String> {
+    let _access = file_access::access(std::path::Path::new(input.repository_path.trim()))?;
     let snapshot = state
         .store
         .latest_snapshot(input.source_id)
@@ -2748,6 +2771,11 @@ async fn get_security_status(
         .await
         .map_err(safe_store_error)?
     {
+        if settings.git.repository_path.trim().is_empty() {
+            continue;
+        }
+        let _access =
+            file_access::access(std::path::Path::new(settings.git.repository_path.trim()))?;
         let path = std::path::Path::new(settings.git.repository_path.trim()).join(".nodalstudio");
         // A directory that cannot be read must not audit as zero conflicts: this
         // is the security panel, and "could not check" reported as "nothing to
@@ -2815,47 +2843,58 @@ async fn check_merge_driver(
     input: ExportGitWorkspaceInput,
     state: State<'_, AppState>,
 ) -> Result<MergeDriverStatus, String> {
+    let _access = file_access::access(std::path::Path::new(input.repository_path.trim()))?;
     let root = std::path::Path::new(input.repository_path.trim());
     if !root.is_absolute() || !root.is_dir() {
         return Err("Choose an existing absolute repository directory.".into());
     }
-    let repository_is_git = Command::new("git")
-        .args([
-            "-C",
-            input.repository_path.trim(),
-            "rev-parse",
-            "--is-inside-work-tree",
-        ])
-        .output()
-        .is_ok_and(|output| output.status.success());
-    let driver_configured = Command::new("git")
-        .args([
-            "-C",
-            input.repository_path.trim(),
-            "config",
-            "--get",
-            "merge.nodalstudio-semantic.driver",
-        ])
-        .output()
-        .is_ok_and(|output| {
-            output.status.success()
-                && String::from_utf8_lossy(&output.stdout).contains("nodalstudio-semantic-merge")
-        });
+    let repository_is_git = if purchase::IS_MAS {
+        git_readiness::has_git_marker(root)
+    } else {
+        Command::new("git")
+            .args([
+                "-C",
+                input.repository_path.trim(),
+                "rev-parse",
+                "--is-inside-work-tree",
+            ])
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    let driver_configured = !purchase::IS_MAS
+        && Command::new("git")
+            .args([
+                "-C",
+                input.repository_path.trim(),
+                "config",
+                "--get",
+                "merge.nodalstudio-semantic.driver",
+            ])
+            .output()
+            .is_ok_and(|output| {
+                output.status.success()
+                    && String::from_utf8_lossy(&output.stdout)
+                        .contains("nodalstudio-semantic-merge")
+            });
     let workspace_root = root.join(".nodalstudio");
     let attributes_configured = fs::read_to_string(workspace_root.join(".gitattributes"))
         .is_ok_and(|value| value.contains("merge=nodalstudio-semantic"));
     let conflict_reports = list_conflict_reports(&workspace_root)?;
     let expected_version = env!("CARGO_PKG_VERSION").to_owned();
-    let driver_version = Command::new("nodalstudio-semantic-merge")
-        .arg("--version")
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| {
-            String::from_utf8(output.stdout)
-                .ok()
-                .and_then(|value| value.split_whitespace().last().map(str::to_owned))
-        });
+    let driver_version = if purchase::IS_MAS {
+        None
+    } else {
+        Command::new("nodalstudio-semantic-merge")
+            .arg("--version")
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| {
+                String::from_utf8(output.stdout)
+                    .ok()
+                    .and_then(|value| value.split_whitespace().last().map(str::to_owned))
+            })
+    };
     let workspace_fingerprint = fs::read_to_string(workspace_root.join("project.json"))
         .ok()
         .and_then(|value| serde_json::from_str::<serde_json::Value>(&value).ok())
@@ -2873,7 +2912,11 @@ async fn check_merge_driver(
         driver_configured,
         driver_version,
         expected_version,
-        install_command: "git config --local merge.nodalstudio-semantic.name 'Nodal Studio semantic merge' && git config --local merge.nodalstudio-semantic.driver 'nodalstudio-semantic-merge %O %A %B'".into(),
+        install_command: if purchase::IS_MAS {
+            String::new()
+        } else {
+            "git config --local merge.nodalstudio-semantic.name 'Nodal Studio semantic merge' && git config --local merge.nodalstudio-semantic.driver 'nodalstudio-semantic-merge %O %A %B'".into()
+        },
         conflict_reports,
         fingerprint_matches: workspace_fingerprint
             .zip(local_fingerprint)
@@ -2931,6 +2974,7 @@ fn conflict_report_path(input: &ConflictReportInput) -> Result<std::path::PathBu
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 fn read_git_conflict_report(input: ConflictReportInput) -> Result<String, String> {
+    let _access = file_access::access(std::path::Path::new(input.repository_path.trim()))?;
     let path = conflict_report_path(&input)?;
     if fs::metadata(&path).map_or(true, |metadata| metadata.len() > 1024 * 1024) {
         return Err("The conflict report is missing or exceeds 1 MB.".into());
@@ -2941,6 +2985,7 @@ fn read_git_conflict_report(input: ConflictReportInput) -> Result<String, String
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 fn delete_git_conflict_report(input: ConflictReportInput) -> Result<(), String> {
+    let _access = file_access::access(std::path::Path::new(input.repository_path.trim()))?;
     let path = conflict_report_path(&input)?;
     fs::remove_file(path).map_err(|_| "Unable to remove the reviewed conflict report.".into())
 }
@@ -3057,6 +3102,7 @@ async fn export_settings_file(
     state: State<'_, AppState>,
 ) -> Result<SettingsFileReceipt, String> {
     let path = validate_settings_file_path(&input.path)?;
+    let _access = file_access::access(&path)?;
     let mut bundle = SettingsExportBundle {
         format_version: settings_model::SETTINGS_SCHEMA_VERSION,
         exported_at: Utc::now().to_rfc3339(),
@@ -3088,6 +3134,7 @@ async fn import_settings_file(
     state: State<'_, AppState>,
 ) -> Result<SettingsFileReceipt, String> {
     let path = validate_settings_file_path(&input.path)?;
+    let _access = file_access::access(&path)?;
     if fs::metadata(&path).map_or(true, |metadata| metadata.len() > 2 * 1024 * 1024) {
         return Err("Choose an existing settings JSON file smaller than 2 MB.".into());
     }
@@ -3121,6 +3168,7 @@ async fn import_settings_file(
 #[allow(clippy::needless_pass_by_value)]
 fn preview_settings_file(input: SettingsFileInput) -> Result<SettingsFilePreview, String> {
     let path = validate_settings_file_path(&input.path)?;
+    let _access = file_access::access(&path)?;
     if fs::metadata(&path).map_or(true, |metadata| metadata.len() > 2 * 1024 * 1024) {
         return Err("Choose an existing settings JSON file smaller than 2 MB.".into());
     }
@@ -3162,6 +3210,7 @@ async fn export_portable_backup(
         .source_id
         .ok_or_else(|| "Choose an active data source before exporting a backup.".to_owned())?;
     let path = validate_backup_file_path(&input.path)?;
+    let _access = file_access::access(&path)?;
     let snapshots = state
         .store
         .list_snapshot_models(source_id)
@@ -3272,6 +3321,7 @@ async fn import_portable_backup(
     state: State<'_, AppState>,
 ) -> Result<BackupReceipt, String> {
     let path = validate_backup_file_path(&input.path)?;
+    let _access = file_access::access(&path)?;
     if fs::metadata(&path).map_or(true, |metadata| metadata.len() > 100 * 1024 * 1024) {
         return Err("Choose an existing portable backup smaller than 100 MB.".into());
     }
@@ -3301,6 +3351,7 @@ async fn preview_portable_backup(
     state: State<'_, AppState>,
 ) -> Result<BackupPreview, String> {
     let path = validate_backup_file_path(&input.path)?;
+    let _access = file_access::access(&path)?;
     if fs::metadata(&path).map_or(true, |metadata| metadata.len() > 100 * 1024 * 1024) {
         return Err("Choose an existing portable backup smaller than 100 MB.".into());
     }
@@ -4189,6 +4240,22 @@ fn legacy_explanation_context(
     Ok(context)
 }
 
+fn validate_remote_consent(
+    ai: &settings_model::AiSettings,
+    consent: Option<&RemoteAiConsent>,
+) -> Result<(), String> {
+    if ai.provider == AiProviderKind::Offline
+        || consent.is_some_and(|c| {
+            c.endpoint == ai.endpoint
+                && c.model == ai.model
+                && c.include_comments == ai.include_comments
+        })
+    {
+        return Ok(());
+    }
+    Err("Preview and confirm the current AI destination and data scope before sending.".into())
+}
+
 #[tauri::command]
 async fn explain_schema(
     input: ExplainSchemaInput,
@@ -4223,6 +4290,8 @@ async fn explain_schema(
     if effective.app.privacy.offline_mode && ai.provider != AiProviderKind::Offline {
         return Err("Remote AI is blocked by completely offline mode.".into());
     }
+    validate_remote_consent(ai, input.remote_consent.as_ref())?;
+
     let context = legacy_explanation_context(&snapshot, &input, ai.include_comments)?;
     if ai.provider == AiProviderKind::Offline {
         return Ok(OfflineSchemaProvider.explain(&context, input.question.as_deref()));
@@ -4622,6 +4691,9 @@ fn cloud_sync_endpoint(input: &SyncProjectInput) -> Result<reqwest::Url, String>
 }
 
 fn cloud_http_client() -> Result<reqwest::Client, String> {
+    if purchase::IS_MAS {
+        return Err("Cloud collaboration is unavailable in the Mac App Store edition.".into());
+    }
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_mins(1))
@@ -4913,9 +4985,11 @@ fn safe_git_workspace_error(error: &git_workspace::GitWorkspaceError) -> String 
 ///
 /// Panics when Tauri cannot initialize the configured desktop runtime or local store.
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    #[cfg(not(feature = "mac-app-store"))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    builder
+        .manage(purchase::PurchaseState::default())
         .manage(connection_tests::ConnectionTests::default())
         .manage(updates::UpdateState::default())
         .manage(table_understanding::TableAiState::default())
@@ -4951,9 +5025,19 @@ pub fn run() {
                 cloud_operations: Arc::new(Mutex::new(HashMap::new())),
                 active_queries: Arc::new(Mutex::new(HashMap::new())),
             });
+            purchase::start(app.handle().clone());
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Focused(true)) {
+                purchase::start(window.app_handle().clone());
+            }
+        })
         .invoke_handler(|invoke| {
+            if let Some(reason) = purchase::reject_reason(&invoke) {
+                invoke.resolver.reject(reason);
+                return true;
+            }
             if updates::reject_during_install(&invoke) {
                 invoke
                     .resolver
@@ -4966,6 +5050,9 @@ pub fn run() {
                 save_schema_report,
                 query_export::export_query_result,
                 get_runtime_info,
+                purchase::get_purchase_status,
+                purchase::restore_app_purchase,
+                purchase::open_app_store,
                 get_diagnostic_info,
                 reveal_app_directory,
                 list_data_sources,
@@ -4973,6 +5060,7 @@ pub fn run() {
                 test_postgres_connection,
                 cancel_connection_test,
                 connection_security::pick_connection_file,
+                file_access::pick_workspace_path,
                 verify_and_refresh_data_source,
                 capture_postgres_snapshot,
                 execute_readonly_query,
@@ -5037,6 +5125,8 @@ pub fn run() {
                 updates::cancel_update_download,
                 updates::install_update,
                 get_semantics,
+                change_review::get_change_review,
+                change_review::apply_change_review,
                 knowledge::prepare_knowledge_draft,
                 knowledge::confirm_knowledge_draft,
                 knowledge::cancel_knowledge_draft,
@@ -5076,6 +5166,29 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn remote_ai_requires_consent_matching_current_settings() {
+        let mut ai = settings_model::AiSettings::default();
+        assert!(validate_remote_consent(&ai, None).is_ok());
+        ai.provider = AiProviderKind::OpenAiCompatible;
+        ai.endpoint = "https://provider.example/v1".into();
+        ai.model = "model".into();
+        let mut consent = RemoteAiConsent {
+            endpoint: ai.endpoint.clone(),
+            model: ai.model.clone(),
+            include_comments: ai.include_comments,
+        };
+        assert!(validate_remote_consent(&ai, None).is_err());
+        assert!(validate_remote_consent(&ai, Some(&consent)).is_ok());
+        consent.endpoint = "https://other.example/v1".into();
+        assert!(validate_remote_consent(&ai, Some(&consent)).is_err());
+        consent.endpoint = ai.endpoint.clone();
+        consent.include_comments = !ai.include_comments;
+        assert!(validate_remote_consent(&ai, Some(&consent)).is_err());
+        consent.include_comments = ai.include_comments;
+        consent.model = "different".into();
+        assert!(validate_remote_consent(&ai, Some(&consent)).is_err());
+    }
 
     /// Some monotonic clocks cannot represent an instant before their origin.
     /// Keep expiry tests real on those platforms instead of panicking or skipping.

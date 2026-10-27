@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { I18nProvider, useI18n } from "../../i18n";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiscoveryInput, DiscoveryPreview, DiscoveryResult, NodalStudioPlatform } from "../../platform";
@@ -22,22 +23,91 @@ function setup(databaseType: "postgreSql" | "mySql" = "postgreSql") {
   return { platform: mocks as unknown as NodalStudioPlatform, mocks, draftSql, snapshot: { ...reportSnapshot, database: { ...reportSnapshot.database, databaseType } }, settings: discoverySettings(), semantics: reportSemantics };
 }
 async function generate() {
-  fireEvent.click(await screen.findByRole("button", { name: "Review AI request" }));
-  fireEvent.click(await screen.findByRole("button", { name: "Generate SQL" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Send request" }));
   await screen.findByLabelText("Generated SQL");
 }
 describe("SQL drafting", () => {
   beforeEach(() => { clearQuerySessions(); });
+  it("follows asynchronous preview growth but preserves reading position after scrolling up", async () => {
+    const p = setup();
+    let reject!: (reason: Error) => void;
+    p.mocks.runDiscovery.mockImplementationOnce(() => new Promise((_, r) => { reject = r; }));
+    render(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
+    const transcript = screen.getByLabelText("Query conversation");
+    Object.defineProperty(transcript, "scrollHeight", { configurable: true, value: 1000 });
+    Object.defineProperty(transcript, "clientHeight", { configurable: true, value: 300 });
+    fireEvent.click(await screen.findByRole("button", { name: "Send request" }));
+    await waitFor(() => expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(transcript.scrollTop).toBe(1000));
+    transcript.scrollTop = 100;
+    fireEvent.scroll(transcript);
+    await act(async () => { reject(new Error("Provider unavailable")); await Promise.resolve(); });
+    await screen.findByText("Provider unavailable");
+    expect(screen.getByText("Request details")).toBeVisible();
+    expect(screen.queryByText("Ready to generate")).toBeNull();
+    expect(transcript.scrollTop).toBe(100);
+    fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Only the first five orders" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send follow-up" }));
+    await waitFor(() => expect(transcript.scrollTop).toBe(1000));
+    expect(p.mocks.executeReadonlyQuery).not.toHaveBeenCalled();
+  });
+  it("translates initial and follow-up placeholders live without losing questions or sending requests", async () => {
+    const p = setup();
+    // Keep this a local conversation, without preparing an AI request.
+    p.settings.source!.ai.enabled = false;
+    function Localized({ language }: { language: "en" | "zhCn" }) {
+      return <I18nProvider value={useI18n(language)}><QueryDraftPanel {...p} onUseSql={vi.fn()} onOpenSettings={vi.fn()} /></I18nProvider>;
+    }
+    const view = render(<Localized language="en" />);
+    const initialEn = "Describe your question, e.g. count orders by month…";
+    const initialZh = "描述你的业务问题，例如：按月统计订单数量…";
+    const followEn = "Ask a follow-up or add filters…";
+    const followZh = "继续追问，或补充筛选条件…";
+    fireEvent.change(screen.getByPlaceholderText(initialEn), { target: { value: "Show public.orders IDs" } });
+    view.rerender(<Localized language="zhCn" />);
+    expect(screen.getByPlaceholderText(initialZh)).toHaveValue("Show public.orders IDs");
+    view.rerender(<Localized language="en" />);
+    fireEvent.keyDown(screen.getByPlaceholderText(initialEn), { key: "Enter" });
+    expect(screen.getByPlaceholderText(followEn)).toHaveValue("");
+    fireEvent.change(screen.getByPlaceholderText(followEn), { target: { value: "只取前 5 行" } });
+    view.rerender(<Localized language="zhCn" />);
+    expect(screen.getByPlaceholderText(followZh)).toHaveValue("只取前 5 行");
+    expect(screen.getByText("Show public.orders IDs")).toBeVisible();
+    view.rerender(<Localized language="en" />);
+    expect(screen.getByPlaceholderText(followEn)).toHaveValue("只取前 5 行");
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+    expect(screen.getByPlaceholderText(initialEn)).toHaveValue("");
+    await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    expect(p.mocks.prepareDiscovery).not.toHaveBeenCalled();
+    expect(p.mocks.runDiscovery).not.toHaveBeenCalled();
+    expect(p.mocks.executeReadonlyQuery).not.toHaveBeenCalled();
+  });
+  it("sends the latest question separately from conversation with the UI language fallback", async () => {
+    const p = setup();
+    render(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Send request" }));
+    await screen.findByLabelText("Generated SQL");
+    expect((p.mocks.prepareDiscovery.mock.calls[0][0] as DiscoveryInput).replyLanguage).toEqual({ currentQuestion: seed.question, uiLocale: "en" });
+    const question = "请用日语解释，并只取前五行";
+    fireEvent.change(screen.getByLabelText("Question"), { target: { value: question } });
+    fireEvent.click(screen.getByRole("button", { name: "Send follow-up" }));
+    await waitFor(() => expect(p.mocks.prepareDiscovery).toHaveBeenCalledTimes(2));
+    const sent = p.mocks.prepareDiscovery.mock.calls[1][0] as DiscoveryInput;
+    expect(sent.replyLanguage).toEqual({ currentQuestion: question, uiLocale: "en" });
+    expect(sent.task.question).toContain(seed.question);
+    expect(sent.task.question).toContain(question);
+    expect(p.mocks.runDiscovery).toHaveBeenCalled();
+    expect(p.mocks.executeReadonlyQuery).not.toHaveBeenCalled();
+  });
   it.each(["postgreSql", "mySql"] as const)("%s drafting requires review and replacement, permits undo, and never runs automatically", async (dialect) => {
     const p = setup(dialect); const sql = p.draftSql; saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 42;" });
     const { container } = render(<QueryPage {...p} runtimeKind="desktop" draftSeed={seed} />);
     expect(screen.getByLabelText("Question")).toHaveValue("");
     expect(screen.getByText(seed.question)).toBeVisible();
-    fireEvent.click(await screen.findByRole("button", { name: "Review AI request" }));
-    await screen.findByRole("button", { name: "Generate SQL" });
-    expect(p.mocks.runDiscovery).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Send request" }));
+    await screen.findByLabelText("Generated SQL");
+    expect(p.mocks.runDiscovery).toHaveBeenCalled();
     expect((p.mocks.prepareDiscovery.mock.calls[0][0] as DiscoveryInput).task).toMatchObject({ operation: "draftSql", question: seed.question, root: seed.root, candidates: seed.tables });
-    fireEvent.click(screen.getByRole("button", { name: "Generate SQL" }));
     fireEvent.click(await screen.findByRole("button", { name: "Review in editor" }));
     expect(screen.getByRole("dialog")).toBeVisible(); expect(container.querySelector(".cm-content")).toHaveTextContent("SELECT 42;");
     expect(p.mocks.executeReadonlyQuery).not.toHaveBeenCalled();
@@ -51,6 +121,23 @@ describe("SQL drafting", () => {
     await waitFor(() => expect(p.mocks.executeReadonlyQuery).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ sql })));
     fireEvent.click(screen.getByRole("tab", { name: "Draft query" }));
     expect(await screen.findByRole("region", { name: "Executed query result" })).toBeVisible();
+  });
+  it("keeps long tokens and explicit newlines intact while using soft wrapping without sending", async () => {
+    const p = setup();
+    render(<QueryPage {...p} runtimeKind="desktop" draftSeed={seed} />);
+    const question = screen.getByLabelText("Question");
+    const text = "字段".repeat(100) + "\n" + "long_identifier_".repeat(80);
+    fireEvent.change(question, { target: { value: text } });
+    expect(question).toHaveAttribute("wrap", "soft");
+    expect(question).toHaveValue(text);
+    fireEvent.keyDown(question, { key: "Enter", shiftKey: true });
+    expect(question).toHaveValue(text);
+    expect(p.mocks.runDiscovery).not.toHaveBeenCalled();
+    expect(p.mocks.executeReadonlyQuery).not.toHaveBeenCalled();
+    fireEvent.change(question, { target: { value: "" } });
+    expect(question).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Send follow-up" })).toBeDisabled();
+    await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
   });
   it("preserves both authoring modes and suppresses execution while composing a question", async () => {
     const p = setup();
@@ -69,7 +156,7 @@ describe("SQL drafting", () => {
     expect(screen.getByLabelText("Question")).toHaveValue("My revised question");
     await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
   });
-  it("starts with a question, automatically prepares matching context, and keeps sending explicit", async () => {
+  it("starts with a question, prepares matching context and sends once after explicit submit, including StrictMode", async () => {
     const p = setup();
     render(<StrictMode><QueryDraftPanel {...p} onUseSql={vi.fn()} onOpenSettings={vi.fn()} /></StrictMode>);
     expect(screen.queryByLabelText("Starting table")).toBeNull();
@@ -77,28 +164,27 @@ describe("SQL drafting", () => {
     expect(screen.getByRole("heading", { name: "What would you like to know?" })).toBeVisible();
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Show public.orders IDs" } });
     fireEvent.click(screen.getByRole("button", { name: "Create SQL draft" }));
-    await screen.findByRole("button", { name: "Generate SQL" });
+    await screen.findByLabelText("Generated SQL");
     expect((p.mocks.prepareDiscovery.mock.calls[0][0] as DiscoveryInput).task.candidates).toEqual(seed.tables);
-    expect(p.mocks.runDiscovery).not.toHaveBeenCalled();
+    expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "orders" } });
     expect(screen.queryByRole("button", { name: "Generate SQL" })).toBeNull();
-    expect(p.mocks.cancelDiscovery).toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Create SQL draft" }));
     expect(screen.getByRole("region", { name: "Clarify query context" })).toBeVisible();
     expect(p.mocks.prepareDiscovery).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /^public\.orders/ }));
-    await screen.findByRole("button", { name: "Generate SQL" });
+    await screen.findByLabelText("Generated SQL");
     fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Show public.customers" } });
     fireEvent.click(screen.getByRole("button", { name: "Create SQL draft" }));
-    await screen.findByRole("button", { name: "Generate SQL" });
+    await screen.findByLabelText("Generated SQL");
     expect((p.mocks.prepareDiscovery.mock.calls.at(-1)![0] as DiscoveryInput).task.candidates).toEqual([reportSnapshot.schemas[0].tables[0].key]);
   });
   it.each(["postgreSql", "mySql"] as const)("%s shows clarification without an actionable SQL draft", async (dialect) => {
     const p = setup(dialect); p.mocks.runDiscovery.mockImplementation(async () => ({ ...discoveryResult(discoveryPreview({ snapshotId: reportSnapshot.id, domainId: null, task: { operation: "draftSql", question: seed.question, root: seed.root, candidates: seed.tables, pathTables: [], pathRelationships: [] } })), requestId: p.mocks.prepareDiscovery.mock.results[0] ? (await p.mocks.prepareDiscovery.mock.results[0].value as DiscoveryPreview).requestId : "", answer: { terms: [], meanings: [], rankings: [], interpretations: [], readingOrder: [], unknowns: [], sqlDraft: { sql: null, explanation: "Business definition needed", assumptions: [], clarification: ["What counts as active?"] } } }));
     render(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Review AI request" })); fireEvent.click(await screen.findByRole("button", { name: "Generate SQL" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send request" })); await waitFor(() => expect(p.mocks.runDiscovery).toHaveBeenCalled());
     expect(await screen.findByText("What counts as active?")).toBeVisible(); expect(screen.queryByRole("button", { name: "Review in editor" })).toBeNull();
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Active means total greater than zero" } });
     fireEvent.click(screen.getByRole("button", { name: "Send follow-up" }));
@@ -110,7 +196,7 @@ describe("SQL drafting", () => {
     const p = setup(dialect); let finish!: (r: DiscoveryResult) => void;
     p.mocks.runDiscovery.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     render(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Review AI request" })); fireEvent.click(await screen.findByRole("button", { name: "Generate SQL" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send request" })); await waitFor(() => expect(p.mocks.runDiscovery).toHaveBeenCalled());
     const preview = await p.mocks.prepareDiscovery.mock.results[0].value as DiscoveryPreview;
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Changed question" } });
     expect(p.mocks.cancelDiscovery).not.toHaveBeenCalled();
@@ -140,13 +226,13 @@ describe("SQL drafting", () => {
     expect(input.task.question).toContain("只取前 5 行");
     expect(input.task.candidates).toEqual(seed.tables);
     expect(JSON.stringify(input)).not.toContain("LOCAL_RESULT_ONLY");
-    expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(2));
     expect(p.mocks.executeReadonlyQuery).not.toHaveBeenCalled();
   });
   it("blocks out-of-scope carried tables and offline configuration without silently changing scope", async () => {
     const p = setup(); p.settings.source!.ai.contextScope = "currentTable";
     const view = render(<QueryDraftPanel {...p} seed={{ ...seed, tables: reportSnapshot.schemas[0].tables.map((t) => t.key) }} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("outside the configured AI scope"); expect(screen.queryByRole("button", { name: "Review AI request" })).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent("outside the configured AI scope"); expect(screen.queryByRole("button", { name: "Send request" })).toBeNull();
     p.settings.app.privacy.offlineMode = true; view.rerender(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Open AI settings" })).toBeVisible(); expect(p.mocks.prepareDiscovery).not.toHaveBeenCalled();
     await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
@@ -176,4 +262,37 @@ describe("SQL drafting", () => {
     expect(screen.queryByText(seed.question)).toBeNull();
     await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
   });
+});
+
+
+it("does not replay a submitted turn when the UI language changes", async () => {
+  const p = setup();
+  function Localized({ language }: { language: "en" | "zhCn" }) {
+    return <I18nProvider value={useI18n(language)}><QueryDraftPanel {...p} onUseSql={vi.fn()} onOpenSettings={vi.fn()} /></I18nProvider>;
+  }
+  const view = render(<Localized language="en" />);
+  fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Show public.orders IDs" } });
+  fireEvent.keyDown(screen.getByLabelText("Question"), { key: "Enter" });
+  await screen.findByLabelText("Generated SQL");
+  expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(1);
+  await act(async () => { view.rerender(<Localized language="zhCn" />); await Promise.resolve(); });
+  expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(1);
+  await act(async () => { view.rerender(<Localized language="en" />); await Promise.resolve(); });
+  expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(1);
+  fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Limit to 5" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send follow-up" }));
+  await waitFor(() => expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(2));
+});
+
+it("invalidates changed semantic evidence without automatically resending", async () => {
+  const p = setup();
+  const view = render(<QueryDraftPanel {...p} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Show public.orders IDs" } });
+  fireEvent.keyDown(screen.getByLabelText("Question"), { key: "Enter" });
+  await screen.findByLabelText("Generated SQL");
+  await act(async () => { view.rerender(<QueryDraftPanel {...p} semantics={{ ...p.semantics, logicalRelationships: [] }} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />); await Promise.resolve(); });
+  expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(1);
+  expect(screen.queryByLabelText("Generated SQL")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+  await waitFor(() => expect(p.mocks.runDiscovery).toHaveBeenCalledTimes(2));
 });

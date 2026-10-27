@@ -1,0 +1,12 @@
+[package]
+name = "storekit-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The only unsafe boundary is the small, documented Swift C ABI in this crate.
+# Application and workspace crates retain unsafe_code = forbid.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[dependencies]

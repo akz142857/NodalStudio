@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "apps/desktop/src-tauri",
+  "crates/storekit-bridge",
   "apps/cloud-api",
   "crates/schema-model",
   "crates/settings-model",

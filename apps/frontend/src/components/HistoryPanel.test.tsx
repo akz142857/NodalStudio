@@ -50,8 +50,11 @@ const changeSet: SchemaChangeSet = {
 function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"]): NodalStudioPlatform {
   return {
     deleteView: vi.fn(),
+    pickWorkspacePath: vi.fn(),
     pickConnectionFile: vi.fn(),
     exportQueryResult: vi.fn(),
+    getChangeReview: vi.fn(),
+    applyChangeReview: vi.fn(),
     prepareKnowledgeDraft: vi.fn(),
     confirmKnowledgeDraft: vi.fn(),
     cancelKnowledgeDraft: vi.fn(),
@@ -130,6 +133,9 @@ function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"])
     exportPortableBackup: vi.fn(),
     previewPortableBackup: vi.fn(),
     importPortableBackup: vi.fn(),
+    openAppStore: vi.fn(),
+    getPurchaseStatus: vi.fn(),
+    restoreAppPurchase: vi.fn(),
     getUpdateStatus: vi.fn(), openUpdateReleases: vi.fn(), downloadUpdate: vi.fn(), cancelUpdateDownload: vi.fn(), installUpdate: vi.fn(),
     checkForUpdates: vi.fn(),
     deleteSourceData: vi.fn(),

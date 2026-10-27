@@ -1,0 +1,25 @@
+Nodal Studio Privacy Policy
+Effective date: October 25, 2026
+
+This policy describes the Nodal Studio desktop app. The Mac App Store edition has no cloud account creation or cloud collaboration. The community edition can connect to a cloud service you configure. Apple handles app purchase authorization; no separate Nodal Studio account is required for a purchase.
+
+Local data
+Connection settings, schema snapshots, annotations, confirmed interpretations, change review state, canvas layouts and query history are stored in the local application data directory. Running SQL accesses your selected database and displays results. Queries and user input may contain personal or sensitive information. Database, SSH, AI and cloud credentials use the operating system credential store. Only connect to data sources you are authorized to access.
+
+AI services
+AI is off by default. When you configure a remote provider and send a request, your question and selected schema context go to the displayed service endpoint. This may include selected database comments or confirmed semantics. The app does not automatically extract and send business rows or database credentials for AI, but your questions, comments and semantics may themselves contain sensitive information. Review them before sending. API credentials authenticate requests to your configured provider. That provider's policies govern its processing and retention; provider fees are between you and the provider. Offline explanations run locally.
+
+Cloud services and sharing (community edition only)
+When you enable and use a configured cloud service, account email, display name, team information and selected shared schema and semantic content are sent to that service. Its operator may be your organization. Disconnecting or leaving a project only changes local settings and does not delete server data. Contact the service administrator for server retention and deletion. These features are unavailable in the Mac App Store edition.
+
+Updates, authorization and diagnostics
+Community update checks contact GitHub, which receives network information needed for the request. The Mac App Store edition does not use GitHub updates. Apple StoreKit handles purchase verification and restoration and may contact Apple. We do not operate a license server or send Apple accounts, receipts or device verification identifiers to the developer. This version has no developer-operated anonymous diagnostics or crash report upload service. You decide whether to share manually exported diagnostics. Apple's system diagnostics settings are separate.
+
+Offline operation and file permission
+Disabling remote AI, cloud sync and community updates reduces external requests. Database connections still contact the database you select. Store authorization uses Apple's verification mechanism; offline access depends on locally verifiable purchase evidence, and restoring a purchase requires Apple connectivity. System file pickers obtain permission for imports, exports, folders and certificate files. Persistent file permissions stay on this machine and are not included in model or settings exports.
+
+Retention and deletion
+Snapshots follow your retention settings. Data source and storage settings let you preview deletion scope, delete local data, and clear caches or credentials. Removing a local connection does not delete the original database server data. You manage exported files and backups you create. Data already sent to an AI or community cloud service is subject to that service's deletion process. Uninstalling the app does not guarantee removal of credential-store entries or exported files.
+
+Contact and changes
+Developer: Clay & Cosmos (Tianjin) Technology Co., Ltd. For support or privacy requests, email support@nodalos.com. We use your email address and the information you provide to investigate and respond to your request. Do not send passwords, API keys, private database content or unnecessary personal information. You can request deletion of support correspondence at this address, subject to any legal retention obligations. Policy updates will carry a revised date and ship with the app.

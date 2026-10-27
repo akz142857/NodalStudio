@@ -63,6 +63,8 @@ describe("QueryPage", () => {
     const editor = container.querySelector(".cm-content");
     expect(editor).not.toBeNull();
     fireEvent.contextMenu(editor!, { clientX: 120, clientY: 80 });
+    expect(screen.getByRole("menuitem", { name: "Run current statement" })).toBeEnabled();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Query execution options" }));
     expect(screen.getByRole("menuitem", { name: /^Run (?:⌘R|Ctrl\+R)$/ })).toBeEnabled();
@@ -82,6 +84,59 @@ describe("QueryPage", () => {
     expect(splitter).toHaveAttribute("aria-valuenow", "410");
     expect(document.body).not.toHaveClass("is-resizing-query-output");
   });
+  it("disables empty execution and dismisses a menu when its SQL changes", () => {
+    const platform = { listQueryHistory: vi.fn().mockResolvedValue([]), cancelQuery: vi.fn() } as unknown as NodalStudioPlatform;
+    const { container } = render(<QueryPage platform={platform} snapshot={snapshot} runtimeKind="desktop" />);
+    const editor = container.querySelector<HTMLElement>(".cm-editor")!;
+    const view = EditorView.findFromDOM(editor)!;
+    fireEvent.contextMenu(editor);
+    expect(screen.getByRole("menuitem", { name: "Run selected SQL" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Run current statement" })).toBeDisabled();
+    act(() => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "SELECT 1;" } }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    const coords = vi.spyOn(view, "coordsAtPos").mockReturnValue({ left: 100, right: 101, top: 100, bottom: 120 });
+    fireEvent.keyDown(editor, { key: "F10", shiftKey: true });
+    expect(screen.getByRole("menuitem", { name: "Run current statement" })).toBeEnabled();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    coords.mockRestore();
+  });
+
+  it("runs selected SQL from the editor menu through the existing readonly query path", async () => {
+    const executeReadonlyQuery = vi.fn().mockResolvedValue(result);
+    const platform = { executeReadonlyQuery, listQueryHistory: vi.fn().mockResolvedValue([]), cancelQuery: vi.fn() } as unknown as NodalStudioPlatform;
+    const { container } = render(<QueryPage platform={platform} snapshot={snapshot} runtimeKind="desktop" />);
+    const editor = container.querySelector<HTMLElement>(".cm-editor")!;
+    const view = EditorView.findFromDOM(editor)!;
+    const sql = "SELECT 1;\nSELECT 2;";
+    act(() => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: sql }, selection: { anchor: 10, head: sql.length } }));
+    fireEvent.contextMenu(editor, { clientX: 200, clientY: 150 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Run selected SQL" }));
+    await waitFor(() => expect(executeReadonlyQuery).toHaveBeenCalledWith(expect.objectContaining({ sql: "SELECT 2;", rowLimit: 100, timeoutMs: 30000 })));
+    expect(view.state.selection.main.from).toBe(10);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+  it("runs the cursor statement and exposes only stop while a query is executing", async () => {
+    let finish!: (value: QueryExecutionResult) => void;
+    const executeReadonlyQuery = vi.fn<NodalStudioPlatform["executeReadonlyQuery"]>().mockImplementation(() => new Promise<QueryExecutionResult>(resolve => { finish = resolve; }));
+    const cancelQuery = vi.fn().mockResolvedValue(true);
+    const platform = { executeReadonlyQuery, cancelQuery, listQueryHistory: vi.fn().mockResolvedValue([]) } as unknown as NodalStudioPlatform;
+    const { container } = render(<QueryPage platform={platform} snapshot={snapshot} runtimeKind="desktop" />);
+    const editor = container.querySelector<HTMLElement>(".cm-editor")!;
+    const view = EditorView.findFromDOM(editor)!;
+    const sql = "SELECT ';';\nSELECT 2;";
+    act(() => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: sql }, selection: { anchor: sql.indexOf("2") } }));
+    fireEvent.contextMenu(editor);
+    expect(screen.getByRole("menuitem", { name: "Run selected SQL" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Run current statement" }));
+    await waitFor(() => expect(executeReadonlyQuery).toHaveBeenCalledWith(expect.objectContaining({ sql: "SELECT 2;" })));
+    fireEvent.contextMenu(editor);
+    expect(screen.getByRole("menuitem", { name: "Run current statement" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Stop query" }));
+    expect(cancelQuery).toHaveBeenCalledWith(executeReadonlyQuery.mock.calls[0][0].queryId);
+    await act(async () => { finish(result); await Promise.resolve(); });
+  });
+
   it("supports keyboard output navigation and reversible pane focus without replacing the draft", async () => {
     const listQueryHistory = vi.fn().mockResolvedValue([]);
     const api = { listQueryHistory } as unknown as NodalStudioPlatform;

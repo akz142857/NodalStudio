@@ -135,7 +135,7 @@ describe("InspectorPanel", () => {
     const onReviewChanges = vi.fn();
     renderPanel({ changeSet, onReviewChanges });
     fireEvent.click(screen.getByRole("button", { name: "History" }));
-    expect(screen.getByRole("heading", { name: "1 structural changes" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "1 structural change" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Review all changes" }));
     expect(onReviewChanges).toHaveBeenCalledOnce();
   });

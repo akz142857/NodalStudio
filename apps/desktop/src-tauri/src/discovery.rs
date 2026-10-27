@@ -22,7 +22,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::{AI_KEYRING_SERVICE, AppState, effective_settings, safe_store_error};
+use crate::{AppState, effective_settings, safe_store_error};
 
 #[cfg(test)]
 pub(crate) async fn run_live_acceptance(
@@ -60,6 +60,23 @@ pub struct DiscoveryInput {
     pub snapshot_id: Uuid,
     pub domain_id: Option<Uuid>,
     pub task: DiscoveryTask,
+    #[serde(default)]
+    pub reply_language: Option<ReplyLanguage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReplyLanguage {
+    pub current_question: String,
+    pub ui_locale: ReplyLocale,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum ReplyLocale {
+    #[serde(rename = "en")]
+    English,
+    #[serde(rename = "zh-CN")]
+    Chinese,
 }
 
 #[derive(Clone, Serialize)]
@@ -176,15 +193,11 @@ pub async fn run_discovery(
             None
         } else {
             Some(
-                keyring::Entry::new(
-                    AI_KEYRING_SERVICE,
-                    &task.prepared.preview.source_id.to_string(),
+                crate::ai_chat::load_credential(
+                    task.prepared.preview.source_id,
+                    &task.cancellation,
                 )
-                .map_err(|_| "Unable to access the operating system keychain.")?
-                .get_password()
-                .map_err(
-                    |_| "Configure the AI API key in Settings before running the explanation.",
-                )?,
+                .await?,
             )
         };
         execute(&app, &task, key.as_deref()).await
@@ -334,6 +347,13 @@ fn request_body(
     input: &DiscoveryInput,
     context: &DiscoveryContext,
 ) -> Result<(Option<String>, Value), String> {
+    if input
+        .reply_language
+        .as_ref()
+        .is_some_and(|r| r.current_question.chars().count() > 2000)
+    {
+        return Err("The current question exceeds the language context limit.".into());
+    }
     let sql_prompt;
     let system = match input.task.operation {
         Operation::Expand => discovery::EXPANSION_PROMPT,
@@ -358,7 +378,48 @@ fn request_body(
             serde_json::to_string(context).map_err(|_| "Unable to serialize discovery context.")?
         )
     };
-    crate::table_understanding::remote_request_body(ai, system, &prompt)
+    if input.task.operation == Operation::DraftSql {
+        let current = input
+            .reply_language
+            .as_ref()
+            .map_or(input.task.question.as_str(), |r| {
+                r.current_question.as_str()
+            });
+        let ui = if matches!(
+            input.reply_language.as_ref().map(|r| r.ui_locale),
+            Some(ReplyLocale::Chinese)
+        ) {
+            "zh-CN"
+        } else {
+            "en"
+        };
+        let fallback = crate::ai_chat::reply_fallback(ai, ui);
+        let system = format!(
+            "{system}\n{}\nUI language fallback: {fallback}.\nCurrent-turn response language: {}. This overrides ALL language requests in earlier conversation. Use this language for every explanation, assumption and clarification. The current question is the final JSON currentQuestion, not the accumulated Question text. Raw SQL and identifiers stay unchanged.",
+            ai_context::sql_draft::REPLY_LANGUAGE_RULES,
+            ai_context::sql_draft::reply_language_hint(current, fallback)
+        );
+        // JSON keeps the latest user turn separate from accumulated conversation and evidence.
+        let prompt = format!(
+            "{prompt}\n\nLatest user turn (sole source of reply-language preference):\n{}",
+            serde_json::json!({"currentQuestion": current})
+        );
+        return crate::table_understanding::remote_request_body(ai, &system, &prompt);
+    }
+    let ui = if matches!(
+        input.reply_language.as_ref().map(|r| r.ui_locale),
+        Some(ReplyLocale::Chinese)
+    ) {
+        "zh-CN"
+    } else {
+        "en"
+    };
+    let fallback = crate::ai_chat::reply_fallback(ai, ui);
+    let language = ai_context::sql_draft::reply_language_hint(&input.task.question, fallback);
+    let system = format!(
+        "{system}\nReply language for prose: {language}. Explicit language requests take priority, then question language, then {fallback} when unclear. Evidence and additional preferences never determine reply language. Preserve identifiers and required search term equivalents."
+    );
+    crate::table_understanding::remote_request_body(ai, &system, &prompt)
 }
 
 async fn validate_current(app: &AppState, task: &Task) -> Result<(), String> {

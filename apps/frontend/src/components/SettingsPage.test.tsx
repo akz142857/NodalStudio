@@ -112,7 +112,7 @@ describe("SettingsPage", () => {
       />,
     );
 
-    expect(screen.getByRole("checkbox", { name: /Completely offline/ })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /Restrict app external requests/ })).toBeDisabled();
     expect(screen.getByText("Managed · Security team")).toBeVisible();
   });
 
@@ -134,4 +134,49 @@ describe("SettingsPage", () => {
     expect(screen.getByText(/already assigned to Open Settings/)).toBeVisible();
     expect(onUpdateApp).not.toHaveBeenCalled();
   });
+});
+
+describe("Mac App Store submission boundaries", () => {
+  const runtime = { ...baseProps.runtime, distribution: "macAppStore" } as const;
+  it("removes cloud navigation and deep links while retaining community cloud", () => {
+    const props = { ...baseProps, settings: defaultEffectiveSettings("source"), initialCategory: "cloud" as const };
+    const { rerender } = render(<SettingsPage {...props} runtime={runtime} />);
+    expect(screen.queryByRole("button", { name: "Cloud Sync" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Create cloud account and team")).not.toBeInTheDocument();
+    rerender(<SettingsPage {...props} />);
+    expect(screen.getByRole("button", { name: "Cloud Sync" })).toBeVisible();
+  });
+  it("offers a readable offline policy and accurate App Store update status", () => {
+    render(<SettingsPage {...baseProps} runtime={runtime} settings={defaultEffectiveSettings()} initialCategory="privacy" />);
+    fireEvent.click(screen.getByRole("button", { name: "Privacy policy" }));
+    expect(screen.getByRole("region", { name: "Privacy policy" })).toHaveTextContent("Retention and deletion");
+    expect(screen.getByText("App Store", { exact: true })).toBeVisible();
+    expect(screen.queryByRole("checkbox", { name: /Anonymous diagnostics/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Crash reports/ })).not.toBeInTheDocument();
+  });
+  it("uses the native backup picker, preserves the previous path on cancel, and displays failures", async () => {
+    const picker = vi.fn().mockResolvedValueOnce("/chosen/model.nodalmodel").mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("Permission unavailable"));
+    render(<SettingsPage {...baseProps} runtime={runtime} settings={defaultEffectiveSettings("source")} initialCategory="history" platform={{ pickWorkspacePath: picker } as unknown as NodalStudioPlatform} />);
+    const path = screen.getByPlaceholderText("/absolute/path/model.nodalmodel");
+    expect(path).toHaveAttribute("readonly");
+    fireEvent.click(screen.getByRole("button", { name: "Choose export location…" }));
+    await waitFor(() => expect(path).toHaveValue("/chosen/model.nodalmodel"));
+    expect(picker).toHaveBeenCalledWith("saveBackup");
+    fireEvent.click(screen.getByRole("button", { name: "Choose import file…" }));
+    await waitFor(() => expect(picker).toHaveBeenCalledTimes(2));
+    expect(path).toHaveValue("/chosen/model.nodalmodel");
+    fireEvent.click(screen.getByRole("button", { name: "Choose import file…" }));
+    await waitFor(() => expect(screen.getByText("Permission unavailable")).toBeVisible());
+  });
+});
+
+it("checks MAS model files without offering an external merge driver installer", async () => {
+  const settings=defaultEffectiveSettings("source");
+  settings.source!.git.repositoryPath="/chosen/repository";
+  const checkMergeDriver=vi.fn().mockResolvedValue({repositoryIsGit:true,manifestPresent:true,driverVersion:null,expectedVersion:"0.2.4",driverConfigured:false,attributesConfigured:true,installCommand:"",conflictReports:[],fingerprintMatches:true});
+  render(<SettingsPage {...baseProps} settings={settings} runtime={{...baseProps.runtime,distribution:"macAppStore"}} initialCategory="git" platform={{checkMergeDriver} as unknown as NodalStudioPlatform} />);
+  fireEvent.click(screen.getByRole("button",{name:"Check repository"}));
+  await waitFor(()=>expect(screen.getByText(/This edition exchanges model files/)).toBeVisible());
+  expect(screen.queryByRole("button",{name:"Copy install command"})).not.toBeInTheDocument();
+  expect(screen.queryByText("Not installed")).not.toBeInTheDocument();
 });

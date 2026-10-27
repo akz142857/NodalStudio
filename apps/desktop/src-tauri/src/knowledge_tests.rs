@@ -320,6 +320,7 @@ async fn legacy_change_and_domain_requests_never_serialize_confirmed_team_text()
         KnowledgeStatus::Confirmed
     );
     let mut input = ExplainSchemaInput {
+        remote_consent: None,
         snapshot_id: snapshot.id,
         target_type: "changeSet".into(),
         object_key: None,

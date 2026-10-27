@@ -29,3 +29,16 @@ describe("connection security", () => {
     expect(screen.getByRole("checkbox")).toBeDisabled();
   });
 });
+
+it("uses supported MAS authentication and explains the required host file", async () => {
+  const changed = vi.fn();
+  const getRuntimeInfo = vi.fn().mockResolvedValue({ distribution: "macAppStore" });
+  const platform = { getRuntimeInfo } as unknown as NodalStudioPlatform;
+  function Form() { const [security,setSecurity]=useState<ConnectionSecurity>({tls:{}}); return <ConnectionSecurityFields security={security} sslMode="disable" disabled={false} platform={platform} onChange={value=>{setSecurity(value);changed(value);}} />; }
+  render(<Form />);
+  await waitFor(()=>expect(getRuntimeInfo).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole("checkbox"));
+  await waitFor(()=>expect(screen.getByLabelText("Authentication")).toHaveValue("privateKey"));
+  expect(screen.getByRole("option",{name:/SSH agent/i})).toBeDisabled();
+  expect(screen.getByText(/System SSH agents are unavailable/)).toBeVisible();
+});

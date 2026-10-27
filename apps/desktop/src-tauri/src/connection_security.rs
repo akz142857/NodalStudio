@@ -11,9 +11,39 @@ use tauri_plugin_dialog::DialogExt;
 fn local_file(value: Option<&str>, label: &str) -> Result<(), String> {
     if let Some(value) = value {
         let path = Path::new(value);
+        let _access = crate::file_access::access(path)
+            .map_err(|error| format!("Choose a readable local file for {label}. {error}"))?;
         if !path.is_absolute() || !path.is_file() || std::fs::File::open(path).is_err() {
             return Err(format!("Choose a readable local file for {label}."));
         }
+    }
+    Ok(())
+}
+
+fn validate_mas_ssh(ssh: &schema_model::SshConfig) -> Result<(), String> {
+    if crate::purchase::IS_MAS {
+        if ssh.authentication == SshAuthentication::Agent {
+            return Err("The App Store edition supports SSH private key or password authentication. Select one of these methods instead of a system SSH agent.".into());
+        }
+        if ssh
+            .known_hosts
+            .as_deref()
+            .is_none_or(|p| p.trim().is_empty())
+        {
+            return Err(
+                "Choose and authorize a trusted known_hosts file for the App Store edition.".into(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn check_socket_paths(directory: &Path, socket: &Path) -> Result<(), String> {
+    if cfg!(target_os = "macos")
+        && (socket.as_os_str().len() >= 104
+            || directory.join("askpass.sock").as_os_str().len() >= 104)
+    {
+        return Err("The private SSH socket path exceeds the macOS path limit. SSH is unavailable with this home directory path.".into());
     }
     Ok(())
 }
@@ -29,6 +59,7 @@ pub fn validate(security: &ConnectionSecurity, mode: SslMode) -> Result<(), Stri
         local_file(tls.client_key.as_deref(), "the TLS private key")?;
     }
     if let Some(ssh) = &security.ssh {
+        validate_mas_ssh(ssh)?;
         if !valid_host(&ssh.host)
             || ssh.port == 0
             || ssh.username.is_empty()
@@ -175,6 +206,7 @@ pub fn run_askpass_helper() -> bool {
 }
 
 pub struct Tunnel {
+    _file_access: Vec<crate::file_access::Access>,
     // kill_on_drop also covers cancellation and early error returns.
     child: Option<tokio::process::Child>,
     _askpass: Option<Askpass>,
@@ -193,14 +225,27 @@ impl Tunnel {
         dialect: DatabaseType,
         password: Option<&str>,
     ) -> Result<Self, String> {
+        let file_access = [
+            security.tls.ca_certificate.as_deref(),
+            security.tls.client_certificate.as_deref(),
+            security.tls.client_key.as_deref(),
+            security.ssh.as_ref().and_then(|s| s.private_key.as_deref()),
+            security.ssh.as_ref().and_then(|s| s.known_hosts.as_deref()),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|path| crate::file_access::access(Path::new(path)))
+        .collect::<Result<Vec<_>, _>>()?;
         let Some(ssh) = &security.ssh else {
             return Ok(Self {
+                _file_access: file_access,
                 child: None,
                 _askpass: None,
                 directory: None,
                 socket: None,
             });
         };
+        validate_mas_ssh(ssh)?;
         if !cfg!(unix) {
             return Err("SSH tunneling currently requires macOS or Linux.".into());
         }
@@ -209,13 +254,18 @@ impl Tunnel {
         }
         // Keep paths short enough for sockaddr_un on macOS. tempfile creates a private 0700 directory.
         let directory = tempfile::Builder::new()
-            .prefix("nodal-ssh-")
-            .tempdir_in("/tmp")
+            .prefix("ns")
+            .tempdir_in(if crate::purchase::IS_MAS {
+                std::env::temp_dir()
+            } else {
+                PathBuf::from("/tmp")
+            })
             .map_err(|_| "Unable to create the private SSH socket directory.")?;
         let socket = directory.path().join(match dialect {
             DatabaseType::PostgreSql => format!(".s.PGSQL.{port}"),
             DatabaseType::MySql => "mysql.sock".into(),
         });
+        check_socket_paths(directory.path(), &socket)?;
         let destination = if host.contains(':') {
             format!("[{host}]")
         } else {
@@ -223,6 +273,11 @@ impl Tunnel {
         };
         let forward = format!("{}:{destination}:{port}", socket.display());
         let mut command = tokio::process::Command::new("/usr/bin/ssh");
+        if crate::purchase::IS_MAS {
+            // Explicit key/password only: do not accidentally consult the login agent.
+            command.env_remove("SSH_AUTH_SOCK");
+            command.args(["-o", "IdentityAgent=none"]);
+        }
         // Ignore arbitrary local config commands/proxies. Never disable host-key validation.
         command.args([
             "-F",
@@ -310,6 +365,7 @@ impl Tunnel {
             .spawn()
             .map_err(|_| "Unable to start OpenSSH. Install the system SSH client.")?;
         let mut tunnel = Self {
+            _file_access: file_access,
             child: Some(child),
             _askpass: askpass,
             directory: Some(directory),
@@ -372,8 +428,11 @@ pub async fn pick_connection_file(app: tauri::AppHandle) -> Result<Option<String
             .blocking_pick_file()
             .map(|file| {
                 file.into_path()
-                    .map(|path| path.to_string_lossy().into_owned())
                     .map_err(|_| "Choose a local file.".to_owned())
+                    .and_then(|path| {
+                        crate::file_access::remember(&path)?;
+                        Ok(path.to_string_lossy().into_owned())
+                    })
             })
             .transpose()
     })
@@ -384,6 +443,36 @@ pub async fn pick_connection_file(app: tauri::AppHandle) -> Result<Option<String
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn socket_paths_fail_before_spawning_on_macos_limit() {
+        if cfg!(target_os = "macos") {
+            assert!(
+                check_socket_paths(
+                    Path::new("/tmp/short"),
+                    Path::new("/tmp/short/.s.PGSQL.5432")
+                )
+                .is_ok()
+            );
+            let long = PathBuf::from(format!("/{}", "a".repeat(100)));
+            assert!(check_socket_paths(&long, &long.join(".s.PGSQL.5432")).is_err());
+        }
+    }
+    #[test]
+    fn mas_requires_explicit_known_hosts_and_supported_authentication() {
+        let mut ssh = schema_model::SshConfig {
+            host: "localhost".into(),
+            port: 22,
+            username: "fixture".into(),
+            authentication: SshAuthentication::Agent,
+            private_key: None,
+            known_hosts: None,
+        };
+        assert_eq!(validate_mas_ssh(&ssh).is_err(), crate::purchase::IS_MAS);
+        ssh.authentication = SshAuthentication::Password;
+        assert_eq!(validate_mas_ssh(&ssh).is_err(), crate::purchase::IS_MAS);
+        ssh.known_hosts = Some("/chosen/known_hosts".into());
+        assert!(validate_mas_ssh(&ssh).is_ok());
+    }
     #[test]
     fn rejects_incomplete_tls_identity_and_missing_files() {
         let mut security = ConnectionSecurity::default();

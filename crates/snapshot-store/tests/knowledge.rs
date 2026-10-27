@@ -921,6 +921,16 @@ async fn failed_verified_storage_transaction_preserves_profile_snapshot_and_conf
         let store = LocalSnapshotStore::open_path(&path).await.unwrap();
         let s = snapshot(Uuid::new_v4());
         let original = profile(s.source_id);
+        if operation == "DELETE" {
+            // Confirmed evidence is now retention-protected. Add an older,
+            // unreferenced snapshot so this failure injection still exercises deletion.
+            let mut unreferenced = s.clone();
+            unreferenced.id = Uuid::new_v4();
+            unreferenced.database.version = "older-unreferenced".into();
+            unreferenced.canonicalize().unwrap();
+            unreferenced.captured_at = s.captured_at - chrono::Duration::seconds(1);
+            store.save_snapshot(&unreferenced).await.unwrap();
+        }
         store.save_verified_source(&original, &s).await.unwrap();
         let a = annotation(s.source_id);
         store.save_annotation(&a).await.unwrap();

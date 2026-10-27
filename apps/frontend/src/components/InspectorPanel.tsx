@@ -214,7 +214,7 @@ export function InspectorPanel({
         <>
           {changeSet ? (
             <section className="change-summary">
-              <h3>{changeSet.operations.length} {bt("business.structuralChanges")}</h3>
+              <h3>{changeSet.operations.length} {bt(changeSet.operations.length === 1 ? "business.structuralChange" : "business.structuralChanges")}</h3>
               <div className="risk-grid">
                 {(["high", "medium", "low", "informational"] as const).map((risk) => (
                   <div key={risk} data-risk={risk}>
@@ -260,6 +260,7 @@ export function InspectorPanel({
       {segment === "ai" && (!selectedTable || historicalSelection) ? (
         historicalSelection ? <p>{bt("business.reviewThisDeletedTableSBeforePropertiesInThe")}</p> : changeSet ? (
           <AiAssistant
+            ai={settings.source?.ai}
             platform={platform}
             input={{ snapshotId: snapshot.id, targetType: "changeSet", changeSet }}
             enabled={aiEnabled}

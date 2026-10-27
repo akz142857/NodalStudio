@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AiExplanation, NodalStudioPlatform } from "../platform";
 import { AiAssistant } from "./AiAssistant";
@@ -50,4 +50,21 @@ describe("AiAssistant", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm and save annotation" }));
     await waitFor(() => expect(confirm).toHaveBeenCalledWith("候选说明，需人工确认。"));
   });
+});
+
+
+it("clears old answers when the snapshot changes and ignores late responses", async () => {
+  let finish!: (answer: AiExplanation) => void;
+  const explainSchema = vi.fn().mockResolvedValueOnce(explanation).mockImplementationOnce(() => new Promise<AiExplanation>((resolve) => { finish = resolve; }));
+  const props = { platform: { explainSchema } as unknown as NodalStudioPlatform, enabled: true, providerLabel: "Offline", onOpenSettings: vi.fn() };
+  const view = render(<AiAssistant {...props} input={{ snapshotId: "old", targetType: "changeSet" }} />);
+  fireEvent.click(screen.getByRole("button", { name: "Explain from metadata" }));
+  await screen.findByText(explanation.title);
+  view.rerender(<AiAssistant {...props} input={{ snapshotId: "middle", targetType: "changeSet" }} />);
+  expect(screen.queryByText(explanation.title)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Explain from metadata" }));
+  view.rerender(<AiAssistant {...props} input={{ snapshotId: "new", targetType: "changeSet" }} />);
+  await act(async () => { finish(explanation); await Promise.resolve(); });
+  expect(screen.queryByText(explanation.title)).toBeNull();
+  expect(screen.getByRole("button", { name: "Explain from metadata" })).toBeEnabled();
 });

@@ -131,7 +131,7 @@ export function SchemaChangesPanel({ changeSet, currentSnapshot, platform, runti
   return (
     <section className="schema-changes-panel" aria-label={bt("business.schemaComparison")}>
       <header className="diff-header">
-        <h2>{operations.length} {bt("business.structuralChanges")}</h2>
+        <h2>{operations.length} {bt(operations.length === 1 ? "business.structuralChange" : "business.structuralChanges")}</h2>
         <p>{bt("business.changesAreReadFrom")} <strong>{bt("business.beforeAfterDetail")}</strong>{bt("businessExtra.addedAndRemovedObjectsFollowThisDirectionRegardlessOfCapture")}</p>
         <div className="diff-direction" aria-label={bt("business.comparisonDirection")}>
           <SnapshotContext label={bt("business.beforeDetail")} id={changeSet.beforeSnapshotId} state={before} runtimeKind={runtimeKind} />

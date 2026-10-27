@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { ConnectionSecurity, NodalStudioPlatform, SslMode } from "../platform";
 import "./connection-security.css";
 
@@ -30,6 +30,8 @@ export function ConnectionSecurityFields({ security, sslMode, disabled, platform
   hasSavedSshPassword?: boolean;
 }) {
   const { t: bt } = useI18n();
+  const [isMas, setIsMas] = useState(false);
+  useEffect(() => { let active = true; void platform.getRuntimeInfo?.().then(info => { if (active) setIsMas(info.distribution === "macAppStore"); }).catch(() => {}); return () => { active = false; }; }, [platform]);
   const current = security ?? { tls: {} };
   const ssh = current.ssh;
   const updateTls = (key: keyof ConnectionSecurity["tls"], value: string | null) => onChange({ ...current, tls: { ...current.tls, [key]: value } });
@@ -47,16 +49,17 @@ export function ConnectionSecurityFields({ security, sslMode, disabled, platform
       </div>
     </details> : null}
     {section !== "tls" ? <section className="connection-ssh-section" aria-label={bt("business.sSHTunnel")}>
-      <label className="connection-ssh-toggle"><input type="checkbox" checked={Boolean(ssh)} disabled={disabled} onChange={(event) => onChange({ ...current, ssh: event.target.checked ? { host: "", port: 22, username: "", authentication: "agent" } : null })} /><span><strong>{bt("business.connectThroughSSH")}</strong><small>{bt("business.reachAPrivateDatabaseThroughAJumpHost")}</small></span></label>
+      <label className="connection-ssh-toggle"><input type="checkbox" checked={Boolean(ssh)} disabled={disabled} onChange={(event) => onChange({ ...current, ssh: event.target.checked ? { host: "", port: 22, username: "", authentication: isMas ? "privateKey" : "agent" } : null })} /><span><strong>{bt("business.connectThroughSSH")}</strong><small>{bt("business.reachAPrivateDatabaseThroughAJumpHost")}</small></span></label>
       {ssh ? <div className="connection-security-content">
+        {isMas ? <p>{bt("submission.masSsh")}</p> : null}
         <div className="connection-form-grid">
           <label>{bt("business.sSHHost")}<input value={ssh.host} disabled={disabled} placeholder="bastion.example.com" onChange={(event) => updateSsh({ host: event.target.value.trim() })} autoComplete="off" spellCheck={false} /></label>
           <label>{bt("business.sSHPort")}<input type="number" min="1" max="65535" value={ssh.port} disabled={disabled} onChange={(event) => updateSsh({ port: Number(event.target.value) })} /></label>
           <label>{bt("business.sSHUsername")}<input value={ssh.username} disabled={disabled} onChange={(event) => updateSsh({ username: event.target.value.trim() })} autoComplete="off" spellCheck={false} /></label>
-          <label>{bt("business.authentication")}<select value={ssh.authentication} disabled={disabled} onChange={(event) => updateSsh({ authentication: event.target.value as "agent" | "privateKey" | "password" })}><option value="agent">{bt("business.sSHAgent")}</option><option value="privateKey">{bt("business.privateKey")}</option><option value="password">{bt("business.password")}</option></select></label>
+          <label>{bt("business.authentication")}<select value={ssh.authentication} disabled={disabled} onChange={(event) => updateSsh({ authentication: event.target.value as "agent" | "privateKey" | "password" })}><option value="agent" disabled={isMas}>{bt("business.sSHAgent")}</option><option value="privateKey">{bt("business.privateKey")}</option><option value="password">{bt("business.password")}</option></select></label>
         </div>
         {ssh.authentication === "privateKey" ? <FileField label={bt("business.sSHPrivateKey")} value={ssh.privateKey} disabled={disabled} platform={platform} placeholder={bt("business.chooseAnOpenSSHPrivateKey")} onChange={(privateKey) => updateSsh({ privateKey })} /> : null}
-        {ssh.authentication === "password" ? <div className="connection-ssh-password"><label>{bt("business.sSHPassword")}<input type="password" autoComplete="new-password" value={sshPassword ?? ""} disabled={disabled} placeholder={hasSavedSshPassword ? bt("business.leaveBlankToKeepSavedPassword") : bt("business.sSHPassword")} onChange={(event) => onSshPasswordChange?.(event.target.value)} /></label><p>{hasSavedSshPassword ? bt("business.savedInTheSystemKeychainLeaveBlankToKeep") : bt("business.savedInTheSystemKeychainAfterVerificationItIs")}</p></div> : <p>{bt("business.unlockEncryptedPrivateKeysInYourSystemSSHAgent")}</p>}
+        {ssh.authentication === "password" ? <div className="connection-ssh-password"><label>{bt("business.sSHPassword")}<input type="password" autoComplete="new-password" value={sshPassword ?? ""} disabled={disabled} placeholder={hasSavedSshPassword ? bt("business.leaveBlankToKeepSavedPassword") : bt("business.sSHPassword")} onChange={(event) => onSshPasswordChange?.(event.target.value)} /></label><p>{hasSavedSshPassword ? bt("business.savedInTheSystemKeychainLeaveBlankToKeep") : bt("business.savedInTheSystemKeychainAfterVerificationItIs")}</p></div> : <p>{bt(isMas ? "submission.masSshKey" : "business.unlockEncryptedPrivateKeysInYourSystemSSHAgent")}</p>}
         <details><summary>{bt("business.serverIdentity")}</summary>
           <FileField label={bt("business.knownHostsFile")} value={ssh.knownHosts} disabled={disabled} platform={platform} placeholder={bt("business.systemKnownHosts")} onChange={(knownHosts) => updateSsh({ knownHosts })} />
           <p>{bt("business.theSSHServerMustAlreadyBeTrustedInKnown")}</p>

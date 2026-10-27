@@ -65,7 +65,7 @@ function EditorSession({ platform, input, sourceId, label, chinese, onSaved }: E
   </section>;
 }
 export function KnowledgeReview({ platform, snapshot, semantics, table, desktop, onRefresh }: { platform: NodalStudioPlatform; snapshot: DatabaseSnapshot; semantics: SemanticBundle; table?: TableDefinition; desktop: boolean; onRefresh: () => Promise<void> }) {
-  const { t: bt } = useI18n();
+  const { t: bt, locale } = useI18n();
   const [latest, setLatest] = useState<string>(); const [limit, setLimit] = useState(10);
   useEffect(() => { let active = true; if (desktop) void platform.listSnapshots(snapshot.sourceId).then((items) => { if (active) setLatest(items[0]?.id); }).catch(() => undefined); return () => { active = false; }; }, [desktop, platform, snapshot.sourceId, snapshot.id]);
   if (!desktop) return <p>{bt("businessSupport.sharedDescriptionsDoNotCarryLocalReviewProofConfirm")}</p>;
@@ -74,7 +74,7 @@ export function KnowledgeReview({ platform, snapshot, semantics, table, desktop,
   const selected = states.find((s) => table && objectId(s.objectKey) === objectId(table.key) && s.objectKey.kind === "table");
   const pending = states.filter((s) => s.status !== "confirmed" && s !== selected);
   const editor = (target: import("../platform").ObjectKey) => <KnowledgeEditor key={JSON.stringify([target, semantics.annotations, states])} platform={platform} input={{ snapshotId: snapshot.id, target, requestId: null, interpretationIndex: null }} sourceId={snapshot.sourceId} onSaved={onRefresh} />;
-  return <section className="knowledge-review" aria-label={bt("businessSupport.localKnowledgeValidity")}><h3>{bt("businessSupport.localReview")}</h3>
+  return <section className="knowledge-review" aria-label={bt("businessSupport.localKnowledgeValidity")}><h3>{bt("businessSupport.localReview")}</h3><button onClick={() => window.dispatchEvent(new Event("nodalstudio:change-review"))}>{locale === "zh-CN" ? "打开本轮变化复核" : "Open current change review"}</button>
     {table ? <><p><strong>{selected?.status === "confirmed" ? bt("businessSupport.confirmedTeamStatement") : selected?.status === "unavailable" ? bt("businessSupport.objectUnavailable") : bt("businessSupport.needsReview")}</strong> · {selected?.reason ?? bt("businessSupport.noLocalConfirmationHasBeenRecorded")}</p>{editor(table.key)}{selected?.confirmation ? <details><summary>{bt("businessSupport.previousConfirmationAndOriginalEvidence")}</summary><pre>{JSON.stringify(selected.confirmation, null, 2)}</pre></details> : null}</> : null}
     <p>{pending.length} {bt("businessSupport.otherDescriptionsNeedReview")}</p>
     <details><summary>{bt("businessSupport.aboutLocalConfirmation")}</summary><p>{bt("businessSupport.gitCloudAndPortableBackupsShareTextWithoutProof")}</p></details>

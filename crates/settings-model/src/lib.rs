@@ -427,6 +427,39 @@ pub struct GitSettings {
     pub commit_reminders: bool,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ReplyLanguage {
+    #[default]
+    Interface,
+    English,
+    Chinese,
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ReplyDetail {
+    Concise,
+    #[default]
+    Balanced,
+    Detailed,
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TerminologyStyle {
+    Plain,
+    #[default]
+    Technical,
+    Bilingual,
+}
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReplyPreferences {
+    pub language: ReplyLanguage,
+    pub detail: ReplyDetail,
+    pub terminology: TerminologyStyle,
+    pub additional_instructions: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiSettings {
@@ -438,6 +471,8 @@ pub struct AiSettings {
     pub max_retries: u8,
     pub max_concurrency: u8,
     pub context_scope: AiContextScope,
+    #[serde(default)]
+    pub reply_preferences: ReplyPreferences,
     pub include_comments: bool,
     pub include_confirmed_semantics: bool,
     pub credential_configured: bool,
@@ -454,6 +489,7 @@ impl Default for AiSettings {
             max_retries: 1,
             max_concurrency: 2,
             context_scope: AiContextScope::CurrentTable,
+            reply_preferences: ReplyPreferences::default(),
             include_comments: true,
             include_confirmed_semantics: true,
             credential_configured: false,
@@ -791,6 +827,8 @@ pub enum SettingsValidationError {
     InvalidRefreshInterval,
     #[error("timeout values must be greater than zero")]
     InvalidTimeout,
+    #[error("AI additional instructions must not exceed 1000 characters")]
+    InvalidAiInstructions,
     #[error("remote endpoints must use HTTP or HTTPS")]
     InvalidEndpoint,
     #[error("retention value must be greater than zero")]
@@ -831,6 +869,16 @@ impl DataSourceSettings {
     ///
     /// Returns the first invalid or unsupported setting.
     pub fn validate(&self) -> Result<(), SettingsValidationError> {
+        if self
+            .ai
+            .reply_preferences
+            .additional_instructions
+            .chars()
+            .count()
+            > 1000
+        {
+            return Err(SettingsValidationError::InvalidAiInstructions);
+        }
         if self.schema_version != SETTINGS_SCHEMA_VERSION {
             return Err(SettingsValidationError::UnsupportedVersion);
         }
@@ -1046,5 +1094,40 @@ mod tests {
         assert!(!effective.source.as_ref().unwrap().cloud.sync_snapshots);
         assert!(!effective.source.unwrap().ai.enabled);
         assert!(effective.managed.iter().any(|item| item.path == "canvas"));
+    }
+}
+
+#[cfg(test)]
+mod reply_preferences_tests {
+    use super::*;
+    #[test]
+    fn legacy_settings_default_and_preferences_round_trip() {
+        let mut source = DataSourceSettings::defaults_for(Uuid::new_v4());
+        let mut legacy = serde_json::to_value(&source).unwrap();
+        legacy["ai"]
+            .as_object_mut()
+            .unwrap()
+            .remove("replyPreferences");
+        let restored: DataSourceSettings = serde_json::from_value(legacy).unwrap();
+        assert_eq!(restored.ai.reply_preferences, ReplyPreferences::default());
+        source.ai.reply_preferences = ReplyPreferences {
+            language: ReplyLanguage::Chinese,
+            detail: ReplyDetail::Detailed,
+            terminology: TerminologyStyle::Bilingual,
+            additional_instructions: "Explain aggregation grain first".into(),
+        };
+        let restored: DataSourceSettings =
+            serde_json::from_value(serde_json::to_value(&source).unwrap()).unwrap();
+        assert_eq!(restored, source);
+        assert!(restored.validate().is_ok());
+        source.ai.reply_preferences.additional_instructions = "x".repeat(1001);
+        assert_eq!(
+            source.validate(),
+            Err(SettingsValidationError::InvalidAiInstructions)
+        );
+        assert!(
+            serde_json::from_value::<ReplyPreferences>(serde_json::json!({"language":"arbitrary"}))
+                .is_err()
+        );
     }
 }

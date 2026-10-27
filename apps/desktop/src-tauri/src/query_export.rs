@@ -331,6 +331,37 @@ pub async fn export_query_result(
     tokio::task::spawn_blocking(move || {
         let bytes = generate(&input)?;
         let extension = input.format.extension();
+        if crate::purchase::IS_MAS {
+            let Some(folder) = app
+                .dialog()
+                .file()
+                .set_title(if locale.as_deref() == Some("zh-CN") {
+                    "选择查询结果导出文件夹"
+                } else {
+                    "Choose query result export folder"
+                })
+                .blocking_pick_folder()
+            else {
+                return Ok(None);
+            };
+            let folder = folder
+                .into_path()
+                .map_err(|_| "Choose a local folder.".to_owned())?;
+            let name = format!(
+                "query-result-{}.{}",
+                chrono::Local::now().format("%Y%m%d-%H%M%S"),
+                extension
+            );
+            return crate::export_file::save_bytes_with_limit(
+                &name,
+                &bytes,
+                extension,
+                &folder,
+                128 * 1024 * 1024,
+            )
+            .map(Some);
+        }
+
         let Some(file) = app
             .dialog()
             .file()

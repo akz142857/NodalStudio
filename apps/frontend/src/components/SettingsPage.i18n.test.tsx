@@ -2,7 +2,7 @@ import { useState } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { SettingsPage } from "./SettingsPage";
-import { defaultEffectiveSettings, type AppSettings, type NodalStudioPlatform } from "../platform";
+import { defaultEffectiveSettings, type AppSettings, type DataSourceSettings, type NodalStudioPlatform } from "../platform";
 
 const noop = async () => {};
 const props = {
@@ -73,4 +73,74 @@ it("localizes capability details, filters, and leaves dialect identifiers intact
   fireEvent.change(within(matrix).getByRole("searchbox", { name: "搜索功能" }), { target: { value: "只读 SQL" } });
   expect(within(matrix).getByRole("button", { name: "执行只读 SQL" })).toBeVisible();
   expect(within(matrix).getByText(/桌面端 MySQL：单条只读 SELECT/)).toBeVisible();
+});
+
+it("edits bilingual reply preferences as a draft, cancels, and saves without touching credentials", async () => {
+  const settings = defaultEffectiveSettings("source"); settings.app.general.language = "en";
+  const onUpdateSource = vi.fn<(source: DataSourceSettings) => Promise<void>>().mockResolvedValue(undefined);
+  const view = render(<SettingsPage {...props} settings={settings} initialCategory="ai" onUpdateSource={onUpdateSource} />);
+  fireEvent.change(screen.getByRole("combobox", { name: "Default reply language" }), { target: { value: "chinese" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Answer detail" }), { target: { value: "concise" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Terminology style" }), { target: { value: "plain" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Additional instructions" }), { target: { value: "Explain grain first." } });
+  expect(onUpdateSource).not.toHaveBeenCalled();
+  expect(screen.getByRole("textbox", { name: "Additional instructions" })).toHaveAttribute("maxlength", "1000");
+  const zh = structuredClone(settings); zh.app.general.language = "zhCn";
+  view.rerender(<SettingsPage {...props} settings={zh} initialCategory="ai" onUpdateSource={onUpdateSource} />);
+  expect(screen.getByRole("textbox", { name: "附加指令" })).toHaveValue("Explain grain first.");
+  expect(screen.getByRole("combobox", { name: "默认回复语言" })).toHaveValue("chinese");
+  expect(screen.getByRole("combobox", { name: "回答详略" })).toHaveValue("concise");
+  fireEvent.click(screen.getByRole("button", { name: "保存 AI 配置" }));
+  await waitFor(() => expect(onUpdateSource).toHaveBeenCalledTimes(1));
+  expect(onUpdateSource.mock.calls[0][0].ai.replyPreferences).toEqual({ language: "chinese", detail: "concise", terminology: "plain", additionalInstructions: "Explain grain first." });
+  expect(onUpdateSource.mock.calls[0][0].ai.credentialConfigured).toBe(false);
+  fireEvent.change(screen.getByRole("textbox", { name: "附加指令" }), { target: { value: "Unwanted draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "放弃草稿" }));
+  expect(screen.getByRole("textbox", { name: "附加指令" })).toHaveValue("");
+});
+
+it("keeps AI save actions outside the scroller and preserves failed drafts for retry", async () => {
+  const settings = defaultEffectiveSettings("source"); settings.app.general.language = "en";
+  let rejectSave!: (reason: Error) => void;
+  const onUpdateSource = vi.fn<(source: DataSourceSettings) => Promise<void>>().mockImplementationOnce(() => new Promise<void>((_, reject) => { rejectSave = reject; })).mockResolvedValue(undefined);
+  render(<SettingsPage {...props} settings={settings} initialCategory="ai" onUpdateSource={onUpdateSource} />);
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  const save = screen.getByRole("button", { name: "Save AI configuration" });
+  expect(save.closest("main")).toBeNull();
+  expect(save.closest(".settings-detail-pane")).toContainElement(document.querySelector("main.settings-content"));
+  expect(save.closest(".settings-detail-pane")).not.toContainElement(screen.getByRole("button", { name: "General" }));
+  expect(save).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Enable AI explanations" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Additional instructions" }), { target: { value: "Keep this draft" } });
+  expect(onUpdateSource).not.toHaveBeenCalled();
+  expect(screen.getByText(/Unsaved AI changes/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Test provider" })).toBeDisabled();
+  fireEvent.click(save); fireEvent.click(save);
+  expect(onUpdateSource).toHaveBeenCalledTimes(1);
+  expect(onUpdateSource.mock.calls[0][0].ai.enabled).toBe(true);
+  expect(screen.getByRole("textbox", { name: "Additional instructions" })).toBeDisabled();
+  await act(async () => { rejectSave(new Error("Disk unavailable")); await Promise.resolve(); });
+  expect(screen.getByText(/Disk unavailable/)).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Additional instructions" })).toHaveValue("Keep this draft");
+  fireEvent.click(screen.getByRole("button", { name: "General" }));
+  expect(save).toBeInTheDocument();
+  fireEvent.click(save);
+  await waitFor(() => expect(onUpdateSource).toHaveBeenCalledTimes(2));
+});
+
+it("saves an entered API key from the persistent bar and retains it if credential storage fails", async () => {
+  const settings = defaultEffectiveSettings("source"); settings.app.general.language = "en";
+  settings.source!.ai.provider = "openAiCompatible";
+  const saveAiCredential = vi.fn().mockRejectedValueOnce(new Error("Credential store unavailable")).mockResolvedValue(undefined);
+  const onUpdateSource = vi.fn().mockResolvedValue(undefined);
+  const onReload = vi.fn().mockResolvedValue(undefined);
+  render(<SettingsPage {...props} settings={settings} initialCategory="ai" onUpdateSource={onUpdateSource} onReload={onReload} platform={{ saveAiCredential } as unknown as NodalStudioPlatform} />);
+  fireEvent.change(screen.getByLabelText(/API key/i), { target: { value: "test-only-credential" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save AI configuration" }));
+  await waitFor(() => expect(screen.getByText(/Credential store unavailable/)).toBeInTheDocument());
+  expect(screen.getByLabelText(/API key/i)).toHaveValue("test-only-credential");
+  fireEvent.click(screen.getByRole("button", { name: "Save AI configuration" }));
+  await waitFor(() => expect(onReload).toHaveBeenCalledOnce());
+  expect(saveAiCredential).toHaveBeenLastCalledWith("source", "test-only-credential");
+  expect(screen.getByLabelText(/API key/i)).toHaveValue("");
 });

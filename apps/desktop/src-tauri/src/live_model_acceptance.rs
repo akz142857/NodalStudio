@@ -118,6 +118,7 @@ async fn run_case(
         return table_understanding::run_live_acceptance(
             &app,
             table_understanding::TableInput {
+                ui_locale: None,
                 snapshot_id: snapshot.id,
                 target: case.target.clone().expect("table target"),
                 focus_column: None,
@@ -155,6 +156,7 @@ async fn run_case(
         &app,
         discovery::DiscoveryInput {
             snapshot_id: snapshot.id,
+            reply_language: None,
             domain_id,
             task: DiscoveryTask {
                 operation,

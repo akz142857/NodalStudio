@@ -338,7 +338,7 @@ validate_project_configuration() {
     fail "App Store Tauri config is invalid"
   plutil -lint "$ENTITLEMENTS_FILE" "$INFO_PLIST_FILE" >/dev/null
 
-  local configured_bundle configured_team configured_app_id sandbox network files encryption
+  local configured_bundle configured_team configured_app_id sandbox network files
   configured_bundle="$(node -p "({...require('$TAURI_CONFIG'), ...require('$TAURI_DIRECTORY/tauri.appstore.conf.json')}).identifier")"
   configured_team="$(/usr/libexec/PlistBuddy -c \
     'Print :com.apple.developer.team-identifier' "$ENTITLEMENTS_FILE")"
@@ -350,8 +350,6 @@ validate_project_configuration() {
     'Print :com.apple.security.network.client' "$ENTITLEMENTS_FILE")"
   files="$(/usr/libexec/PlistBuddy -c \
     'Print :com.apple.security.files.user-selected.read-write' "$ENTITLEMENTS_FILE")"
-  encryption="$(/usr/libexec/PlistBuddy -c \
-    'Print :ITSAppUsesNonExemptEncryption' "$INFO_PLIST_FILE")"
 
   [[ "$configured_bundle" == "$APP_BUNDLE_ID" ]] ||
     fail "Tauri identifier is $configured_bundle; expected $APP_BUNDLE_ID"
@@ -361,8 +359,8 @@ validate_project_configuration() {
     fail "Entitlements application identifier is $configured_app_id"
   [[ "$sandbox" == "true" && "$network" == "true" && "$files" == "true" ]] ||
     fail "App Store sandbox, network client, and user-selected read/write entitlements must be enabled"
-  [[ "$encryption" == "false" ]] ||
-    fail "Review ITSAppUsesNonExemptEncryption in $INFO_PLIST_FILE"
+  python3 "$SCRIPT_DIR/check_mas_compliance.py"
+  info "Export classification is pending: complete the App Store Connect encryption questionnaire before distribution."
   validate_icns_has_1024 "$SOURCE_ICNS_FILE" "Source"
 }
 
@@ -450,7 +448,7 @@ require_value APP_BUILD_NUMBER
 validate_boolean REQUIRE_CLEAN_GIT
 validate_boolean INSTALL_DEPENDENCIES
 
-for command in cargo codesign date git iconutil node openssl pkgutil plutil pnpm rustup security sips uuidgen xcrun; do
+for command in cargo codesign date git iconutil node openssl pkgutil plutil pnpm python3 rustup security sips uuidgen xcrun; do
   require_command "$command"
 done
 xcrun --find productbuild >/dev/null || fail "productbuild is not installed"
@@ -508,10 +506,12 @@ cp "$PROVISIONING_PROFILE" "$STAGED_PROFILE"
 chmod 644 "$STAGED_PROFILE"
 
 RUNTIME_CONFIG="{\"bundle\":{\"macOS\":{\"bundleVersion\":\"$APP_BUILD_NUMBER\"}}}"
-BUILD_ARGS=(--bundles app --config "$APPSTORE_CONFIG" --config "$RUNTIME_CONFIG")
+BUILD_ARGS=(--features mac-app-store --bundles app --config "$APPSTORE_CONFIG" --config "$RUNTIME_CONFIG")
 if [[ "$BUILD_TARGET" != "host" ]]; then
   BUILD_ARGS+=(--target "$BUILD_TARGET")
 fi
+
+python3 "$SCRIPT_DIR/generate_third_party_notices.py" --check
 
 info "Building and signing the sandboxed Mac App Store app"
 APPLE_SIGNING_IDENTITY="$APP_DISTRIBUTION_IDENTITY" \
@@ -520,6 +520,7 @@ APPLE_SIGNING_IDENTITY="$APP_DISTRIBUTION_IDENTITY" \
 BUNDLE_ROOT="$(bundle_root)"
 APP_PATH="$BUNDLE_ROOT/macos/Nodal Studio.app"
 [[ -d "$APP_PATH" ]] || fail "App bundle was not generated: $APP_PATH"
+python3 "$SCRIPT_DIR/check_mas_compliance.py" --app "$APP_PATH" --expected-build "$APP_BUILD_NUMBER"
 [[ -f "$APP_PATH/Contents/embedded.provisionprofile" ]] ||
   fail "Provisioning profile was not embedded in the app"
 

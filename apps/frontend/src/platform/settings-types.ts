@@ -12,6 +12,12 @@ export type LogLevel = "error" | "warn" | "info" | "debug";
 export type ChangeNotificationLevel = "all" | "highRisk" | "off";
 export type UpdateChannel = "stable" | "beta";
 export type AiProviderKind = "offline" | "openAiCompatible";
+export interface AiReplyPreferences {
+  language: "interface" | "english" | "chinese";
+  detail: "concise" | "balanced" | "detailed";
+  terminology: "plain" | "technical" | "bilingual";
+  additionalInstructions: string;
+}
 export type AiContextScope = "currentTable" | "oneHop" | "domain";
 export type ConflictStrategy = "ask" | "keepLocal" | "keepRemote";
 
@@ -141,6 +147,7 @@ export interface DataSourceSettings {
     maxRetries: number;
     maxConcurrency: number;
     contextScope: AiContextScope;
+    replyPreferences?: AiReplyPreferences;
     includeComments: boolean;
     includeConfirmedSemantics: boolean;
     credentialConfigured: boolean;

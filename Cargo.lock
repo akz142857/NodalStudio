@@ -2340,6 +2340,7 @@ dependencies = [
  "sha2 0.10.9",
  "snapshot-store",
  "sqlx",
+ "storekit-bridge",
  "tar",
  "tauri",
  "tauri-build",
@@ -4123,6 +4124,10 @@ dependencies = [
  "psm",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "storekit-bridge"
+version = "0.2.4"
 
 [[package]]
 name = "string_cache"

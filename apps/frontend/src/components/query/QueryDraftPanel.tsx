@@ -42,7 +42,7 @@ export function QueryDraftPanel(props: Props) {
   return <DraftPanel key={JSON.stringify([props.snapshot.id, props.snapshot.sourceId, props.snapshot.fingerprint, props.settings.source, props.settings.app.privacy, props.seed?.id])} {...props} />;
 }
 function DraftPanel({ platform, snapshot, settings, semantics, seed, initialTable, onUseSql, onOpenSettings, execution }: Props) {
-  const { t: bt } = useI18n();
+  const { t: bt, locale } = useI18n();
   const eventBt = useEventTranslator(bt);
   const semanticBinding = JSON.stringify([semantics.logicalRelationships, semantics.domainGroups, semantics.knowledge]);
   const questionId = useId();
@@ -87,7 +87,27 @@ function DraftPanel({ platform, snapshot, settings, semantics, seed, initialTabl
     void platform.listSnapshots(snapshot.sourceId).then((items) => { if (active) setLatest(items[0]?.id === snapshot.id); }).catch(() => { if (active) setSnapshotError(eventBt("business.unableToVerifyTheLatestSnapshotReopenDraftingTo")); });
     return () => { active = false; };
   }, [platform, snapshot.sourceId, snapshot.id, eventBt]);
-  useEffect(() => { if (transcript.current) transcript.current.scrollTop = transcript.current.scrollHeight; }, [turns]);
+  const followLatest = useRef(true);
+  useLayoutEffect(() => {
+    followLatest.current = true;
+    const node = transcript.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [turns.length]);
+  useEffect(() => {
+    const node = transcript.current;
+    const content = node?.firstElementChild;
+    if (!node || !content) return;
+    const follow = () => { if (followLatest.current) node.scrollTop = node.scrollHeight; };
+    const onScroll = () => { followLatest.current = node.scrollHeight - node.clientHeight - node.scrollTop < 48; };
+    // Preview, errors and answers arrive inside the child without changing turns.
+    const mutations = new MutationObserver(follow);
+    mutations.observe(content, { childList: true, subtree: true, characterData: true });
+    const resize = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(follow);
+    resize?.observe(content);
+    resize?.observe(node);
+    node.addEventListener("scroll", onScroll);
+    return () => { mutations.disconnect(); resize?.disconnect(); node.removeEventListener("scroll", onScroll); };
+  }, []);
   const tables = snapshot.schemas.flatMap((schema) => schema.tables);
   const domains = semantics.domainGroups.filter((d) => d.sourceId === snapshot.sourceId);
   const scope = settings.source?.ai.contextScope ?? "currentTable";
@@ -96,13 +116,13 @@ function DraftPanel({ platform, snapshot, settings, semantics, seed, initialTabl
   const automatic = activeTurn && !activeTurn.context ? resolveDraftContext(snapshot, semantics, settings, activeTurn.requestQuestion, domainId, initialTable?.key, bt) : undefined;
   const context = activeTurn?.context ?? (automatic?.kind === "ready" ? automatic.context : undefined);
   const problem = context ? validateDraftContext(snapshot, semantics, settings, context, domainId, bt) : automatic?.kind === "blocked" ? automatic.message : undefined;
-  const input = { snapshotId: snapshot.id, domainId: domainId || null, task: { operation: "draftSql" as const, question: activeTurn?.requestQuestion ?? "", root: context?.root ?? null, candidates: context?.tables ?? [], pathTables: [], pathRelationships: [] } };
+  const input = { replyLanguage: { currentQuestion: activeTurn?.question ?? "", uiLocale: locale }, snapshotId: snapshot.id, domainId: domainId || null, task: { operation: "draftSql" as const, question: activeTurn?.requestQuestion ?? "", root: context?.root ?? null, candidates: context?.tables ?? [], pathTables: [], pathRelationships: [] } };
   const examples = ["Summarize monthly trends for the last six months", "Which customers have no recent orders?", "Count users by status"].map((label) => translateUiLabel(label, bt));
   function changeQuestion(value: string) { setQuestion(value); setComposerError(""); }
   function pinContext(next?: DraftContext) {
     setManual(next);
     const id = nextId.current++;
-    if (activeTurn && !activeTurn.answer) setTurns((current) => current.map((turn) => turn.id === activeTurn.id ? { ...turn, id, context: next, autoPrepare: true, semanticBinding } : turn));
+    if (activeTurn && !activeTurn.answer) setTurns((current) => current.map((turn) => turn.id === activeTurn.id ? { ...turn, id, context: next, autoPrepare: false, semanticBinding } : turn));
   }
   function submit() {
     const text = question.trim();
@@ -129,7 +149,7 @@ function DraftPanel({ platform, snapshot, settings, semantics, seed, initialTabl
               {automatic?.kind === "clarify" ? <section className="query-context-response" aria-label={bt("business.clarifyQueryContext")}><h3>{bt("business.aLittleMoreContext")}</h3><p>{automatic.message}</p><div className="query-context-choices">{automatic.choices.map((choice) => <button type="button" key={objectId(choice.key)} onClick={() => setTurns((current) => current.map((item) => item.id === turn.id ? { ...item, context: { root: choice.key, tables: [choice.key] }, autoPrepare: true } : item))}><strong>{objectLabel(choice.key)}</strong><span>{choice.reason}</span></button>)}</div></section> : null}
               {problem ? <p className="query-context-response" role="alert">{problem}</p> : null}
               {context && !problem ? <section className="query-context-response" aria-label={bt("business.queryContext")}><div className="query-context-chips">{context.tables.map((key) => <span key={objectId(key)}><ActionIcon name="database" />{objectLabel(key)}</span>)}</div>
-                {configured ? <DiscoveryAssistant platform={platform} snapshot={snapshot} settings={settings} input={input} autoPrepare={turn.autoPrepare} binding={JSON.stringify([turn.id, semantics.logicalRelationships, semantics.domainGroups, semantics.knowledge])} available={latest} onApplyTerms={() => {}} onLocate={() => {}} onOpenSettings={onOpenSettings} onUseSql={onUseSql} execution={execution} onSqlDraft={(answer) => setTurns((current) => current.map((item) => item.id === turn.id ? { ...item, answer, context, semanticBinding } : item))} /> : null}
+                {configured ? <DiscoveryAssistant platform={platform} snapshot={snapshot} settings={settings} input={input} autoPrepare={turn.autoPrepare} directSend binding={JSON.stringify([turn.id, semantics.logicalRelationships, semantics.domainGroups, semantics.knowledge])} available={latest} onApplyTerms={() => {}} onLocate={() => {}} onOpenSettings={onOpenSettings} onUseSql={onUseSql} execution={execution} onSqlDraft={(answer) => setTurns((current) => current.map((item) => item.id === turn.id ? { ...item, answer, context, semanticBinding } : item))} /> : null}
               </section> : null}
             </>}
           </div>
@@ -151,7 +171,7 @@ function DraftPanel({ platform, snapshot, settings, semantics, seed, initialTabl
         {composerError ? <p role="alert">{composerError}</p> : null}
         <form className="query-composer" onSubmit={(event) => { event.preventDefault(); submit(); }}>
           <label className="visually-hidden" htmlFor={questionId}>{bt("business.questionDetail")}</label>
-          <textarea ref={composer} id={questionId} aria-label={bt("business.questionDetail")} value={question} rows={2} maxLength={2000} placeholder={turns.length ? "继续追问，或补充筛选条件…" : "描述你的业务问题，例如：按月统计订单数量…"} onChange={(e) => changeQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
+          <textarea ref={composer} id={questionId} aria-label={bt("business.questionDetail")} value={question} wrap="soft" rows={2} maxLength={2000} placeholder={bt(turns.length ? "business.followUpQuestionPlaceholder" : "business.initialQuestionPlaceholder")} onChange={(e) => changeQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
           <div className="query-composer-footer"><span><ActionIcon name="database" />{snapshot.database.name}<span className="query-model-name">{configured ? settings.source?.ai.model : bt("business.aINotConfigured")}</span></span><button className="query-compose-submit" type="submit" aria-label={turns.length ? bt("business.sendFollowUp") : bt("business.createSQLDraft")} disabled={!question.trim()}><ActionIcon name="chevronUp" /></button></div>
         </form>
         <p className="query-draft-footnote">{bt("business.enterToSendShiftEnterForANewLine")}</p>

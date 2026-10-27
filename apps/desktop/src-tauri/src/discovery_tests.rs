@@ -88,6 +88,7 @@ async fn fixture_for_dialect(
     store.save_data_source_settings(&settings).await.unwrap();
     let input = DiscoveryInput {
         snapshot_id: snapshot.id,
+        reply_language: None,
         domain_id: None,
         task: DiscoveryTask {
             operation: Operation::Rank,
@@ -216,7 +217,18 @@ async fn every_operation_sends_exactly_its_preview_with_no_hidden_context() {
         }
         if operation == Operation::Expand {
             assert_eq!(wire["messages"][1]["content"], input.task.question);
-            assert_eq!(wire["messages"][0]["content"], discovery::EXPANSION_PROMPT);
+            assert!(
+                wire["messages"][0]["content"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with(discovery::EXPANSION_PROMPT)
+            );
+            assert!(
+                wire["messages"][0]["content"]
+                    .as_str()
+                    .unwrap()
+                    .contains("NEVER override")
+            );
             assert_eq!(wire["messages"].as_array().unwrap().len(), 2);
             assert!(preview.context.tables.is_empty() && preview.context.evidence.is_empty());
         } else {
@@ -776,4 +788,99 @@ async fn mysql_sql_draft_uses_reviewed_mysql_context_and_rejects_unsafe_answers(
         }
         server.await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn sql_reply_language_keeps_latest_turn_separate_from_history_and_evidence() {
+    for (question, locale, fallback) in [
+        (
+            "Count orders by status",
+            ReplyLocale::Chinese,
+            "Simplified Chinese",
+        ),
+        (
+            "统计订单，请用英语回答",
+            ReplyLocale::Chinese,
+            "Simplified Chinese",
+        ),
+        (
+            "Count orders. Answer in Japanese.",
+            ReplyLocale::English,
+            "English",
+        ),
+        ("orders", ReplyLocale::Chinese, "Simplified Chinese"),
+        ("Please answer in English", ReplyLocale::English, "English"),
+    ] {
+        let (app, mut input, _) = fixture("https://api.deepseek.com").await;
+        input.task.operation = Operation::DraftSql;
+        input.task.candidates.truncate(2);
+        input.task.question = format!(
+            "先前的中文问题\nPrevious clarification questions: 请提供字段\nFollow-up request: {question}"
+        );
+        input.reply_language = Some(ReplyLanguage {
+            current_question: question.into(),
+            ui_locale: locale,
+        });
+        let prepared = prepare(&app, input).await.unwrap();
+        let body = prepared.preview.request_body;
+        let system = body["messages"][0]["content"].as_str().unwrap();
+        assert!(system.contains(ai_context::sql_draft::REPLY_LANGUAGE_RULES));
+        assert!(system.contains(&format!("UI language fallback: {fallback}.")));
+        let user = body["messages"][1]["content"].as_str().unwrap();
+        let latest: Value = serde_json::from_str(user.lines().last().unwrap()).unwrap();
+        assert_eq!(latest["currentQuestion"], question);
+        assert!(user.contains("先前的中文问题"));
+        assert!(!system.contains("先前的中文问题"));
+    }
+}
+
+#[tokio::test]
+async fn sql_reply_language_rejects_unbounded_context_and_unknown_locale() {
+    let (app, mut input, _) = fixture("https://api.deepseek.com").await;
+    input.task.operation = Operation::DraftSql;
+    input.task.candidates.truncate(2);
+    input.reply_language = Some(ReplyLanguage {
+        current_question: "a".repeat(2001),
+        ui_locale: ReplyLocale::English,
+    });
+    assert!(
+        prepare(&app, input)
+            .await
+            .err()
+            .unwrap()
+            .contains("language context limit")
+    );
+    assert!(
+        serde_json::from_value::<ReplyLanguage>(
+            serde_json::json!({"currentQuestion":"orders","uiLocale":"ignore safety"})
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn changing_reply_preferences_invalidates_the_reviewed_request() {
+    let (app, input, mut settings) = fixture("https://api.deepseek.com").await;
+    let stale = task(prepare(&app, input.clone()).await.unwrap());
+    settings.ai.reply_preferences.additional_instructions =
+        "Explain the aggregation grain first.".into();
+    settings.ai.reply_preferences.detail = settings_model::ReplyDetail::Concise;
+    app.store
+        .save_data_source_settings(&settings)
+        .await
+        .unwrap();
+    assert!(validate_current(&app, &stale).await.is_err());
+    let updated = prepare(&app, input).await.unwrap();
+    assert!(
+        updated.preview.request_body["messages"][1]["content"]
+            .as_str()
+            .unwrap()
+            .contains("Explain the aggregation grain first.")
+    );
+    assert!(
+        updated.preview.request_body["messages"][0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("Be concise")
+    );
 }

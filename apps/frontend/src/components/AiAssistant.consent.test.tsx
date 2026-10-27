@@ -1,0 +1,26 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { AiAssistant } from "./AiAssistant";
+import { defaultEffectiveSettings, type NodalStudioPlatform } from "../platform";
+afterEach(cleanup);
+it("requires a current destination preview, cancels without sending, and invalidates edits", async () => {
+  const send = vi.fn().mockRejectedValue(new Error("Test response"));
+  const ai = { ...defaultEffectiveSettings("source").source!.ai, provider: "openAiCompatible" as const, endpoint: "https://provider.example/v1", model: "review-model", includeComments: true };
+  const props = { platform: { explainSchema: send } as unknown as NodalStudioPlatform, enabled: true, providerLabel: "Custom AI", onOpenSettings: vi.fn(), ai, input: { snapshotId: "snapshot", targetType: "changeSet" as const } };
+  const { rerender } = render(<AiAssistant {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Preview AI request" }));
+  expect(screen.getByRole("region", { name: "Preview AI request" })).toHaveTextContent(ai.endpoint);
+  expect(send).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("button", { name: "Send and explain" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Preview AI request" }));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Why did this change?" } });
+  expect(screen.queryByRole("button", { name: "Send and explain" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Preview AI request" }));
+  rerender(<AiAssistant {...props} ai={{ ...ai, endpoint: "https://other.example/v1" }} />);
+  expect(screen.queryByRole("button", { name: "Send and explain" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Preview AI request" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send and explain" }));
+  await waitFor(() => expect(send).toHaveBeenCalledOnce());
+  expect(send.mock.calls[0][0]).toMatchObject({ question: "Why did this change?", remoteConsent: { endpoint: "https://other.example/v1", model: "review-model", includeComments: true } });
+});

@@ -5,12 +5,25 @@ import type { AppSettings, NodalStudioPlatform, RuntimeInfo, UpdateStatus } from
 import { assertUpdateCanRestart } from "../../platform/update-guard";
 import { SettingsGroup, ToggleRow, TextRow, SelectRow } from "./SettingsControls";
 import "./updates.css";
+import { PurchasePanel } from "./PurchasePanel";
 
 const labels = {"idle":"updates.phase.idle","checking":"updates.phase.checking","available":"updates.phase.available","upToDate":"updates.phase.upToDate","downloading":"updates.phase.downloading","verifying":"updates.phase.verifying","ready":"updates.phase.ready","installing":"updates.phase.installing","error":"updates.phase.error"} as const;
 const reason = (error: unknown) => error instanceof Error ? error.message : String(error);
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
-export function UpdatePanel({ platform, runtime, app, managed, onSave }: {
+type UpdatePanelProps = {
+  platform: NodalStudioPlatform; runtime?: RuntimeInfo; app: AppSettings;
+  managed?: { source: string; reason: string }; onSave: (app: AppSettings) => Promise<void>;
+};
+
+export function UpdatePanel(props: UpdatePanelProps) {
+  if (!props.runtime) return null;
+  return props.runtime?.distribution === "macAppStore"
+    ? <PurchasePanel platform={props.platform} version={props.runtime.version} />
+    : <DirectUpdatePanel {...props} />;
+}
+
+function DirectUpdatePanel({ platform, runtime, app, managed, onSave }: {
   platform: NodalStudioPlatform; runtime?: RuntimeInfo; app: AppSettings;
   managed?: { source: string; reason: string }; onSave: (app: AppSettings) => Promise<void>;
 }) {

@@ -10,7 +10,7 @@ export interface DiscoveryTask {
   pathTables: ObjectKey[];
   pathRelationships: string[];
 }
-export interface DiscoveryInput { snapshotId: string; domainId: string | null; task: DiscoveryTask }
+export interface DiscoveryInput { snapshotId: string; domainId: string | null; task: DiscoveryTask; replyLanguage?: { currentQuestion: string; uiLocale: "en" | "zh-CN" } }
 export interface KnownRelationship {
   id: string;
   kind: "physical" | "logical";

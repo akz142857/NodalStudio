@@ -1,0 +1,57 @@
+[
+  {
+    "file": "01-database-structure.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "mode": "RGB",
+    "opaque": true,
+    "pixelIdenticalToFigmaRGB": true,
+    "sha256": "56b50b170f94f148968dd76fbc3dd481891a4edd0f06d7a81da41e8da9471cc8"
+  },
+  {
+    "file": "02-change-review.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "mode": "RGB",
+    "opaque": true,
+    "pixelIdenticalToFigmaRGB": true,
+    "sha256": "a14a731a3afcb485aa2cd59d5e2219dc6d43dfa40b1917349d2428676772eb0c"
+  },
+  {
+    "file": "03-field-context.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "mode": "RGB",
+    "opaque": true,
+    "pixelIdenticalToFigmaRGB": true,
+    "sha256": "04aafc60710f21b16d343e81a9feb9beab7a2a880b833707850ec7bc07f262a8"
+  },
+  {
+    "file": "04-ai-sql-drafts.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "mode": "RGB",
+    "opaque": true,
+    "pixelIdenticalToFigmaRGB": true,
+    "sha256": "3d364212efe12d8d4a69dfa11163aa3d6d6b415b158abc514b4b9d43ae0ba6ae"
+  },
+  {
+    "file": "05-query-charts.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "mode": "RGB",
+    "opaque": true,
+    "pixelIdenticalToFigmaRGB": true,
+    "sha256": "f27661ee04b674646b4b722b6751f5434b4af8bc45875d897b334cc00a1f9572"
+  }
+]
