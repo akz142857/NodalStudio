@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "ai-context"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "schema-diff",
  "schema-model",
@@ -996,7 +996,7 @@ dependencies = [
 
 [[package]]
 name = "extension-model"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "chrono",
  "schema-diff",
@@ -1382,7 +1382,7 @@ dependencies = [
 
 [[package]]
 name = "git-workspace"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "chrono",
  "extension-model",
@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "mysql-adapter"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "schema-model",
  "sqlx",
@@ -2297,7 +2297,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nodalstudio-cloud-api"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "axum",
  "chrono",
@@ -2317,7 +2317,7 @@ dependencies = [
 
 [[package]]
 name = "nodalstudio-desktop"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "ai-context",
  "chrono",
@@ -2805,7 +2805,7 @@ dependencies = [
 
 [[package]]
 name = "postgres-adapter"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "schema-model",
  "sqlx",
@@ -2909,7 +2909,7 @@ dependencies = [
 
 [[package]]
 name = "query-engine"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "chrono",
  "futures-util",
@@ -3379,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "schema-diff"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "chrono",
  "schema-model",
@@ -3390,7 +3390,7 @@ dependencies = [
 
 [[package]]
 name = "schema-model"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "chrono",
  "hex",
@@ -3515,7 +3515,7 @@ dependencies = [
 
 [[package]]
 name = "semantic-model"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "chrono",
  "schema-model",
@@ -3718,7 +3718,7 @@ dependencies = [
 
 [[package]]
 name = "settings-model"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -3820,7 +3820,7 @@ dependencies = [
 
 [[package]]
 name = "snapshot-store"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "chrono",
  "extension-model",
@@ -4127,7 +4127,7 @@ dependencies = [
 
 [[package]]
 name = "storekit-bridge"
-version = "1.0.1"
+version = "1.0.2"
 
 [[package]]
 name = "string_cache"
