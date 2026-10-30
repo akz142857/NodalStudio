@@ -45,7 +45,7 @@ unsafe extern "C" {
 
 // Opaque retained immutable NSURL. Foundation acquisition and release may occur
 // on different worker threads; no Rust pointer is dereferenced or shared.
-pub struct FileAccess(usize);
+pub struct FileAccess(#[cfg(target_os = "macos")] usize);
 impl Drop for FileAccess {
     fn drop(&mut self) {
         #[cfg(target_os = "macos")]
@@ -56,6 +56,8 @@ impl Drop for FileAccess {
     }
 }
 pub fn remember_file(path: &str) -> Result<(), &'static str> {
+    #[cfg(not(target_os = "macos"))]
+    let _ = path;
     #[cfg(target_os = "macos")]
     {
         let path = std::ffi::CString::new(path).map_err(|_| "Invalid file path")?;
@@ -67,6 +69,8 @@ pub fn remember_file(path: &str) -> Result<(), &'static str> {
     Err("Unable to save file permission. Choose the file again.")
 }
 pub fn access_file(path: &str) -> Result<FileAccess, &'static str> {
+    #[cfg(not(target_os = "macos"))]
+    let _ = path;
     #[cfg(target_os = "macos")]
     {
         let path = std::ffi::CString::new(path).map_err(|_| "Invalid file path")?;
