@@ -19,8 +19,31 @@ type UpdatePanelProps = {
 export function UpdatePanel(props: UpdatePanelProps) {
   if (!props.runtime) return null;
   return props.runtime?.distribution === "macAppStore"
-    ? <PurchasePanel platform={props.platform} version={props.runtime.version} />
+    ? <>
+        <AppStoreUpdatePanel platform={props.platform} version={props.runtime.version} />
+        <PurchasePanel platform={props.platform} />
+      </>
     : <DirectUpdatePanel {...props} />;
+}
+
+function AppStoreUpdatePanel({ platform, version }: { platform: NodalStudioPlatform; version: string }) {
+  const { t } = useI18n();
+  const [error, setError] = useState(false);
+
+  async function openStore() {
+    setError(false);
+    try { await platform.openAppStore(); }
+    catch { setError(true); }
+  }
+
+  return <SettingsGroup title={t("updates.appStoreTitle")}>
+    <p className="update-help">{t("updates.currentVersion", { version })}</p>
+    <p className="update-help">{t("updates.appStoreManaged")}</p>
+    {error ? <p className="update-error" role="alert">{t("updates.appStoreOpenFailed")}</p> : null}
+    <div className="setting-action-row update-actions">
+      <button type="button" onClick={() => void openStore()}>{t("updates.openAppStore")}</button>
+    </div>
+  </SettingsGroup>;
 }
 
 function DirectUpdatePanel({ platform, runtime, app, managed, onSave }: {

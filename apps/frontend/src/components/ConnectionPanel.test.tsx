@@ -485,7 +485,7 @@ describe("ConnectionPanel", () => {
 
     await waitFor(() => expect(saveDataSource).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByText(/Connected to flow/)).toBeInTheDocument();
+    expect(screen.queryByText(/Connected to flow/)).not.toBeInTheDocument();
   });
 });
 

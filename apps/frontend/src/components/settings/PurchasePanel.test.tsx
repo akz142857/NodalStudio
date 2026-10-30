@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { PurchasePanel } from "./PurchasePanel";
 import { UpdatePanel } from "./UpdatePanel";
@@ -16,8 +16,14 @@ describe("Mac App Store purchase panel", () => {
     const { api, platform } = fixture();
     render(<UpdatePanel platform={platform} runtime={{ kind: "desktop", distribution: "macAppStore", label: "Desktop", version: "1.0.0" }} app={defaultAppSettings()} onSave={vi.fn()} />);
     expect(await screen.findByText("Purchase verification needed")).toBeInTheDocument();
-    expect(screen.getByText(/Mac App Store · 1\.0\.0/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open App Store" }));
+    const updates = screen.getByRole("group", { name: "Mac App Store updates" });
+    const purchase = screen.getByRole("group", { name: "Purchase verification" });
+    expect(within(updates).getByText("Current version 1.0.0")).toBeInTheDocument();
+    expect(within(updates).getByText("Updates are managed by the Mac App Store.")).toBeInTheDocument();
+    expect(within(purchase).getByRole("button", { name: "Reverify App Store purchase" })).toBeInTheDocument();
+    expect(within(purchase).queryByRole("button", { name: "Open App Store" })).not.toBeInTheDocument();
+    expect(within(updates).queryByRole("button", { name: "Reverify App Store purchase" })).not.toBeInTheDocument();
+    fireEvent.click(within(updates).getByRole("button", { name: "Open App Store" }));
     expect(api.openAppStore).toHaveBeenCalledOnce();
     expect(api.restoreAppPurchase).not.toHaveBeenCalled(); expect(api.getUpdateStatus).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Check for updates" })).not.toBeInTheDocument();
@@ -31,7 +37,7 @@ describe("Mac App Store purchase panel", () => {
   });
   it("restores on explicit click and shows verified offline use", async () => {
     const { api, platform } = fixture();
-    render(<PurchasePanel platform={platform} version="1.0.0" />);
+    render(<PurchasePanel platform={platform} />);
     await screen.findByText("Purchase verification needed");
     fireEvent.click(screen.getByRole("button", { name: "Reverify App Store purchase" }));
     expect(await screen.findByText("Pro · Purchase verified")).toBeInTheDocument();
@@ -42,7 +48,7 @@ describe("Mac App Store purchase panel", () => {
     const { api, platform } = fixture();
     let finish!: (value: PurchaseStatus) => void;
     api.getPurchaseStatus.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-    render(<PurchasePanel platform={platform} version="1.0.0" />);
+    render(<PurchasePanel platform={platform} />);
     fireEvent.click(screen.getByRole("button", { name: "Reverify App Store purchase" }));
     await screen.findByText("Pro · Purchase verified");
     await act(async () => { finish(missing); await Promise.resolve(); });
@@ -51,7 +57,7 @@ describe("Mac App Store purchase panel", () => {
   it("keeps cancellation actionable and does not retry or grant access", async () => {
     const { api, platform } = fixture();
     api.restoreAppPurchase.mockResolvedValue({ ...missing, reason: "cancelled" });
-    render(<PurchasePanel platform={platform} version="1.0.0" />);
+    render(<PurchasePanel platform={platform} />);
     await screen.findByText("Purchase verification needed");
     fireEvent.click(screen.getByRole("button", { name: "Reverify App Store purchase" }));
     expect(await screen.findByText(/Verification was cancelled/)).toBeInTheDocument();
@@ -63,7 +69,7 @@ describe("Mac App Store purchase panel", () => {
     const { api, platform } = fixture();
     let finish!: (value: PurchaseStatus) => void;
     api.restoreAppPurchase.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-    const view = render(<PurchasePanel platform={platform} version="1.0.0" />);
+    const view = render(<PurchasePanel platform={platform} />);
     await screen.findByText("Purchase verification needed");
     const button = screen.getByRole("button", { name: "Reverify App Store purchase" });
     fireEvent.click(button); fireEvent.click(button);
@@ -73,12 +79,12 @@ describe("Mac App Store purchase panel", () => {
   });
   it("labels Apple sandbox proof as testing only", async () => {
     const { platform } = fixture({ ...verified, environment: "Sandbox" });
-    render(<PurchasePanel platform={platform} version="1.0.0" />);
+    render(<PurchasePanel platform={platform} />);
     expect(await screen.findByText("Apple sandbox purchase · Testing only")).toBeInTheDocument();
   });
   it("handles unavailable IPC without exposing raw native details", async () => {
     const { api, platform } = fixture(); api.getPurchaseStatus.mockRejectedValue(new Error("private details"));
-    render(<PurchasePanel platform={platform} version="1.0.0" />);
+    render(<PurchasePanel platform={platform} />);
     await waitFor(() => expect(screen.getByText(/temporarily unavailable/)).toBeInTheDocument());
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
   });

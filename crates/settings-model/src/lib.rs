@@ -57,7 +57,7 @@ impl Default for ConnectionDefaults {
     fn default() -> Self {
         Self {
             database_engine: DatabaseEngine::PostgreSql,
-            ssl_mode: DefaultSslMode::Prefer,
+            ssl_mode: DefaultSslMode::Disable,
         }
     }
 }

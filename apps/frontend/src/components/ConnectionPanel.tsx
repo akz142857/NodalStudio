@@ -1,4 +1,3 @@
-import { translateUiLabel } from "../i18n/business-labels";
 import { useI18n } from "../i18n";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ConnectionTestStatus } from "./ConnectionTestStatus";
@@ -11,7 +10,6 @@ import "./model-navigation.css";
 import type {
   DataSourceProfile,
   CaptureSnapshotResult,
-  ConnectionTestResult,
   NodalStudioPlatform,
   SaveDataSourceInput,
   SslMode,
@@ -41,7 +39,7 @@ const initialForm: SaveDataSourceInput = {
   username: "postgres",
   password: "",
   databaseType: "postgreSql",
-  sslMode: "prefer",
+  sslMode: "disable",
 };
 
 function newConnectionForm(
@@ -92,7 +90,6 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
   const testController = useRef<AbortController | null>(null);
   useEffect(() => () => { testController.current?.abort(); testController.current = null; }, []);
   const [testState, setTestState] = useState<ConnectionTestState>({ status: "idle" });
-  const [connectionResult, setConnectionResult] = useState<ConnectionTestResult>();
   const [error, setError] = useState<string>();
   const openContext = useMemo(() => ({ sourceId: activeSourceId }), [activeSourceId]);
   const [openError, setOpenError] = useState<{ context: typeof openContext; profile: DataSourceProfile; message: string }>();
@@ -187,7 +184,6 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
     }
     setPending(true);
     setError(undefined);
-    setConnectionResult(undefined);
     try {
       if (editingProfile) {
         const profile = await platform.saveDataSource(form);
@@ -200,14 +196,13 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
         setDialogOpen(false);
         return;
       }
-      const testResult = await platform.testPostgresConnection(form);
+      await platform.testPostgresConnection(form);
       const profile = await platform.saveDataSource(form);
       setProfiles((current) => [
         profile,
         ...current.filter((item) => item.id !== profile.id),
       ]);
       await capture(profile.id);
-      setConnectionResult(testResult);
       setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "" }));
       setDialogOpen(false);
     } catch (reason) {
@@ -226,7 +221,6 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
     if (!editingProfile) return;
     setPending(true);
     setError(undefined);
-    setConnectionResult(undefined);
     try {
       const result = await platform.verifyAndRefreshDataSource(form);
       const profile = result.profile;
@@ -235,7 +229,6 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
         ...current.filter((item) => item.id !== profile.id),
       ]);
       onSnapshot(result.capture);
-      setConnectionResult(result.connection);
       setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "" }));
       setEditingProfile(profile);
       setDialogOpen(false);
@@ -266,7 +259,6 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
     setPending(true);
     setError(undefined);
     setOpenError(undefined);
-    setConnectionResult(undefined);
     try {
       await openSavedSnapshot(profile);
     } catch (reason) {
@@ -279,7 +271,6 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
   function openCreateDialog() {
     setForm(newConnectionForm(defaultDatabaseType, defaultSslMode, bt("business.localDevelopment")));
     setEditingProfile(undefined);
-    setConnectionResult(undefined);
     setError(undefined);
     setTestState({ status: "idle" });
     setConnectionTab("general");
@@ -289,7 +280,6 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
   function openEditDialog(profile: DataSourceProfile) {
     setForm({ ...profile, password: "", sshPassword: "" });
     setEditingProfile(profile);
-    setConnectionResult(undefined);
     setError(undefined);
     setTestState({ status: "idle" });
     setConnectionTab("general");
@@ -323,7 +313,6 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
       setProfiles(remaining);
       setDialogOpen(false);
       setEditingProfile(undefined);
-      setConnectionResult(undefined);
       onSourceDeleted?.(editingProfile.id);
       // Removing the current source should keep the workspace useful. Opening
       // the next saved model uses local snapshots and needs no live connection.
@@ -390,13 +379,6 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
       )}
 
       {!enabled ? <p className="connection-note">{bt("business.installTheDesktopAppToConnectADatabase")}</p> : null}
-      {connectionResult ? (
-        <p className="success-message connection-status">
-          {bt("business.connectedTo")} {connectionResult.database.name} · {connectionResult.database.databaseType === "mySql" ? "MySQL" : "PostgreSQL"} {connectionResult.database.version}
-          {bt("business.sSL", { value0: connectionResult.sslActive === null ? translateUiLabel("unknown", bt) : connectionResult.sslActive ? translateUiLabel("active", bt) : translateUiLabel("off", bt) })}
-          {bt("business.server", { value0: connectionResult.serverReadOnly === null ? translateUiLabel("read-only unknown", bt) : connectionResult.serverReadOnly ? translateUiLabel("read-only", bt) : translateUiLabel("writes allowed", bt) })}
-        </p>
-      ) : null}
       {error && !dialogOpen ? <p className="error-message connection-status">{error}</p> : null}
 
       {dialogOpen ? (

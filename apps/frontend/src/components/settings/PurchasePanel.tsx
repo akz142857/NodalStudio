@@ -4,7 +4,7 @@ import type { NodalStudioPlatform } from "../../platform";
 import type { PurchaseStatus } from "../../platform/purchase-types";
 import { SettingsGroup } from "./SettingsControls";
 
-export function PurchasePanel({ platform, version }: { platform: NodalStudioPlatform; version: string }) {
+export function PurchasePanel({ platform }: { platform: NodalStudioPlatform }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<PurchaseStatus>();
   const [restoring, setRestoring] = useState(false);
@@ -45,16 +45,14 @@ export function PurchasePanel({ platform, version }: { platform: NodalStudioPlat
   return <SettingsGroup title={t("purchase.title")}>
     <div className="update-summary" aria-live="polite" aria-atomic="true">
       <span className="update-symbol" aria-hidden="true">{phase === "verified" ? "✓" : "↻"}</span>
-      <div><h3>{t(`purchase.${phase}`)}</h3><p>{t("purchase.store")} · {version}</p></div>
+      <div><h3>{t(`purchase.${phase}`)}</h3><p>{t("purchase.store")}</p></div>
     </div>
     {status?.environment === "Sandbox" ? <p className="update-help">{t("purchase.test")}</p> : null}
     <p className="update-help">{phase === "verified" ? t("purchase.offline") : t("purchase.recoveryHelp")}</p>
     {error || status?.reason ? <p role="status" className="update-error">{status?.reason === "cancelled" ? t("purchase.cancelled") : phase === "unverified" ? t("purchase.invalid") : t("purchase.retry")}</p> : null}
     <div className="setting-action-row update-actions">
       <button type="button" disabled={restoring || status?.busy} onClick={() => void restore()}>{restoring || status?.busy ? t("purchase.restoring") : t("purchase.restore")}</button>
-      <button type="button" onClick={() => void platform.openAppStore().catch(() => setError(true))}>{t("purchase.openStore")}</button>
     </div>
     <p className="update-help">{t("purchase.restoreHelp")}</p>
-    <p className="update-help">{t("purchase.updates")}</p>
   </SettingsGroup>;
 }

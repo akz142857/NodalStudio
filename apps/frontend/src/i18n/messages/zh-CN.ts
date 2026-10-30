@@ -1,8 +1,7 @@
 import type { en } from "./en";
 
 export const zhCN = {
-  "purchase.openStore": "打开 App Store",
-  "purchase.title": "版本与购买",
+  "purchase.title": "购买验证",
   "purchase.store": "Mac App Store",
   "purchase.checking": "正在验证购买…",
   "purchase.verified": "Pro · 购买已验证",
@@ -15,7 +14,6 @@ export const zhCN = {
   "purchase.restore": "重新验证 App Store 购买",
   "purchase.restoring": "正在等待 App Store…",
   "purchase.restoreHelp": "Apple 可能要求登录用于获取此应用的 Apple 账号。",
-  "purchase.updates": "更新由 Mac App Store 管理，请打开 App Store 查看更新。",
   "purchase.cancelled": "已取消验证，可在准备好后重试。",
   "purchase.retry": "暂时无法完成 App Store 验证，请联网后重试。",
   "purchase.invalid": "无法确认购买与此应用及设备匹配。请使用有购买资格的 Apple 账号从 App Store 下载。",
@@ -657,6 +655,11 @@ export const zhCN = {
   "settings.storedInTheSystemCredentialStore": "已存储在系统凭据库",
   "settings.save": "保存",
   "updates.updates": "更新",
+  "updates.appStoreTitle": "Mac App Store 更新",
+  "updates.currentVersion": "当前版本 {version}",
+  "updates.appStoreManaged": "更新由 Mac App Store 管理。",
+  "updates.openAppStore": "打开 App Store",
+  "updates.appStoreOpenFailed": "无法打开 App Store，请手动打开 App Store 查看更新。",
   "updates.installedVersion": "已安装版本 {version}{available}",
   "updates.available": " · 可用版本 {value0}",
   "updates.signatureVerified": "签名已验证",
