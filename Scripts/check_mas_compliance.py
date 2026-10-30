@@ -51,7 +51,16 @@ def validate_distribution_identity(development, release, appstore):
         if config.get('identifier') != 'com.claycosmos.nodalstudio' or config.get('productName') != 'Nodal Studio':
             raise ValueError('Production overlays must explicitly select the production application identity')
 
+def product_version(base=BASE):
+    version=json.loads((base/'tauri.conf.json').read_text())['version']
+    for name in ('tauri.release.conf.json', 'tauri.appstore.conf.json'):
+        overlay=json.loads((base/name).read_text())
+        if overlay.get('version', version) != version:
+            raise ValueError('Distribution versions must match the shared product version')
+    return version
+
 def validate_source(base=BASE, root=ROOT):
+    product_version(base)
     validate_distribution_identity(*(json.loads((base/name).read_text()) for name in
         ('tauri.conf.json', 'tauri.release.conf.json', 'tauri.appstore.conf.json')))
     validate_manifest(read_plist(base/'PrivacyInfo.xcprivacy'))
@@ -70,7 +79,7 @@ def validate_source(base=BASE, root=ROOT):
 
 def validate_bundle_version(info, base=BASE, expected_build=None):
     config=json.loads((base/'tauri.appstore.conf.json').read_text())
-    if info.get('CFBundleShortVersionString') != config['version']:
+    if info.get('CFBundleShortVersionString') != product_version(base):
         raise ValueError('Built app has the wrong MAS marketing version')
     build=expected_build if expected_build is not None else config['bundle']['macOS']['bundleVersion']
     if not re.fullmatch(r'[0-9]+(?:\.[0-9]+){0,2}', build):

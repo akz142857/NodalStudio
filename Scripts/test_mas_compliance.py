@@ -1,5 +1,6 @@
 import copy
 import importlib.util
+import json
 from pathlib import Path
 import plistlib
 import tempfile
@@ -8,6 +9,8 @@ import shutil
 
 spec=importlib.util.spec_from_file_location('compliance',Path(__file__).with_name('check_mas_compliance.py'))
 compliance=importlib.util.module_from_spec(spec);spec.loader.exec_module(compliance)
+PRODUCT_VERSION=json.loads((compliance.BASE/'tauri.conf.json').read_text())['version']
+BUILD_NUMBER=json.loads((compliance.BASE/'tauri.appstore.conf.json').read_text())['bundle']['macOS']['bundleVersion']
 
 class ComplianceTests(unittest.TestCase):
     def test_development_and_production_identities_cannot_overlap_or_fall_back(self):
@@ -19,6 +22,19 @@ class ComplianceTests(unittest.TestCase):
 
     def test_source_resources_and_pinned_sdk(self):
         compliance.validate_source()
+
+    def test_distribution_versions_inherit_shared_version_and_reject_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp)
+            (base/'tauri.conf.json').write_text(json.dumps({'version':'1.2.3'}))
+            for name in ('tauri.release.conf.json','tauri.appstore.conf.json'):
+                (base/name).write_text('{}')
+            self.assertEqual(compliance.product_version(base),'1.2.3')
+            for name in ('tauri.release.conf.json','tauri.appstore.conf.json'):
+                (base/name).write_text(json.dumps({'version':'1.0.0'}))
+                with self.assertRaisesRegex(ValueError,'shared product version'):
+                    compliance.product_version(base)
+                (base/name).write_text('{}')
 
     def test_missing_duplicate_or_guessed_reason_rejected(self):
         original=compliance.read_plist(compliance.BASE/'PrivacyInfo.xcprivacy')
@@ -39,7 +55,7 @@ class ComplianceTests(unittest.TestCase):
     def test_bundle_requires_correct_location_and_exact_resources(self):
         with tempfile.TemporaryDirectory() as tmp:
             app=Path(tmp)/'Fixture.app';contents=app/'Contents';contents.mkdir(parents=True)
-            (contents/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'com.claycosmos.nodalstudio','CFBundleShortVersionString':'1.0.0','CFBundleVersion':'2'}))
+            (contents/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'com.claycosmos.nodalstudio','CFBundleShortVersionString':PRODUCT_VERSION,'CFBundleVersion':BUILD_NUMBER}))
             with self.assertRaisesRegex(ValueError,'missing or stale'):compliance.validate_bundle(app)
             for dest,src in compliance.RESOURCES.items():
                 source=compliance.BASE/src;target=contents/dest;target.parent.mkdir(parents=True,exist_ok=True)
@@ -55,7 +71,7 @@ class ComplianceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'version changed'):compliance.validate_source(root=root)
 
     def test_mas_version_and_build_reject_fallback_and_allow_next_upload(self):
-        valid={'CFBundleShortVersionString':'1.0.0','CFBundleVersion':'2'}
+        valid={'CFBundleShortVersionString':PRODUCT_VERSION,'CFBundleVersion':BUILD_NUMBER}
         compliance.validate_bundle_version(valid)
         for field,value in [('CFBundleShortVersionString','0.2.4'),('CFBundleVersion','1.0.0'),('CFBundleVersion',None)]:
             with self.assertRaises(ValueError):compliance.validate_bundle_version({**valid,field:value})

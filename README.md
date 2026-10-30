@@ -175,6 +175,11 @@ increasing `APP_BUILD_NUMBER`. Installed Keychain identities are selected
 automatically. Optional `.p12` paths can instead be configured for temporary
 import during the build.
 
+GitHub, Windows and Mac App Store builds share the product version in
+`apps/desktop/src-tauri/tauri.conf.json`. Production overlays inherit this value;
+the MAS compliance check rejects a different version in either overlay. The
+App Store build number remains independent and must increase for each upload.
+
 Validate all local prerequisites without building:
 
 ```bash
