@@ -16,7 +16,7 @@ describe("Database snapshot context", () => {
     const onOpenHistory = vi.fn();
     const {rerender} = render(<DatabaseSnapshotHeader snapshot={reportSnapshot} latestSnapshotId="newer" refreshState="refreshing" onOpenHistory={onOpenHistory}/>);
     expect(screen.getByText("Historical snapshot")).toBeVisible();
-    expect(screen.getByRole("status")).toHaveTextContent("Refreshing schema");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open schema history" })).toHaveAttribute("title", expect.stringContaining("Schema captured"));
     expect(document.querySelector("time")).toHaveAttribute("datetime",reportSnapshot.capturedAt);
     fireEvent.click(screen.getByRole("button",{name:"Open schema history"}));
@@ -24,5 +24,17 @@ describe("Database snapshot context", () => {
     expect(screen.queryByRole("button",{name:/Refresh/})).toBeNull();
     rerender(<DatabaseSnapshotHeader snapshot={reportSnapshot} latestSnapshotId={reportSnapshot.id} refreshState="idle" onOpenHistory={onOpenHistory}/>);
     expect(screen.queryByText("Historical snapshot")).toBeNull();
+  });
+
+  it("keeps canvas header content unchanged throughout a successful refresh and still reports failures", () => {
+    const header = (refreshState: "idle" | "refreshing" | "error") => <DatabaseSnapshotHeader snapshot={reportSnapshot} tableCount={3} refreshState={refreshState} />;
+    const { container, rerender } = render(header("idle"));
+    const initialContent = container.innerHTML;
+    rerender(header("refreshing"));
+    expect(container.innerHTML).toBe(initialContent);
+    rerender(header("idle"));
+    expect(container.innerHTML).toBe(initialContent);
+    rerender(header("error"));
+    expect(screen.getByRole("alert")).toHaveTextContent("Refresh failed");
   });
 });

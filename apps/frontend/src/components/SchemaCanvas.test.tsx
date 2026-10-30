@@ -38,6 +38,31 @@ describe("SchemaCanvas table selection", () => {
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+  it("preserves the viewport, positions and selection through unchanged refresh cycles without rerunning layout", async () => {
+    const canvasSettings = defaultAppSettings().canvas;
+    const { container, rerender } = render(<CanvasHarness canvasSettings={canvasSettings} semantics={positionedSemantics} />);
+    await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
+    const selected = container.querySelector('.react-flow__node[data-id="public.orders"]')!;
+    fireEvent.click(selected);
+    const viewport = container.querySelector<HTMLElement>(".react-flow__viewport")!;
+    const initialViewport = viewport.style.transform;
+    fireEvent.wheel(container.querySelector(".react-flow__pane")!, { deltaX: 80, deltaY: 40, deltaMode: 0 });
+    await waitFor(() => expect(viewport.style.transform).not.toBe(initialViewport));
+    const transform = viewport.style.transform;
+    const positions = [...container.querySelectorAll<HTMLElement>(".react-flow__node")].map((node) => node.style.transform);
+    const layoutCalls = vi.mocked(layoutSchemaGraph).mock.calls.length;
+    const restoreCalls = vi.mocked(restoreOrExtendLayout).mock.calls.length;
+    for (const refreshState of ["refreshing", "idle", "refreshing", "idle"] as const) {
+      rerender(<CanvasHarness canvasSettings={canvasSettings} semantics={positionedSemantics} refreshState={refreshState} />);
+      expect(viewport.style.transform).toBe(transform);
+      expect([...container.querySelectorAll<HTMLElement>(".react-flow__node")].map((node) => node.style.transform)).toEqual(positions);
+      expect(container.querySelectorAll(".react-flow__node.selected")).toHaveLength(1);
+      expect(selected).toHaveClass("selected");
+      expect(vi.mocked(layoutSchemaGraph)).toHaveBeenCalledTimes(layoutCalls);
+      expect(vi.mocked(restoreOrExtendLayout)).toHaveBeenCalledTimes(restoreCalls);
+    }
+  });
+
   it("passes the clicked field to the inspector and clears it when selecting the table header", async () => {
     const inspect = vi.fn();
     const { container } = render(<CanvasHarness onSelectTable={inspect} />);

@@ -28,7 +28,9 @@ export function DatabaseSnapshotHeader({ snapshot, latestSnapshotId, refreshStat
           ? <time className="visually-hidden" dateTime={snapshot.capturedAt}>{captured}</time>
           : <span className="visually-hidden">{captured}</span>}
       </div>
-      {refreshState !== "idle" ? <span className="workspace-refresh-status" role={refreshState === "error" ? "alert" : "status"}>{refreshState === "refreshing" ? bt("business.refreshingSchema") : bt("business.refreshFailedShowingCapturedModel")}</span> : null}
+      {/* Refresh progress already lives in the application's refresh button.
+          Adding a progress row here resizes the canvas on every unchanged poll. */}
+      {refreshState === "error" ? <span className="workspace-refresh-status" role="alert">{bt("business.refreshFailedShowingCapturedModel")}</span> : null}
     </div>
     <div className="model-workspace-actions" role="toolbar" aria-label={bt("business.diagramTools")}>
       {tools}

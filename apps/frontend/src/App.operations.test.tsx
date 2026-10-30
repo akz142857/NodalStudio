@@ -12,7 +12,12 @@ vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot 
   <button onClick={() => onSnapshot({ snapshot: reportSnapshot, stored: true, changeSet: null })}>Load operation fixture</button>
   <button onClick={() => onSnapshot({ snapshot: other, stored: true, changeSet: null })}>Load other source</button>
 </> }));
-vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: ({ snapshot, onOpenHistory }: SchemaCanvasProps) => <><DatabaseSnapshotHeader snapshot={snapshot} onOpenHistory={onOpenHistory} /><p data-testid="operation-canvas">{snapshot.sourceId} · {snapshot.id}</p></> }));
+vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: ({ snapshot, onOpenHistory, refreshState, onSelectTable, selectedTable }: SchemaCanvasProps) => <>
+  <DatabaseSnapshotHeader snapshot={snapshot} onOpenHistory={onOpenHistory} refreshState={refreshState} />
+  <p data-testid="operation-canvas">{snapshot.sourceId} · {snapshot.id}</p>
+  <button onClick={() => onSelectTable(snapshot.schemas[0].tables[1], "total")}>Select order field</button>
+  <output data-testid="selected-table">{selectedTable?.key.name}</output>
+</> }));
 async function mount() {
   const platform = getPlatform();
   vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "desktop", label: "Desktop test runtime", version: "test" });
@@ -56,14 +61,47 @@ describe("App snapshot operation feedback", () => {
     expect(screen.queryByRole("group", { name: "Snapshot refresh" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Refreshing…" })[0]).toBeDisabled(); expect(capture).toHaveBeenCalledOnce();
     await act(() => Promise.resolve(reject(new Error("Connection interrupted"))));
-    expect(screen.getByRole("alert")).toHaveTextContent("The loaded snapshot remains available");
-    expect(screen.getByRole("alert")).toHaveTextContent("Connection interrupted");
+    const failure = within(screen.getByRole("group", { name: "Snapshot refresh" })).getByRole("alert");
+    expect(failure).toHaveTextContent("The loaded snapshot remains available");
+    expect(failure).toHaveTextContent("Connection interrupted");
     expect(screen.getByTestId("operation-canvas")).toHaveTextContent(reportSnapshot.id);
     fireEvent.click(screen.getByRole("button", { name: "Retry snapshot refresh" }));
     await waitFor(() => expect(refresh()).toBeEnabled());
     expect(capture).toHaveBeenCalledTimes(2); expect(capture).toHaveBeenLastCalledWith(reportSnapshot.sourceId, "manual");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Snapshot refresh" })).not.toBeInTheDocument();
+  });
+  it("keeps automatic refresh enabled without replacing unchanged models or clearing the selected field", async () => {
+    const timers = vi.spyOn(window, "setInterval");
+    const platform = await mount();
+    let finish!: (result: CaptureSnapshotResult) => void;
+    const capture = vi.spyOn(platform, "capturePostgresSnapshot").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: "Select order field" }));
+    const header = screen.getByRole("banner", { name: "Database snapshot context" });
+    const initialContent = header.innerHTML;
+    const field = document.querySelector('[data-column-focus="true"]');
+    expect(field).toHaveTextContent("Calculated order total");
+    const getSemantics = vi.spyOn(platform, "getSemantics");
+    const tick = timers.mock.calls.filter(([, delay]) => delay === 30_000).at(-1)?.[0];
+    expect(tick).toBeTypeOf("function");
+
+    for (let poll = 0; poll < 2; poll += 1) {
+      act(() => tick!());
+      expect(capture).toHaveBeenLastCalledWith(reportSnapshot.sourceId, "background");
+      expect(header.innerHTML).toBe(initialContent);
+      expect(screen.getByRole("button", { name: "Refreshing…" })).toHaveAttribute("aria-busy", "true");
+      await act(() => Promise.resolve(finish({ snapshot: reportSnapshot, stored: false, changeSet: null })));
+      expect(header.innerHTML).toBe(initialContent);
+      expect(screen.getByTestId("selected-table")).toHaveTextContent("orders");
+      expect(document.querySelector('[data-column-focus="true"]')).toBe(field);
+    }
+    expect(capture).toHaveBeenCalledTimes(2);
+    expect(getSemantics).not.toHaveBeenCalled();
+
+    act(() => tick!());
+    await act(() => Promise.resolve(finish({ snapshot: { ...reportSnapshot, id: "updated-model", fingerprint: "changed-structure" }, stored: true, changeSet: null })));
+    expect(screen.getByTestId("operation-canvas")).toHaveTextContent("updated-model");
+    expect(getSemantics).toHaveBeenCalled();
   });
   it.each(["success", "failure"])("does not replace the current source or show a late refresh %s", async (outcome) => {
     const platform = await mount(); let finish!: (value: CaptureSnapshotResult) => void; let fail!: (error: Error) => void;
