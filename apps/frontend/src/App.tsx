@@ -121,10 +121,10 @@ export function App() {
   const [activeSearchResult, setActiveSearchResult] = useState(0);
   const [objectDocument, setObjectDocument] = useState<{ snapshot: DatabaseSnapshot; key: ObjectKey }>();
   const [selectedTable, setSelectedTable] = useState<TableDefinition>();
+  const [columnFocus, setColumnFocus] = useState<{ snapshot: DatabaseSnapshot | undefined; table: TableDefinition; name: string }>();
   const [semanticsSettledSnapshot, setSemanticsSettledSnapshot] = useState<DatabaseSnapshot>();
   const [locateRequest, setLocateRequest] = useState<CanvasLocateRequest>();
   const locateRevision = useRef(0);
-  const inspectTable = useCallback((table: TableDefinition | undefined) => { setSelectedTable(table); setLocateRequest(undefined); }, []);
   const finishLocate = useCallback((request: CanvasLocateRequest) => setLocateRequest((current) => current === request ? undefined : current), []);
   const [semantics, setSemantics] = useState<SemanticBundle>(emptySemantics);
   const [semanticsSnapshot, setSemanticsSnapshot] = useState<DatabaseSnapshot>();
@@ -158,6 +158,12 @@ export function App() {
     rightPanelInteracted.current = true;
     restoreRightPanel(update);
   }, []);
+  const inspectTable = useCallback((table: TableDefinition | undefined, columnName?: string) => {
+    setSelectedTable(table);
+    setLocateRequest(undefined);
+    setColumnFocus(table && columnName ? { snapshot, table, name: columnName } : undefined);
+    if (columnName) setRightPanel((panel) => ({ ...panel, expanded: true }));
+  }, [snapshot, setRightPanel]);
   const [settings, setSettings] = useState<EffectiveSettings>(() => defaultEffectiveSettings());
   const i18n = useI18n(settings.app.general.language);
   const { t } = i18n;
@@ -260,6 +266,7 @@ export function App() {
     setSearchOpen(false);
     setSavedView(undefined);
     setSelectedTable(table);
+    setColumnFocus(undefined);
     setLocateRequest({ sourceId: snapshot.sourceId, snapshotId: snapshot.id,
       nodeId: `${table.key.schema}.${table.key.name}`, revision: ++locateRevision.current });
   }, [snapshot, setPreflightOpen]);
@@ -1218,6 +1225,7 @@ export function App() {
           <div hidden={documentVisible || preflightOpen}>
           <InspectorPanel
             onOpenObject={openObjectDocument}
+            columnFocus={columnFocus?.snapshot === snapshot && columnFocus?.table === selectedTable ? columnFocus : undefined}
             explainRequest={explainRequest}
             snapshot={snapshot}
             selectedTable={selectedTable}

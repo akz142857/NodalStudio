@@ -112,7 +112,7 @@ export interface SchemaCanvasProps {
   query: string;
   changeSet?: SchemaChangeSet;
   beforeSnapshot?: DatabaseSnapshot;
-  onSelectTable: (table: TableDefinition | undefined) => void;
+  onSelectTable: (table: TableDefinition | undefined, columnName?: string) => void;
   selectedTable?: TableDefinition;
   locateRequest?: CanvasLocateRequest;
   onLocateComplete?: (request: CanvasLocateRequest) => void;
@@ -1099,7 +1099,7 @@ function SchemaCanvasInner({
             else nextSelection.add(node.id);
             selectedNodeIds.current = nextSelection;
             setNodes((current) => current.map((candidate) => Boolean(candidate.selected) === nextSelection.has(candidate.id) ? candidate : { ...candidate, selected: nextSelection.has(candidate.id) }));
-            onSelectTable(node.data.inspectionTable ?? node.data.table);
+            onSelectTable(node.data.inspectionTable ?? node.data.table, element?.dataset.columnName);
           }
         }}
         onNodeContextMenu={(event, node) => {

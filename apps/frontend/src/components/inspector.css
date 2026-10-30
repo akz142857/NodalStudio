@@ -65,6 +65,7 @@
 .inspector-view .inspector-columns b { padding: 1px 4px; border: 1px solid var(--ds-separator); color: var(--ds-secondary); background: var(--ds-window); font-size: .769rem; font-weight: 600; line-height: 1.2; }
 .inspector-view :is(.inspector-columns small, .inspector-list span) { color: var(--ds-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--ds-text-caption); line-height: 1.5; overflow-wrap: anywhere; }
 .inspector-view .inspector-columns p { font-size: var(--ds-text-control); }
+.inspector-view .inspector-columns > [data-column-focus="true"] { background: color-mix(in srgb, var(--ds-accent) 14%, var(--ds-surface)); box-shadow: inset 3px 0 var(--ds-accent); }
 .inspector-view [data-evidence-focus="true"] { outline-color: var(--ds-accent); background: color-mix(in srgb, var(--ds-accent) 10%, var(--ds-surface)); }
 
 .inspector-view .annotation-form .core-toggle { display: flex; align-items: center; gap: 8px; color: var(--ds-text); }

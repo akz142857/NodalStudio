@@ -20,6 +20,10 @@ vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: (props: SchemaCanvas
   <output data-testid="navigation-ready">{String(props.navigationReady)}</output>
   <output data-testid="locate-request">{props.locateRequest ? JSON.stringify(props.locateRequest) : "none"}</output>
   <button onClick={() => props.locateRequest && props.onLocateComplete?.(props.locateRequest)}>Acknowledge navigation</button>
+  <button onClick={() => props.onSelectTable(props.snapshot.schemas[0].tables[1], "total")}>Inspect total field</button>
+  <button onClick={() => props.onSelectTable(props.snapshot.schemas[0].tables[1], "customer_id")}>Inspect customer field</button>
+  <button onClick={() => props.onSelectTable(props.snapshot.schemas[1].tables[0], "id")}>Inspect archived field</button>
+  <button onClick={() => props.onSelectTable(undefined)}>Clear canvas selection</button>
 </section> }));
 async function mount() {
   const platform = getPlatform();
@@ -37,6 +41,51 @@ const pickOrders = () => {
 };
 describe("App sidebar object navigation", () => {
   beforeEach(() => localStorage.clear()); afterEach(() => vi.restoreAllMocks());
+  it("opens field details, highlights and locates repeated clicks, and clears stale field selection", async () => {
+    const scrolled: HTMLElement[] = [];
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: function (this: HTMLElement) { scrolled.push(this); } });
+    try {
+      await mount();
+      fireEvent.click(screen.getByRole("button", { name: "Load navigation fixture" }));
+      fireEvent.click(screen.getByRole("button", { name: "Inspect total field" }));
+      const inspector = document.querySelector<HTMLElement>(".inspector")!;
+      const highlighted = () => inspector.querySelector<HTMLElement>('[data-column-focus="true"]');
+      expect(inspector).toBeVisible();
+      expect(highlighted()).toHaveTextContent("Calculated order total");
+      expect(scrolled.at(-1)).toBe(highlighted());
+      expect(screen.getByRole("button", { name: "Table" })).toHaveAttribute("aria-pressed", "true");
+
+      fireEvent.click(screen.getByRole("button", { name: "Semantics" }));
+      fireEvent.click(screen.getByRole("button", { name: "Collapse right inspector" }));
+      const scrollCount = scrolled.length;
+      fireEvent.click(screen.getByRole("button", { name: "Inspect total field" }));
+      expect(inspector).toBeVisible();
+      expect(highlighted()).toHaveTextContent("Calculated order total");
+      expect(scrolled.length).toBeGreaterThan(scrollCount);
+      expect(scrolled.at(-1)).toBe(highlighted());
+
+      fireEvent.click(screen.getByRole("button", { name: "Inspect customer field" }));
+      expect(inspector.querySelectorAll('[data-column-focus="true"]')).toHaveLength(1);
+      expect(highlighted()).toHaveTextContent("Customer identifier");
+      expect(scrolled.at(-1)).toBe(highlighted());
+      fireEvent.click(screen.getByRole("button", { name: "Inspect archived field" }));
+      expect(highlighted()).toHaveTextContent("id");
+      expect(inspector).toHaveTextContent("Archived order structure");
+      fireEvent.click(screen.getByRole("button", { name: "Clear canvas selection" }));
+      expect(highlighted()).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Inspect total field" }));
+      pickOrders();
+      expect(highlighted()).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Inspect total field" }));
+      fireEvent.click(screen.getByRole("button", { name: "Load enum fixture" }));
+      expect(highlighted()).toBeNull();
+    } finally {
+      if (original) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", original);
+      else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+    }
+  });
   it("opens a central document without remounting the canvas or changing tree search", async () => {
     const platform = await mount();
     const save = vi.spyOn(platform, "saveLayout");

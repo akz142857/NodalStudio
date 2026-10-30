@@ -38,6 +38,18 @@ describe("SchemaCanvas table selection", () => {
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+  it("passes the clicked field to the inspector and clears it when selecting the table header", async () => {
+    const inspect = vi.fn();
+    const { container } = render(<CanvasHarness onSelectTable={inspect} />);
+    await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
+    const node = container.querySelector('.react-flow__node[data-id="public.orders"]')!;
+    const field = node.querySelector('[data-column-name="total"] .column-type')!;
+    fireEvent.click(field);
+    expect(inspect).toHaveBeenLastCalledWith(reportSnapshot.schemas[0].tables[1], "total");
+    fireEvent.click(node.querySelector(".table-node > header strong")!);
+    expect(inspect).toHaveBeenLastCalledWith(reportSnapshot.schemas[0].tables[1], undefined);
+  });
+
   it.each(["web", "historical"])("preserves %s layout history and positions when the language changes", async (mode) => {
     const canvasSettings = defaultAppSettings().canvas;
     function LocalizedCanvas({ language }: { language: Language }) {

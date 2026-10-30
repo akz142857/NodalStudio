@@ -28,6 +28,7 @@ type InspectorSegment = "structure" | "semantics" | "history" | "ai";
 
 
 interface InspectorPanelProps {
+  columnFocus?: { name: string };
   onOpenObject?: (key: import("../platform").ObjectKey) => void;
   explainRequest?: number;
   snapshot?: DatabaseSnapshot;
@@ -72,6 +73,7 @@ function findAnnotation(
  * so the segments never disappear and their positions stay learnable.
  */
 export function InspectorPanel({
+  columnFocus,
   onOpenObject,
   explainRequest,
   snapshot,
@@ -108,6 +110,14 @@ export function InspectorPanel({
     if (explainRequest) setSegment("ai");
   }
   const [evidenceSelection, setEvidenceSelection] = useState<{ scope: string; requestId: string; evidence: TableAiEvidence }>();
+  const [handledColumnFocus, setHandledColumnFocus] = useState(columnFocus);
+  if (columnFocus !== handledColumnFocus) {
+    setHandledColumnFocus(columnFocus);
+    if (columnFocus) {
+      setSegment("structure");
+      setEvidenceSelection(undefined);
+    }
+  }
   const [evidenceRequestId, setEvidenceRequestId] = useState<string>();
   const handleAiTaskChange = useCallback((requestId: string | undefined) => {
     setEvidenceRequestId(requestId);
@@ -163,7 +173,7 @@ export function InspectorPanel({
               <pre>{focusedEvidence.detail}</pre>
               <button type="button" onClick={() => setSegment("ai")}>{bt("business.backToAIExplanation")}</button>
             </section> : null}
-            <TableStructure onOpenObject={onOpenObject} snapshot={snapshot} table={evidenceTable || selectedTable} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
+            <TableStructure onOpenObject={onOpenObject} snapshot={snapshot} table={evidenceTable || selectedTable} columnFocus={focusedEvidence ? undefined : columnFocus} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
           </>
         ) : (
           <dl className="snapshot-summary">

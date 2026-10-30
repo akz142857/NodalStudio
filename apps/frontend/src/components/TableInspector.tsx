@@ -4,10 +4,11 @@ import type { DatabaseSnapshot } from "../platform/types";
 import { translateUiLabel } from "../i18n/business-labels";
 import { useI18n } from "../i18n";
 import { useUpdateBlocker } from "../platform/update-guard";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ObjectAnnotation, SaveAnnotationInput, TableAiEvidence, TableDefinition } from "../platform";
 
 interface TableStructureProps {
+  columnFocus?: { name: string };
   onOpenObject?: (key: import("../platform").ObjectKey) => void;
   table: TableDefinition;
   snapshot?: DatabaseSnapshot;
@@ -29,9 +30,18 @@ interface TableKnowledgeFormProps {
  * Split from the knowledge form because the inspector shows one or the other —
  * structure is read-only and comes from the snapshot, the form is authored.
  */
-export function TableStructure({ table, snapshot, onOpenQuery, focusedEvidence, onOpenObject, onShowColumnSource }: TableStructureProps) {
+export function TableStructure({ table, snapshot, onOpenQuery, columnFocus, focusedEvidence, onOpenObject, onShowColumnSource }: TableStructureProps) {
   const { t: bt } = useI18n();
   const structure = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!columnFocus) return;
+    const target = structure.current?.querySelector<HTMLElement>('[data-column-focus="true"]');
+    if (!target) return;
+    // Keep the field clear of the inspector's sticky title and segment tabs.
+    const header = structure.current?.closest(".inspector-view")?.querySelector<HTMLElement>(".inspector-header");
+    target.style.scrollMarginTop = `${(header?.offsetHeight ?? 0) + 8}px`;
+    target.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [columnFocus, table]);
   useEffect(() => {
     const target = structure.current?.querySelector<HTMLElement>('[data-evidence-target="true"]')
       ?? structure.current?.querySelector<HTMLElement>('[data-evidence-focus="true"]');
@@ -68,7 +78,7 @@ export function TableStructure({ table, snapshot, onOpenQuery, focusedEvidence, 
         <h3>{bt("business.columnsDetail")}</h3>
         <div className="inspector-columns">
           {table.columns.map((column) => (
-            <div key={column.name} tabIndex={-1} data-evidence-target={focused("column", column.name) || logicalField === column.name ? "true" : undefined} data-evidence-focus={focused("column", column.name) || focusedEvidence?.columns.includes(column.name) ? "true" : undefined}>
+            <div key={column.name} tabIndex={-1} data-column-focus={columnFocus?.name === column.name ? "true" : undefined} data-evidence-target={focused("column", column.name) || logicalField === column.name ? "true" : undefined} data-evidence-focus={focused("column", column.name) || focusedEvidence?.columns.includes(column.name) ? "true" : undefined}>
               <span>
                 {primaryColumns.has(column.name) ? <b>{bt("business.pKDetail")}</b> : null}
                 {foreignColumns.has(column.name) ? <b>{bt("business.fK")}</b> : null}
