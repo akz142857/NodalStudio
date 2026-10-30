@@ -72,10 +72,10 @@ pub fn reply_language_hint(question: &str, fallback: &str) -> String {
                 "用",
                 "使用",
             ] {
-                if let Some(pos) = lower.rfind(&format!("{verb}{alias}")) {
-                    if explicit.as_ref().is_none_or(|(last, _)| pos >= *last) {
-                        explicit = Some((pos, name));
-                    }
+                if let Some(pos) = lower.rfind(&format!("{verb}{alias}"))
+                    && explicit.as_ref().is_none_or(|(last, _)| pos >= *last)
+                {
+                    explicit = Some((pos, name));
                 }
             }
         }

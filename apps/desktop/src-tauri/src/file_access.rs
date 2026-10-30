@@ -12,6 +12,8 @@ pub struct Access {
     #[cfg(feature = "mac-app-store")]
     _scope: Option<storekit_bridge::FileAccess>,
 }
+// Keep the same fallible API as the security-scoped MAS implementation.
+#[cfg_attr(not(feature = "mac-app-store"), allow(clippy::unnecessary_wraps))]
 pub fn access(path: &Path) -> Result<Access, String> {
     #[cfg(feature = "mac-app-store")]
     {
@@ -34,6 +36,7 @@ pub fn access(path: &Path) -> Result<Access, String> {
         Ok(Access {})
     }
 }
+#[cfg_attr(not(feature = "mac-app-store"), allow(clippy::unnecessary_wraps))]
 pub fn remember(path: &Path) -> Result<(), String> {
     #[cfg(feature = "mac-app-store")]
     storekit_bridge::remember_file(path.to_str().ok_or("Invalid local path")?)

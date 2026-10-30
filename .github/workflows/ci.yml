@@ -45,7 +45,11 @@ jobs:
           components: clippy,rustfmt
       - uses: swatinem/rust-cache@v2
       - run: cargo fmt --check
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      # MAS deliberately rejects updater smoke-test overrides, so validate each
+      # supported feature configuration separately.
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo clippy -p nodalstudio-desktop --all-targets --features updater-smoke-test --locked -- -D warnings
+      - run: cargo clippy -p nodalstudio-desktop --all-targets --features mac-app-store --locked -- -D warnings
       - run: cargo test --workspace
 
   postgres-integration:

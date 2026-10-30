@@ -232,7 +232,7 @@ fi
 validate_boolean REQUIRE_CLEAN_GIT
 validate_boolean INSTALL_DEPENDENCIES
 
-for command in cargo codesign git node pnpm rustup security shasum spctl uuidgen xcrun; do
+for command in cargo codesign git node pnpm python3 rustup security shasum spctl uuidgen xcrun; do
   require_command "$command"
 done
 RELEASE_VERSION="$(node -p 'require("./apps/desktop/src-tauri/tauri.conf.json").version')"
@@ -311,7 +311,7 @@ pnpm --filter @nodalstudio/desktop tauri build "${BUILD_ARGS[@]}" -- --locked
 BUNDLE_ROOT="$(bundle_root)"
 APP_PATH="$BUNDLE_ROOT/macos/Nodal Studio.app"
 [[ -d "$APP_PATH" ]] || fail "App bundle was not generated: $APP_PATH"
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Contents/Info.plist")" == \
+[[ "$(python3 -c 'import plistlib, sys; print(plistlib.load(open(sys.argv[1], "rb"))["CFBundleIdentifier"])' "$APP_PATH/Contents/Info.plist")" == \
     "com.claycosmos.nodalstudio" ]] || fail "Release bundle has the wrong application identifier"
 
 # Tauri retains older release artifacts in this directory. Never publish the

@@ -41,13 +41,23 @@ elif name == "pnpm":
     bundle = pathlib.Path.cwd() / "target/release/bundle"
     # Tauri removes the intermediate app when only the DMG is requested.
     if "app" in bundles:
-        (bundle / "macos/Nodal Studio.app").mkdir(parents=True)
+        contents = bundle / "macos/Nodal Studio.app/Contents"
+        contents.mkdir(parents=True)
+        (contents / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": os.environ["RELEASE_TEST_BUNDLE_ID"]}))
     (bundle / "dmg").mkdir(parents=True, exist_ok=True)
     if os.environ.get("RELEASE_TEST_MISSING_DMG") != "1":
         (bundle / "dmg/Nodal Studio_0.1.0_test.dmg").write_bytes(b"fixture disk image")
     if os.environ.get("RELEASE_TEST_UPDATER") == "1":
         assert "--config" in args
-        config = json.loads(pathlib.Path(args[args.index("--config") + 1]).read_text())
+        configs = []
+        for index, arg in enumerate(args):
+            if arg == "--config":
+                path = pathlib.Path(args[index + 1])
+                if not path.is_absolute():
+                    path = pathlib.Path.cwd() / "apps/desktop" / path
+                configs.append(json.loads(path.read_text()))
+        assert configs[0]["identifier"] == "com.claycosmos.nodalstudio"
+        config = configs[-1]
         assert config["bundle"]["createUpdaterArtifacts"] is True
         assert config["plugins"]["updater"]["endpoints"][0].endswith("/latest/download/latest.json")
         archive = bundle / "macos/Nodal Studio.app.tar.gz"
@@ -85,7 +95,7 @@ else:
 
 
 class MacOSReleaseCheckTests(unittest.TestCase):
-    def run_release(self, *, has_identity=True, check_only=True, notary="Accepted", updater=False, keychain=False, keychain_failure=False, existing_dmgs=(), missing_dmg=False):
+    def run_release(self, *, has_identity=True, check_only=True, notary="Accepted", updater=False, keychain=False, keychain_failure=False, existing_dmgs=(), missing_dmg=False, bundle_id="com.claycosmos.nodalstudio"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "release fixture"
             commands = root / "bin"
@@ -95,6 +105,9 @@ class MacOSReleaseCheckTests(unittest.TestCase):
             script = scripts / SCRIPT.name
             shutil.copyfile(SCRIPT, script)
             shutil.copyfile(SCRIPT.parent / "github_update.py", scripts / "github_update.py")
+            release_config = root / "apps/desktop/src-tauri/tauri.release.conf.json"
+            release_config.parent.mkdir(parents=True)
+            shutil.copyfile(SCRIPT.parent.parent / "apps/desktop/src-tauri/tauri.release.conf.json", release_config)
             log = root / "commands.log"
             stub = commands / "stub"
             stub.write_text(STUB)
@@ -132,6 +145,7 @@ class MacOSReleaseCheckTests(unittest.TestCase):
                 "RELEASE_TEST_NOTARY": notary,
                 "RELEASE_TEST_UPDATER": "1" if updater else "0",
                 "RELEASE_TEST_MISSING_DMG": "1" if missing_dmg else "0",
+                "RELEASE_TEST_BUNDLE_ID": bundle_id,
                 "UPDATER_PUBLIC_KEY_PATH": str(public_key) if updater else "",
                 "UPDATER_NOTES_PATH": "",
                 "TAURI_SIGNING_PRIVATE_KEY": "fixture-only" if updater else "",
@@ -181,6 +195,13 @@ class MacOSReleaseCheckTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("DMG notarization was not accepted: Invalid", result.stderr)
         self.assertNotIn("xcrun stapler staple", commands)
+        self.assertIsNone(checksum)
+
+    def test_release_rejects_development_bundle_before_notarization(self):
+        result, commands, checksum = self.run_release(check_only=False, bundle_id="com.claycosmos.nodalstudio.dev")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Release bundle has the wrong application identifier", result.stderr)
+        self.assertNotIn("xcrun notarytool submit", commands)
         self.assertIsNone(checksum)
 
     def test_release_ignores_dmg_from_previous_version(self):

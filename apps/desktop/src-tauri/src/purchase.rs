@@ -137,6 +137,8 @@ async fn verify(app: &tauri::AppHandle, refresh: bool) -> Result<PurchaseStatus,
     Ok(result)
 }
 
+// MAS awaits the native StoreKit call; other distributions share its async API.
+#[cfg_attr(not(feature = "mac-app-store"), allow(clippy::unused_async))]
 async fn native_reply(refresh: bool, expected_bundle: String) -> ProviderReply {
     #[cfg(feature = "mac-app-store")]
     {

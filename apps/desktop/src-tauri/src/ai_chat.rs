@@ -52,10 +52,11 @@ pub(crate) fn reply_preferences(
 
 pub(crate) fn reply_fallback(ai: &settings_model::AiSettings, ui_language: &str) -> &'static str {
     match ai.reply_preferences.language {
-        settings_model::ReplyLanguage::English => "English",
         settings_model::ReplyLanguage::Chinese => "Simplified Chinese",
         settings_model::ReplyLanguage::Interface if ui_language == "zh-CN" => "Simplified Chinese",
-        settings_model::ReplyLanguage::Interface => "English",
+        settings_model::ReplyLanguage::English | settings_model::ReplyLanguage::Interface => {
+            "English"
+        }
     }
 }
 
