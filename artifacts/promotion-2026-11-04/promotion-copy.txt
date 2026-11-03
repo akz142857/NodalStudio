@@ -1,0 +1,41 @@
+Nodal Studio · 限时买断优惠 / Limited-time launch offer
+
+活动：2026-11-04 至 2026-11-10；2026-11-11 恢复原价。
+美区 US$0.99（原价 US$19.99）；中国大陆对应 ¥8（常规 ¥148）。
+一次购买，无订阅；活动结束后仍可使用。各地区售价、税费、可售情况及生效时间以 App Store 为准。法国当前未上架，不宣传全地区可购。
+
+App Store Promotional Text (146 characters)
+A clearer database for less. Get Nodal Studio for US$0.99 in the U.S. until November 11. One-time purchase. No subscription. Regional prices vary.
+
+中文发帖文案
+接手一个陌生数据库，先看懂它。
+
+Nodal Studio 把 PostgreSQL / MySQL 的表、字段和关系变成可探索的模型：
+• 看清表与表之间的关系
+• 比较结构变化，为字段留下可复用的说明
+• 借助可选 AI 起草 SQL，审阅后再决定执行只读查询
+
+现在 Mac App Store 限时买断优惠：美区 US$0.99，中国大陆对应 ¥8。
+一次购买，无订阅，活动结束后仍可使用。11 月 11 日恢复原价，各地区售价和可售情况以商店显示为准。
+
+官网：https://studio.nodalos.com/?lang=zh#download
+下载：https://apps.apple.com/app/id6791674692
+
+English post
+Your database, made clearer.
+
+Explore PostgreSQL and MySQL schemas, review structural changes, and draft SQL with optional AI in Nodal Studio for Mac.
+
+Limited-time launch offer: US$0.99 in the U.S. instead of US$19.99. One-time purchase. No subscription. Keep using the app after the offer ends.
+
+Offer ends November 11. Regional prices and availability vary; check your App Store. Requires macOS 13+. Bring your own database connection; optional remote AI requires your API key and provider fees may apply.
+
+Explore: https://studio.nodalos.com/?lang=en#download
+Get it: https://apps.apple.com/app/id6791674692
+
+Short English post
+Nodal Studio for Mac is US$0.99 in the U.S. until November 11. Explore PostgreSQL/MySQL schemas, review changes, and draft SQL with optional AI. One-time purchase, no subscription. Regional prices vary.
+https://apps.apple.com/app/id6791674692
+
+图片源文件：promotion-en.html (1200×630)、promotion-zh.html (1080×1080)，内嵌现有公开产品截图和应用图标，无外部字体或脚本。
+已通过 X 账号 @Ziy142857 发布英文推广帖及英文横图：https://x.com/Ziy142857/status/2117668175424925819。实际发布文案见 x-post.json。

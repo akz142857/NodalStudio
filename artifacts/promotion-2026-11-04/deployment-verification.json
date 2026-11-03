@@ -1,0 +1,24 @@
+{
+  "website": "https://studio.nodalos.com/?lang=zh#download",
+  "implementation_commit": "d5ceb1574fe7e49b4007373f43e2825016a36a2c",
+  "deployment_commit": "e726b37f08e2748889cab9763e3b6ed99813f06b",
+  "ci": "https://github.com/akz142857/nodalos/actions/runs/41681087006",
+  "ci_result": "success",
+  "public_website_en_verified": true,
+  "public_website_zh_verified": true,
+  "public_website_support_faq_verified": true,
+  "app_store_live_promo_saved": true,
+  "app_store_1_0_2_promo_saved_and_reload_verified": true,
+  "app_store_review_status": "Waiting for Review",
+  "website_expiry": "2026-11-11T00:00:00+08:00",
+  "local_expiry_tests_passed": 4,
+  "container_smoke_check": "passed",
+  "responsive_desktop_and_mobile_checked": true,
+  "minimum_macos": "13.0",
+  "social_posts_published": true,
+  "verification_limits": [
+    "Public HTTPS browser checks succeeded; separate Python HTTP probe timed out during TLS handshake.",
+    "Direct production kubectl status unavailable because the local context requires renewed credentials; deployment verified by successful CI/GitOps and actual public site content."
+  ],
+  "x_post_url": "https://x.com/Ziy142857/status/2117668175424925819"
+}
