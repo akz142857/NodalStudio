@@ -63,13 +63,13 @@ function mount() {
   return pending;
 }
 
-async function loadSource(name: "A" | "B") {
+async function loadSource(name: "A" | "B", settingsReady = true) {
   fireEvent.click(screen.getByRole("button", { name: `Load source ${name}` }));
   fireEvent.click(await screen.findByRole("button", { name: "Select current table" }));
   const expand = screen.queryByRole("button", { name: "Expand right inspector" });
   if (expand) fireEvent.click(expand);
   fireEvent.click(screen.getByRole("button", { name: "AI" }));
-  await waitFor(() => expect(screen.getByRole("textbox", { name: "Question" })).toBeEnabled());
+  if (settingsReady) await waitFor(() => expect(screen.getByRole("textbox", { name: "Question" })).toBeEnabled());
 }
 
 async function finishSave(save: PendingSave) {
@@ -78,6 +78,18 @@ async function finishSave(save: PendingSave) {
     save.resolve({ app: save.app, source: null, project: null, managed: [] });
     await Promise.resolve();
   });
+}
+
+async function sourceSave(pending: PendingSave[], source: "a" | "b") {
+  const theme = source === "a" ? "dark" : "light";
+  // Loading source settings may finish after the workspace debounce on a slow
+  // runner. Wait for the save containing the loaded settings, not a call count.
+  await waitFor(() => expect(pending.some(({ app }) =>
+    app.general.lastSourceId === `source-${source}` && app.general.theme === theme,
+  )).toBe(true));
+  return [...pending].reverse().find(({ app }) =>
+    app.general.lastSourceId === `source-${source}` && app.general.theme === theme,
+  )!;
 }
 
 async function openAiSettings() {
@@ -98,9 +110,7 @@ describe("source settings during recent workspace persistence", () => {
     const pending = mount();
     await screen.findByText("Settings test runtime");
     await loadSource("A");
-    await waitFor(() => expect(pending).toHaveLength(1));
-    expect(pending[0].app.general.lastSourceId).toBe("source-a");
-    await finishSave(pending[0]);
+    await finishSave(await sourceSave(pending, "a"));
 
     expect(screen.getByRole("textbox", { name: "Question" })).toBeEnabled();
     const settings = await openAiSettings();
@@ -115,12 +125,28 @@ describe("source settings during recent workspace persistence", () => {
     const pending = mount();
     await screen.findByText("Settings test runtime");
     await loadSource("A");
-    await waitFor(() => expect(pending).toHaveLength(1));
-    await loadSource("B");
-    await waitFor(() => expect(pending).toHaveLength(2));
-    expect(pending[1].app.general.lastSourceId).toBe("source-b");
-    await finishSave(pending[1]);
-    await finishSave(pending[0]);
+    await sourceSave(pending, "a");
+    let resolveSourceB!: (settings: EffectiveSettings) => void;
+    const sourceBSettings = new Promise<EffectiveSettings>((resolve) => { resolveSourceB = resolve; });
+    vi.spyOn(getPlatform(), "getSettings").mockImplementation((sourceId) =>
+      sourceId === "source-b" ? sourceBSettings : Promise.resolve(effectiveSettings(sourceId)),
+    );
+    await loadSource("B", false);
+    // Exercise the slow-settings path explicitly instead of depending on runner speed.
+    await waitFor(() => expect(pending.some(({ app }) =>
+      app.general.lastSourceId === "source-b" && app.general.theme === "dark",
+    )).toBe(true));
+    await act(async () => {
+      resolveSourceB(effectiveSettings("source-b"));
+      await sourceBSettings;
+    });
+    const current = await sourceSave(pending, "b");
+    await finishSave(current);
+    // Resolve every older response last, including a possible intermediate B
+    // save, and retain the assertions that the current source wins.
+    for (const stale of pending.filter((save) => save !== current).reverse()) {
+      await finishSave(stale);
+    }
 
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(screen.getByRole("textbox", { name: "Question" })).toBeEnabled();
@@ -133,9 +159,9 @@ describe("source settings during recent workspace persistence", () => {
     const pending = mount();
     await screen.findByText("Settings test runtime");
     await loadSource("A");
-    await waitFor(() => expect(pending).toHaveLength(1));
+    const current = await sourceSave(pending, "a");
     await act(async () => {
-      pending[0].reject(new Error("Fixture disk write failed"));
+      current.reject(new Error("Fixture disk write failed"));
       await Promise.resolve();
     });
 

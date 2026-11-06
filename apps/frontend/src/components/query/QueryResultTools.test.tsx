@@ -31,9 +31,9 @@ describe("query result tools",()=>{
     const exportQueryResult=vi.fn<NodalStudioPlatform["exportQueryResult"]>().mockResolvedValue(null);
     const platform={exportQueryResult} as unknown as NodalStudioPlatform;
     render(<QueryResultGrid result={result} platform={platform}/>);
-    fireEvent.click(screen.getByRole("checkbox",{name:"Select row 1"}));
+    fireEvent.click(screen.getByLabelText("Select row 1"));
     fireEvent.click(screen.getByRole("button",{name:"Next"}));
-    fireEvent.click(screen.getByRole("checkbox",{name:"Select row 205"}));
+    fireEvent.click(screen.getByLabelText("Select row 205"));
     fireEvent.click(screen.getByRole("button",{name:"Export…"}));
     const dialog=screen.getByRole("dialog");expect(dialog).toHaveTextContent("does not run SQL again");
     fireEvent.change(within(dialog).getByLabelText("Rows"),{target:{value:"selected"}});
@@ -47,13 +47,13 @@ describe("query result tools",()=>{
   it("uses an all-pages header checkbox and only reveals selection commands when needed",()=>{
     render(<QueryResultGrid result={result}/>);
     expect(screen.queryByRole("button",{name:"Clear selection"})).toBeNull();
-    const all = screen.getByRole("checkbox",{name:"Select all returned rows"});
-    fireEvent.click(screen.getByRole("checkbox",{name:"Select row 1"}));
+    const all = screen.getByLabelText("Select all returned rows");
+    fireEvent.click(screen.getByLabelText("Select row 1"));
     expect(all).toBePartiallyChecked();
     fireEvent.click(all);
     expect(all).toBeChecked(); expect(screen.getByText("205 selected")).toBeVisible();
     fireEvent.click(screen.getByRole("button",{name:"Next"}));
-    expect(screen.getByRole("checkbox",{name:"Select row 205"})).toBeChecked();
+    expect(screen.getByLabelText("Select row 205")).toBeChecked();
     fireEvent.click(screen.getByRole("button",{name:"Clear selection"}));
     expect(all).not.toBeChecked(); expect(all).not.toBePartiallyChecked();
     expect(screen.queryByRole("button",{name:"Copy selected rows"})).toBeNull();
