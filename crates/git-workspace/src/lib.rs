@@ -2,7 +2,6 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
     path::{Path, PathBuf},
 };
 
@@ -15,6 +14,9 @@ use semantic_model::{DomainGroup, ObjectAnnotation, SavedView};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
+
+mod secure_directory;
+use secure_directory::WorkspaceDirectory;
 
 const FORMAT_VERSION: u16 = 1;
 const WORKSPACE_DIRECTORY: &str = ".nodalstudio";
@@ -221,12 +223,9 @@ pub fn write_workspace(
         return Err(GitWorkspaceError::InvalidRoot);
     }
     let root = repository_root.join(WORKSPACE_DIRECTORY);
-    let legacy_root = repository_root.join(LEGACY_WORKSPACE_DIRECTORY);
-    if !root.exists() && legacy_root.is_dir() {
-        fs::rename(&legacy_root, &root)?;
-    }
-    fs::create_dir_all(&root)?;
-    let previous = read_previous_manifest(&root)?;
+    let directory =
+        WorkspaceDirectory::open(repository_root, true)?.ok_or(GitWorkspaceError::InvalidRoot)?;
+    let previous = read_previous_manifest(&directory)?;
     let current: BTreeSet<_> = workspace.files.keys().cloned().collect();
     let mut removed_stale_files = 0;
     if let Some(previous) = previous {
@@ -234,19 +233,13 @@ pub fn write_workspace(
             if current.contains(&relative) || relative == "project.json" {
                 continue;
             }
-            let path = safe_join(&root, &relative)?;
-            if path.is_file() {
-                fs::remove_file(path)?;
+            if directory.remove(&relative)? {
                 removed_stale_files += 1;
             }
         }
     }
     for (relative, contents) in &workspace.files {
-        let path = safe_join(&root, relative)?;
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(path, contents)?;
+        directory.write(relative, contents)?;
     }
     let manifest: GitWorkspaceManifest = serde_json::from_str(
         workspace
@@ -275,19 +268,26 @@ pub fn preview_workspace(
     if !repository_root.is_absolute() || !repository_root.is_dir() {
         return Err(GitWorkspaceError::InvalidRoot);
     }
-    let root = workspace_root_for_read(repository_root);
-    let previous = read_previous_manifest(&root)?;
+    let directory = WorkspaceDirectory::open(repository_root, false)?;
+    let previous = directory
+        .as_ref()
+        .map(read_previous_manifest)
+        .transpose()?
+        .flatten();
     let current: BTreeSet<_> = workspace.files.keys().cloned().collect();
     let mut added_files = 0;
     let mut modified_files = 0;
     let mut unchanged_files = 0;
     for (relative, expected) in &workspace.files {
-        let path = safe_join(&root, relative)?;
-        match fs::read_to_string(path) {
-            Ok(actual) if actual == *expected => unchanged_files += 1,
-            Ok(_) => modified_files += 1,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => added_files += 1,
-            Err(error) => return Err(error.into()),
+        match directory
+            .as_ref()
+            .map(|dir| dir.read(relative))
+            .transpose()?
+            .flatten()
+        {
+            Some(actual) if actual == *expected => unchanged_files += 1,
+            Some(_) => modified_files += 1,
+            None => added_files += 1,
         }
     }
     let mut removed_files = 0;
@@ -296,7 +296,13 @@ pub fn preview_workspace(
             if current.contains(&relative) || relative == "project.json" {
                 continue;
             }
-            if safe_join(&root, &relative)?.is_file() {
+            if directory
+                .as_ref()
+                .map(|dir| dir.read(&relative))
+                .transpose()?
+                .flatten()
+                .is_some()
+            {
                 removed_files += 1;
             }
         }
@@ -327,8 +333,9 @@ pub fn read_workspace(repository_root: &Path) -> Result<ImportedWorkspace, GitWo
     if !repository_root.is_absolute() || !repository_root.is_dir() {
         return Err(GitWorkspaceError::InvalidRoot);
     }
-    let root = workspace_root_for_read(repository_root);
-    let manifest = read_previous_manifest(&root)?.ok_or(GitWorkspaceError::InvalidRoot)?;
+    let directory =
+        WorkspaceDirectory::open(repository_root, false)?.ok_or(GitWorkspaceError::InvalidRoot)?;
+    let manifest = read_previous_manifest(&directory)?.ok_or(GitWorkspaceError::InvalidRoot)?;
     let mut semantics = Vec::new();
     let mut domain_groups = Vec::new();
     let mut saved_views = Vec::new();
@@ -336,11 +343,9 @@ pub fn read_workspace(repository_root: &Path) -> Result<ImportedWorkspace, GitWo
     let mut lineage = Vec::new();
     let mut relationships = Vec::new();
     for relative in &manifest.managed_files {
-        let path = safe_join(&root, relative)?;
-        if !path.is_file() {
+        let Some(contents) = directory.read(relative)? else {
             continue;
-        }
-        let contents = fs::read_to_string(path)?;
+        };
         let is_json = Path::new(relative)
             .extension()
             .is_some_and(|extension| extension.eq_ignore_ascii_case("json"));
@@ -751,33 +756,13 @@ fn record_conflict(
     });
 }
 
-fn workspace_root_for_read(repository_root: &Path) -> PathBuf {
-    let root = repository_root.join(WORKSPACE_DIRECTORY);
-    if root.is_dir() {
-        root
-    } else {
-        repository_root.join(LEGACY_WORKSPACE_DIRECTORY)
-    }
-}
-
-fn read_previous_manifest(root: &Path) -> Result<Option<GitWorkspaceManifest>, GitWorkspaceError> {
-    let path = root.join("project.json");
-    if !path.is_file() {
-        return Ok(None);
-    }
-    Ok(Some(serde_json::from_str(&fs::read_to_string(path)?)?))
-}
-
-fn safe_join(root: &Path, relative: &str) -> Result<PathBuf, GitWorkspaceError> {
-    let relative_path = Path::new(relative);
-    if relative_path.is_absolute()
-        || relative_path
-            .components()
-            .any(|component| !matches!(component, std::path::Component::Normal(_)))
-    {
-        return Err(GitWorkspaceError::UnsafePath(relative.into()));
-    }
-    Ok(root.join(relative_path))
+fn read_previous_manifest(
+    directory: &WorkspaceDirectory,
+) -> Result<Option<GitWorkspaceManifest>, GitWorkspaceError> {
+    directory
+        .read("project.json")?
+        .map(|json| serde_json::from_str(&json).map_err(Into::into))
+        .transpose()
 }
 
 fn object_filename(key: &ObjectKey) -> String {
@@ -842,6 +827,7 @@ const fn readme_content() -> &'static str {
 mod tests {
     use chrono::Utc;
     use schema_model::{DatabaseInfo, DatabaseType, SchemaDefinition, TableDefinition};
+    use std::fs;
 
     use super::*;
 

@@ -362,6 +362,15 @@ pub struct DataSourceSettings {
 }
 
 impl DataSourceSettings {
+    /// Keep local service destinations and credentials out of portable imports.
+    /// Unknown sources must pass their local defaults instead.
+    pub fn preserve_local_bindings(&mut self, local: &Self) {
+        self.ai.clone_from(&local.ai);
+        self.cloud.clone_from(&local.cloud);
+        self.git.clone_from(&local.git);
+        self.refresh.auto_connect = false;
+    }
+
     pub fn defaults_for(source_id: Uuid) -> Self {
         Self {
             schema_version: SETTINGS_SCHEMA_VERSION,

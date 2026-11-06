@@ -18,6 +18,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 pub mod change_review;
+mod import_safety;
 mod knowledge;
 pub mod relationship_batches;
 mod snapshot_history;
@@ -976,7 +977,7 @@ impl LocalSnapshotStore {
         &self,
         relationship: &LogicalRelationship,
     ) -> Result<(), SnapshotStoreError> {
-        sqlx::query(
+        let result = sqlx::query(
             r"
             INSERT INTO logical_relationships (
                 id, source_id, relationship_key, status, updated_at, payload_json
@@ -987,6 +988,7 @@ impl LocalSnapshotStore {
                 status = excluded.status,
                 updated_at = excluded.updated_at,
                 payload_json = excluded.payload_json
+            WHERE logical_relationships.source_id = excluded.source_id
             ",
         )
         .bind(relationship.id.to_string())
@@ -997,6 +999,11 @@ impl LocalSnapshotStore {
         .bind(serde_json::to_string(relationship)?)
         .execute(&self.pool)
         .await?;
+        if result.rows_affected() == 0 {
+            return Err(SnapshotStoreError::ReviewConflict(
+                "The object belongs to another data source.".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -1111,7 +1118,7 @@ impl LocalSnapshotStore {
     ///
     /// Returns an error when serialization or `SQLite` persistence fails.
     pub async fn save_domain_group(&self, group: &DomainGroup) -> Result<(), SnapshotStoreError> {
-        sqlx::query(
+        let result = sqlx::query(
             r"
             INSERT INTO domain_groups (id, source_id, updated_at, payload_json)
             VALUES (?, ?, ?, ?)
@@ -1119,6 +1126,7 @@ impl LocalSnapshotStore {
                 source_id = excluded.source_id,
                 updated_at = excluded.updated_at,
                 payload_json = excluded.payload_json
+            WHERE domain_groups.source_id = excluded.source_id
             ",
         )
         .bind(group.id.to_string())
@@ -1127,6 +1135,11 @@ impl LocalSnapshotStore {
         .bind(serde_json::to_string(group)?)
         .execute(&self.pool)
         .await?;
+        if result.rows_affected() == 0 {
+            return Err(SnapshotStoreError::ReviewConflict(
+                "The object belongs to another data source.".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -1154,7 +1167,7 @@ impl LocalSnapshotStore {
     ///
     /// Returns an error when serialization or `SQLite` persistence fails.
     pub async fn save_view(&self, view: &SavedView) -> Result<(), SnapshotStoreError> {
-        sqlx::query(
+        let result = sqlx::query(
             r"
             INSERT INTO saved_views (id, source_id, updated_at, payload_json)
             VALUES (?, ?, ?, ?)
@@ -1162,6 +1175,7 @@ impl LocalSnapshotStore {
                 source_id = excluded.source_id,
                 updated_at = excluded.updated_at,
                 payload_json = excluded.payload_json
+            WHERE saved_views.source_id = excluded.source_id
             ",
         )
         .bind(view.id.to_string())
@@ -1170,6 +1184,11 @@ impl LocalSnapshotStore {
         .bind(serde_json::to_string(view)?)
         .execute(&self.pool)
         .await?;
+        if result.rows_affected() == 0 {
+            return Err(SnapshotStoreError::ReviewConflict(
+                "The object belongs to another data source.".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -1731,9 +1750,30 @@ impl LocalSnapshotStore {
     ) -> Result<(), SnapshotStoreError> {
         let source = bundle.source_id.to_string();
         let mut transaction = self.pool.begin().await?;
+        import_safety::validate(&mut transaction, bundle).await?;
+        let local_profile: Option<String> =
+            sqlx::query_scalar("SELECT payload_json FROM data_sources WHERE id = ?")
+                .bind(&source)
+                .fetch_optional(&mut *transaction)
+                .await?;
+        let local_settings: Option<String> =
+            sqlx::query_scalar("SELECT payload_json FROM data_source_settings WHERE source_id = ?")
+                .bind(&source)
+                .fetch_optional(&mut *transaction)
+                .await?;
         if let Some(profile) = &bundle.source_profile {
-            // A portable model never grants local file access, even outside MAS.
-            let mut profile = profile.clone();
+            // Model restore never retargets credentials belonging to this local ID.
+            // A previously unknown source starts as an offline, unbound model.
+            let mut profile = if let Some(local) = local_profile {
+                serde_json::from_str::<DataSourceProfile>(&local)?
+            } else {
+                let mut offline = profile.clone();
+                offline.host.clear();
+                offline.port = 0;
+                offline.username.clear();
+                offline.security = schema_model::ConnectionSecurity::default();
+                offline
+            };
             profile.sqlite = None;
             sqlx::query(
                 "INSERT INTO data_sources (id, display_name, updated_at, payload_json) VALUES (?, ?, ?, ?) \
@@ -1746,13 +1786,19 @@ impl LocalSnapshotStore {
             .execute(&mut *transaction)
             .await?;
         }
+        let mut settings = bundle.source_settings.clone();
+        let local = local_settings
+            .map(|json| serde_json::from_str::<DataSourceSettings>(&json))
+            .transpose()?
+            .unwrap_or_else(|| DataSourceSettings::defaults_for(bundle.source_id));
+        settings.preserve_local_bindings(&local);
         sqlx::query(
             "INSERT INTO data_source_settings (source_id, schema_version, payload_json) VALUES (?, ?, ?) \
              ON CONFLICT(source_id) DO UPDATE SET schema_version = excluded.schema_version, payload_json = excluded.payload_json",
         )
         .bind(&source)
-        .bind(i64::from(bundle.source_settings.schema_version))
-        .bind(serde_json::to_string(&bundle.source_settings)?)
+        .bind(i64::from(settings.schema_version))
+        .bind(serde_json::to_string(&settings)?)
         .execute(&mut *transaction)
         .await?;
         for snapshot in &bundle.snapshots {

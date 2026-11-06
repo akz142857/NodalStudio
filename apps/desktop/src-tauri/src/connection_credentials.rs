@@ -4,6 +4,30 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub const SSH_SERVICE: &str = "com.claycosmos.nodalstudio.ssh";
+
+/// Imported network models deliberately have no local connection binding.
+pub fn require_binding(profile: &schema_model::DataSourceProfile) -> Result<(), String> {
+    if profile.host.trim().is_empty() || profile.port == 0 || profile.username.trim().is_empty() {
+        return Err("This imported model is offline. Edit the connection and enter its credentials before connecting.".into());
+    }
+    Ok(())
+}
+
+pub fn prepare_imported_binding(
+    input: &mut crate::SaveDataSourceInput,
+    existing: Option<&schema_model::DataSourceProfile>,
+) -> Result<(), String> {
+    if input.database_type != schema_model::DatabaseType::Sqlite
+        && existing.is_none_or(|profile| require_binding(profile).is_err())
+    {
+        if input.password.is_empty() {
+            return Err("Enter the database password to connect this imported model.".into());
+        }
+        // Neither a database nor SSH password may fall back to an orphaned key.
+        input.id = None;
+    }
+    Ok(())
+}
 #[derive(Serialize, Deserialize)]
 struct SshSecret {
     host: String,
@@ -119,6 +143,44 @@ pub fn save(id: Uuid, input: &crate::SaveDataSourceInput) -> Result<SavedSecrets
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn offline_or_unknown_ids_require_fresh_database_and_ssh_credentials() {
+        let id = Uuid::new_v4();
+        let mut input = crate::SaveDataSourceInput {
+            id: Some(id),
+            display_name: "Imported model".into(),
+            host: String::new(),
+            port: 0,
+            username: String::new(),
+            database: "app".into(),
+            password: String::new(),
+            ssh_password: None,
+            sqlite: None,
+            database_type: schema_model::DatabaseType::PostgreSql,
+            ssl_mode: schema_model::SslMode::Require,
+            security: ConnectionSecurity::default(),
+        };
+        let now = chrono::Utc::now();
+        let offline = crate::data_source_profile_from_input(&input, id, now, now);
+        assert!(require_binding(&offline).is_err());
+        input.host = "confirmed.example".into();
+        input.port = 5432;
+        input.username = "reader".into();
+        assert!(prepare_imported_binding(&mut input, Some(&offline)).is_err());
+        assert!(prepare_imported_binding(&mut input, None).is_err());
+        input.password = "fresh-secret".into();
+        input.security.ssh = Some(ssh());
+        prepare_imported_binding(&mut input, Some(&offline)).unwrap();
+        assert!(input.id.is_none());
+        assert!(resolve_ssh(input.id, &input.security, None).is_err());
+        let bound = crate::data_source_profile_from_input(&input, id, now, now);
+        assert!(require_binding(&bound).is_ok());
+        input.id = Some(id);
+        input.password.clear();
+        prepare_imported_binding(&mut input, Some(&bound)).unwrap();
+        assert_eq!(input.id, Some(id));
+    }
+
     fn ssh() -> SshConfig {
         SshConfig {
             host: "jump.example".into(),

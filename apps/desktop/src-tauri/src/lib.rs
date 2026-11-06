@@ -826,7 +826,7 @@ async fn save_data_source(
 }
 
 async fn save_data_source_using(
-    input: SaveDataSourceInput,
+    mut input: SaveDataSourceInput,
     state: &AppState,
 ) -> Result<DataSourceProfile, String> {
     let now = Utc::now();
@@ -878,6 +878,7 @@ async fn save_data_source_using(
         .await?;
         return Ok(profile);
     }
+    connection_credentials::prepare_imported_binding(&mut input, existing.as_ref())?;
     validate_connection_profile_input(&input)?;
     if existing.is_none() && input.password.is_empty() {
         return Err("A database password is required for a new data source.".into());
@@ -897,11 +898,21 @@ async fn save_data_source_using(
 
 #[tauri::command]
 async fn test_postgres_connection(
-    input: SaveDataSourceInput,
+    mut input: SaveDataSourceInput,
     test_id: Option<Uuid>,
     on_progress: tauri::ipc::Channel<connection_tests::ConnectionTestProgress>,
     tests: State<'_, connection_tests::ConnectionTests>,
+    state: State<'_, AppState>,
 ) -> Result<ConnectionTestResult, ConnectionFailure> {
+    let existing = if let Some(id) = input.id {
+        state.store.get_data_source(id).await.map_err(|_| {
+            ConnectionFailure::new("configuration", "Unable to load the local connection.")
+        })?
+    } else {
+        None
+    };
+    connection_credentials::prepare_imported_binding(&mut input, existing.as_ref())
+        .map_err(|message| ConnectionFailure::new("configuration", message))?;
     let operation = tests.start(test_id.unwrap_or_else(Uuid::new_v4))?;
     // The first event acknowledges registration; clients may now safely cancel.
     connection_tests::progress(Some(&on_progress), "configuration", false);
@@ -1149,7 +1160,7 @@ fn data_source_profile_from_input(
 
 #[tauri::command]
 async fn verify_and_refresh_data_source(
-    input: SaveDataSourceInput,
+    mut input: SaveDataSourceInput,
     state: State<'_, AppState>,
 ) -> Result<VerifyAndRefreshResult, String> {
     let source_id = input
@@ -1162,6 +1173,7 @@ async fn verify_and_refresh_data_source(
         .await
         .map_err(safe_store_error)?
         .ok_or_else(|| "The selected data source no longer exists.".to_owned())?;
+    connection_credentials::prepare_imported_binding(&mut input, Some(&previous_profile))?;
     let resolved = connection_input_with_resolved_password(input)?;
     validate_connection_input(&resolved)?;
     let connection = test_database_connection(&resolved)
@@ -1295,6 +1307,7 @@ async fn capture_snapshot_using(
             .ok_or("The selected data source no longer exists.")?;
         // macOS may wait for an unlock or authorization dialog here. Keep that
         // synchronous wait off Tokio workers so local storage and settings remain usable.
+        connection_credentials::require_binding(&profile)?;
         let source_id = profile.id;
         let password = tokio::task::spawn_blocking(move || {
             credential_entry(source_id)?
@@ -1402,6 +1415,8 @@ async fn execute_readonly_query(
     if profile.database_type == DatabaseType::Sqlite {
         return sqlite_source::query(&state, profile, input, request).await;
     }
+    connection_credentials::require_binding(&profile)
+        .map_err(|message| query_command_error(query_id, QueryError::Validation(message)))?;
     match profile.database_type {
         DatabaseType::Sqlite => request.validate_sqlite(),
         DatabaseType::PostgreSql => request.validate(),
@@ -3323,7 +3338,13 @@ async fn import_settings_file(
         .save_app_settings(&bundle.app)
         .await
         .map_err(safe_store_error)?;
-    for source in &bundle.sources {
+    for source in &mut bundle.sources {
+        let local = state
+            .store
+            .get_data_source_settings(source.source_id)
+            .await
+            .map_err(safe_store_error)?;
+        source.preserve_local_bindings(&local);
         state
             .store
             .save_data_source_settings(source)
@@ -3556,7 +3577,7 @@ async fn preview_portable_backup(
             .await
             .map_err(safe_store_error)?
             .is_some(),
-        conflict_strategy: "Stable IDs are inserted or updated; unrelated local data is preserved.",
+        conflict_strategy: "Local connection and service settings are preserved. New sources stay offline until configured. Cross-source ID conflicts reject the entire import.",
     })
 }
 

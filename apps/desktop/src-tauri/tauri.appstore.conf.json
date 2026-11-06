@@ -5,7 +5,7 @@
   "bundle": {
     "category": "DeveloperTool",
     "macOS": {
-      "bundleVersion": "4",
+      "bundleVersion": "5",
       "entitlements": "./Entitlements.appstore.plist",
       "infoPlist": "./Info.appstore.plist",
       "files": {
