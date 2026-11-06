@@ -20,11 +20,18 @@ impl WorkspaceDirectory {
         match repo.open_dir_nofollow(super::LEGACY_WORKSPACE_DIRECTORY) {
             Ok(dir) => {
                 if create {
+                    // Windows directory handles can deny rename while open.
+                    // Reopen the destination without following links so a
+                    // replacement during migration cannot become our root.
+                    drop(dir);
                     repo.rename(
                         super::LEGACY_WORKSPACE_DIRECTORY,
                         &repo,
                         super::WORKSPACE_DIRECTORY,
                     )?;
+                    return repo
+                        .open_dir_nofollow(super::WORKSPACE_DIRECTORY)
+                        .map(|dir| Some(Self(dir)));
                 }
                 return Ok(Some(Self(dir)));
             }
