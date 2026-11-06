@@ -577,3 +577,81 @@ describe("database navigation actions", () => {
     }
   });
 });
+
+it("opens SQLite through a file picker without network or credential fields", async () => {
+  const pickWorkspacePath = vi.fn().mockResolvedValue("/tmp/local.sqlite");
+  const testPostgresConnection = vi.fn().mockResolvedValue({ database: { name: "local.sqlite", databaseType: "sqlite", version: "3.51" }, sslActive: null, serverReadOnly: true });
+  renderPanel(platformMock({ pickWorkspacePath, testPostgresConnection }));
+  fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Database engine" }), { target: { value: "sqlite" } });
+  expect(screen.queryByRole("textbox", { name: "Host" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "TLS" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "SSH" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Choose database file" }));
+  await waitFor(() => expect(screen.getByDisplayValue("/tmp/local.sqlite")).toBeInTheDocument());
+  expect(pickWorkspacePath).toHaveBeenCalledWith("openSqlite");
+  fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+  await screen.findByText("SQLite is ready. The original database is opened read-only.");
+  expect(testPostgresConnection).toHaveBeenCalledWith(expect.objectContaining({ databaseType: "sqlite", sqlite: { path: "/tmp/local.sqlite" }, password: "" }), expect.anything());
+  expect(screen.queryByRole("group", { name: "TLS status" })).not.toBeInTheDocument();
+});
+
+
+it("keeps SQLite keyboard navigation inside its only visible connection tab", async () => {
+  renderPanel();
+  fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Database engine" }), { target: { value: "sqlite" } });
+  const connection = screen.getByRole("tab", { name: "Connection" });
+  for (const key of ["ArrowRight", "ArrowLeft", "End", "Home"]) {
+    fireEvent.keyDown(connection, { key });
+    expect(connection).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "Choose database file" })).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "SSL mode" })).not.toBeInTheDocument();
+  }
+});
+
+it("preserves network TLS and credentials when switching between PostgreSQL and MySQL", async () => {
+  const testPostgresConnection = vi.fn().mockResolvedValue(connectionResult);
+  renderPanel(platformMock({ testPostgresConnection }));
+  fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "entered-password" } });
+  fireEvent.click(screen.getByRole("tab", { name: "TLS" }));
+  fireEvent.change(screen.getByLabelText("SSL mode"), { target: { value: "verifyFull" } });
+  fireEvent.click(screen.getByRole("tab", { name: "Connection" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Database engine" }), { target: { value: "postgreSql" } });
+  fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+  await waitFor(() => expect(testPostgresConnection).toHaveBeenCalledWith(expect.objectContaining({ databaseType: "postgreSql", sslMode: "verifyFull", password: "entered-password" }), expect.anything()));
+});
+
+it("blocks saving or changing the connection while a SQLite file picker is pending", async () => {
+  let choose!: (path: string) => void;
+  const pickWorkspacePath = vi.fn().mockImplementationOnce(() => Promise.resolve("/tmp/first.db"))
+    .mockImplementationOnce(() => new Promise<string>((resolve) => { choose = resolve; }));
+  const api = platformMock({ pickWorkspacePath });
+  renderPanel(api);
+  fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Database engine" }), { target: { value: "sqlite" } });
+  fireEvent.click(screen.getByRole("button", { name: "Choose database file" }));
+  await screen.findByDisplayValue("/tmp/first.db");
+  fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save and map" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Choose database file" }));
+  expect(screen.getByRole("combobox", { name: "Database engine" })).toBeDisabled();
+  fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+  expect(api.saveDataSource).not.toHaveBeenCalled();
+  await act(() => Promise.resolve(choose("/tmp/second.db")));
+  expect(screen.getByDisplayValue("/tmp/second.db")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
+});
+
+
+it("deletes a SQLite source without requesting a database credential operation", async () => {
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const clearCredentials = vi.fn().mockResolvedValue(undefined);
+  const sqliteProfile = { ...profile, databaseType: "sqlite" as const, sqlite: { path: "/tmp/source.db" } };
+  renderPanel(platformMock({ listDataSources: vi.fn().mockResolvedValue([sqliteProfile]), clearCredentials }));
+  await editCurrentConnection();
+  expect(screen.getByText("Open the saved SQLite file read-only and refresh its schema snapshot.")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
+  await waitFor(() => expect(clearCredentials).toHaveBeenCalledWith(profile.id, { database: false, ai: true, cloud: true }));
+});

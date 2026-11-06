@@ -4,7 +4,7 @@ import { reportSnapshot } from "../test/schema-report-fixture";
 import { diagramColumn, diagramForeignKey, diagramTable } from "../test/diagram-comparison-fixture";
 import { runSchemaPreflight } from "./schema-preflight";
 
-function pair(dialect: "postgreSql" | "mySql", a: string, b: string, formattedA = a, formattedB = b): DatabaseSnapshot {
+function pair(dialect: "postgreSql" | "mySql" | "sqlite", a: string, b: string, formattedA = a, formattedB = b): DatabaseSnapshot {
   const column = (typeName: string, formattedType: string): ColumnDefinition => ({ ...diagramColumn("id"), typeSchema: dialect === "mySql" ? "mysql" : "pg_catalog", typeName, formattedType });
   const source = diagramTable("source", [column(a, formattedA)]);
   source.foreignKeys = [diagramForeignKey("source_target_fk", "id", "target")];
@@ -13,6 +13,18 @@ function pair(dialect: "postgreSql" | "mySql", a: string, b: string, formattedA 
 const types = (snapshot: DatabaseSnapshot) => runSchemaPreflight(snapshot).findings.filter((finding) => finding.ruleId.endsWith("fk-types"));
 
 describe("snapshot structure preflight", () => {
+  it("reports unavailable SQLite endpoint columns as missing coverage rather than a broken FK", () => {
+    const snapshot = pair("sqlite", "INTEGER", "INTEGER");
+    const target = snapshot.schemas[0].tables[1];
+    target.columns = []; target.primaryKey = null;
+    target.sqlite = { definition: "CREATE VIRTUAL TABLE target USING external(id)", strict: false,
+      withoutRowid: false, virtualTable: true, columnsUnavailable: true, diagnostics: ["Module unavailable"] };
+    const report = runSchemaPreflight(snapshot);
+    expect(report.findings).toHaveLength(1);
+    expect(report.findings[0]).toMatchObject({ outcome: "insufficient", severity: "info", ruleId: "key-references" });
+    expect(report.coverage.find(rule => rule.ruleId === "key-references")).toMatchObject({ status: "partial", incomplete: 1 });
+  });
+
   it("checks only captured metadata without mutating it or depending on semantics, filters or credentials", () => {
     const original = structuredClone(reportSnapshot);
     const result = runSchemaPreflight(reportSnapshot);

@@ -3,6 +3,8 @@ import type { DatabaseInfo, RuntimeInfo } from "./types";
 export type CapabilityStatus = "supported" | "partial" | "unavailable";
 export interface CapabilityScope { status: CapabilityStatus; scope: string }
 export const capabilityTargets = [
+  { id: "desktop-sqlite", label: "Desktop · SQLite", runtime: "desktop", database: "sqlite" },
+  { id: "web-sqlite", label: "Web · SQLite", runtime: "web", database: "sqlite" },
   { id: "desktop-postgres", label: "Desktop · PostgreSQL", runtime: "desktop", database: "postgreSql" },
   { id: "desktop-mysql", label: "Desktop · MySQL", runtime: "desktop", database: "mySql" },
   { id: "web-postgres", label: "Web · PostgreSQL", runtime: "web", database: "postgreSql" },
@@ -15,7 +17,19 @@ const partial = (scope: string): CapabilityScope => ({ status: "partial", scope 
 const unavailable = (scope: string): CapabilityScope => ({ status: "unavailable", scope });
 const desktopOnly = unavailable("Requires Desktop. Web Viewer cannot connect to a database or write back to the source workspace.");
 function define<Id extends string>(id: Id, name: string, category: string, pg: CapabilityScope, mysql: CapabilityScope, webPg: CapabilityScope = desktopOnly, webMysql: CapabilityScope = webPg) {
-  return { id, name, category, targets: { "desktop-postgres": pg, "desktop-mysql": mysql, "web-postgres": webPg, "web-mysql": webMysql } };
+  return { id, name, category, targets: { "desktop-sqlite": sqliteCapability(id, false), "web-sqlite": sqliteCapability(id, true), "desktop-postgres": pg, "desktop-mysql": mysql, "web-postgres": webPg, "web-mysql": webMysql } };
+}
+function sqliteCapability(id: string, web: boolean): CapabilityScope {
+  if (["event-trigger", "ddl-import", "physical-edit"].includes(id)) return unavailable("Unavailable for SQLite. No database writes or SQLite SQL-file import.");
+  if (web && ["database-connection", "read-only-query", "snapshot-history", "semantic-edit", "logical-relationships", "layout-persistence", "ai-explanation", "git-workspace", "cloud-publish", "portable-backup"].includes(id)) return unavailable("Web displays a published SQLite snapshot only; no local file access, queries or saved edits.");
+  if (id === "shared-view") return web ? supported("Read permitted SQLite metadata from a published share.") : unavailable("Open published shares in the Web Viewer.");
+  if (id === "schema-capture") return partial("SQLite main schema: tables, columns, primary/foreign keys, indexes, views, triggers and original DDL. Unsupported virtual modules retain definitions and diagnostics. Foreign-key deferral and complex DDL coverage follow displayed diagnostics; no row scanning.");
+  if (id === "ai-explanation") return partial("Metadata explanations and discovery use SQLite context. AI SQL drafts are unavailable. Existing send-scope and provider policies apply.");
+  if (id === "structure-preflight" || id === "logical-relationships") return partial("Generic object-reference checks only. SQLite affinities do not establish foreign-key compatibility or enforcement.");
+  if (id === "database-connection") return supported("Choose a local SQLite file and open it read-only. WAL may require containing-folder access. Imported models require selecting the local file again.");
+  if (id === "read-only-query") return supported("One read-only SELECT/WITH, cancellation, history and bounded results. Default 100 rows, maximum 5,000. Integers retain exact text, mixed storage types are decoded per value; BLOBs are length summaries.");
+  if (id === "comparison-details" && web) return partial("Published SQLite snapshot and optional changes only; no complete Before history.");
+  return supported(web ? "Uses only the published SQLite metadata. Capture diagnostics and existing viewer limits apply." : "Uses captured SQLite metadata with existing export, backup, layout and sharing limits. File paths and access grants stay local; backups contain no database rows.");
 }
 const inspectPg = supported("Metadata only: user schemas; ordinary, partitioned and foreign tables; columns, PK/FK, indexes, constraints, views/materialized views and enum objects. System schemas and application rows are excluded; this is not a complete server catalog.");
 const inspectMysql = partial("Metadata only for the current DATABASE(): base tables, columns, PK/FK, indexes and views. CHECK constraints and enum objects are not collected; inline enum types remain formatted column text. Character set, collation, generation expressions and storage engine are not collected; functional index expressions use a placeholder.");
@@ -65,6 +79,6 @@ export function currentCapabilityTarget(runtime?: RuntimeInfo["kind"], database?
 }
 export function resolveCapability(id: CapabilityId, runtime?: RuntimeInfo["kind"], database?: DatabaseInfo["databaseType"]): CapabilityScope | { status: "unknown"; scope: string } {
   const target = currentCapabilityTarget(runtime, database);
-  if (!target) return { status: "unknown", scope: "Runtime or loaded database dialect is not known. Select a captured PostgreSQL or MySQL snapshot to determine this capability." };
+  if (!target) return { status: "unknown", scope: "Runtime or loaded database dialect is not known. Select a captured PostgreSQL, MySQL or SQLite snapshot to determine this capability." };
   return capabilityDefinitions.find((definition) => definition.id === id)!.targets[target];
 }

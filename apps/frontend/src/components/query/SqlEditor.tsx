@@ -164,8 +164,8 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
         if (selection.empty) { from = 0; to = document.length; }
         const text = document.slice(from, to);
         if (!text.trim()) return;
-        const { formatDialect, mysql, postgresql } = await import("sql-formatter");
-        const formatted = formatDialect(text.trim(), { dialect: dialect === "mySql" ? mysql : postgresql, tabWidth: 2 });
+        const { formatDialect, mysql, postgresql, sqlite } = await import("sql-formatter");
+        const formatted = formatDialect(text.trim(), { dialect: dialect === "sqlite" ? sqlite : dialect === "mySql" ? mysql : postgresql, tabWidth: 2 });
         // Keep selected fragment boundaries so adjacent SQL tokens cannot merge.
         insert = selection.empty ? formatted : (text.match(/^\s*/)?.[0] ?? "") + formatted + (text.match(/\s*$/)?.[0] ?? "");
       }

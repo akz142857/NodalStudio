@@ -7,7 +7,7 @@ import { getPlatform, type CaptureSnapshotResult, type SnapshotSummary } from ".
 import type { SchemaCanvasProps } from "./components/SchemaCanvas";
 import { reportSemantics, reportSnapshot } from "./test/schema-report-fixture";
 import { discoverySettings } from "./test/discovery-fixture";
-let loadedDialect: "postgreSql" | "mySql" = "postgreSql";
+let loadedDialect: "postgreSql" | "mySql" | "sqlite" = "postgreSql";
 vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot }: { onSnapshot: (r: CaptureSnapshotResult) => void }) => <button onClick={() => onSnapshot({ snapshot: { ...reportSnapshot, database: { ...reportSnapshot.database, databaseType: loadedDialect } }, stored: true, changeSet: null })}>Load business fixture</button> }));
 vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: (props: SchemaCanvasProps) => {
   const [viewport, setViewport] = useState("original");

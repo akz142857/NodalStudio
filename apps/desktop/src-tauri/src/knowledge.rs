@@ -281,6 +281,7 @@ mod tests {
     use std::sync::Arc;
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn unchanged_verified_capture_can_prepare_and_confirm_a_fresh_review() {
         let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
         let source = Uuid::new_v4();
@@ -304,6 +305,7 @@ mod tests {
         );
         snapshot.canonicalize().unwrap();
         let mut profile = DataSourceProfile {
+            sqlite: None,
             id: source,
             display_name: "Original".into(),
             host: "old.example".into(),

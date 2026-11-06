@@ -40,3 +40,9 @@ describe("MySQL lexical boundaries", () => {
     expect(validateSqlText(first, "mySql")).toEqual([]);
   });
 });
+
+it("uses SQLite lexical boundaries for quoted identifiers and accepts SQLite expressions", () => {
+  const text = "SELECT [a;b], 'x;y' FROM main.t; SELECT json_extract('{}', '$.x');";
+  expect(currentSqlStatement(text, 5, "sqlite")).toBe("SELECT [a;b], 'x;y' FROM main.t;");
+  expect(validateSqlText("SELECT strftime('%Y', 'now'), 1 || 'x'", "sqlite")).toEqual([]);
+});

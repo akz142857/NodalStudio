@@ -12,6 +12,7 @@ members = [
   "crates/extension-model",
   "crates/git-workspace",
   "crates/mysql-adapter",
+  "crates/sqlite-adapter",
   "crates/postgres-adapter",
   "crates/query-engine",
   "crates/snapshot-store",

@@ -66,18 +66,22 @@ pub fn validate_read_only_mysql(sql: &str) -> Result<(), QueryError> {
             "Exactly one read-only SELECT or WITH query is allowed.".into(),
         ));
     }
-    match statements.visit(&mut ReadOnly) {
+    match statements.visit(&mut ReadOnly {
+        allow_values: false,
+    }) {
         ControlFlow::Continue(()) => Ok(()),
         ControlFlow::Break(error) => Err(error),
     }
 }
 
 // Visit every subquery, including scalar subqueries and derived tables.
-struct ReadOnly;
+struct ReadOnly {
+    allow_values: bool,
+}
 impl Visitor for ReadOnly {
     type Break = QueryError;
     fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<QueryError> {
-        match validate_query(query) {
+        match validate_query_with_values(query, self.allow_values) {
             Ok(()) => ControlFlow::Continue(()),
             Err(error) => ControlFlow::Break(error),
         }
@@ -103,6 +107,10 @@ impl Visitor for ReadOnly {
 }
 
 fn validate_query(query: &Query) -> Result<(), QueryError> {
+    validate_query_with_values(query, false)
+}
+
+fn validate_query_with_values(query: &Query, allow_values: bool) -> Result<(), QueryError> {
     if !query.locks.is_empty() {
         return Err(QueryError::Validation(
             "SELECT locking clauses are not allowed in read-only Query.".into(),
@@ -110,20 +118,21 @@ fn validate_query(query: &Query) -> Result<(), QueryError> {
     }
     if let Some(with) = &query.with {
         for cte in &with.cte_tables {
-            validate_query(&cte.query)?;
+            validate_query_with_values(&cte.query, allow_values)?;
         }
     }
-    validate_set_expr(&query.body)
+    validate_set_expr(&query.body, allow_values)
 }
 
-fn validate_set_expr(expression: &SetExpr) -> Result<(), QueryError> {
+fn validate_set_expr(expression: &SetExpr, allow_values: bool) -> Result<(), QueryError> {
     match expression {
         SetExpr::Select(select) => validate_select(select),
-        SetExpr::Query(query) => validate_query(query),
+        SetExpr::Query(query) => validate_query_with_values(query, allow_values),
         SetExpr::SetOperation { left, right, .. } => {
-            validate_set_expr(left)?;
-            validate_set_expr(right)
+            validate_set_expr(left, allow_values)?;
+            validate_set_expr(right, allow_values)
         }
+        SetExpr::Values(_) if allow_values => Ok(()),
         _ => Err(QueryError::Validation(
             "Only SELECT query expressions are allowed.".into(),
         )),
@@ -137,6 +146,76 @@ fn validate_select(select: &Select) -> Result<(), QueryError> {
         ));
     }
     Ok(())
+}
+
+/// Accepts one `SQLite` SELECT/WITH with no extension, file or PRAGMA functions.
+/// # Errors
+/// Rejects unsupported statements, side effects and ambiguous SQL.
+pub fn validate_read_only_sqlite(sql: &str) -> Result<(), QueryError> {
+    if sql.len() > 1024 * 1024 {
+        return Err(QueryError::Validation(
+            "SQLite SQL exceeds the 1 MiB statement limit.".into(),
+        ));
+    }
+    let statements = Parser::parse_sql(&sqlparser::dialect::SQLiteDialect {}, sql)
+        .map_err(|_| QueryError::Validation("SQLite SQL could not be parsed.".into()))?;
+    if statements.len() != 1 || !matches!(statements[0], Statement::Query(_)) {
+        return Err(QueryError::Validation(
+            "Exactly one read-only SELECT or WITH query is allowed.".into(),
+        ));
+    }
+    // VALUES is a read-only expression used by ordinary SQLite CTE anchors.
+    // Keep the outer command restricted to SELECT/WITH rather than standalone VALUES.
+    if matches!(&statements[0], Statement::Query(query) if query.with.is_none() && matches!(query.body.as_ref(), SetExpr::Values(_)))
+    {
+        return Err(QueryError::Validation(
+            "Use SELECT or WITH for SQLite queries.".into(),
+        ));
+    }
+    if let ControlFlow::Break(error) = statements.visit(&mut ReadOnly { allow_values: true }) {
+        return Err(error);
+    }
+    match statements.visit(&mut SqliteReadOnly) {
+        ControlFlow::Continue(()) => Ok(()),
+        ControlFlow::Break(error) => Err(error),
+    }
+}
+struct SqliteReadOnly;
+impl Visitor for SqliteReadOnly {
+    type Break = QueryError;
+    fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<QueryError> {
+        if let Expr::Function(f) = expr {
+            let name = f
+                .name
+                .to_string()
+                .replace(['"', '`', '[', ']'], "")
+                .to_ascii_lowercase();
+            if name.split('.').any(|s| {
+                s.starts_with("pragma_")
+                    || matches!(
+                        s,
+                        "load_extension" | "readfile" | "writefile" | "fts3_tokenizer" | "eval"
+                    )
+            }) {
+                return ControlFlow::Break(QueryError::Validation(
+                    "SQLite extension, file and PRAGMA functions are unavailable.".into(),
+                ));
+            }
+        }
+        ControlFlow::Continue(())
+    }
+    fn pre_visit_relation(&mut self, name: &sqlparser::ast::ObjectName) -> ControlFlow<QueryError> {
+        let name = name
+            .to_string()
+            .replace(['"', '`', '[', ']'], "")
+            .to_ascii_lowercase();
+        if name.split('.').any(|s| s.starts_with("pragma_")) {
+            return ControlFlow::Break(QueryError::Validation(
+                "Use the structure viewer for SQLite metadata.".into(),
+            ));
+        }
+        ControlFlow::Continue(())
+    }
 }
 
 #[cfg(test)]

@@ -19,6 +19,7 @@ chrono.workspace = true
 extension-model = { path = "../../../crates/extension-model" }
 git-workspace = { path = "../../../crates/git-workspace" }
 keyring.workspace = true
+sqlite-adapter = { path = "../../../crates/sqlite-adapter" }
 mysql-adapter = { path = "../../../crates/mysql-adapter" }
 postgres-adapter = { path = "../../../crates/postgres-adapter" }
 query-engine = { path = "../../../crates/query-engine" }
@@ -55,5 +56,10 @@ updater-smoke-test = []
 
 [[example]]
 name = "sandbox_compatibility"
+test = false
+required-features = ["mac-app-store"]
+
+[[example]]
+name = "sqlite_sandbox"
 test = false
 required-features = ["mac-app-store"]

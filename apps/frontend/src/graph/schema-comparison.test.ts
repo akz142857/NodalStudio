@@ -3,6 +3,42 @@ import { buildSchemaGraph, orientFieldEdges } from "./schema-graph";
 import { diagramAfter, diagramBefore, diagramChangeSet, diagramColumn, diagramForeignKey, diagramTable } from "../test/diagram-comparison-fixture";
 
 describe("comparison diagram", () => {
+  it("does not mark SQLite coverage-only changes as structural modifications", () => {
+    const table = diagramTable("orders");
+    table.sqlite = { definition: "CREATE VIRTUAL TABLE orders USING external(id)", strict: false,
+      withoutRowid: false, virtualTable: true, columnsUnavailable: false, diagnostics: [] };
+    const diagnosticsOnly = { ...table, sqlite: { ...table.sqlite, diagnostics: ["Additional capture guidance"] } };
+    const unavailable = { ...table, columns: [], primaryKey: null, sqlite: { ...table.sqlite, columnsUnavailable: true, diagnostics: ["Module unavailable"] } };
+    for (const [oldTable, newTable] of [[table, diagnosticsOnly], [table, unavailable], [unavailable, table]]) {
+      const before = { ...diagramBefore, schemas: [{ ...diagramBefore.schemas[0], tables: [oldTable] }] };
+      const after = { ...diagramAfter, schemas: [{ ...diagramAfter.schemas[0], tables: [newTable] }] };
+      const graph = buildSchemaGraph(after, { beforeSnapshot: before, changeSet: { ...diagramChangeSet, operations: [] } });
+      expect(graph.nodes[0].data.changeStatus).toBeUndefined();
+    }
+    const before = { ...diagramBefore, schemas: [{ ...diagramBefore.schemas[0], tables: [unavailable] }] };
+    const after = { ...diagramAfter, schemas: [{ ...diagramAfter.schemas[0], tables: [{ ...unavailable, sqlite: { ...unavailable.sqlite, definition: "CREATE VIRTUAL TABLE orders USING changed(id)" } }] }] };
+    expect(buildSchemaGraph(after, { beforeSnapshot: before, changeSet: { ...diagramChangeSet, operations: [] } }).nodes[0].data.changeStatus).toBe("modified");
+  });
+
+  it("does not invent field or relationship changes when SQLite virtual-table coverage is unavailable", () => {
+    const complete = diagramTable("orders", [diagramColumn("id"), diagramColumn("user_id", 2)]);
+    complete.foreignKeys = [diagramForeignKey("owner", "user_id", "users")];
+    const incomplete = { ...complete, columns: [], foreignKeys: [], sqlite: {
+      definition: "CREATE VIRTUAL TABLE orders USING missing_module(value)", strict: false,
+      withoutRowid: false, virtualTable: true, columnsUnavailable: true,
+      columns: {}, indexTerms: {}, diagnostics: ["Module unavailable"],
+    } };
+    for (const [oldTable, newTable] of [[complete, incomplete], [incomplete, complete]]) {
+      const before = { ...diagramBefore, schemas: [{ ...diagramBefore.schemas[0], tables: [oldTable, diagramTable("users")] }] };
+      const after = { ...diagramAfter, schemas: [{ ...diagramAfter.schemas[0], tables: [newTable, diagramTable("users")] }] };
+      const graph = buildSchemaGraph(after, { beforeSnapshot: before, changeSet: { ...diagramChangeSet, operations: [] } });
+      const orders = graph.nodes.find((node) => node.id === "public.orders")!;
+      expect(orders.data.table.columns).toEqual(newTable.columns);
+      expect(orders.data.columnChanges).toBeUndefined();
+      expect(graph.edges.every((edge) => !edge.data?.changeStatus)).toBe(true);
+    }
+  });
+
   it("restores deleted tables, columns and their incoming and outgoing connections without mutating snapshots", () => {
     const original = JSON.stringify([diagramBefore, diagramAfter]);
     const graph = buildSchemaGraph(diagramAfter, { changeSet: diagramChangeSet, beforeSnapshot: diagramBefore });

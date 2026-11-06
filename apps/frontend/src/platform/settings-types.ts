@@ -75,7 +75,7 @@ export interface AppSettings {
     largeModelThreshold: number;
   };
   connectionDefaults: {
-    databaseEngine: "postgreSql" | "mySql";
+    databaseEngine: "postgreSql" | "mySql" | "sqlite";
     sslMode: "disable" | "prefer" | "require" | "verifyCa" | "verifyFull";
   };
   history: {
@@ -287,7 +287,7 @@ export interface BackupPreview {
   sourceId: string;
   sourceLabel: string | null;
   databaseName: string | null;
-  databaseType: "postgreSql" | "mySql" | null;
+  databaseType: "postgreSql" | "mySql" | "sqlite" | null;
   snapshots: number;
   annotations: number;
   savedViews: number;

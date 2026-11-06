@@ -113,7 +113,7 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke<void>("reveal_app_directory", { input: { kind } });
   }
 
-  pickWorkspacePath(kind: "openSettings" | "saveSettings" | "openBackup" | "saveBackup" | "repository"): Promise<string | null> { return invoke("pick_workspace_path", { kind }); }
+  pickWorkspacePath(kind: "openSettings" | "saveSettings" | "openBackup" | "saveBackup" | "repository" | "openSqlite" | "sqliteDirectory"): Promise<string | null> { return invoke("pick_workspace_path", { kind }); }
   pickConnectionFile(): Promise<string | null> {
     return invoke<string | null>("pick_connection_file");
   }

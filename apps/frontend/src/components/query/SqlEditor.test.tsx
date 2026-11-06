@@ -9,7 +9,7 @@ import type { DatabaseSnapshot } from "../../platform";
 const writeText = vi.fn<(text: string) => Promise<void>>();
 const readText = vi.fn<() => Promise<string>>();
 const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
-function setup(initial = "select 1;\nselect 2;", dialect: "postgreSql" | "mySql" = "postgreSql") {
+function setup(initial = "select 1;\nselect 2;", dialect: "postgreSql" | "mySql" | "sqlite" = "postgreSql") {
   const onRun = vi.fn();
   const snapshot = { id: "snapshot", database: { databaseType: dialect }, schemas: [] } as unknown as DatabaseSnapshot;
   function Harness() {

@@ -1,14 +1,15 @@
-import { MySQL, PostgreSQL, SQLDialect, sql } from "@codemirror/lang-sql";
+import { SQLite, MySQL, PostgreSQL, SQLDialect, sql } from "@codemirror/lang-sql";
 import { syntaxTree } from "@codemirror/language";
 import type { Diagnostic } from "@codemirror/lint";
 import { EditorState } from "@codemirror/state";
 
-export type SqlDialect = "postgreSql" | "mySql";
+export type SqlDialect = "postgreSql" | "mySql" | "sqlite";
 export const postgresSqlLanguage = sql({ dialect: PostgreSQL });
 // Match the backend session mode, including MySQL backslash string escapes.
 const mysqlDialect = SQLDialect.define({ ...MySQL.spec, backslashEscapes: true });
 export const mysqlSqlLanguage = sql({ dialect: mysqlDialect });
-export function sqlLanguage(dialect: SqlDialect) { return dialect === "mySql" ? mysqlSqlLanguage : postgresSqlLanguage; }
+export const sqliteSqlLanguage = sql({ dialect: SQLite });
+export function sqlLanguage(dialect: SqlDialect) { return dialect === "sqlite" ? sqliteSqlLanguage : dialect === "mySql" ? mysqlSqlLanguage : postgresSqlLanguage; }
 
 export function sqlSyntaxDiagnostics(state: EditorState): Diagnostic[] {
   if (!state.doc.toString().trim()) return [];
@@ -38,7 +39,7 @@ export function currentPostgresStatement(document: string, position: number): st
 /** Use the source dialect's lexical boundaries for quoted names, literals and comments. */
 export function currentSqlStatement(document: string, position: number, dialect: SqlDialect): string {
   const statements: { from: number; to: number }[] = [];
-  const tree = (dialect === "mySql" ? mysqlDialect : PostgreSQL).language.parser.parse(document);
+  const tree = (dialect === "sqlite" ? SQLite : dialect === "mySql" ? mysqlDialect : PostgreSQL).language.parser.parse(document);
   for (let node = tree.topNode.firstChild; node; node = node.nextSibling) {
     if (node.name === "Statement" && document.slice(node.from, node.to).replaceAll(";", "").trim()) statements.push({ from: node.from, to: node.to });
   }

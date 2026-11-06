@@ -40,6 +40,7 @@ pub fn check(refresh: bool, expected_bundle: &str) -> Result<String, &'static st
 unsafe extern "C" {
     fn nodal_remember_file(path: *const std::ffi::c_char) -> i32;
     fn nodal_access_file(path: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+    fn nodal_forget_file(path: *const std::ffi::c_char);
     fn nodal_release_file(handle: *mut std::ffi::c_void);
 }
 
@@ -81,4 +82,18 @@ pub fn access_file(path: &str) -> Result<FileAccess, &'static str> {
         }
     }
     Err("File permission is missing or expired. Choose the file or folder again.")
+}
+
+pub fn forget_file(path: &str) -> Result<(), &'static str> {
+    #[cfg(target_os = "macos")]
+    {
+        let path = std::ffi::CString::new(path).map_err(|_| "Invalid file path")?;
+        // SAFETY: Swift copies the string synchronously and does not retain its pointer.
+        unsafe {
+            nodal_forget_file(path.as_ptr());
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = path;
+    Ok(())
 }

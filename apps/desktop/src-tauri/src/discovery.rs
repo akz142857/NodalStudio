@@ -505,6 +505,9 @@ async fn execute(
                 query_engine::validate_read_only_postgres(sql)
             }
             schema_model::DatabaseType::MySql => query_engine::validate_read_only_mysql(sql),
+            schema_model::DatabaseType::Sqlite => Err(query_engine::QueryError::Validation(
+                "SQLite AI SQL drafts are not available yet.".into(),
+            )),
         }
         .map_err(|e| e.to_string())?;
     }

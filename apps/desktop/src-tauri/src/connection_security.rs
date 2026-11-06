@@ -264,6 +264,7 @@ impl Tunnel {
         let socket = directory.path().join(match dialect {
             DatabaseType::PostgreSql => format!(".s.PGSQL.{port}"),
             DatabaseType::MySql => "mysql.sock".into(),
+            DatabaseType::Sqlite => return Err("SQLite does not use SSH tunnels.".into()),
         });
         check_socket_paths(directory.path(), &socket)?;
         let destination = if host.contains(':') {
@@ -543,6 +544,7 @@ mod tests {
         assert!(directory.starts_with("/tmp/nodal-security-acceptance"));
         let file = |name: &str| Some(format!("{directory}/{name}"));
         let mut input = crate::SaveDataSourceInput {
+            sqlite: None,
             id: None,
             display_name: "Security acceptance".into(),
             host: "localhost".into(),

@@ -186,6 +186,7 @@ mod tests {
         let _cleanup = Cleanup(id);
         let file = |name: &str| Some(format!("{directory}/{name}"));
         let mut input = crate::SaveDataSourceInput {
+            sqlite: None,
             id: Some(id),
             display_name: "Isolated password test".into(),
             host: "localhost".into(),

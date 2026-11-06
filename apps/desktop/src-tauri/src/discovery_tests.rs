@@ -21,6 +21,7 @@ async fn fixture_for_dialect(
     let (version, type_schema, type_name) = match dialect {
         DatabaseType::PostgreSql => ("17", "pg_catalog", "int8"),
         DatabaseType::MySql => ("8.4", "public", "bigint"),
+        DatabaseType::Sqlite => ("3", "main", "INTEGER"),
     };
     let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
     let mut snapshot = DatabaseSnapshot::new(
@@ -758,12 +759,12 @@ async fn mysql_sql_draft_uses_reviewed_mysql_context_and_rejects_unsafe_answers(
         );
         assert!(!preview_body.to_string().contains("private_unrelated"));
         assert!(!preview_body.to_string().contains("private-field-comment"));
-        let running =
+        let mut running =
             tokio::spawn(async move { execute(&app, &prepared, Some("fixture-key")).await });
-        let wire = tokio::time::timeout(Duration::from_secs(5), received)
-            .await
-            .unwrap()
-            .unwrap();
+        let wire = tokio::select! {
+            result = &mut running => panic!("AI request ended before the fixture received it: {:?}", result.map(|reply| reply.map(|_| ()))),
+            wire = tokio::time::timeout(Duration::from_secs(5), received) => wire.unwrap().unwrap(),
+        };
         assert_eq!(wire, preview_body);
         let content = serde_json::json!({"sqlDraft":{"sql":sql,"explanation":"Review the selected columns.","assumptions":[],"clarification":if sql.is_none() { vec!["Which date range?"] } else { vec![] }}});
         respond

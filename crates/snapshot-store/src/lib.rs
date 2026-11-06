@@ -1732,6 +1732,9 @@ impl LocalSnapshotStore {
         let source = bundle.source_id.to_string();
         let mut transaction = self.pool.begin().await?;
         if let Some(profile) = &bundle.source_profile {
+            // A portable model never grants local file access, even outside MAS.
+            let mut profile = profile.clone();
+            profile.sqlite = None;
             sqlx::query(
                 "INSERT INTO data_sources (id, display_name, updated_at, payload_json) VALUES (?, ?, ?, ?) \
                  ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name, updated_at = excluded.updated_at, payload_json = excluded.payload_json",
@@ -1739,7 +1742,7 @@ impl LocalSnapshotStore {
             .bind(profile.id.to_string())
             .bind(&profile.display_name)
             .bind(profile.updated_at.to_rfc3339())
-            .bind(serde_json::to_string(profile)?)
+            .bind(serde_json::to_string(&profile)?)
             .execute(&mut *transaction)
             .await?;
         }
@@ -2403,6 +2406,7 @@ mod tests {
     fn profile(source_id: Uuid) -> DataSourceProfile {
         let now = Utc::now();
         DataSourceProfile {
+            sqlite: None,
             id: source_id,
             display_name: "Imported".into(),
             host: "127.0.0.1".into(),
@@ -2482,6 +2486,39 @@ mod tests {
         assert!(store.import_portable_model(&bundle).await.is_err());
         assert_eq!(store.get_data_source(source_id).await.unwrap(), None);
         assert!(store.list_snapshots(source_id).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn portable_import_never_trusts_sqlite_file_bindings() {
+        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
+        let source_id = Uuid::new_v4();
+        let mut original = profile(source_id);
+        original.database_type = DatabaseType::Sqlite;
+        original.sqlite = Some(schema_model::SqliteFile {
+            path: "/private/untrusted.db".into(),
+            access_directory: Some("/private".into()),
+        });
+        let bundle = PortableModelBackup {
+            format_version: 1,
+            exported_at: Utc::now().to_rfc3339(),
+            source_id,
+            source_profile: Some(original),
+            source_settings: DataSourceSettings::defaults_for(source_id),
+            snapshots: vec![],
+            change_sets: vec![],
+            annotations: vec![],
+            domain_groups: vec![],
+            saved_views: vec![],
+            layouts: vec![],
+            provenance: vec![],
+            lineage: vec![],
+            logical_relationships: vec![],
+            ignored_relationship_inferences: vec![],
+        };
+        store.import_portable_model(&bundle).await.unwrap();
+        let restored = store.get_data_source(source_id).await.unwrap().unwrap();
+        assert_eq!(restored.database_type, DatabaseType::Sqlite);
+        assert!(restored.sqlite.is_none());
     }
 
     #[tokio::test]
@@ -2603,6 +2640,7 @@ mod tests {
         let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
         let now = Utc::now();
         let profile = DataSourceProfile {
+            sqlite: None,
             id: Uuid::new_v4(),
             display_name: "Local development".into(),
             host: "127.0.0.1".into(),

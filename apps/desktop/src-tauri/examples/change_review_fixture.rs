@@ -79,6 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         if mode == "init" {
             let profile = DataSourceProfile {
+                sqlite: None,
                 id: source,
                 display_name: format!("P0 Review {engine:?}"),
                 database_type: engine,

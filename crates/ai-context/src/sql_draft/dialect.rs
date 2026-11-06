@@ -7,6 +7,10 @@ use sqlparser::{
 
 pub(super) fn prompt_rules(dialect: DatabaseType) -> (&'static str, &'static str) {
     match dialect {
+        DatabaseType::Sqlite => (
+            "SQLite",
+            "SQLite SQL drafts are unavailable. Do not generate SQL.",
+        ),
         DatabaseType::PostgreSql => (
             "PostgreSQL",
             "Use PostgreSQL double quotes for identifiers where needed. Functions: count,sum,avg,min,max,coalesce,nullif,round,abs,lower,upper,length,date_trunc,date_part,now,current_date,current_timestamp only (unqualified or pg_catalog-qualified). Standard date/timestamp casts and INTERVAL literals are supported.",
@@ -63,6 +67,7 @@ pub(super) fn function_supported(dialect: DatabaseType, name: &str) -> bool {
     ]
     .contains(&name)
         || match dialect {
+            DatabaseType::Sqlite => false,
             DatabaseType::PostgreSql => ["date_trunc", "date_part"].contains(&name),
             DatabaseType::MySql => [
                 "char_length",
@@ -86,6 +91,7 @@ pub(super) fn function_supported(dialect: DatabaseType, name: &str) -> bool {
 
 pub(super) fn cast_supported(dialect: DatabaseType, kind: &CastKind, data_type: &DataType) -> bool {
     match dialect {
+        DatabaseType::Sqlite => false,
         DatabaseType::PostgreSql => {
             matches!(kind, CastKind::Cast | CastKind::DoubleColon)
                 && [

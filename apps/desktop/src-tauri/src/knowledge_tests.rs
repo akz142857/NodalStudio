@@ -360,6 +360,7 @@ async fn failed_candidate_introspection_does_not_replace_profile_or_invalidate_c
     let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
     let snapshot = model(Uuid::new_v4());
     let original = DataSourceProfile {
+        sqlite: None,
         id: snapshot.source_id,
         display_name: "Original".into(),
         host: "old.example".into(),
@@ -395,6 +396,7 @@ async fn failed_candidate_introspection_does_not_replace_profile_or_invalidate_c
     candidate.host = "127.0.0.1".into();
     candidate.port = 0;
     let candidate_input = SaveDataSourceInput {
+        sqlite: None,
         id: Some(candidate.id),
         display_name: candidate.display_name.clone(),
         host: candidate.host.clone(),

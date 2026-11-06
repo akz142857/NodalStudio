@@ -451,6 +451,7 @@ fn backup(s: DatabaseSnapshot, a: ObjectAnnotation) -> snapshot_store::PortableM
 }
 fn profile(source: Uuid) -> schema_model::DataSourceProfile {
     schema_model::DataSourceProfile {
+        sqlite: None,
         id: source,
         display_name: "Original".into(),
         host: "old.example".into(),

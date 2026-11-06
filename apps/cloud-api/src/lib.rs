@@ -165,6 +165,12 @@ pub fn router(state: CloudState) -> Router {
     let middleware_state = state.clone();
     Router::new()
         .route("/health", get(health))
+        .route(
+            "/v1/capabilities",
+            get(|| async {
+                Json(serde_json::json!({ "databaseTypes": ["postgreSql", "mySql", "sqlite"] }))
+            }),
+        )
         .route("/v1/auth/bootstrap", post(bootstrap_account))
         .route("/v1/auth/refresh", post(refresh_access))
         .route("/v1/projects", post(create_project))
@@ -990,6 +996,30 @@ mod tests {
         assert_ne!(
             compute_sync_bundle_fingerprint(&bundle).expect("fingerprint"),
             first
+        );
+    }
+
+    #[tokio::test]
+    async fn capabilities_advertise_sqlite_without_database_access() {
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://unused:unused@127.0.0.1/unused")
+            .expect("lazy pool");
+        let response = router(CloudState::new(pool))
+            .oneshot(
+                Request::get("/v1/capabilities")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            body["databaseTypes"],
+            serde_json::json!(["postgreSql", "mySql", "sqlite"])
         );
     }
 

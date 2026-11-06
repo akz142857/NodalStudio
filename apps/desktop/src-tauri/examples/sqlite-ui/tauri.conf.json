@@ -1,0 +1,12 @@
+{
+  "productName": "Nodal SQLite Sandbox",
+  "version": "1.0.2",
+  "identifier": "com.claycosmos.sqliteprobe",
+  "build": { "frontendDist": "." },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{ "label": "main", "title": "Nodal SQLite Sandbox", "width": 850, "height": 650 }],
+    "security": { "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost" }
+  },
+  "bundle": { "icon": ["../../icons/icon.png"] }
+}

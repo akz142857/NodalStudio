@@ -14,8 +14,9 @@ function StatusIcon({ tone }: { tone: Tone }) {
 }
 export function ConnectionTestStatus({ state, form, onCancel }: { state: ConnectionTestState; form: SaveDataSourceInput; onCancel?: () => void }) {
   const { t: bt } = useI18n();
-  const stageLabels = { configuration: bt("business.checkConnectionSettings"), ssh: bt("business.sSHConnectionFailed"), tls: bt("business.tLSVerificationFailed"), database: bt("business.databaseConnectionFailed"), timeout: bt("business.connectionTestTimedOut"), cancelled: bt("business.connectionTestCancelled") };
+  const stageLabels = { file: bt("sqlite.failed"), configuration: bt("business.checkConnectionSettings"), ssh: bt("business.sSHConnectionFailed"), tls: bt("business.tLSVerificationFailed"), database: bt("business.databaseConnectionFailed"), timeout: bt("business.connectionTestTimedOut"), cancelled: bt("business.connectionTestCancelled") };
   const phaseLabels = {
+  file: bt("sqlite.checking"),
   configuration: bt("business.checkingSettingsAndCredentials"),
   ssh: bt("business.establishingTheSSHTunnel"),
   handshake: bt("business.connectingToTheDatabaseAndNegotiatingTLS"),
@@ -49,16 +50,16 @@ export function ConnectionTestStatus({ state, form, onCancel }: { state: Connect
   else if (failure?.stage === "database") Object.assign(database, { label: bt("business.failed"), tone: "error" });
   else if (busy) Object.assign(database, { label: phase === "metadata" ? bt("business.verifyingAccess") : bt("business.connecting"), tone: "running" });
   else if (cancelled && phase !== "configuration" && phase !== "ssh") database.label = bt("business.cancelled");
-  const warning = tls.tone === "warning";
+  const warning = form.databaseType !== "sqlite" && tls.tone === "warning";
   const tone: Tone = running ? "running" : failure ? "error" : cancelled ? "neutral" : warning ? "warning" : "success";
   const title = running ? state.cancelling ? bt("business.cancellingConnectionTest") : bt("business.testingConnection") : failure ? stageLabels[failure.stage] : cancelled ? bt("business.connectionTestCancelled") : warning ? bt("business.connectedReviewTLS") : bt("business.connectionSuccessful");
-  const detail = running ? state.cancelling ? bt("business.stoppingThisTestAndClosingItsConnection") : phaseLabels[phase] : (failure ? translateConnectionFailure(failure, bt) : undefined) ?? (cancelled ? bt("business.nothingWasSavedYouCanChangeTheSettingsOr") : warning ? result?.sslActive === false ? bt("business.connectedWithoutTLSChooseRequireOrVerifyFullTo") : bt("business.theServerDidNotReportTLSStatusEncryptionCould") : bt("business.theConnectionIsReadySettingsAndPasswordsAreSaved"));
+  const detail = form.databaseType === "sqlite" ? failure?.message ?? (running ? bt("sqlite.checking") : cancelled ? bt("business.connectionTestCancelled") : bt("sqlite.ready")) : running ? state.cancelling ? bt("business.stoppingThisTestAndClosingItsConnection") : phaseLabels[phase] : (failure ? translateConnectionFailure(failure, bt) : undefined) ?? (cancelled ? bt("business.nothingWasSavedYouCanChangeTheSettingsOr") : warning ? result?.sslActive === false ? bt("business.connectedWithoutTLSChooseRequireOrVerifyFullTo") : bt("business.theServerDidNotReportTLSStatusEncryptionCould") : bt("business.theConnectionIsReadySettingsAndPasswordsAreSaved"));
   return <section className="connection-test-status" role={failure ? "alert" : "status"} aria-label={bt("business.connectionTestResult")} data-state={state.status}>
     <div className="connection-test-heading">
       <div data-tone={tone}><StatusIcon tone={tone} /><strong>{title}</strong></div>
       {running && onCancel ? <button type="button" className="connection-test-cancel" onClick={onCancel} disabled={state.cancelling} aria-label={bt("business.cancelConnectionTest")}>{state.cancelling ? bt("business.cancelling") : bt("business.cancelTest")}</button> : null}
     </div>
-    <div className="connection-test-checks">{[ssh, tls, database].map((check) => <div className="connection-test-check" role="group" aria-label={bt("business.status", { value0: check.name })} data-tone={check.tone} key={check.name}>
+    <div className="connection-test-checks">{(form.databaseType === "sqlite" ? [database] : [ssh, tls, database]).map((check) => <div className="connection-test-check" role="group" aria-label={bt("business.status", { value0: check.name })} data-tone={check.tone} key={check.name}>
       <StatusIcon tone={check.tone} /><div><span>{check.name}</span><strong>{check.label}</strong></div>
     </div>)}</div>
     {running ? <div className="connection-test-progress" role="progressbar" aria-label={bt("business.connectionTestProgress")} aria-valuetext={detail}><span /></div> : null}

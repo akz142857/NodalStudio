@@ -76,12 +76,16 @@ pub fn known_relationships(
         !ac.is_empty()
             && ac.len() == bc.len()
             && tables.get(a).is_some_and(|t| {
-                ac.iter()
-                    .all(|c| t.columns.iter().any(|column| &column.name == c))
+                understanding::columns_available(t)
+                    && ac
+                        .iter()
+                        .all(|c| t.columns.iter().any(|column| &column.name == c))
             })
             && tables.get(b).is_some_and(|t| {
-                bc.iter()
-                    .all(|c| t.columns.iter().any(|column| &column.name == c))
+                understanding::columns_available(t)
+                    && bc
+                        .iter()
+                        .all(|c| t.columns.iter().any(|column| &column.name == c))
             })
     };
     let mut result = Vec::new();
@@ -147,9 +151,17 @@ pub fn build_context(
     {
         return Err("Choose at most 100 local candidates or a path of at most two hops.".into());
     }
+    if task.operation == Operation::DraftSql
+        && snapshot.database.database_type == schema_model::DatabaseType::Sqlite
+    {
+        return Err("SQLite AI SQL drafts are not available yet.".into());
+    }
     let mut context = DiscoveryContext { operation: task.operation, scope, dialect: None, tables: vec![], candidates: vec![], evidence: vec![], path: vec![], coverage: vec![
         "Only this loaded snapshot is covered. Unreviewed notes and relationship free text are excluded; eligible local team statements are labelled separately.".into(),
     ] };
+    if snapshot.database.database_type == schema_model::DatabaseType::Sqlite {
+        context.coverage.push("SQLite declared types describe affinity, not every stored value. Foreign-key enforcement is connection-specific. Unavailable virtual-table modules and unparsed DDL properties are not verified.".into());
+    }
     if task.operation == Operation::Expand {
         context.coverage.push("Only your question and fixed instructions are sent; no database metadata or history is attached.".into());
         return Ok(context);

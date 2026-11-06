@@ -16,5 +16,9 @@ tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
 
+[dev-dependencies]
+sqlite-adapter = { path = "../sqlite-adapter" }
+tempfile = "3.27.0"
+
 [lints]
 workspace = true

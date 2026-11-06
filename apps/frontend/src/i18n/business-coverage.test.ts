@@ -73,7 +73,7 @@ it("keeps static business-page copy in the shared catalog", () => {
   "components/KnowledgeReview.tsx",
   "components/ProvenancePanel.tsx"
 ];
-  const identifiers = new Set(["Nodal Studio", "PostgreSQL", "MySQL", "NULL", "UQ", "IX", "?FK", "LR", "GEN", "DEP", "bastion.example.com", "001.sql, 002.sql"]);
+  const identifiers = new Set(["Nodal Studio", "PostgreSQL", "MySQL", "SQLite", "NULL", "UQ", "IX", "?FK", "LR", "GEN", "DEP", "bastion.example.com", "001.sql, 002.sql"]);
   const remaining: string[] = [];
   for (const file of files) {
     const source = ts.createSourceFile(file, readFileSync(`src/${file}`, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

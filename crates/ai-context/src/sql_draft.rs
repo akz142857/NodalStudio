@@ -532,6 +532,7 @@ pub fn validate_sql(sql: &str, context: &DiscoveryContext) -> Result<(), String>
         .dialect
         .ok_or("The SQL source dialect is missing. Review the request again.")?;
     let parser_dialect: &dyn Dialect = match database_type {
+        DatabaseType::Sqlite => return Err("SQLite AI SQL drafts are not available yet.".into()),
         DatabaseType::PostgreSql => &PostgreSqlDialect {},
         DatabaseType::MySql => {
             dialect::validate_mysql_tokens(sql)?;

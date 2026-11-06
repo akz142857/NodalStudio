@@ -78,11 +78,23 @@ pub enum DatabaseType {
     #[default]
     PostgreSql,
     MySql,
+    Sqlite,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqliteFile {
+    pub path: String,
+    /// A separately selected directory granting access to WAL sidecars on macOS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_directory: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DataSourceProfile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sqlite: Option<SqliteFile>,
     pub id: Uuid,
     pub display_name: String,
     pub host: String,
@@ -241,7 +253,46 @@ impl SchemaDefinition {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SqliteColumnMetadata {
+    pub hidden: i64,
+    pub affinity: String,
+    pub generation_expression: Option<String>,
+    pub generation_mode: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqliteIndexTerm {
+    pub column: Option<String>,
+    pub descending: bool,
+    pub collation: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "Independent SQLite catalog flags, not mutually exclusive states"
+)]
+pub struct SqliteTableMetadata {
+    #[serde(default)]
+    pub columns: std::collections::BTreeMap<String, SqliteColumnMetadata>,
+    #[serde(default)]
+    pub index_terms: std::collections::BTreeMap<String, Vec<SqliteIndexTerm>>,
+    #[serde(default)]
+    pub columns_unavailable: bool,
+    pub definition: String,
+    pub strict: bool,
+    pub without_rowid: bool,
+    pub virtual_table: bool,
+    pub diagnostics: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TableDefinition {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sqlite: Option<SqliteTableMetadata>,
     pub key: ObjectKey,
     pub table_kind: TableKind,
     pub columns: Vec<ColumnDefinition>,
@@ -255,6 +306,7 @@ pub struct TableDefinition {
 impl TableDefinition {
     pub fn empty(schema: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
+            sqlite: None,
             key: ObjectKey::table(schema, name),
             table_kind: TableKind::Ordinary,
             columns: Vec::new(),
@@ -662,6 +714,28 @@ mod tests {
         assert_eq!(
             relationship.relationship_key(),
             "public.orders[user_id]->public.users[id]"
+        );
+    }
+    #[test]
+    fn sqlite_additions_preserve_legacy_json_and_are_explicit() {
+        let old = serde_json::json!({"id":Uuid::nil(),"displayName":"old","host":"localhost","port":5432,"database":"app","username":"user","databaseType":"postgreSql","sslMode":"disable","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"});
+        let profile: DataSourceProfile = serde_json::from_value(old).unwrap();
+        assert!(profile.sqlite.is_none());
+        assert!(
+            serde_json::to_value(profile)
+                .unwrap()
+                .get("sqlite")
+                .is_none()
+        );
+        assert!(
+            serde_json::to_value(TableDefinition::empty("public", "old"))
+                .unwrap()
+                .get("sqlite")
+                .is_none()
+        );
+        assert_eq!(
+            serde_json::to_value(DatabaseType::Sqlite).unwrap(),
+            "sqlite"
         );
     }
 }

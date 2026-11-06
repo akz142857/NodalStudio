@@ -23,6 +23,19 @@ export interface ComparisonTable {
 const keyOf = (table: TableDefinition) => JSON.stringify([table.key.schema, table.key.name]);
 const sameDefinition = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 
+/** Coverage diagnostics do not describe a schema change. Compare only captured properties. */
+function sameTableStructure(left: TableDefinition, right: TableDefinition): boolean {
+  const partial = left.sqlite?.columnsUnavailable || right.sqlite?.columnsUnavailable;
+  const comparable = (table: TableDefinition) => partial
+    ? { key: table.key, tableKind: table.tableKind, comment: table.comment, sqlite: table.sqlite && {
+      definition: table.sqlite.definition, strict: table.sqlite.strict,
+      withoutRowid: table.sqlite.withoutRowid, virtualTable: table.sqlite.virtualTable,
+    } }
+    : { ...table, sqlite: table.sqlite && Object.fromEntries(Object.entries(table.sqlite)
+      .filter(([key]) => key !== "diagnostics" && key !== "columnsUnavailable")) };
+  return sameDefinition(comparable(left), comparable(right));
+}
+
 /** A display projection only: the stored Before and After snapshots stay intact. */
 export function comparisonTables(
   after: DatabaseSnapshot,
@@ -47,7 +60,18 @@ export function comparisonTables(
         : ["column", "primaryKey", "foreignKey", "index", "constraint"].includes(operation.object.kind) && operation.object.schema === tableId) ?? [] : [];
     const changeStatus: ChangeStatus | undefined = !comparing ? undefined : baseline && !current ? "deleted"
       : (baseline && !previous) || operations.some((operation) => operation.operationType === "addTable") ? "added"
-      : operations.length || (previous && current && !sameDefinition(previous, current)) ? "modified" : undefined;
+      : operations.length || (previous && current && !sameTableStructure(previous, current)) ? "modified" : undefined;
+
+    // A missing virtual-table module is a coverage gap, not evidence of removed fields.
+    if (current && previous && (current.sqlite?.columnsUnavailable || previous.sqlite?.columnsUnavailable)) {
+      return {
+        schema: current.key.schema,
+        table: current,
+        inspectionTable: current,
+        changeStatus,
+        relations: current.foreignKeys.map((foreignKey) => ({ foreignKey })),
+      };
+    }
 
     const relations: ComparisonRelation[] = (current?.foreignKeys ?? []).map((foreignKey) => {
       const old = previous?.foreignKeys.find((candidate) => candidate.name === foreignKey.name);

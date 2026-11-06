@@ -72,6 +72,66 @@ fn snapshot() -> DatabaseSnapshot {
     )
 }
 
+#[test]
+fn unavailable_sqlite_columns_are_unknown_evidence_not_zero_columns() {
+    let mut snapshot = snapshot();
+    snapshot.database.database_type = DatabaseType::Sqlite;
+    snapshot.schemas[0].tables[0].sqlite = Some(schema_model::SqliteTableMetadata {
+        columns: std::collections::BTreeMap::new(),
+        index_terms: std::collections::BTreeMap::new(),
+        columns_unavailable: true,
+        definition: "private raw DDL".into(),
+        strict: false,
+        without_rowid: false,
+        virtual_table: true,
+        diagnostics: vec![],
+    });
+    let target = snapshot.schemas[0].tables[0].key.clone();
+    let context = build_context(
+        &snapshot,
+        &target,
+        None,
+        SendScope::OneHop,
+        None,
+        &[],
+        false,
+    )
+    .unwrap();
+    assert_eq!(context.tables, vec![target.clone()]);
+    assert_eq!(context.evidence.len(), 1);
+    let detail: serde_json::Value = serde_json::from_str(&context.evidence[0].detail).unwrap();
+    assert!(detail["columnCount"].is_null());
+    assert!(detail["hasPrimaryKey"].is_null());
+    assert!(
+        detail["metadataCoverage"]
+            .as_str()
+            .unwrap()
+            .contains("unknown, not absent")
+    );
+    assert!(
+        !serde_json::to_string(&context)
+            .unwrap()
+            .contains("private raw DDL")
+    );
+    assert!(
+        build_context(
+            &snapshot,
+            &target,
+            Some("id"),
+            SendScope::CurrentTable,
+            None,
+            &[],
+            false
+        )
+        .is_err()
+    );
+    assert!(
+        ai_context::discovery::known_relationships(&snapshot, &[])
+            .iter()
+            .all(|r| r.source != target && r.target != target)
+    );
+}
+
 fn domain(s: &DatabaseSnapshot, names: &[&str]) -> DomainGroup {
     DomainGroup {
         id: Uuid::new_v4(),

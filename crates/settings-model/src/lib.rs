@@ -976,7 +976,11 @@ string_enum!(ConflictStrategy {
     KeepLocal,
     KeepRemote
 });
-string_enum!(DatabaseEngine { PostgreSql, MySql });
+string_enum!(DatabaseEngine {
+    PostgreSql,
+    MySql,
+    Sqlite
+});
 string_enum!(DefaultSslMode {
     Disable,
     Prefer,

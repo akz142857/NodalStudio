@@ -19,7 +19,7 @@ export function CapabilitiesMatrix({ runtime, database }: { runtime?: RuntimeInf
   return <section className="capabilities-matrix" aria-label={t("capabilities.productCapabilities")}>
     <div className="capabilities-overview">
       <p>{t("capabilities.thisBuildSSupportScopeComparedAcrossRuntime")}</p>
-      <p className="capabilities-current">{t("capabilities.currentContext")}{" "}{runtime ? runtime.kind === "desktop" ? t("settings.desktop") : t("capabilities.web") : t("capabilities.runtimeNotDetected")} · {database ? `${database.databaseType === "postgreSql" ? "PostgreSQL" : database.databaseType === "mySql" ? "MySQL" : t("capabilities.unknownDialect")} ${database.version}` : t("capabilities.noLoadedDatabase")}. {current ? t("capabilities.theMatchingColumnIsHighlighted") : t("capabilities.noColumnSelectedAnUnknownContextIsNot")}</p>
+      <p className="capabilities-current">{t("capabilities.currentContext")}{" "}{runtime ? runtime.kind === "desktop" ? t("settings.desktop") : t("capabilities.web") : t("capabilities.runtimeNotDetected")} · {database ? `${database.databaseType === "sqlite" ? "SQLite" : database.databaseType === "postgreSql" ? "PostgreSQL" : database.databaseType === "mySql" ? "MySQL" : t("capabilities.unknownDialect")} ${database.version}` : t("capabilities.noLoadedDatabase")}. {current ? t("capabilities.theMatchingColumnIsHighlighted") : t("capabilities.noColumnSelectedAnUnknownContextIsNot")}</p>
       <p className="capabilities-legend">{t("capabilities.supportedAvailableWithinTheStatedScopePartialLimited")}</p>
     </div>
     <div className="capabilities-toolbar">

@@ -4,15 +4,18 @@ mod guard;
 mod mysql;
 mod mysql_value;
 mod postgres;
+mod sqlite;
 mod value;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+pub use guard::validate_read_only_sqlite;
 pub use guard::{validate_read_only_mysql, validate_read_only_postgres};
 pub use mysql::execute_mysql_query;
 pub use postgres::execute_postgres_query;
+pub use sqlite::execute_sqlite_query;
 
 pub const DEFAULT_ROW_LIMIT: u32 = 100;
 pub const MAX_ROW_LIMIT: u32 = 5_000;
@@ -61,6 +64,14 @@ impl ExecuteQueryRequest {
     pub fn validate_mysql(&self) -> Result<(), QueryError> {
         self.validate_limits()?;
         validate_read_only_mysql(&self.sql)
+    }
+
+    /// Validates limits and one read-only `SQLite` statement.
+    /// # Errors
+    /// Rejects writes, unsafe functions and invalid limits.
+    pub fn validate_sqlite(&self) -> Result<(), QueryError> {
+        self.validate_limits()?;
+        validate_read_only_sqlite(&self.sql)
     }
 
     fn validate_limits(&self) -> Result<(), QueryError> {

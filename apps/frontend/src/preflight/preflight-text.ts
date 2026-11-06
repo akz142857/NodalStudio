@@ -1,6 +1,8 @@
 import type { useI18n } from "../i18n";
 type Translate = ReturnType<typeof useI18n>["t"];
 const messages = {
+  "Column metadata is unavailable for a foreign-key endpoint.": "preflight.sqliteColumnsUnavailable",
+  "Refresh metadata with the required SQLite module before checking these columns.": "preflight.sqliteModuleRequired",
   "Primary key presence": "preflight.text0",
   "Key references": "preflight.text1",
   "PostgreSQL FK types": "preflight.text2",

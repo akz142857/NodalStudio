@@ -85,3 +85,8 @@ section.connection-dialog { width: min(760px, calc(var(--ds-viewport-width) - 48
 @media (max-width: 560px) { .connection-test-checks { gap: 5px; } .connection-test-check { flex-direction: column; padding: 8px; gap: 5px; } }
 @media (prefers-reduced-motion: reduce) { .connection-panel .connection-tabs button { transition: none; } }
 @media (max-width: 560px) { .connection-dialog .connection-panel > footer, .connection-footer-actions { flex-wrap: wrap; gap: 8px; } }
+
+.sqlite-file-fields { grid-column: 1 / -1; display: grid; gap: var(--ds-space-2); min-width: 0; }
+.sqlite-file-fields input { width: 100%; min-width: 0; }
+.sqlite-file-fields p, .sqlite-file-fields small { overflow-wrap: anywhere; }
+.sqlite-file-fields button { justify-self: start; }

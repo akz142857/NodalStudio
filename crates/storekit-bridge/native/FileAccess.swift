@@ -48,3 +48,13 @@ public func nodalReleaseFile(_ handle: UnsafeMutableRawPointer?) {
     let url = Unmanaged<NSURL>.fromOpaque(handle).takeRetainedValue()
     url.stopAccessingSecurityScopedResource()
 }
+
+@_cdecl("nodal_forget_file")
+public func nodalForgetFile(_ path: UnsafePointer<CChar>?) {
+    guard let path else { return }
+    let url = URL(fileURLWithPath: String(cString: path)).standardizedFileURL
+    bookmarkLock.lock(); defer { bookmarkLock.unlock() }
+    var bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkKey) as? [String: Data] ?? [:]
+    bookmarks.removeValue(forKey: url.path)
+    UserDefaults.standard.set(bookmarks, forKey: bookmarkKey)
+}

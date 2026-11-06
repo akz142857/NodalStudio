@@ -34,7 +34,7 @@ export function ObjectDocument({ snapshot, object, onClose, onSelect, onSelectTa
       {section === "definition" ? <div className="object-document-actions"><button type="button" aria-pressed={wrap} onClick={() => setWrap(!wrap)}>{t("document.wrap")}</button><button type="button" disabled={!definition} onClick={() => { void Promise.resolve().then(() => navigator.clipboard.writeText(definition ?? "")).then(() => setCopyStatus(t("document.copied")), () => setCopyStatus(t("document.copyFailed"))); }}>{t("document.copy")}</button></div> : null}
     </div>
     {copyStatus ? <p className="object-document-status" role="status">{copyStatus}</p> : null}
-    {section === "definition" ? definition ? <DefinitionReader value={definition} wrap={wrap} dialect={snapshot.database.databaseType === "mySql" ? "mySql" : "postgreSql"} /> : <p className="object-document-empty">{t("objects.unavailable")}</p> : <div className="object-document-content">
+    {section === "definition" ? definition ? <DefinitionReader value={definition} wrap={wrap} dialect={snapshot.database.databaseType} /> : <p className="object-document-empty">{t("objects.unavailable")}</p> : <div className="object-document-content">
       {section === "dependencies" ? <ObjectDependencies snapshot={snapshot} objectKey={object.key} onSelect={onSelect} onSelectTable={onSelectTable} /> : <>
         <ObjectDocumentProperties object={object} />
       </>}
@@ -42,7 +42,7 @@ export function ObjectDocument({ snapshot, object, onClose, onSelect, onSelectTa
   </section>;
 }
 
-function DefinitionReader({ value, wrap, dialect }: { value: string; wrap: boolean; dialect: "postgreSql" | "mySql" }) {
+function DefinitionReader({ value, wrap, dialect }: { value: string; wrap: boolean; dialect: "postgreSql" | "mySql" | "sqlite" }) {
   const { t } = useI18n();
   const label = t("document.reader");
   const host = useRef<HTMLDivElement>(null);

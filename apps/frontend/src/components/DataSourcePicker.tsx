@@ -7,10 +7,11 @@ import { ActionIcon } from "./ActionIcon";
 type InitialFocus = "selected" | "first" | "last";
 
 function engine(profile: DataSourceProfile) {
-  return profile.databaseType === "mySql" ? "MySQL" : "PostgreSQL";
+  return profile.databaseType === "sqlite" ? "SQLite" : profile.databaseType === "mySql" ? "MySQL" : "PostgreSQL";
 }
 
 function address(profile: DataSourceProfile) {
+  if (profile.databaseType === "sqlite") return profile.sqlite?.path ?? profile.database;
   const host = profile.host.includes(":") && !profile.host.startsWith("[") ? `[${profile.host}]` : profile.host;
   return `${host}:${profile.port}`;
 }

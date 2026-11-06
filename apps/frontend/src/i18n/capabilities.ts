@@ -6,6 +6,8 @@ export const capabilityMessages = {
     "name": "capabilities.databaseConnection.name",
     "category": "capabilities.databaseConnection.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.database-connection.desktop",
+      "web-sqlite": "capabilities.sqlite.database-connection.web",
       "desktop-postgres": "capabilities.databaseConnection.desktopPostgres.scope",
       "desktop-mysql": "capabilities.databaseConnection.desktopMysql.scope",
       "web-postgres": "capabilities.databaseConnection.webPostgres.scope",
@@ -16,6 +18,8 @@ export const capabilityMessages = {
     "name": "capabilities.schemaCapture.name",
     "category": "capabilities.databaseConnection.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.schema-capture.desktop",
+      "web-sqlite": "capabilities.sqlite.schema-capture.web",
       "desktop-postgres": "capabilities.schemaCapture.desktopPostgres.scope",
       "desktop-mysql": "capabilities.schemaCapture.desktopMysql.scope",
       "web-postgres": "capabilities.schemaCapture.webPostgres.scope",
@@ -26,6 +30,8 @@ export const capabilityMessages = {
     "name": "capabilities.diagram.name",
     "category": "capabilities.diagram.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.diagram.desktop",
+      "web-sqlite": "capabilities.sqlite.diagram.web",
       "desktop-postgres": "capabilities.diagram.desktopPostgres.scope",
       "desktop-mysql": "capabilities.diagram.desktopPostgres.scope",
       "web-postgres": "capabilities.diagram.desktopPostgres.scope",
@@ -36,6 +42,8 @@ export const capabilityMessages = {
     "name": "capabilities.snapshotHistory.name",
     "category": "capabilities.snapshotHistory.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.snapshot-history.desktop",
+      "web-sqlite": "capabilities.sqlite.snapshot-history.web",
       "desktop-postgres": "capabilities.snapshotHistory.desktopPostgres.scope",
       "desktop-mysql": "capabilities.snapshotHistory.desktopMysql.scope",
       "web-postgres": "capabilities.snapshotHistory.webPostgres.scope",
@@ -46,6 +54,8 @@ export const capabilityMessages = {
     "name": "capabilities.comparisonDetails.name",
     "category": "capabilities.snapshotHistory.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.comparison-details.desktop",
+      "web-sqlite": "capabilities.sqlite.comparison-details.web",
       "desktop-postgres": "capabilities.comparisonDetails.desktopPostgres.scope",
       "desktop-mysql": "capabilities.comparisonDetails.desktopPostgres.scope",
       "web-postgres": "capabilities.comparisonDetails.webPostgres.scope",
@@ -56,6 +66,8 @@ export const capabilityMessages = {
     "name": "capabilities.diagramExport.name",
     "category": "capabilities.diagramExport.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.diagram-export.desktop",
+      "web-sqlite": "capabilities.sqlite.diagram-export.web",
       "desktop-postgres": "capabilities.diagramExport.desktopPostgres.scope",
       "desktop-mysql": "capabilities.diagramExport.desktopPostgres.scope",
       "web-postgres": "capabilities.diagramExport.webPostgres.scope",
@@ -66,6 +78,8 @@ export const capabilityMessages = {
     "name": "capabilities.schemaReport.name",
     "category": "capabilities.diagramExport.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.schema-report.desktop",
+      "web-sqlite": "capabilities.sqlite.schema-report.web",
       "desktop-postgres": "capabilities.schemaReport.desktopPostgres.scope",
       "desktop-mysql": "capabilities.schemaReport.desktopPostgres.scope",
       "web-postgres": "capabilities.schemaReport.webPostgres.scope",
@@ -76,6 +90,8 @@ export const capabilityMessages = {
     "name": "capabilities.offlineViewer.name",
     "category": "capabilities.diagramExport.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.offline-viewer.desktop",
+      "web-sqlite": "capabilities.sqlite.offline-viewer.web",
       "desktop-postgres": "capabilities.offlineViewer.desktopPostgres.scope",
       "desktop-mysql": "capabilities.offlineViewer.desktopMysql.scope",
       "web-postgres": "capabilities.offlineViewer.webPostgres.scope",
@@ -86,6 +102,8 @@ export const capabilityMessages = {
     "name": "capabilities.semanticEdit.name",
     "category": "capabilities.semanticEdit.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.semantic-edit.desktop",
+      "web-sqlite": "capabilities.sqlite.semantic-edit.web",
       "desktop-postgres": "capabilities.semanticEdit.desktopPostgres.scope",
       "desktop-mysql": "capabilities.semanticEdit.desktopMysql.scope",
       "web-postgres": "capabilities.semanticEdit.webPostgres.scope",
@@ -96,6 +114,8 @@ export const capabilityMessages = {
     "name": "capabilities.logicalRelationships.name",
     "category": "capabilities.semanticEdit.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.logical-relationships.desktop",
+      "web-sqlite": "capabilities.sqlite.logical-relationships.web",
       "desktop-postgres": "capabilities.logicalRelationships.desktopPostgres.scope",
       "desktop-mysql": "capabilities.logicalRelationships.desktopMysql.scope",
       "web-postgres": "capabilities.logicalRelationships.webPostgres.scope",
@@ -106,6 +126,8 @@ export const capabilityMessages = {
     "name": "capabilities.layoutTools.name",
     "category": "capabilities.diagram.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.layout-tools.desktop",
+      "web-sqlite": "capabilities.sqlite.layout-tools.web",
       "desktop-postgres": "capabilities.layoutTools.desktopPostgres.scope",
       "desktop-mysql": "capabilities.layoutTools.desktopPostgres.scope",
       "web-postgres": "capabilities.layoutTools.webPostgres.scope",
@@ -116,6 +138,8 @@ export const capabilityMessages = {
     "name": "capabilities.layoutPersistence.name",
     "category": "capabilities.diagram.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.layout-persistence.desktop",
+      "web-sqlite": "capabilities.sqlite.layout-persistence.web",
       "desktop-postgres": "capabilities.layoutPersistence.desktopPostgres.scope",
       "desktop-mysql": "capabilities.layoutPersistence.desktopPostgres.scope",
       "web-postgres": "capabilities.layoutPersistence.webPostgres.scope",
@@ -126,6 +150,8 @@ export const capabilityMessages = {
     "name": "capabilities.structurePreflight.name",
     "category": "capabilities.structurePreflight.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.structure-preflight.desktop",
+      "web-sqlite": "capabilities.sqlite.structure-preflight.web",
       "desktop-postgres": "capabilities.structurePreflight.desktopPostgres.scope",
       "desktop-mysql": "capabilities.structurePreflight.desktopMysql.scope",
       "web-postgres": "capabilities.structurePreflight.desktopPostgres.scope",
@@ -136,6 +162,8 @@ export const capabilityMessages = {
     "name": "capabilities.preflightReviews.name",
     "category": "capabilities.structurePreflight.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.preflight-reviews.desktop",
+      "web-sqlite": "capabilities.sqlite.preflight-reviews.web",
       "desktop-postgres": "capabilities.preflightReviews.desktopPostgres.scope",
       "desktop-mysql": "capabilities.preflightReviews.desktopMysql.scope",
       "web-postgres": "capabilities.preflightReviews.webPostgres.scope",
@@ -146,6 +174,8 @@ export const capabilityMessages = {
     "name": "capabilities.readOnlyQuery.name",
     "category": "capabilities.databaseConnection.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.read-only-query.desktop",
+      "web-sqlite": "capabilities.sqlite.read-only-query.web",
       "desktop-postgres": "capabilities.readOnlyQuery.desktopPostgres.scope",
       "desktop-mysql": "capabilities.readOnlyQuery.desktopMysql.scope",
       "web-postgres": "capabilities.readOnlyQuery.webPostgres.scope",
@@ -156,6 +186,8 @@ export const capabilityMessages = {
     "name": "capabilities.eventTrigger.name",
     "category": "capabilities.databaseConnection.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.event-trigger.desktop",
+      "web-sqlite": "capabilities.sqlite.event-trigger.web",
       "desktop-postgres": "capabilities.eventTrigger.desktopPostgres.scope",
       "desktop-mysql": "capabilities.eventTrigger.desktopMysql.scope",
       "web-postgres": "capabilities.databaseConnection.webPostgres.scope",
@@ -166,6 +198,8 @@ export const capabilityMessages = {
     "name": "capabilities.aiExplanation.name",
     "category": "capabilities.aiExplanation.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.ai-explanation.desktop",
+      "web-sqlite": "capabilities.sqlite.ai-explanation.web",
       "desktop-postgres": "capabilities.aiExplanation.desktopPostgres.scope",
       "desktop-mysql": "capabilities.aiExplanation.desktopMysql.scope",
       "web-postgres": "capabilities.aiExplanation.webPostgres.scope",
@@ -176,6 +210,8 @@ export const capabilityMessages = {
     "name": "capabilities.gitWorkspace.name",
     "category": "capabilities.aiExplanation.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.git-workspace.desktop",
+      "web-sqlite": "capabilities.sqlite.git-workspace.web",
       "desktop-postgres": "capabilities.gitWorkspace.desktopPostgres.scope",
       "desktop-mysql": "capabilities.gitWorkspace.desktopMysql.scope",
       "web-postgres": "capabilities.databaseConnection.webPostgres.scope",
@@ -186,6 +222,8 @@ export const capabilityMessages = {
     "name": "capabilities.cloudPublish.name",
     "category": "capabilities.aiExplanation.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.cloud-publish.desktop",
+      "web-sqlite": "capabilities.sqlite.cloud-publish.web",
       "desktop-postgres": "capabilities.cloudPublish.desktopPostgres.scope",
       "desktop-mysql": "capabilities.cloudPublish.desktopMysql.scope",
       "web-postgres": "capabilities.cloudPublish.webPostgres.scope",
@@ -196,6 +234,8 @@ export const capabilityMessages = {
     "name": "capabilities.sharedView.name",
     "category": "capabilities.diagramExport.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.shared-view.desktop",
+      "web-sqlite": "capabilities.sqlite.shared-view.web",
       "desktop-postgres": "capabilities.sharedView.desktopPostgres.scope",
       "desktop-mysql": "capabilities.sharedView.desktopPostgres.scope",
       "web-postgres": "capabilities.sharedView.webPostgres.scope",
@@ -206,6 +246,8 @@ export const capabilityMessages = {
     "name": "capabilities.portableBackup.name",
     "category": "capabilities.diagramExport.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.portable-backup.desktop",
+      "web-sqlite": "capabilities.sqlite.portable-backup.web",
       "desktop-postgres": "capabilities.portableBackup.desktopPostgres.scope",
       "desktop-mysql": "capabilities.portableBackup.desktopMysql.scope",
       "web-postgres": "capabilities.databaseConnection.webPostgres.scope",
@@ -216,6 +258,8 @@ export const capabilityMessages = {
     "name": "capabilities.ddlImport.name",
     "category": "capabilities.databaseConnection.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.ddl-import.desktop",
+      "web-sqlite": "capabilities.sqlite.ddl-import.web",
       "desktop-postgres": "capabilities.ddlImport.desktopPostgres.scope",
       "desktop-mysql": "capabilities.ddlImport.desktopMysql.scope",
       "web-postgres": "capabilities.ddlImport.webPostgres.scope",
@@ -226,6 +270,8 @@ export const capabilityMessages = {
     "name": "capabilities.physicalEdit.name",
     "category": "capabilities.databaseConnection.category",
     "targets": {
+      "desktop-sqlite": "capabilities.sqlite.physical-edit.desktop",
+      "web-sqlite": "capabilities.sqlite.physical-edit.web",
       "desktop-postgres": "capabilities.physicalEdit.desktopPostgres.scope",
       "desktop-mysql": "capabilities.physicalEdit.desktopMysql.scope",
       "web-postgres": "capabilities.physicalEdit.webPostgres.scope",
@@ -235,6 +281,8 @@ export const capabilityMessages = {
 } as const satisfies Record<CapabilityId, { name: MessageKey; category: MessageKey; targets: Record<CapabilityTarget, MessageKey> }>;
 
 export const capabilityTargetMessages = {
+  "desktop-sqlite": "capabilities.target.desktopSqlite",
+  "web-sqlite": "capabilities.target.webSqlite",
   "desktop-postgres": "capabilities.target.desktopPostgres",
   "desktop-mysql": "capabilities.target.desktopMysql",
   "web-postgres": "capabilities.target.webPostgres",

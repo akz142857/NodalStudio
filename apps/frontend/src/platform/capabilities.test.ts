@@ -3,7 +3,7 @@ import { capabilityDefinitions, capabilityTargets, currentCapabilityTarget, reso
 import type { DatabaseInfo, RuntimeInfo } from "./types";
 
 describe("declared capability matrix", () => {
-  it("defines every feature once, with all four combinations and an explicit scope", () => {
+  it("defines every feature once, with all six combinations and an explicit scope", () => {
     expect(new Set(capabilityDefinitions.map((definition) => definition.id)).size).toBe(capabilityDefinitions.length);
     expect(capabilityDefinitions).toHaveLength(23);
     for (const definition of capabilityDefinitions) {
@@ -41,11 +41,11 @@ describe("declared capability matrix", () => {
   });
   it("bounds DDL import to temporary previews while keeping physical editing and execution unavailable", () => {
     for (const target of capabilityTargets) {
-      expect(resolveCapability("ddl-import", target.runtime, target.database).status).toBe("partial");
+      expect(resolveCapability("ddl-import", target.runtime, target.database).status).toBe(target.database === "sqlite" ? "unavailable" : "partial");
       expect(resolveCapability("physical-edit", target.runtime, target.database).status).toBe("unavailable");
     }
   });
-  it("declares portable read-only Viewer scope for all four targets without implying shared history or revocation", () => {
+  it("declares portable read-only Viewer scope for all six targets without implying shared history or revocation", () => {
     for (const target of capabilityTargets) expect(resolveCapability("offline-viewer", target.runtime, target.database).status).toBe("supported");
     expect(resolveCapability("offline-viewer", "desktop", "postgreSql").scope).toContain("500 tables");
     expect(resolveCapability("offline-viewer", "web", "postgreSql").scope).toContain("only the loaded shared snapshot");

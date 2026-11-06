@@ -10,7 +10,7 @@ import { clearQuerySessions, saveQuerySession, loadQuerySession } from "./query-
 import { QueryDraftPanel, type QueryDraftSeed } from "./QueryDraftPanel";
 const sql = 'SELECT o.id, o.total FROM public.orders AS o LIMIT 100;';
 const seed: QueryDraftSeed = { id: 1, sourceId: reportSnapshot.sourceId, snapshotId: reportSnapshot.id, question: "Show order IDs and totals", root: reportSnapshot.schemas[0].tables[1].key, tables: [reportSnapshot.schemas[0].tables[1].key], domainId: null };
-function setup(databaseType: "postgreSql" | "mySql" = "postgreSql") {
+function setup(databaseType: "postgreSql" | "mySql" | "sqlite" = "postgreSql") {
   const draftSql = databaseType === "mySql" ? "SELECT o.`id`, o.`total` FROM `public`.`orders` AS o LIMIT 100;" : sql;
   const previews = new Map<string, DiscoveryPreview>();
   const mocks = {
@@ -27,6 +27,19 @@ async function generate() {
   await screen.findByLabelText("Generated SQL");
 }
 describe("SQL drafting", () => {
+  it("returns to the SQL editor when the same source is rebound to SQLite during drafting", async () => {
+    const p = setup();
+    const view = render(<QueryPage {...p} runtimeKind="desktop" draftSeed={seed} />);
+    expect(screen.getByRole("tab", { name: "Draft query" })).toHaveAttribute("aria-selected", "true");
+    const sqlite = { ...p.snapshot, id: "sqlite-capture", database: { ...p.snapshot.database, databaseType: "sqlite" as const } };
+    view.rerender(<QueryPage {...p} runtimeKind="desktop" snapshot={sqlite} draftSeed={seed} />);
+    expect(screen.queryByRole("tab", { name: "Draft query" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "SQL editor" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "SQL editor" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Run/ })).toBeEnabled();
+    expect(p.mocks.runDiscovery).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => { clearQuerySessions(); });
   it("follows asynchronous preview growth but preserves reading position after scrolling up", async () => {
     const p = setup();

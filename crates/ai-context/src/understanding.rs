@@ -87,6 +87,9 @@ pub fn build_context(
     let selected = tables
         .get(target)
         .ok_or("Select a table in the current snapshot.")?;
+    if focus_column.is_some() && !columns_available(selected) {
+        return Err("Column metadata is unavailable for this SQLite table.".into());
+    }
     if focus_column.is_some_and(|name| !selected.columns.iter().any(|c| c.name == name)) {
         return Err("The selected column no longer exists.".into());
     }
@@ -161,6 +164,9 @@ pub fn build_context(
             "Business grain, state meanings, units and workflow remain unverified unless independently supported.".into(),
         ],
     };
+    if snapshot.database.database_type == schema_model::DatabaseType::Sqlite {
+        context.coverage.push("SQLite declared types describe affinity, not every stored value. Foreign-key enforcement is connection-specific. Unavailable virtual-table modules and unparsed DDL properties are not verified.".into());
+    }
     if scope == SendScope::Domain {
         context.coverage.push("Only the target and its direct neighbours inside the explicitly selected domain are included.".into());
     }
@@ -302,14 +308,18 @@ fn endpoints_exist(
         && tables
             .get(&ObjectKey::table(from_schema, from))
             .is_some_and(|t| {
-                cols.iter()
-                    .all(|name| t.columns.iter().any(|c| &c.name == name))
+                columns_available(t)
+                    && cols
+                        .iter()
+                        .all(|name| t.columns.iter().any(|c| &c.name == name))
             })
         && tables
             .get(&ObjectKey::table(to_schema, to))
             .is_some_and(|t| {
-                refs.iter()
-                    .all(|name| t.columns.iter().any(|c| &c.name == name))
+                columns_available(t)
+                    && refs
+                        .iter()
+                        .all(|name| t.columns.iter().any(|c| &c.name == name))
             })
 }
 
@@ -317,11 +327,35 @@ fn json(value: &impl Serialize) -> Result<String, String> {
     serde_json::to_string(value).map_err(|_| "Unable to serialize table evidence.".into())
 }
 
+pub(crate) fn columns_available(table: &TableDefinition) -> bool {
+    !table
+        .sqlite
+        .as_ref()
+        .is_some_and(|metadata| metadata.columns_unavailable)
+}
+
 fn add_table_evidence(
     evidence: &mut Vec<Evidence>,
     table: &TableDefinition,
     comments: bool,
 ) -> Result<(), String> {
+    if !columns_available(table) {
+        add_evidence(
+            evidence,
+            &table.key,
+            ObjectKind::Table,
+            &table.key.name,
+            "table",
+            json(&serde_json::json!({
+                "kind": table.table_kind,
+                "columnCount": null,
+                "hasPrimaryKey": null,
+                "metadataCoverage": "SQLite module unavailable: columns, keys and indexes are unknown, not absent."
+            }))?,
+            vec![],
+        );
+        return Ok(());
+    }
     add_evidence(
         evidence,
         &table.key,

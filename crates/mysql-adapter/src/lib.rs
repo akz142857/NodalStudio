@@ -186,6 +186,7 @@ async fn load_tables(
     let rows = sqlx::query("SELECT TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment FROM information_schema.tables WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME").fetch_all(pool).await?;
     for row in rows {
         schema.tables.push(TableDefinition {
+            sqlite: None,
             key: ObjectKey::table(&schema.name, row.try_get::<String, _>("table_name")?),
             table_kind: TableKind::Ordinary,
             columns: vec![],

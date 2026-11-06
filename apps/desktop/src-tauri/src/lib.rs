@@ -1,3 +1,4 @@
+mod sqlite_source;
 use std::{
     collections::{BTreeSet, HashMap},
     fs,
@@ -192,6 +193,8 @@ struct VerifyAndRefreshResult {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SaveDataSourceInput {
+    #[serde(default)]
+    sqlite: Option<schema_model::SqliteFile>,
     id: Option<Uuid>,
     display_name: String,
     host: String,
@@ -819,7 +822,13 @@ async fn save_data_source(
     input: SaveDataSourceInput,
     state: State<'_, AppState>,
 ) -> Result<DataSourceProfile, String> {
-    validate_connection_profile_input(&input)?;
+    save_data_source_using(input, &state).await
+}
+
+async fn save_data_source_using(
+    input: SaveDataSourceInput,
+    state: &AppState,
+) -> Result<DataSourceProfile, String> {
     let now = Utc::now();
     let id = input.id.unwrap_or_else(Uuid::new_v4);
     let existing = state
@@ -827,6 +836,49 @@ async fn save_data_source(
         .get_data_source(id)
         .await
         .map_err(safe_store_error)?;
+    if input.database_type == DatabaseType::Sqlite {
+        let _operation = acquire_cloud_operation(state, id).await?;
+        let existing = state
+            .store
+            .get_data_source(id)
+            .await
+            .map_err(safe_store_error)?;
+        if let Some(previous) = existing.as_ref().filter(|previous| {
+            previous.database_type == DatabaseType::Sqlite && previous.sqlite == input.sqlite
+        }) {
+            if input.display_name.trim().is_empty() {
+                return Err("A data source name is required.".into());
+            }
+            // A name edit also works for an imported model with no local file binding.
+            let mut profile = previous.clone();
+            profile.display_name = input.display_name.trim().to_owned();
+            profile.updated_at = now;
+            state
+                .store
+                .save_data_source(&profile)
+                .await
+                .map_err(safe_store_error)?;
+            return Ok(profile);
+        }
+        validate_connection_profile_input(&input)?;
+        let profile = data_source_profile_from_input(
+            &input,
+            id,
+            existing.as_ref().map_or(now, |p| p.created_at),
+            now,
+        );
+        capture_snapshot_using(
+            CaptureSnapshotInput {
+                source_id: id,
+                trigger: None,
+            },
+            state,
+            Some((&profile, &input)),
+        )
+        .await?;
+        return Ok(profile);
+    }
+    validate_connection_profile_input(&input)?;
     if existing.is_none() && input.password.is_empty() {
         return Err("A database password is required for a new data source.".into());
     }
@@ -885,6 +937,11 @@ fn prepare_connection_test(
     input: SaveDataSourceInput,
 ) -> Result<SaveDataSourceInput, ConnectionFailure> {
     let mut input = input;
+    if input.database_type == DatabaseType::Sqlite {
+        validate_connection_profile_input(&input)
+            .map_err(|m| ConnectionFailure::new("configuration", m))?;
+        return Ok(input);
+    }
     let mut tls = input.security.clone();
     tls.ssh = None;
     connection_security::validate(&tls, input.ssl_mode)
@@ -927,6 +984,21 @@ async fn test_database_connection_with_progress(
     input: &SaveDataSourceInput,
     progress: Option<&tauri::ipc::Channel<connection_tests::ConnectionTestProgress>>,
 ) -> Result<ConnectionTestResult, ConnectionFailure> {
+    if input.database_type == DatabaseType::Sqlite {
+        connection_tests::progress(progress, "file", false);
+        let now = Utc::now();
+        let profile =
+            data_source_profile_from_input(input, input.id.unwrap_or_else(Uuid::new_v4), now, now);
+        let database = sqlite_source::test(profile)
+            .await
+            .map_err(|m| ConnectionFailure::new("file", m))?;
+        connection_tests::progress(progress, "metadata", false);
+        return Ok(ConnectionTestResult {
+            database,
+            ssl_active: None,
+            server_read_only: Some(true),
+        });
+    }
     connection_tests::progress(progress, "ssh", false);
     let tunnel = connection_security::Tunnel::open(
         &input.security,
@@ -940,6 +1012,7 @@ async fn test_database_connection_with_progress(
     let ssh_connected = input.security.ssh.is_some();
     connection_tests::progress(progress, "handshake", ssh_connected);
     match input.database_type {
+        DatabaseType::Sqlite => unreachable!("SQLite handled before network setup"),
         DatabaseType::PostgreSql => {
             let options =
                 connection_options_from_input(input).with_socket(tunnel.postgres_socket());
@@ -1009,6 +1082,9 @@ fn connection_input_with_resolved_password(
     mut input: SaveDataSourceInput,
 ) -> Result<SaveDataSourceInput, String> {
     validate_connection_profile_input(&input)?;
+    if input.database_type == DatabaseType::Sqlite {
+        return Ok(input);
+    }
     if input.password.is_empty() {
         let source_id = input.id.ok_or_else(|| {
             "A database password is required to verify a new connection.".to_owned()
@@ -1032,15 +1108,40 @@ fn data_source_profile_from_input(
     updated_at: chrono::DateTime<Utc>,
 ) -> DataSourceProfile {
     DataSourceProfile {
+        sqlite: input.sqlite.clone(),
         id,
         display_name: input.display_name.trim().to_owned(),
-        host: input.host.trim().to_owned(),
-        port: input.port,
-        database: input.database.trim().to_owned(),
-        username: input.username.trim().to_owned(),
+        host: if input.database_type == DatabaseType::Sqlite {
+            String::new()
+        } else {
+            input.host.trim().to_owned()
+        },
+        port: if input.database_type == DatabaseType::Sqlite {
+            0
+        } else {
+            input.port
+        },
+        database: if input.database_type == DatabaseType::Sqlite {
+            input
+                .sqlite
+                .as_ref()
+                .and_then(|f| std::path::Path::new(&f.path).file_name())
+                .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+        } else {
+            input.database.trim().to_owned()
+        },
+        username: if input.database_type == DatabaseType::Sqlite {
+            String::new()
+        } else {
+            input.username.trim().to_owned()
+        },
         database_type: input.database_type,
         ssl_mode: input.ssl_mode,
-        security: input.security.clone(),
+        security: if input.database_type == DatabaseType::Sqlite {
+            schema_model::ConnectionSecurity::default()
+        } else {
+            input.security.clone()
+        },
         created_at,
         updated_at,
     }
@@ -1152,6 +1253,37 @@ async fn capture_snapshot_using(
             change_set: None,
         });
     }
+    let sqlite_profile = if let Some((profile, _)) = verified {
+        Some(profile.clone())
+    } else {
+        state
+            .store
+            .get_data_source(input.source_id)
+            .await
+            .map_err(safe_store_error)?
+    };
+    if let Some(profile) = sqlite_profile.filter(|p| p.database_type == DatabaseType::Sqlite) {
+        let snapshot = sqlite_source::capture(
+            profile.clone(),
+            Duration::from_secs(u64::from(
+                source_settings.refresh.introspection_timeout_seconds,
+            )),
+        )
+        .await?;
+        return if verified.is_some() {
+            state
+                .store
+                .save_verified_source(&profile, &snapshot)
+                .await
+                .map_err(safe_store_error)
+        } else {
+            state
+                .store
+                .save_captured_snapshot(&snapshot)
+                .await
+                .map_err(safe_store_error)
+        };
+    }
     let (profile, password) = if let Some((profile, resolved)) = verified {
         (profile.clone(), resolved.password.clone())
     } else {
@@ -1188,6 +1320,7 @@ async fn capture_snapshot_using(
     )
     .await?;
     let snapshot = match profile.database_type {
+        DatabaseType::Sqlite => unreachable!("SQLite captured before network setup"),
         DatabaseType::PostgreSql => {
             let options = connection_options_from_profile(&profile, &password)
                 .with_socket(tunnel.postgres_socket())
@@ -1266,7 +1399,11 @@ async fn execute_readonly_query(
         .await
         .map_err(|_| query_command_error(query_id, QueryError::Connection))?
         .ok_or_else(|| query_command_error(query_id, QueryError::Connection))?;
+    if profile.database_type == DatabaseType::Sqlite {
+        return sqlite_source::query(&state, profile, input, request).await;
+    }
     match profile.database_type {
+        DatabaseType::Sqlite => request.validate_sqlite(),
         DatabaseType::PostgreSql => request.validate(),
         DatabaseType::MySql => request.validate_mysql(),
     }
@@ -1314,6 +1451,7 @@ async fn execute_readonly_query(
     ));
     // Register before connecting, so Stop works during pool acquisition as well.
     let result = match profile.database_type {
+        DatabaseType::Sqlite => unreachable!("SQLite queried before network setup"),
         DatabaseType::PostgreSql => {
             let options = connection_options_from_profile(&profile, &password)
                 .with_socket(tunnel.postgres_socket())
@@ -2553,6 +2691,14 @@ async fn delete_source_data(
     if !input.selection.connection && !input.selection.history && !input.selection.semantics {
         return Err("Select at least one local data category to delete.".into());
     }
+    let profile = state
+        .store
+        .get_data_source(input.source_id)
+        .await
+        .map_err(safe_store_error)?;
+    let sqlite_source = profile
+        .as_ref()
+        .is_some_and(|p| p.database_type == DatabaseType::Sqlite);
     let affected = state
         .store
         .delete_source_data(
@@ -2563,7 +2709,12 @@ async fn delete_source_data(
         )
         .await
         .map_err(safe_store_error)?;
-    if input.remove_database_credential {
+    if input.selection.connection
+        && let Some(profile) = &profile
+    {
+        sqlite_source::revoke_unused_grants(&state, profile).await?;
+    }
+    if input.remove_database_credential && !sqlite_source {
         delete_secret(KEYRING_SERVICE, input.source_id)?;
         delete_secret(connection_credentials::SSH_SERVICE, input.source_id)?;
     }
@@ -2641,6 +2792,7 @@ async fn duplicate_data_source(
         .ok_or_else(|| "The data source no longer exists.".to_owned())?;
     let now = Utc::now();
     let copy = DataSourceProfile {
+        sqlite: original.sqlite,
         id: Uuid::new_v4(),
         display_name: format!("{} copy", original.display_name),
         host: original.host,
@@ -2784,18 +2936,18 @@ async fn get_security_status(
         unresolved_git_conflict_reports +=
             u64::try_from(list_conflict_reports(&path)?.len()).unwrap_or(u64::MAX);
     }
+    let (database_credential_configured, weak_ssl_sources) =
+        network_security_status(&profiles, source_id, |id| {
+            credential_exists(KEYRING_SERVICE, id)
+        });
     Ok(SecurityStatus {
         offline_mode: app.privacy.offline_mode,
-        database_credential_configured: source_id
-            .is_some_and(|id| credential_exists(KEYRING_SERVICE, id)),
+        database_credential_configured,
         ai_credential_configured: source_id
             .is_some_and(|id| credential_exists(AI_KEYRING_SERVICE, id)),
         cloud_credential_configured: source_id
             .is_some_and(|id| credential_exists(CLOUD_KEYRING_SERVICE, id)),
-        weak_ssl_sources: profiles
-            .iter()
-            .filter(|profile| profile.ssl_mode == SslMode::Disable)
-            .count() as u64,
+        weak_ssl_sources,
         failed_or_conflicted_sync_items: pending
             .iter()
             .filter(|item| item.state == "conflict" || item.attempts > 0)
@@ -2803,6 +2955,26 @@ async fn get_security_status(
         stale_model_sources,
         unresolved_git_conflict_reports,
     })
+}
+
+// SQLite has no transport or database password. Do not probe its Keychain entry
+// or report its deliberately disabled TLS setting as a network security issue.
+fn network_security_status(
+    profiles: &[DataSourceProfile],
+    source_id: Option<Uuid>,
+    has_credential: impl FnOnce(Uuid) -> bool,
+) -> (bool, u64) {
+    let network_source = profiles.iter().find(|profile| {
+        Some(profile.id) == source_id && profile.database_type != DatabaseType::Sqlite
+    });
+    let configured = network_source.is_some_and(|profile| has_credential(profile.id));
+    let weak = profiles
+        .iter()
+        .filter(|profile| {
+            profile.database_type != DatabaseType::Sqlite && profile.ssl_mode == SslMode::Disable
+        })
+        .count() as u64;
+    (configured, weak)
 }
 
 #[tauri::command]
@@ -3266,7 +3438,11 @@ async fn export_portable_backup(
             .store
             .get_data_source(source_id)
             .await
-            .map_err(safe_store_error)?,
+            .map_err(safe_store_error)?
+            .map(|mut profile| {
+                profile.sqlite = None;
+                profile
+            }),
         source_settings,
         snapshots,
         change_sets: change_sets.into_values().collect(),
@@ -3833,7 +4009,11 @@ fn validate_relationship_against_snapshot(
             message_codes,
         };
     }
-    let compatible = source_types == target_types;
+    let compatible =
+        snapshot.database.database_type == DatabaseType::Sqlite || source_types == target_types;
+    if snapshot.database.database_type == DatabaseType::Sqlite {
+        messages.push("SQLite logical relationships are model-only; type affinity does not establish physical foreign-key compatibility or enforcement.".into());
+    }
     if !compatible {
         messages.push("Source and target column types differ.".into());
         message_codes.push("typeMismatch");
@@ -4509,6 +4689,25 @@ async fn sync_project(
         .await
         .map_err(safe_store_error)?;
     let client = cloud_http_client()?;
+    if cloud_requires_sqlite_support(&bundle) {
+        let capability_url = format!("{}/v1/capabilities", input.api_url.trim_end_matches('/'));
+        let capabilities = client
+            .get(capability_url)
+            .send()
+            .await
+            .map_err(|_| "Unable to verify Cloud SQLite support; nothing was uploaded.")?
+            .error_for_status()
+            .map_err(|_| "Update the Cloud server to support SQLite before publishing.")?
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|_| "Cloud capability response is invalid.")?;
+        if !capabilities["databaseTypes"]
+            .as_array()
+            .is_some_and(|types| types.iter().any(|kind| kind == "sqlite"))
+        {
+            return Err("This Cloud server does not support SQLite; nothing was uploaded.".into());
+        }
+    }
     let response = client
         .put(endpoint.clone())
         .bearer_auth(&access_token)
@@ -4597,6 +4796,19 @@ async fn sync_project(
         .await
         .map_err(|_| "Cloud returned an invalid sync receipt.".to_owned())?;
     finish_cloud_sync(&state.store, input.source_id, &sync_event_ids, receipt).await
+}
+
+fn cloud_requires_sqlite_support(bundle: &CloudSyncBundle) -> bool {
+    bundle
+        .snapshot
+        .as_ref()
+        .is_some_and(|snapshot| snapshot.database.database_type == DatabaseType::Sqlite)
+        || bundle.change_set.as_ref().is_some_and(|changes| {
+            changes
+                .operations
+                .iter()
+                .any(|operation| operation.operation_type == schema_diff::OperationType::AlterTable)
+        })
 }
 
 async fn finish_cloud_sync(
@@ -4829,13 +5041,29 @@ async fn update_source_sync_events(
 
 fn validate_connection_input(input: &SaveDataSourceInput) -> Result<(), String> {
     validate_connection_profile_input(input)?;
-    if input.password.is_empty() {
+    if input.database_type != DatabaseType::Sqlite && input.password.is_empty() {
         return Err("A database password is required to verify the connection.".into());
     }
     Ok(())
 }
 
 fn validate_connection_profile_input(input: &SaveDataSourceInput) -> Result<(), String> {
+    if input.database_type == DatabaseType::Sqlite {
+        if input.display_name.trim().is_empty() {
+            return Err("A data source name is required.".into());
+        }
+        let file = input
+            .sqlite
+            .as_ref()
+            .ok_or("Choose a SQLite database file.")?;
+        if !std::path::Path::new(&file.path).is_absolute() {
+            return Err("Choose a local SQLite database file.".into());
+        }
+        return Ok(());
+    }
+    if input.sqlite.is_some() {
+        return Err("Network connections cannot contain a SQLite file target.".into());
+    }
     if input.display_name.trim().is_empty()
         || input.host.trim().is_empty()
         || input.database.trim().is_empty()
@@ -5286,6 +5514,7 @@ mod tests {
     #[test]
     fn rejects_incomplete_connection_input() {
         let input = SaveDataSourceInput {
+            sqlite: None,
             id: None,
             display_name: String::new(),
             host: "localhost".into(),
@@ -5304,6 +5533,7 @@ mod tests {
     #[test]
     fn allows_an_existing_profile_to_keep_its_keychain_password() {
         let input = SaveDataSourceInput {
+            sqlite: None,
             id: Some(Uuid::new_v4()),
             display_name: "Local development".into(),
             host: "127.0.0.1".into(),

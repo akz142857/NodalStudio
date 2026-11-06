@@ -41,7 +41,7 @@ function queryError(bt: Translate, error: unknown): { kind: QueryErrorKind; mess
 
 export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onConsumeOpenRequest, settings, semantics, selectedTable, draftSeed, onOpenAiSettings }: QueryPageProps) {
   const { t: bt } = useI18n();
-  const [drafting, setDrafting] = useState(Boolean(draftSeed && draftSeed.sourceId === snapshot?.sourceId && draftSeed.snapshotId === snapshot?.id));
+  const [draftRequested, setDrafting] = useState(Boolean(snapshot?.database.databaseType !== "sqlite" && draftSeed && draftSeed.sourceId === snapshot?.sourceId && draftSeed.snapshotId === snapshot?.id));
   const draftBinding = JSON.stringify([settings?.source, settings?.app.privacy, semantics?.logicalRelationships, semantics?.domainGroups, semantics?.knowledge]);
   const [generatedRequest, setGeneratedRequest] = useState<{ sourceId: string; snapshotId: string; sql: string; binding: string }>();
   const [appliedDraft, setAppliedDraft] = useState<{ sourceId: string; snapshotId: string; previous: string; sql: string }>();
@@ -58,7 +58,8 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   const sourceId = snapshot?.sourceId ?? "no-source";
   const capability = resolveCapability("read-only-query", runtimeKind, snapshot?.database.databaseType);
   const desktopReady = Boolean(snapshot) && capability.status === "supported";
-  const canDraft = desktopReady && Boolean(settings && semantics);
+  const canDraft = snapshot?.database.databaseType !== "sqlite" && desktopReady && Boolean(settings && semantics);
+  const drafting = canDraft && draftRequested;
   const sessionKey = "query-workspace";
   const [session, setSession] = useState<QuerySession>(() => loadQuerySession(sessionKey));
   const [historyRecord, setHistoryRecord] = useState<{ sourceId: string; entries: QueryHistoryEntry[] }>({ sourceId, entries: [] });
@@ -177,7 +178,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     void run(key === "r" && event.shiftKey ? editorRef.current?.getCurrentStatementSql() ?? "" : editorRef.current?.getExecutableSql() ?? "");
   }}>
     <header className="query-toolbar">
-      <div className="query-source"><ActionIcon name="database" /><div><strong>{snapshot?.database.name ?? bt("business.queryDetail")}</strong><span>{snapshot ? `${snapshot.database.databaseType === "postgreSql" ? "PostgreSQL" : "MySQL"} · ${snapshot.schemas.length === 1 ? bt("businessExtra.oneSchema") : bt("businessExtra.countSchemas", { count: snapshot.schemas.length })}` : bt("business.selectADataSourceToBegin")}</span></div></div>
+      <div className="query-source"><ActionIcon name="database" /><div><strong>{snapshot?.database.name ?? bt("business.queryDetail")}</strong><span>{snapshot ? `${snapshot.database.databaseType === "sqlite" ? "SQLite" : snapshot.database.databaseType === "postgreSql" ? "PostgreSQL" : "MySQL"} · ${snapshot.schemas.length === 1 ? bt("businessExtra.oneSchema") : bt("businessExtra.countSchemas", { count: snapshot.schemas.length })}` : bt("business.selectADataSourceToBegin")}</span></div></div>
       <div className="query-toolbar-actions">
 
         <span className="query-readonly" title={bt("business.queriesRunInAReadOnlyTransaction")}><ActionIcon name="shield" />{bt("business.readOnly")}</span>

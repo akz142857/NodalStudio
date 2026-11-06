@@ -132,6 +132,9 @@ pub fn table_digest(snapshot: &DatabaseSnapshot, key: &ObjectKey) -> Option<Stri
 /// Excludes display labels, timestamps, TLS preferences and credentials.
 #[must_use]
 pub fn source_identity(profile: Option<&schema_model::DataSourceProfile>) -> String {
+    if let Some(p) = profile.filter(|p| p.database_type == schema_model::DatabaseType::Sqlite) {
+        return digest(&(p.database_type, p.sqlite.as_ref().map(|s| &s.path)));
+    }
     digest(&profile.map(|p| (p.database_type, &p.host, p.port, &p.database, &p.username)))
 }
 /// Hash the relationship's structural meaning, excluding sync bookkeeping and free text.

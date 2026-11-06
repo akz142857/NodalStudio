@@ -24,12 +24,12 @@ export interface RuntimeInfo {
 
 export interface DatabaseInfo {
   name: string;
-  databaseType: "postgreSql" | "mySql";
+  databaseType: "postgreSql" | "mySql" | "sqlite";
   version: string;
 }
 
 export interface ConnectionTestProgress {
-  phase: "configuration" | "ssh" | "handshake" | "metadata" | "tls";
+  phase: "file" | "configuration" | "ssh" | "handshake" | "metadata" | "tls";
   sshConnected: boolean;
 }
 export interface ConnectionTestOptions {
@@ -117,6 +117,7 @@ export interface EnumDefinition {
 }
 
 export interface TableDefinition {
+  sqlite?: { definition: string; strict: boolean; withoutRowid: boolean; virtualTable: boolean; columnsUnavailable?: boolean; columns?: Record<string, { hidden: number; affinity: string; generationExpression: string | null; generationMode: string | null }>; diagnostics: string[] };
   key: {
     kind: "table";
     schema: string;
@@ -156,7 +157,10 @@ export interface ConnectionSecurity {
   ssh?: { host: string; port: number; username: string; authentication: "agent" | "privateKey" | "password"; privateKey?: string | null; knownHosts?: string | null } | null;
 }
 
+export interface SqliteFile { path: string; accessDirectory?: string | null }
+
 export interface SaveDataSourceInput {
+  sqlite?: SqliteFile | null;
   id?: string;
   displayName: string;
   host: string;
@@ -165,19 +169,20 @@ export interface SaveDataSourceInput {
   username: string;
   password: string;
   sshPassword?: string;
-  databaseType: "postgreSql" | "mySql";
+  databaseType: "postgreSql" | "mySql" | "sqlite";
   sslMode: SslMode;
   security?: ConnectionSecurity;
 }
 
 export interface DataSourceProfile {
+  sqlite?: SqliteFile | null;
   id: string;
   displayName: string;
   host: string;
   port: number;
   database: string;
   username: string;
-  databaseType: "postgreSql" | "mySql";
+  databaseType: "postgreSql" | "mySql" | "sqlite";
   sslMode: SslMode;
   security?: ConnectionSecurity;
   createdAt: string;
@@ -581,7 +586,7 @@ export interface NodalStudioPlatform {
   getRuntimeInfo(): Promise<RuntimeInfo>;
   getDiagnosticInfo(): Promise<import("./settings-types").DiagnosticInfo>;
   revealAppDirectory(kind: "data" | "logs"): Promise<void>;
-  pickWorkspacePath(kind: "openSettings" | "saveSettings" | "openBackup" | "saveBackup" | "repository"): Promise<string | null>;
+  pickWorkspacePath(kind: "openSettings" | "saveSettings" | "openBackup" | "saveBackup" | "repository" | "openSqlite" | "sqliteDirectory"): Promise<string | null>;
   pickConnectionFile(): Promise<string | null>;
   listDataSources(): Promise<DataSourceProfile[]>;
   renameDataSource(sourceId: string, displayName: string): Promise<DataSourceProfile>;

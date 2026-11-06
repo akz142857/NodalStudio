@@ -64,6 +64,7 @@ function connectionDetailsDiffer(
 ): boolean {
   return (
     profile.databaseType !== form.databaseType ||
+    JSON.stringify(profile.sqlite ?? null) !== JSON.stringify(form.sqlite ?? null) ||
     profile.host.trim() !== form.host.trim() ||
     profile.port !== form.port ||
     profile.database.trim() !== form.database.trim() ||
@@ -133,13 +134,24 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  async function pickSqlite(folder: boolean) {
+    if (!enabled || pending) return;
+    setPending(true);
+    try {
+      const path = await platform.pickWorkspacePath(folder ? "sqliteDirectory" : "openSqlite");
+      if (!path) return;
+      updateField("sqlite", folder ? { path: form.sqlite?.path ?? "", accessDirectory: path } : { path });
+    } catch (reason) { setError(connectionFailure(reason).message); }
+    finally { setPending(false); }
+  }
+
   async function capture(sourceId: string) {
     const result = await platform.capturePostgresSnapshot(sourceId);
     onSnapshot(result);
   }
 
   async function testConnection() {
-    if (testController.current) return;
+    if (!enabled || pending || testController.current) return;
     const controller = new AbortController();
     testController.current = controller;
     setPending(true);
@@ -177,6 +189,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!enabled || pending) return;
     if ((!editingProfile || requiresLiveVerification) && testState.status !== "success") return;
     if (editingProfile && requiresLiveVerification) {
       await verifyAndRefreshEditingSource();
@@ -218,7 +231,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
   }
 
   async function verifyAndRefreshEditingSource() {
-    if (!editingProfile) return;
+    if (!enabled || pending || !editingProfile) return;
     setPending(true);
     setError(undefined);
     try {
@@ -302,7 +315,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
     setPending(true);
     setError(undefined);
     try {
-      await platform.clearCredentials(editingProfile.id, { database: true, ai: true, cloud: true });
+      await platform.clearCredentials(editingProfile.id, { database: editingProfile.databaseType !== "sqlite", ai: true, cloud: true });
       await platform.deleteSourceData(editingProfile.id, {
         deleteConnection: true,
         deleteHistory: true,
@@ -390,7 +403,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
               <div>
                 <span className="dialog-eyebrow">
                   {editingProfile
-                    ? bt("business.dataSource", { value0: editingProfile.databaseType === "mySql" ? "MySQL" : "PostgreSQL" })
+                    ? bt("business.dataSource", { value0: editingProfile.databaseType === "sqlite" ? "SQLite" : editingProfile.databaseType === "mySql" ? "MySQL" : "PostgreSQL" })
                     : bt("business.newDataSource")}
                 </span>
                 <h2 id="connection-dialog-title">
@@ -400,18 +413,18 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
               <button type="button" className="dialog-close-button" aria-label={bt("business.closeConnectionDialog")} onClick={closeDialog} disabled={pending}>×</button>
             </header>
             <p className="dialog-description">
-              {editingProfile
+              {form.databaseType === "sqlite" ? bt("sqlite.readonly") : editingProfile
                 ? bt("business.testConnectionChangesBeforeSavingExistingPasswordsAreReused")
                 : bt("business.addADatabaseVerifyAccessAndCreateItsFirst")}
             </p>
             <form className="connection-panel" onSubmit={(event) => void handleSubmit(event)}>
               <div className="connection-tabs" role="tablist" aria-label={bt("business.connectionSettings")}>
-                {([['general', bt("business.connection")], ['tls', 'TLS'], ['ssh', 'SSH']] as const).map(([tab, label]) => <button key={tab} type="button" role="tab" id={`connection-tab-${tab}`} aria-controls={`connection-panel-${tab}`} aria-selected={connectionTab === tab} tabIndex={connectionTab === tab ? 0 : -1} onClick={() => setConnectionTab(tab)} onKeyDown={(event) => {
-                  const tabs = ['general', 'tls', 'ssh'] as const;
+                {([['general', bt("business.connection")], ['tls', 'TLS'], ['ssh', 'SSH']] as const).filter(([tab]) => form.databaseType !== 'sqlite' || tab === 'general').map(([tab, label]) => <button key={tab} type="button" role="tab" id={`connection-tab-${tab}`} aria-controls={`connection-panel-${tab}`} aria-selected={connectionTab === tab} tabIndex={connectionTab === tab ? 0 : -1} onClick={() => setConnectionTab(tab)} onKeyDown={(event) => {
+                  const tabs: ("general" | "tls" | "ssh")[] = form.databaseType === "sqlite" ? ["general"] : ["general", "tls", "ssh"];
                   const direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
                   if (!direction && event.key !== 'Home' && event.key !== 'End') return;
                   event.preventDefault();
-                  const index = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (tabs.indexOf(tab) + direction + 3) % 3;
+                  const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (tabs.indexOf(tab) + direction + tabs.length) % tabs.length;
                   setConnectionTab(tabs[index]);
                   document.getElementById(`connection-tab-${tabs[index]}`)?.focus();
                 }}>{label}{tab === 'ssh' && form.security?.ssh ? <span className="connection-tab-dot" aria-label={bt("business.enabled")} /> : null}</button>)}
@@ -421,7 +434,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
               <section className="connection-form-section" aria-labelledby="connection-identity-title">
                 <div className="connection-section-heading">
                   <strong id="connection-identity-title">{bt("business.connection")}</strong>
-                  <span>{bt("business.nameAndNetworkLocation")}</span>
+                  <span>{bt(form.databaseType === "sqlite" ? "connection.sqlite.location" : "business.nameAndNetworkLocation")}</span>
                 </div>
                 <div className="connection-form-grid connection-identity-grid">
                   <label>
@@ -435,15 +448,31 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                         const databaseType = event.target.value as SaveDataSourceInput["databaseType"];
                         setTestState({ status: "idle" });
                         setError(undefined);
-                        setForm((current) => ({ ...current, databaseType, port: databaseType === "mySql" ? 3306 : 5432 }));
+                        setConnectionTab("general");
+                        setForm((current) => ({
+                          ...current,
+                          databaseType,
+                          sqlite: undefined,
+                          port: databaseType === "mySql" ? 3306 : 5432,
+                          ...(databaseType === "sqlite" || current.databaseType === "sqlite"
+                            ? { password: "", sshPassword: "", security: undefined, sslMode: databaseType === "sqlite" ? "disable" as const : defaultSslMode }
+                            : {}),
+                        }));
                       }}
                       disabled={!enabled || pending}
                     >
                       <option value="postgreSql">PostgreSQL</option>
                       <option value="mySql">MySQL</option>
+                      <option value="sqlite">SQLite</option>
                     </select>
                   </label>
-                  <label className="connection-host-field">
+                  {form.databaseType === "sqlite" ? <div className="sqlite-file-fields">
+                    <label>{bt("sqlite.file")}<input readOnly value={form.sqlite?.path ?? ""} placeholder={bt("sqlite.choose")} /></label>
+                    <button type="button" disabled={pending} onClick={() => void pickSqlite(false)}>{bt("sqlite.choose")}</button>
+                    <p>{bt("sqlite.folderHelp")}</p>
+                    <button type="button" disabled={pending || !form.sqlite?.path} onClick={() => void pickSqlite(true)}>{bt("sqlite.folder")}</button>
+                    {form.sqlite?.accessDirectory ? <small>{form.sqlite.accessDirectory}</small> : null}
+                  </div> : <><label className="connection-host-field">
                     {bt("business.host")}<input value={form.host} onChange={(event) => updateField("host", event.target.value)} disabled={!enabled || pending} />
                   </label>
                   <label>
@@ -451,11 +480,11 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                   </label>
                   <label className="connection-database-field">
                     {bt("business.database")}<input value={form.database} onChange={(event) => updateField("database", event.target.value)} disabled={!enabled || pending} />
-                  </label>
+                  </label></>}
                 </div>
               </section>
 
-              <section className="connection-form-section" aria-labelledby="connection-access-title">
+              <section hidden={form.databaseType === "sqlite"} className="connection-form-section" aria-labelledby="connection-access-title">
                 <div className="connection-section-heading">
                   <strong id="connection-access-title">{bt("business.accessSecurity")}</strong>
                   <span className="connection-keychain-status">{bt("business.systemCredentialStorage")}</span>
@@ -475,7 +504,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                 </div>
               </section>
               </div>
-              <div className="connection-tab-panel" role="tabpanel" id="connection-panel-tls" aria-labelledby="connection-tab-tls" hidden={connectionTab !== "tls"}>
+              <div className="connection-tab-panel" role="tabpanel" id="connection-panel-tls" aria-labelledby="connection-tab-tls" hidden={form.databaseType === "sqlite" || connectionTab !== "tls"}>
                 <div className="connection-security-setting">
                   <div>
                     <strong>{bt("business.transportSecurity")}</strong>
@@ -494,7 +523,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                 </div>
                 <ConnectionSecurityFields section="tls" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={(security) => updateField("security", security)} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={Boolean(editingProfile?.security?.ssh?.authentication === "password" && form.security?.ssh?.host === editingProfile.security.ssh.host && form.security?.ssh?.port === editingProfile.security.ssh.port && form.security?.ssh?.username === editingProfile.security.ssh.username)} />
               </div>
-              <div className="connection-tab-panel" role="tabpanel" id="connection-panel-ssh" aria-labelledby="connection-tab-ssh" hidden={connectionTab !== "ssh"}>
+              <div className="connection-tab-panel" role="tabpanel" id="connection-panel-ssh" aria-labelledby="connection-tab-ssh" hidden={form.databaseType === "sqlite" || connectionTab !== "ssh"}>
                 <ConnectionSecurityFields section="ssh" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={(security) => updateField("security", security)} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={Boolean(editingProfile?.security?.ssh?.authentication === "password" && form.security?.ssh?.host === editingProfile.security.ssh.host && form.security?.ssh?.port === editingProfile.security.ssh.port && form.security?.ssh?.username === editingProfile.security.ssh.username)} />
               </div>
               </div>
@@ -505,7 +534,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                       <span>
                         {requiresLiveVerification
                           ? bt("business.connectionDetailsChangedVerifyBeforeSavingAndReplaceThe")
-                          : bt("business.connectNowUsingTheSavedDatabasePasswordAndReplace")}
+                          : bt(form.databaseType === "sqlite" ? "sqlite.refreshSavedFile" : "business.connectNowUsingTheSavedDatabasePasswordAndReplace")}
                       </span>
                     </div>
                     <button

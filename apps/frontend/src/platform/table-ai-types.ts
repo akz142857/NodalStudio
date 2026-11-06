@@ -24,7 +24,7 @@ export interface TableAiContext {
   target: ObjectKey;
   focusColumn: string | null;
   scope: "currentTable" | "oneHop" | "domain";
-  dialect: "postgreSql" | "mySql";
+  dialect: "postgreSql" | "mySql" | "sqlite";
   tables: ObjectKey[];
   evidence: TableAiEvidence[];
   coverage: string[];

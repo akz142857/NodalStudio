@@ -73,7 +73,7 @@ export function runSchemaPreflight(snapshot: DatabaseSnapshot, options: { nameSp
 
   for (const table of tables) {
     const ownColumns = columns.get(tableId(table.key))!;
-    if (table.tableKind === "foreign") pk.skipped++;
+    if (table.tableKind === "foreign" || table.sqlite?.virtualTable) pk.skipped++;
     else {
       pk.checked++;
       if (!table.primaryKey) add(pk.ruleId, table, undefined, "missing", "design", "No primary key is captured for this table.", [`Table kind: ${table.tableKind}`, "Snapshot primaryKey: absent"], "Review whether this table needs a stable row identifier. A primary key is optional; views and some analytical tables use other designs.");
@@ -99,6 +99,11 @@ export function runSchemaPreflight(snapshot: DatabaseSnapshot, options: { nameSp
       const validLists = fk.columns.length > 0 && fk.columns.length === fk.referencedColumns.length
         && new Set(fk.columns).size === fk.columns.length && new Set(fk.referencedColumns).size === fk.referencedColumns.length;
       const evidence = [`Foreign key: ${fk.name}`, `Source columns: ${JSON.stringify(fk.columns)}`, `Target: ${JSON.stringify([fk.referencedSchema, fk.referencedTable])}`, `Target columns: ${JSON.stringify(fk.referencedColumns)}`];
+      if (table.sqlite?.columnsUnavailable || target?.sqlite?.columnsUnavailable) {
+        references.incomplete++;
+        add(references.ruleId, table, fk.name, "columns-unavailable", "insufficient", "Column metadata is unavailable for a foreign-key endpoint.", evidence, "Refresh metadata with the required SQLite module before checking these columns.", target ? [target.key] : []);
+        continue;
+      }
       if (target) references.checked++;
       if (!validLists || absentSource.length || absentTarget.length) add(references.ruleId, table, fk.name, "fk-columns", "suspected", "The captured foreign key column lists are inconsistent.", [...evidence, `Missing source columns: ${JSON.stringify(absentSource)}`, `Missing target columns: ${JSON.stringify(absentTarget)}`], "Review the captured column lists and refresh metadata. A snapshot inconsistency does not establish that a physical constraint is invalid.", target ? [target.key] : []);
       if (!target) {
@@ -121,7 +126,7 @@ export function runSchemaPreflight(snapshot: DatabaseSnapshot, options: { nameSp
   for (const item of coverage) item.status = item.incomplete ? "partial" : item.checked ? "checked" : "skipped";
   const rank = { warning: 0, suggestion: 1, info: 2 };
   findings.sort((a, b) => rank[a.severity] - rank[b.severity] || a.id.localeCompare(b.id));
-  return { dialect: snapshot.database.databaseType === "postgreSql" ? "PostgreSQL" : snapshot.database.databaseType === "mySql" ? "MySQL" : "Unsupported dialect",
+  return { dialect: snapshot.database.databaseType === "postgreSql" ? "PostgreSQL" : snapshot.database.databaseType === "mySql" ? "MySQL" : snapshot.database.databaseType === "sqlite" ? "SQLite" : "Unsupported dialect",
     tableCount: tables.length, columnCount: tables.reduce((count, table) => count + table.columns.length, 0), foreignKeyCount: tables.reduce((count, table) => count + table.foreignKeys.length, 0),
     excludedViewCount: snapshot.schemas.reduce((count, schema) => count + schema.views.length, 0), findings, coverage };
 }

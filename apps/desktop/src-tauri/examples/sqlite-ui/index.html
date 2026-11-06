@@ -1,0 +1,5 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>SQLite sandbox acceptance</title>
+<style>body{font:16px system-ui;margin:32px;background:#f7f8fb;color:#182535}button{font:inherit;padding:10px 18px;margin:8px 8px 8px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:20px;background:white;border:1px solid #ddd;border-radius:8px}</style>
+<h1>SQLite sandbox acceptance</h1><p>Select only the disposable fixture folder. Run again after restarting to verify the saved bookmark.</p>
+<button id="choose">Choose fixture folder</button><button id="run">Run saved fixture</button><pre id="result">Ready</pre>
+<script>async function call(command){let output=document.getElementById('result');output.textContent='Running…';try{output.textContent=JSON.stringify(await window.__TAURI__.core.invoke(command),null,2)}catch(error){output.textContent='FAILED: '+String(error)}}document.getElementById('choose').addEventListener('click',()=>call('choose_sqlite_fixture'));document.getElementById('run').addEventListener('click',()=>call('run_sqlite_fixture'));</script></html>

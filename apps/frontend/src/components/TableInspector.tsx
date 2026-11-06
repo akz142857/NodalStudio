@@ -58,6 +58,11 @@ export function TableStructure({ table, snapshot, onOpenQuery, columnFocus, focu
   return (
     <div ref={structure} className="table-structure">
       <p className="inspector-comment" tabIndex={-1} data-evidence-target={focusedEvidence?.kind !== "logicalRelationship" && focused("table", table.key.name) ? "true" : undefined}>{table.comment ?? `${table.key.schema}.${table.key.name}`}</p>
+      {table.sqlite ? <details className="inspector-section"><summary>{bt("sqlite.definition")}</summary>
+        <p>{[table.sqlite.strict ? "STRICT" : null, table.sqlite.withoutRowid ? "WITHOUT ROWID" : null, table.sqlite.virtualTable ? "VIRTUAL TABLE" : null].filter(Boolean).join(" · ")}</p>
+        {table.sqlite.diagnostics.map((message) => <p key={message} role="note">{message}</p>)}
+        <pre tabIndex={0}>{table.sqlite.definition}</pre>
+      </details> : null}
       <dl className="snapshot-summary">
         <div>
           <dt>{bt("business.kind")}</dt>
@@ -88,6 +93,7 @@ export function TableStructure({ table, snapshot, onOpenQuery, columnFocus, focu
                 {column.formattedType}
                 {column.nullable ? "" : bt("business.notNullDetail")}
               </small>
+              {table.sqlite?.columns?.[column.name] ? <small>{table.sqlite.columns[column.name].affinity}{table.sqlite.columns[column.name].generationExpression ? ` · ${table.sqlite.columns[column.name].generationMode ?? "VIRTUAL"}: ${table.sqlite.columns[column.name].generationExpression}` : ""}</small> : null}
               {column.comment ? <p>{column.comment}</p> : null}
               {onShowColumnSource ? <>
                 {column.identity ? <small>{bt("businessMeta.identity")}: {column.identity}</small> : null}

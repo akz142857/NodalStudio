@@ -93,6 +93,7 @@ export function createSchemaReport(snapshot: DatabaseSnapshot, semantics: Semant
           ? [`<a href="#logical-${index}">${escapeHtml(relationship.name)}</a> (${escapeHtml(statuses[relationship.status])})`] : []);
       return `<article id="table-${schemaIndex}-${tableIndex}"><h3>${escapeHtml(`${table.key.schema}.${table.key.name}`)}</h3>
       <span class="badge">${escapeHtml(table.tableKind)} table</span><p>${text(table.comment)}</p>
+      ${table.sqlite ? `<h4>SQLite definition</h4><p>${table.sqlite.strict ? "STRICT " : ""}${table.sqlite.withoutRowid ? "WITHOUT ROWID " : ""}${table.sqlite.virtualTable ? "VIRTUAL TABLE" : ""}</p><pre>${escapeHtml(table.sqlite.definition)}</pre>${table.sqlite.diagnostics.map(message => `<p>${escapeHtml(message)}</p>`).join("")}` : ""}
       ${businessGroups.length ? `<p>Business domains: ${businessGroups.map(escapeHtml).join(", ")}</p>` : ""}
       ${semanticDetails(annotations.get(annotationKey(table.key)))}
       <h4>Columns (${table.columns.length})</h4>${grid("Columns", ["#", "Name", "Type", "Nullable", "Default", "Identity / generated", "Comment / semantics"], table.columns.map((column) => cells([
@@ -120,7 +121,7 @@ export function createSchemaReport(snapshot: DatabaseSnapshot, semantics: Semant
   const foreignKeyCount = [...tables.values()].reduce((total, { table }) => total + table.foreignKeys.length, 0);
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escapeHtml(snapshot.database.name)} — Schema report</title><style>${STYLE}</style></head><body><main>
     <header><p class="eyebrow">Nodal Studio · Data dictionary</p><h1>${escapeHtml(snapshot.database.name)}</h1>
-    <p class="meta">${snapshot.database.databaseType === "postgreSql" ? "PostgreSQL" : "MySQL"} ${escapeHtml(snapshot.database.version)} · Captured ${escapeHtml(snapshot.capturedAt)}</p>
+    <p class="meta">${snapshot.database.databaseType === "sqlite" ? "SQLite" : snapshot.database.databaseType === "postgreSql" ? "PostgreSQL" : "MySQL"} ${escapeHtml(snapshot.database.version)} · Captured ${escapeHtml(snapshot.capturedAt)}</p>
     <p>Snapshot fingerprint: ${code(snapshot.fingerprint)}</p>
     <div class="summary">${[quantity(snapshot.schemas.length, "schema"), quantity(tables.size, "table"), quantity(columnCount, "column"), quantity(count("views"), "view"), quantity(count("enums"), "enum")].map((label) => `<span class="badge">${label}</span>`).join("")}</div>
     <div class="scope"><p>Single snapshot: all objects available in the loaded snapshot, independent of Diagram filters. Shared reports contain only metadata available to the viewer.</p><p>Business semantics are the current saved annotations and domains, not historical versions at the snapshot capture time. No orphaned annotations or unconfirmed relationship candidates are included.</p></div>

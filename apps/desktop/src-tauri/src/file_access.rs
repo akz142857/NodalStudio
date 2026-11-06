@@ -54,6 +54,8 @@ pub enum SelectionKind {
     OpenBackup,
     SaveBackup,
     Repository,
+    OpenSqlite,
+    SqliteDirectory,
 }
 
 #[tauri::command]
@@ -64,6 +66,12 @@ pub async fn pick_workspace_path(
     tokio::task::spawn_blocking(move || {
         let picker = app.dialog().file();
         let result = match kind {
+            SelectionKind::OpenSqlite => picker
+                .set_title("Choose SQLite database / 选择 SQLite 数据库")
+                .blocking_pick_file(),
+            SelectionKind::SqliteDirectory => picker
+                .set_title("Allow SQLite WAL folder access / 授权 SQLite 所在文件夹")
+                .blocking_pick_folder(),
             SelectionKind::Repository => picker
                 .set_title("Choose repository folder")
                 .blocking_pick_folder(),
@@ -87,7 +95,12 @@ pub async fn pick_workspace_path(
                 let path = file
                     .into_path()
                     .map_err(|_| "Choose a local file or folder")?;
-                if matches!(kind, SelectionKind::Repository) {
+                if matches!(
+                    kind,
+                    SelectionKind::Repository
+                        | SelectionKind::OpenSqlite
+                        | SelectionKind::SqliteDirectory
+                ) {
                     remember(&path)?;
                 } else {
                     SELECTED
@@ -123,6 +136,17 @@ pub async fn export_directory(app: &tauri::AppHandle) -> Result<std::path::PathB
     })
     .await
     .map_err(|_| "Unable to open the export folder picker.".to_owned())?
+}
+
+pub fn forget(path: &Path) -> Result<(), String> {
+    SELECTED
+        .lock()
+        .map_err(|_| "File permissions unavailable")?
+        .remove(&path.to_string_lossy().into_owned());
+    #[cfg(feature = "mac-app-store")]
+    storekit_bridge::forget_file(path.to_str().ok_or("Invalid local path")?)
+        .map_err(str::to_owned)?;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@ Nodal Studio is a local-first workspace for understanding and documenting
 database schemas. It helps developers explore structure, relationships, semantic
 context, and schema history without reading application data.
 
-The desktop application connects to PostgreSQL or MySQL with read-only metadata
+The desktop application connects to PostgreSQL or MySQL, and opens local SQLite files, with read-only metadata
 queries, renders an ER model, records structural changes without reading table
 data, and lets teams add model-only logical relationships that never create
 database constraints. Its unified Settings control center manages persistence,
@@ -243,10 +243,24 @@ terminate HTTPS in front of the stack.
 
 ## Privacy boundary
 
-The MVP introspector reads PostgreSQL system metadata only. It does not query
-application tables, store database passwords in SQLite, execute DDL, or upload
-business rows. Cloud publishing is disabled by default, recursively rejects
+Schema capture reads PostgreSQL/MySQL catalogs or SQLite schema metadata only.
+It does not scan application rows. The Query workspace executes user-initiated
+read-only queries separately. The app does not store database passwords in its
+local SQLite store, execute DDL, or upload business rows. Cloud publishing is disabled by default, recursively rejects
 credential/row-data fields, and stores its access token in the OS Keychain.
+
+## SQLite files
+
+Choose **SQLite** when adding a Desktop data source, select an existing local
+file, then test and save. Connections are read-only. If macOS sandbox access to
+WAL sidecars is needed, explicitly select the containing folder. Imported models
+retain their schema but require a new local file selection before reconnecting.
+
+SQLite supports schema browsing, ER diagrams, history comparison and explicit
+SELECT/CTE queries. Web Viewer displays SQLite snapshots; opening local databases,
+AI SQL drafts, SQLite DDL text import, writes and encrypted files are unavailable.
+See [implementation and acceptance](docs/SQLITE_ACCEPTANCE.md) for coverage,
+local sandbox evidence and release-validation limits.
 
 ## Extension verification
 

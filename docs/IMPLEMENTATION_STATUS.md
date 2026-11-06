@@ -4,6 +4,7 @@ This file tracks implementation evidence against [DEVELOPMENT_PLAN.md](../DEVELO
 
 ## Latest verification evidence
 
+- SQLite viewing support (2026-11-06): Desktop local-file connections, catalog capture, bounded read-only queries, metadata/graph/diff integration, portable-path isolation and six-column capability declarations are implemented. Local App Sandbox WAL/restart/cancellation checks passed; signed distribution, other OS and live-service acceptance are separate. See [implementation and evidence](SQLITE_ACCEPTANCE.md). The subsequent [multi-role review](SQLITE_REVIEW_FIXES.md) covers cancellation cleanup, partial catalogs, connection-state regressions and merged regression evidence.
 - SQL editor editing menu (2026-10-25): copy/cut/paste/select-all and dialect-aware selection/document formatting added without changing query execution. Async clipboard edits guard against stale document/selection, failed cut preserves SQL, and edits support isolated undo. Native clipboard and formatting/undo flow verified in the isolated app. See [acceptance evidence](SQL_EDITOR_CONTEXT_MENU_ACCEPTANCE.md). Uncommitted and unpublished.
 
 - P0 code review and SQL editor context menu (2026-10-25): repaired capture-identity baseline validation, round-action selector/replay validation, retained stale drafts and batch-history member search. Added right-click selected/current-statement execution through the existing readonly query path, with native selection/menu checks. See [review fixes and verification](CHANGE_REVIEW_P0_CODE_REVIEW.md). No commit or publication.

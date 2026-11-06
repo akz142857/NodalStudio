@@ -58,6 +58,7 @@ pub enum OperationType {
     DropProgram,
     AlterProgram,
     AlterDependencies,
+    AlterTable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -314,6 +315,24 @@ fn diff_table(
     after: &TableDefinition,
     operations: &mut Vec<SchemaOperation>,
 ) {
+    if sqlite_structure_changed(before, after) {
+        operations.push(SchemaOperation {
+            operation_type: OperationType::AlterTable,
+            object: after.key.clone(),
+            risk: RiskLevel::Medium,
+            before: sqlite_table_summary(before),
+            after: sqlite_table_summary(after),
+        });
+    }
+    if before
+        .sqlite
+        .as_ref()
+        .is_some_and(|s| s.columns_unavailable)
+        || after.sqlite.as_ref().is_some_and(|s| s.columns_unavailable)
+    {
+        // Missing module metadata is not evidence of dropped columns or constraints.
+        return;
+    }
     diff_columns(before, after, operations);
     diff_primary_key(before, after, operations);
     diff_named_objects(
@@ -346,6 +365,38 @@ fn diff_table(
         RiskLevel::High,
         operations,
     );
+}
+
+fn sqlite_structure_changed(before: &TableDefinition, after: &TableDefinition) -> bool {
+    match (&before.sqlite, &after.sqlite) {
+        (Some(before), Some(after)) => {
+            before.definition != after.definition
+                || before.strict != after.strict
+                || before.without_rowid != after.without_rowid
+                || before.virtual_table != after.virtual_table
+                || (!before.columns_unavailable
+                    && !after.columns_unavailable
+                    && (before.columns != after.columns || before.index_terms != after.index_terms))
+        }
+        (None, None) => false,
+        _ => true,
+    }
+}
+
+fn sqlite_table_summary(table: &TableDefinition) -> Option<String> {
+    table.sqlite.as_ref().map(|metadata| {
+        // Coverage diagnostics are not structural evidence. Include the compared
+        // properties so an option change never produces identical Before/After text.
+        serde_json::json!({
+            "definition": metadata.definition,
+            "strict": metadata.strict,
+            "withoutRowid": metadata.without_rowid,
+            "virtualTable": metadata.virtual_table,
+            "columns": (!metadata.columns_unavailable).then_some(&metadata.columns),
+            "indexTerms": (!metadata.columns_unavailable).then_some(&metadata.index_terms),
+        })
+        .to_string()
+    })
 }
 
 fn table_map(snapshot: &DatabaseSnapshot) -> BTreeMap<&ObjectKey, &TableDefinition> {
@@ -691,6 +742,7 @@ const fn operation_order(operation: OperationType) -> u8 {
         OperationType::DropProgram => 21,
         OperationType::AlterProgram => 22,
         OperationType::AlterDependencies => 23,
+        OperationType::AlterTable => 24,
     }
 }
 
@@ -735,6 +787,87 @@ mod tests {
             generated: false,
             comment: None,
         }
+    }
+
+    #[test]
+    fn sqlite_options_are_compared_but_unavailable_columns_are_not_deletions() {
+        let mut table = TableDefinition::empty("main", "items");
+        table.columns.push(column("value", true));
+        table.sqlite = Some(schema_model::SqliteTableMetadata {
+            definition: "CREATE TABLE items(value TEXT)".into(),
+            strict: false,
+            without_rowid: false,
+            virtual_table: false,
+            diagnostics: Vec::new(),
+            columns: BTreeMap::new(),
+            index_terms: BTreeMap::new(),
+            columns_unavailable: false,
+        });
+        let mut changed = table.clone();
+        changed.sqlite.as_mut().unwrap().strict = true;
+        changed
+            .sqlite
+            .as_mut()
+            .unwrap()
+            .definition
+            .push_str(" STRICT");
+        let diff = diff_snapshots(
+            &snapshot_with_table(table.clone()),
+            &snapshot_with_table(changed),
+        );
+        assert_eq!(diff.operations.len(), 1);
+        assert_eq!(diff.operations[0].operation_type, OperationType::AlterTable);
+        assert_ne!(diff.operations[0].before, diff.operations[0].after);
+        let mut incomplete = table.clone();
+        incomplete.sqlite.as_mut().unwrap().columns_unavailable = true;
+        incomplete
+            .sqlite
+            .as_mut()
+            .unwrap()
+            .diagnostics
+            .push("Module unavailable".into());
+        incomplete.columns.clear();
+        for (before, after) in [(&table, &incomplete), (&incomplete, &table)] {
+            let diff = diff_snapshots(
+                &snapshot_with_table(before.clone()),
+                &snapshot_with_table(after.clone()),
+            );
+            assert!(diff.operations.is_empty());
+        }
+        incomplete
+            .sqlite
+            .as_mut()
+            .unwrap()
+            .definition
+            .push_str(" /* changed */");
+        let diff = diff_snapshots(
+            &snapshot_with_table(table.clone()),
+            &snapshot_with_table(incomplete),
+        );
+        assert_eq!(diff.operations.len(), 1);
+        assert_eq!(diff.operations[0].operation_type, OperationType::AlterTable);
+
+        let mut diagnostic_only = table.clone();
+        diagnostic_only
+            .sqlite
+            .as_mut()
+            .unwrap()
+            .diagnostics
+            .push("More detailed coverage".into());
+        let diff = diff_snapshots(
+            &snapshot_with_table(table.clone()),
+            &snapshot_with_table(diagnostic_only),
+        );
+        assert!(diff.operations.is_empty());
+
+        let mut option_only = table.clone();
+        option_only.sqlite.as_mut().unwrap().strict = true;
+        let diff = diff_snapshots(
+            &snapshot_with_table(table),
+            &snapshot_with_table(option_only),
+        );
+        assert_eq!(diff.operations.len(), 1);
+        assert_ne!(diff.operations[0].before, diff.operations[0].after);
     }
 
     #[test]

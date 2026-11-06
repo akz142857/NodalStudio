@@ -731,6 +731,7 @@ async fn prepared_response_is_stale_when_endpoint_changes_even_with_identical_sn
     let prepared = prepare(&app, input.clone()).await.unwrap();
     let source = prepared.preview.source_id;
     let profile = schema_model::DataSourceProfile {
+        sqlite: None,
         id: source,
         display_name: "Same model, different endpoint".into(),
         host: "replacement.example".into(),

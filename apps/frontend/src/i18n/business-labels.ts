@@ -142,6 +142,7 @@ const messages = {
   "Add column": "businessMeta.addColumn",
   "Drop column": "businessMeta.dropColumn",
   "Rename column": "businessMeta.renameColumn",
+  "Alter table": "businessMeta.alterTable",
   "Alter column": "businessMeta.alterColumn",
   "Add index": "businessMeta.addIndex",
   "Drop index": "businessMeta.dropIndex",
