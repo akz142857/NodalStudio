@@ -18,7 +18,13 @@ fn request(sql: &str) -> ExecuteQueryRequest {
 #[tokio::test]
 async fn readonly_wal_mixed_values_and_limits() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("数据库 ?#.db");
+    // Keep URI-sensitive characters without using Windows' reserved `?`.
+    let filename = if cfg!(windows) {
+        "数据库 %#.db"
+    } else {
+        "数据库 ?%#.db"
+    };
+    let path = dir.path().join(filename);
     let mut writer = SqliteConnection::connect_with(
         &SqliteConnectOptions::new()
             .filename(&path)
