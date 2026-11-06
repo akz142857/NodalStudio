@@ -33,3 +33,11 @@ it("preserves finished SSH after cancellation without marking TLS successful", (
   expect(screen.getByRole("group", { name: "TLS status" })).toHaveTextContent("Not verified");
   expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
 });
+
+it("presents a SQLite file failure without an unrelated not-tested network checklist", () => {
+  render(<ConnectionTestStatus form={{ ...form, databaseType: "sqlite" }} state={{ status: "error", failure: { stage: "file", message: "Choose a readable SQLite file.", sshConnected: false } }} />);
+  expect(screen.getByRole("alert")).toHaveTextContent("Unable to open SQLite file");
+  expect(screen.getByRole("alert")).toHaveTextContent("Choose a readable SQLite file.");
+  expect(screen.queryByText("Not tested")).not.toBeInTheDocument();
+  expect(screen.queryByRole("group")).not.toBeInTheDocument();
+});

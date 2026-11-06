@@ -19,6 +19,8 @@ interface ConnectionPanelProps {
   enabled: boolean;
   /** The source whose snapshot is on the canvas; its objects nest beneath it. */
   activeSourceId?: string;
+  /** Reload profiles after imports or settings mutations outside this panel. */
+  sourcesRevision?: number;
   /** The schema tree rendered below the active source's picker. */
   children?: ReactNode;
   platform: NodalStudioPlatform;
@@ -74,7 +76,7 @@ function connectionDetailsDiffer(
   );
 }
 
-export function ConnectionPanel({ enabled, activeSourceId, children, platform, onSnapshot, onSourceOpenStart, onSourceDeleted, onRefresh, refreshDisabled, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
+export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, children, platform, onSnapshot, onSourceOpenStart, onSourceDeleted, onRefresh, refreshDisabled, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
   const { t: bt } = useI18n();
   const sslModeDescriptions: Record<SslMode, string> = {
   disable: bt("business.tLSIsDisabledForThisConnection"),
@@ -84,6 +86,7 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
   verifyFull: bt("business.requireTLSAndVerifyTheDatabaseServerIdentity"),
 };
   const navigation = useRef<HTMLElement>(null);
+  const connectionDialog = useRef<HTMLElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number }>();
   const [managerOpen, setManagerOpen] = useState(false);
   const [form, setForm] = useState<SaveDataSourceInput>(() => newConnectionForm(defaultDatabaseType, defaultSslMode, bt("business.localDevelopment")));
@@ -104,13 +107,15 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
 
   useEffect(() => {
     if (!enabled) return;
+    let current = true;
     void platform
       .listDataSources()
-      .then(setProfiles)
+      .then((next) => { if (current) setProfiles(next); })
       .catch((reason: unknown) => {
-        setError(connectionFailure(reason).message);
+        if (current) setError(connectionFailure(reason).message);
       });
-  }, [enabled, platform]);
+    return () => { current = false; };
+  }, [enabled, platform, sourcesRevision]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -398,27 +403,28 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
         <div className="connection-dialog-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget) closeDialog();
         }}>
-          <section className="connection-dialog" role="dialog" aria-modal="true" aria-labelledby="connection-dialog-title">
+          <section ref={connectionDialog} className="connection-dialog" role="dialog" aria-modal="true" aria-labelledby="connection-dialog-title" aria-describedby="connection-dialog-description" onKeyDown={(event) => {
+            if (event.key !== "Tab") return;
+            const controls = Array.from(connectionDialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex="0"]') ?? []).filter((element) => !element.closest('[hidden]') && element.getClientRects().length > 0);
+            const first = controls[0], last = controls.at(-1);
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+          }}>
             <header>
               <div>
-                <span className="dialog-eyebrow">
-                  {editingProfile
-                    ? bt("business.dataSource", { value0: editingProfile.databaseType === "sqlite" ? "SQLite" : editingProfile.databaseType === "mySql" ? "MySQL" : "PostgreSQL" })
-                    : bt("business.newDataSource")}
-                </span>
                 <h2 id="connection-dialog-title">
                   {editingProfile ? bt("business.edit", { value0: editingProfile.displayName }) : bt("business.createDatabaseConnection")}
                 </h2>
               </div>
               <button type="button" className="dialog-close-button" aria-label={bt("business.closeConnectionDialog")} onClick={closeDialog} disabled={pending}>×</button>
             </header>
-            <p className="dialog-description">
+            <p id="connection-dialog-description" className="dialog-description">
               {form.databaseType === "sqlite" ? bt("sqlite.readonly") : editingProfile
                 ? bt("business.testConnectionChangesBeforeSavingExistingPasswordsAreReused")
                 : bt("business.addADatabaseVerifyAccessAndCreateItsFirst")}
             </p>
             <form className="connection-panel" onSubmit={(event) => void handleSubmit(event)}>
-              <div className="connection-tabs" role="tablist" aria-label={bt("business.connectionSettings")}>
+              {form.databaseType !== "sqlite" ? <div className="connection-tabs" role="tablist" aria-label={bt("business.connectionSettings")}>
                 {([['general', bt("business.connection")], ['tls', 'TLS'], ['ssh', 'SSH']] as const).filter(([tab]) => form.databaseType !== 'sqlite' || tab === 'general').map(([tab, label]) => <button key={tab} type="button" role="tab" id={`connection-tab-${tab}`} aria-controls={`connection-panel-${tab}`} aria-selected={connectionTab === tab} tabIndex={connectionTab === tab ? 0 : -1} onClick={() => setConnectionTab(tab)} onKeyDown={(event) => {
                   const tabs: ("general" | "tls" | "ssh")[] = form.databaseType === "sqlite" ? ["general"] : ["general", "tls", "ssh"];
                   const direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
@@ -428,14 +434,10 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                   setConnectionTab(tabs[index]);
                   document.getElementById(`connection-tab-${tabs[index]}`)?.focus();
                 }}>{label}{tab === 'ssh' && form.security?.ssh ? <span className="connection-tab-dot" aria-label={bt("business.enabled")} /> : null}</button>)}
-              </div>
+              </div> : null}
               <div className="connection-dialog-body">
-              <div className="connection-tab-panel" role="tabpanel" id="connection-panel-general" aria-labelledby="connection-tab-general" hidden={connectionTab !== "general"}>
-              <section className="connection-form-section" aria-labelledby="connection-identity-title">
-                <div className="connection-section-heading">
-                  <strong id="connection-identity-title">{bt("business.connection")}</strong>
-                  <span>{bt(form.databaseType === "sqlite" ? "connection.sqlite.location" : "business.nameAndNetworkLocation")}</span>
-                </div>
+              <div className="connection-tab-panel" role={form.databaseType === "sqlite" ? undefined : "tabpanel"} id="connection-panel-general" aria-labelledby={form.databaseType === "sqlite" ? undefined : "connection-tab-general"} hidden={connectionTab !== "general"}>
+              <section className="connection-form-section">
                 <div className="connection-form-grid connection-identity-grid">
                   <label>
                     {bt("business.name")}<input autoFocus={Boolean(editingProfile)} value={form.displayName} onChange={(event) => updateField("displayName", event.target.value)} disabled={!enabled || pending} />
@@ -467,11 +469,20 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
                     </select>
                   </label>
                   {form.databaseType === "sqlite" ? <div className="sqlite-file-fields">
-                    <label>{bt("sqlite.file")}<input readOnly value={form.sqlite?.path ?? ""} placeholder={bt("sqlite.choose")} /></label>
-                    <button type="button" disabled={pending} onClick={() => void pickSqlite(false)}>{bt("sqlite.choose")}</button>
-                    <p>{bt("sqlite.folderHelp")}</p>
-                    <button type="button" disabled={pending || !form.sqlite?.path} onClick={() => void pickSqlite(true)}>{bt("sqlite.folder")}</button>
-                    {form.sqlite?.accessDirectory ? <small>{form.sqlite.accessDirectory}</small> : null}
+                    <label htmlFor="sqlite-file-path">{bt("sqlite.file")}</label>
+                    <div className="sqlite-file-picker">
+                      <input id="sqlite-file-path" readOnly value={form.sqlite?.path ?? ""} title={form.sqlite?.path} placeholder={bt("sqlite.noFile")} aria-invalid={testState.status === "error" || undefined} aria-describedby={testState.status !== "idle" ? "connection-test-detail" : "sqlite-file-help"} />
+                      <button className="secondary-button" type="button" aria-label={bt("sqlite.choose")} disabled={pending} onClick={() => void pickSqlite(false)}>{bt("sqlite.chooseShort")}</button>
+                    </div>
+                    <p id="sqlite-file-help" className="connection-field-help">{bt("sqlite.fileHelp")}</p>
+                    <details className="sqlite-file-access">
+                      <summary>{bt("sqlite.fileAccess")}</summary>
+                      <div>
+                        <p>{bt("sqlite.folderHelp")}</p>
+                        <button className="secondary-button" type="button" disabled={pending || !form.sqlite?.path} onClick={() => void pickSqlite(true)}>{bt("sqlite.folder")}</button>
+                        {form.sqlite?.accessDirectory ? <small title={form.sqlite.accessDirectory}>{form.sqlite.accessDirectory}</small> : null}
+                      </div>
+                    </details>
                   </div> : <><label className="connection-host-field">
                     {bt("business.host")}<input value={form.host} onChange={(event) => updateField("host", event.target.value)} disabled={!enabled || pending} />
                   </label>
@@ -526,7 +537,6 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
               <div className="connection-tab-panel" role="tabpanel" id="connection-panel-ssh" aria-labelledby="connection-tab-ssh" hidden={form.databaseType === "sqlite" || connectionTab !== "ssh"}>
                 <ConnectionSecurityFields section="ssh" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={(security) => updateField("security", security)} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={Boolean(editingProfile?.security?.ssh?.authentication === "password" && form.security?.ssh?.host === editingProfile.security.ssh.host && form.security?.ssh?.port === editingProfile.security.ssh.port && form.security?.ssh?.username === editingProfile.security.ssh.username)} />
               </div>
-              </div>
                 {editingProfile && !requiresLiveVerification && testState.status === "idle" ? (
                   <div className="connection-live-action">
                     <div>
@@ -550,17 +560,21 @@ export function ConnectionPanel({ enabled, activeSourceId, children, platform, o
               <ConnectionTestStatus state={testState} form={form} onCancel={cancelConnectionTest} />
               {requiresLiveVerification && testState.status === "idle" ? <p className="connection-test-hint">{bt("business.connectionDetailsChangedTestTheConnectionBeforeSaving")}</p> : null}
               {error ? <p className="error-message" role="alert">{error}</p> : null}
+              </div>
               <footer>
+                <div className="connection-footer-leading">
+                  <button type="button" className="secondary-button" onClick={() => void testConnection()} disabled={!enabled || pending}>{testState.status === "testing" ? bt("business.testing") : bt("business.testConnection")}</button>
                 {editingProfile ? (
                   <div className="connection-danger-action">
                     <button type="button" className="delete-source-button" onClick={() => void deleteEditingSource()} disabled={pending}>{bt("business.deleteDataSource")}</button>
                     <span>{bt("business.removesLocalDataOnly")}</span>
                   </div>
-                ) : <span />}
+                ) : null}
+                </div>
                 <div className="connection-footer-actions">
                   <button type="button" className="secondary-button" onClick={closeDialog} disabled={pending}>{bt("business.cancel")}</button>
-                  <button type="button" className="secondary-button" onClick={() => void testConnection()} disabled={!enabled || pending}>{testState.status === "testing" ? bt("business.testing") : bt("business.testConnection")}</button>
-                  <button type="submit" disabled={!enabled || pending || ((!editingProfile || requiresLiveVerification) && testState.status !== "success")}>
+
+                  <button type="submit" className="connection-primary-button" disabled={!enabled || pending || ((!editingProfile || requiresLiveVerification) && testState.status !== "success")}>
 
                     {pending && testState.status !== "testing" ? (editingProfile ? bt("business.saving") : bt("business.readingSchema")) : editingProfile ? bt("business.saveChanges") : bt("business.saveAndMap")}
                   </button>

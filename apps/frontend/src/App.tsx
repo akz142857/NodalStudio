@@ -173,6 +173,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("general");
   const [dataSources, setDataSources] = useState<DataSourceProfile[]>([]);
+  const [sourcesRevision, setSourcesRevision] = useState(0);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [notices, setNotices] = useState<AppNotice[]>([]);
   const [noticesOpen, setNoticesOpen] = useState(false);
@@ -1025,6 +1026,7 @@ export function App() {
             key={`${settings.app.connectionDefaults.databaseEngine}:${settings.app.connectionDefaults.sslMode}`}
             enabled={runtime.data?.kind === "desktop"}
             platform={platform}
+            sourcesRevision={sourcesRevision}
             onSnapshot={handleCapture}
             onSourceOpenStart={beginSourceOpen}
             onRefresh={snapshot && !historyPreview ? () => void refreshActive() : undefined}
@@ -1284,7 +1286,10 @@ export function App() {
               snapshot ? discoveryLatest.refetch() : Promise.resolve(),
             ]);
           }}
-          onDataSourcesChanged={async () => setDataSources(await platform.listDataSources())}
+          onDataSourcesChanged={async () => {
+            setSourcesRevision((current) => current + 1);
+            setDataSources(await platform.listDataSources());
+          }}
           onFactoryReset={() => {
             clearQuerySessions();
             setMode("explore");

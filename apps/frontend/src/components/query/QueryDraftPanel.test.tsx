@@ -27,7 +27,7 @@ async function generate() {
   await screen.findByLabelText("Generated SQL");
 }
 describe("SQL drafting", () => {
-  it("returns to the SQL editor when the same source is rebound to SQLite during drafting", async () => {
+  it("returns to the SQL editor when the same source is rebound to SQLite during drafting", () => {
     const p = setup();
     const view = render(<QueryPage {...p} runtimeKind="desktop" draftSeed={seed} />);
     expect(screen.getByRole("tab", { name: "Draft query" })).toHaveAttribute("aria-selected", "true");

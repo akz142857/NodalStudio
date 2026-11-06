@@ -54,15 +54,15 @@ export function ConnectionTestStatus({ state, form, onCancel }: { state: Connect
   const tone: Tone = running ? "running" : failure ? "error" : cancelled ? "neutral" : warning ? "warning" : "success";
   const title = running ? state.cancelling ? bt("business.cancellingConnectionTest") : bt("business.testingConnection") : failure ? stageLabels[failure.stage] : cancelled ? bt("business.connectionTestCancelled") : warning ? bt("business.connectedReviewTLS") : bt("business.connectionSuccessful");
   const detail = form.databaseType === "sqlite" ? failure?.message ?? (running ? bt("sqlite.checking") : cancelled ? bt("business.connectionTestCancelled") : bt("sqlite.ready")) : running ? state.cancelling ? bt("business.stoppingThisTestAndClosingItsConnection") : phaseLabels[phase] : (failure ? translateConnectionFailure(failure, bt) : undefined) ?? (cancelled ? bt("business.nothingWasSavedYouCanChangeTheSettingsOr") : warning ? result?.sslActive === false ? bt("business.connectedWithoutTLSChooseRequireOrVerifyFullTo") : bt("business.theServerDidNotReportTLSStatusEncryptionCould") : bt("business.theConnectionIsReadySettingsAndPasswordsAreSaved"));
-  return <section className="connection-test-status" role={failure ? "alert" : "status"} aria-label={bt("business.connectionTestResult")} data-state={state.status}>
+  return <section className="connection-test-status" role={failure ? "alert" : "status"} aria-label={bt("business.connectionTestResult")} data-state={state.status} data-compact={form.databaseType === "sqlite" || undefined}>
     <div className="connection-test-heading">
       <div data-tone={tone}><StatusIcon tone={tone} /><strong>{title}</strong></div>
       {running && onCancel ? <button type="button" className="connection-test-cancel" onClick={onCancel} disabled={state.cancelling} aria-label={bt("business.cancelConnectionTest")}>{state.cancelling ? bt("business.cancelling") : bt("business.cancelTest")}</button> : null}
     </div>
-    <div className="connection-test-checks">{(form.databaseType === "sqlite" ? [database] : [ssh, tls, database]).map((check) => <div className="connection-test-check" role="group" aria-label={bt("business.status", { value0: check.name })} data-tone={check.tone} key={check.name}>
+    {form.databaseType !== "sqlite" ? <div className="connection-test-checks">{[ssh, tls, database].map((check) => <div className="connection-test-check" role="group" aria-label={bt("business.status", { value0: check.name })} data-tone={check.tone} key={check.name}>
       <StatusIcon tone={check.tone} /><div><span>{check.name}</span><strong>{check.label}</strong></div>
-    </div>)}</div>
+    </div>)}</div> : null}
     {running ? <div className="connection-test-progress" role="progressbar" aria-label={bt("business.connectionTestProgress")} aria-valuetext={detail}><span /></div> : null}
-    <p className="connection-test-detail">{detail}</p>
+    <p id="connection-test-detail" className="connection-test-detail">{detail}</p>
   </section>;
 }

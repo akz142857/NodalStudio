@@ -25,7 +25,7 @@ it.each(['manual', 'domain-race', 'create', 'update', 'delete', 'delete-missing'
   const semantics=vi.spyOn(platform,'getSemantics').mockImplementation(()=>Promise.resolve(structuredClone(bundle)));
   const invalidate = () => { mutated=true; bundle={...bundle,knowledge:bundle.knowledge!.map(s=>({...s,status:'pendingReview',reason:'Supporting evidence changed'}))}; };
   vi.spyOn(window,'confirm').mockReturnValue(true);
-  vi.spyOn(platform,'listDataSources').mockResolvedValue([{id:reportSnapshot.sourceId,displayName:'Review source',host:'fixture',port:5432,database:'fixture',username:'reader',databaseType:'postgreSql',sslMode:'prefer',createdAt:'old',updatedAt:'old'}]);
+  vi.spyOn(platform,'listDataSources').mockImplementation(()=>Promise.resolve([{id:reportSnapshot.sourceId,displayName:'Review source',host:'fixture',port:5432,database:'fixture',username:'reader',databaseType:kind==='portable'?'sqlite':'postgreSql',sqlite:kind==='portable'&&!mutated?{path:'/synthetic/original.sqlite'}:undefined,sslMode:'prefer',createdAt:'old',updatedAt:'old'}]));
   vi.spyOn(platform,'previewSourceDataDeletion').mockResolvedValue({snapshotRecords:1,semanticRecords:1} as never);
   vi.spyOn(platform,'deleteSourceData').mockImplementation(()=>{invalidate();return Promise.resolve(1);});
   vi.spyOn(platform,'previewGitImport').mockResolvedValue({relationshipConflicts:[]} as never);
@@ -69,6 +69,11 @@ it.each(['manual', 'domain-race', 'create', 'update', 'delete', 'delete-missing'
     fireEvent.click(screen.getByRole('button',{name:action}));
     await waitFor(()=>expect(semantics).toHaveBeenCalledTimes(2));
     if(kind==='git-settings-error') await screen.findByText('Settings unavailable');
+    if(kind==='portable') {
+      fireEvent.click(screen.getByRole('button',{name:'Data Sources'}));
+      expect(await screen.findByText('SQLite · Select the database file again')).toBeVisible();
+      expect(screen.queryByText('SQLite · /synthetic/original.sqlite')).toBeNull();
+    }
     fireEvent.click(screen.getByRole('button',{name:'← Back'}));
   }
   await waitFor(()=>expect(semantics).toHaveBeenCalledTimes(2));

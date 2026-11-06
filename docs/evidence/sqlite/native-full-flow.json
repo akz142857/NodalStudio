@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-06",
+  "baseCommit": "59f255651aa551fe8ec7ceda7466870ec01d3efa",
+  "containsUncommittedImportRefreshFix": true,
+  "appIdentifier": "com.claycosmos.nodalstudio.sqliteacceptance.review",
+  "buildCommand": "pnpm tauri build --debug --bundles app --config /tmp/nodal-sqlite-ui-review.config.json",
+  "binarySha256": "f9a3707e1dbed6d27c23c7bb6a26f255f9fb4e70b1f53b307154303c40ce48e8",
+  "nativeUiObserved": true,
+  "finalQueryRows": 4,
+  "finalQueryHistoryEntries": 7,
+  "observedObjects": {
+    "tables": 3,
+    "views": 1,
+    "triggers": 1
+  },
+  "walBytesBeforeWriterShutdown": 16512,
+  "mainFileUnchangedBeforeWriterShutdown": true,
+  "jsonExportVerified": true,
+  "portableBackupSnapshots": 2,
+  "portableBackupFileBinding": null,
+  "importRefreshVerifiedWithoutRestart": [
+    "settings",
+    "source picker",
+    "connection editor"
+  ],
+  "frontendTests": {
+    "files": 144,
+    "passed": 970
+  },
+  "focusedTests": 93,
+  "lint": "passed",
+  "typecheck": "passed",
+  "htmlExports": "native UI reported success; external read blocked by macOS Downloads permission",
+  "signedDistributionAcceptance": false,
+  "windowsLinuxAcceptance": false,
+  "fixtureAfterWriterShutdown": {
+    "integrity": "ok",
+    "sampleRows": 4,
+    "exactInteger": "9223372036854775807"
+  }
+}
