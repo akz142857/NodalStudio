@@ -1,4 +1,5 @@
 import { Channel } from "@tauri-apps/api/core";
+import type { DatabaseExportProgress, DatabaseExportReceipt, DatabaseExportRequest } from "./database-export";
 import { invoke } from "./desktop-invoke";
 import type {
   FileExportReceipt,
@@ -60,6 +61,12 @@ import type {
 } from "./settings-types";
 
 export class TauriPlatform implements NodalStudioPlatform {
+  exportDatabaseFile(input: DatabaseExportRequest, receive: (progress: DatabaseExportProgress) => void): Promise<DatabaseExportReceipt | null> {
+    const onProgress = new Channel<DatabaseExportProgress>();
+    onProgress.onmessage = receive;
+    return invoke("export_database_file", { input, onProgress });
+  }
+  cancelDatabaseExport(jobId: string): Promise<boolean> { return invoke("cancel_database_export", { jobId }); }
   previewRelationshipBatch(input: import("./relationship-batches").ReviewRequest): Promise<import("./relationship-batches").ReviewPreview> { return invoke("preview_relationship_batch", { input }); }
   applyRelationshipBatch(input: import("./relationship-batches").ApplyReviewBatch): Promise<import("./relationship-batches").ReviewBatch> { return invoke("apply_relationship_batch", { input }); }
   listRelationshipBatches(sourceId: string): Promise<import("./relationship-batches").ReviewBatch[]> { return invoke("list_relationship_batches", { input: { sourceId } }); }
@@ -185,8 +192,11 @@ export class TauriPlatform implements NodalStudioPlatform {
     });
   }
 
-  executeReadonlyQuery(input: ExecuteReadonlyQueryInput): Promise<QueryExecutionResult> {
-    return invoke<QueryExecutionResult>("execute_readonly_query", { input });
+  executeReadonlyQuery(input: ExecuteReadonlyQueryInput, receiveRegistration?: () => void): Promise<QueryExecutionResult> {
+    if (!receiveRegistration) return invoke<QueryExecutionResult>("execute_readonly_query", { input });
+    const onRegistered = new Channel<null>();
+    onRegistered.onmessage = receiveRegistration;
+    return invoke<QueryExecutionResult>("execute_table_preview_query", { input, onRegistered });
   }
 
   cancelQuery(queryId: string): Promise<boolean> {

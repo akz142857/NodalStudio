@@ -1,0 +1,13 @@
+.database-export-dialog header { margin-bottom: 16px; }
+.database-export-scope { overflow-wrap: anywhere; }
+.database-export-format { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-block: 12px; }
+.database-export-format select { color: var(--ds-text); background: var(--ds-field); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); padding: 5px 8px; }
+.database-export-formula { display: flex; align-items: start; gap: 6px; margin-block: 12px; }
+.database-export-formula small { display: block; color: var(--ds-secondary); }
+.database-export-columns { min-width: 0; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); }
+.database-export-column-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.database-export-column-list { display: grid; gap: 5px; max-height: 180px; overflow: auto; }
+.database-export-column-list label { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.database-export-column-list input, .database-export-formula input, .database-export-dialog progress { accent-color: var(--ds-accent-fill); }
+.database-export-dialog div[role="status"] { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.database-export-dialog progress { flex: 1; min-width: 50px; }

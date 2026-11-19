@@ -1,7 +1,7 @@
 import { SchemaIndexDetails } from "./SchemaIndexDetails";
 import { translateUiLabel } from "../i18n/business-labels";
 import { useI18n } from "../i18n";
-import { memo, useCallback, useMemo, useState, type MouseEvent, type KeyboardEvent, type ReactNode, type CSSProperties } from "react";
+import { memo, useCallback, useContext, useMemo, useState, type MouseEvent, type KeyboardEvent, type ReactNode, type CSSProperties } from "react";
 import type { DatabaseSnapshot, ObjectKey, TableDefinition } from "../platform";
 import type { EnumDefinition, ViewDefinition, ProgramDefinition, SchemaDefinition } from "../platform/types";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
@@ -11,7 +11,10 @@ import { useOperation } from "./use-operation";
 import { TreeDisclosureIcon } from "./TreeDisclosureIcon";
 import { ObjectDependencies, ProgramDetails } from "./SchemaProgramDetails";
 import { SchemaEnumDetails } from "./SchemaEnumDetails";
+import { dumpSqlMenu } from "./database-export-menu";
+import { ConnectionSourceContext } from "./connection-source-context";
 import { findDocumentObject } from "./object-document-model";
+import type { DumpMode } from "../platform/database-export";
 
 interface SchemaTreeProps {
   snapshot: DatabaseSnapshot;
@@ -21,6 +24,9 @@ interface SchemaTreeProps {
   onCloseObject?: () => void;
   onOpenObject?: (key: ObjectKey) => void;
   onSelectTable: (table: TableDefinition) => void;
+  onOpenTable?: (table: TableDefinition) => void;
+  onExportTable?: (table: TableDefinition) => void;
+  onDumpSchema?: (schema: string, mode: DumpMode) => void;
   onOpenQuery?: (table: TableDefinition) => void;
 }
 
@@ -32,7 +38,8 @@ const OBJECT_TYPE_ICONS: Record<ObjectType, ActionIconName> = {
   functions: "function", procedures: "procedure", triggers: "trigger",
 };
 type SchemaObject = TableDefinition | ViewDefinition | EnumDefinition | ProgramDefinition;
-type MenuTarget = { object: SchemaObject; trigger: HTMLButtonElement; x: number; y: number; scope: string };
+type MenuObject = string | SchemaObject;
+type MenuTarget = { object: MenuObject; trigger: HTMLButtonElement; x: number; y: number; scope: string };
 type RowEvent = MouseEvent<HTMLButtonElement> | KeyboardEvent<HTMLButtonElement>;
 type ObjectGroup = { type: ObjectType; objects: readonly SchemaObject[] };
 
@@ -67,7 +74,7 @@ const SchemaObjectRows = memo(function SchemaObjectRows({ objects, selectedName,
   menuObject?: SchemaObject;
   onSelectTable: (table: TableDefinition) => void;
   onOpenObject: (key: ObjectKey) => void;
-  onShowMenu: (event: RowEvent, object: SchemaObject) => void;
+  onShowMenu: (event: RowEvent, object: MenuObject) => void;
 }) {
   const { t } = useI18n();
   const rows = objects.map((object) => {
@@ -76,15 +83,19 @@ const SchemaObjectRows = memo(function SchemaObjectRows({ objects, selectedName,
     const selected = "arguments" in object ? selectedProgram === object : name === selectedName;
     return <div className="tree-object-row" key={name}>
       <button type="button" className="tree-row tree-row-object" title={name}
-        aria-current={selected ? "true" : undefined}
+        aria-current={selected ? "true" : undefined} aria-keyshortcuts={table ? "Shift+F10" : undefined}
         onClick={() => table ? onSelectTable(table) : onOpenObject(object.key)}
-        onDragStart={"arguments" in object ? undefined : (event) => event.preventDefault()}>
+        onDragStart={"arguments" in object ? undefined : (event) => event.preventDefault()}
+        onContextMenu={table ? (event) => onShowMenu(event, table) : undefined}
+        onKeyDown={table ? (event) => {
+          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) onShowMenu(event, table);
+        } : undefined}>
         <span className="tree-label">{name}</span>
         {table ? <small>{table.columns.length}</small> : "materialized" in object && object.materialized ? <small>{t("business.materializedView")}</small> : null}
       </button>
-      <button type="button" className="tree-object-actions"
+      {table ? null : <button type="button" className="tree-object-actions"
         aria-label={t("business.actionsFor", { value0: schema, value1: name })}
-        aria-haspopup="menu" aria-expanded={menuObject === object} onClick={(event) => onShowMenu(event, object)}><ActionIcon name="more" /></button>
+        aria-haspopup="menu" aria-expanded={menuObject === object} onClick={(event) => onShowMenu(event, object)}><ActionIcon name="more" /></button>}
     </div>;
   });
   // The first rows must paint with the branch disclosure. Only later chunks can
@@ -99,8 +110,9 @@ const SchemaObjectRows = memo(function SchemaObjectRows({ objects, selectedName,
 });
 
 /** Filtering expands matches without changing the user's normal disclosure state. */
-export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery, navigation, selectedObject, onOpenObject, onCloseObject }: SchemaTreeProps) {
+export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenTable, onExportTable, onDumpSchema, onOpenQuery, navigation, selectedObject, onOpenObject, onCloseObject }: SchemaTreeProps) {
   const { t: bt } = useI18n();
+  const source = useContext(ConnectionSourceContext);
   const TYPE_LABEL = { tables: bt("business.tables"), views: bt("business.views"), enums: bt("business.enums"), functions: bt("objects.functions"), procedures: bt("objects.procedures"), triggers: bt("objects.triggers") } as const;
   const [open, setOpen] = useState<OpenState>({});
   const [openFor, setOpenFor] = useState<string>();
@@ -160,7 +172,7 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     setContext(undefined);
     if (restoreFocus && context?.trigger.isConnected) context.trigger.focus();
   }, [context]);
-  const showMenu = useCallback((event: RowEvent, object: SchemaObject) => {
+  const showMenu = useCallback((event: RowEvent, object: MenuObject) => {
     event.preventDefault(); event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     const pointer = "clientX" in event && (event.clientX !== 0 || event.clientY !== 0);
@@ -183,8 +195,14 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     }, { running: bt("business.copyingObjectName"), success: (name) => bt("business.copied", { value0: name }), failure: bt("business.unableToCopyObjectName") });
   };
   const menuObject = activeMenu?.object;
-  const actions: SchemaObjectMenuAction[] = menuObject ? [
+  const menuName = typeof menuObject === "string" ? menuObject : menuObject && `${menuObject.key.schema}.${menuObject.key.name}`;
+  const actions: SchemaObjectMenuAction[] = typeof menuObject === "string"
+    ? (onDumpSchema ? [dumpSqlMenu(bt, (mode) => onDumpSchema(menuObject, mode), Boolean(source?.security?.ssh))] : [])
+    : menuObject ? [
       ...("columns" in menuObject ? [
+        ...(onOpenTable ? [{ label: bt("databaseExport.openTable"), run: () => onOpenTable(menuObject) }] : []),
+        ...(onExportTable && menuObject.tableKind !== "foreign"
+          ? [{ label: bt("databaseExport.wizard"), run: () => onExportTable(menuObject) }] : []),
         { label: bt("business.locateInDiagram"), run: () => chooseTable(menuObject) },
         ...(onOpenQuery ? [{ label: bt("business.openReadOnlyQuery"), run: () => onOpenQuery(menuObject) }] : []),
       ] : "values" in menuObject ? [{ label: bt("business.showEnumDetails"), run: () => openObject(menuObject.key) }]
@@ -221,7 +239,11 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     {visible.map(({ name, groups, count }) => {
       const schemaOpen = expanded(name);
       return <div className="tree-node" key={name}>
-        <button type="button" className="tree-row tree-row-schema" title={name} aria-expanded={schemaOpen} onClick={() => toggle(name)}>
+        <button type="button" className="tree-row tree-row-schema" title={name} aria-expanded={schemaOpen} onClick={() => toggle(name)}
+          onContextMenu={onDumpSchema ? (event) => showMenu(event, name) : undefined}
+          onKeyDown={(event) => {
+            if (onDumpSchema && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) showMenu(event, name);
+          }}>
           <TreeDisclosureIcon open={schemaOpen} /><span className="tree-label">{name}</span><small>{count}</small>
         </button>
         {schemaOpen ? groups.map(({ type, objects }) => {
@@ -229,7 +251,7 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
           const typeOpen = expanded(key);
           const selectedName = selectedKey?.schema === name && OBJECT_TYPES[selectedKey.kind] === type ? selectedKey.name : undefined;
           const selectedProgram = selectedName !== undefined ? programPreview : undefined;
-          const groupMenu = menuObject && menuObject.key.schema === name && OBJECT_TYPES[menuObject.key.kind] === type
+          const groupMenu = menuObject && typeof menuObject !== "string" && menuObject.key.schema === name && OBJECT_TYPES[menuObject.key.kind] === type
             ? menuObject : undefined;
           return <div className="tree-node tree-node-type" key={key}>
             <button type="button" className="tree-row tree-row-type" aria-expanded={typeOpen} onClick={() => toggle(key)}>
@@ -241,7 +263,7 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
         }) : null}
       </div>;
     })}
-    {activeMenu ? <SchemaObjectMenu x={activeMenu.x} y={activeMenu.y}
-      name={`${activeMenu.object.key.schema}.${activeMenu.object.key.name}`} actions={actions} onClose={closeMenu} /> : null}
+    {activeMenu && menuName && actions.length > 0 ? <SchemaObjectMenu key={JSON.stringify(typeof menuObject === "string" ? menuObject : menuObject?.key)}
+      x={activeMenu.x} y={activeMenu.y} name={menuName} actions={actions} onClose={closeMenu} /> : null}
   </section>;
 }

@@ -1,6 +1,6 @@
 import { queryErrorMessages } from "../../i18n/query-errors";
 import { useI18n, type Translate } from "../../i18n";
-import { useEffect, useId, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import type { DatabaseSnapshot, QueryErrorKind, QueryExecutionResult, QueryHistoryEntry, NodalStudioPlatform } from "../../platform";
 import { QueryRunControls } from "./QueryRunControls";
 import { queryKeys } from "./query-shortcuts";
@@ -13,8 +13,10 @@ import { QueryResultGrid } from "./QueryResultGrid";
 import { loadQuerySession, resizedQueryResultHeight, saveQuerySession, type QuerySession, type QueryTab } from "./query-state";
 import { SqlEditor, type SqlEditorHandle } from "./SqlEditor";
 import { resolveCapability } from "../../platform/capabilities";
+import { TABLE_PREVIEW_ROW_LIMIT } from "./query-format";
 
 export interface OpenQueryRequest { id: number; sql: string }
+export interface OpenTableRequest { id: string; sourceId: string; sql: string }
 
 interface QueryPageProps {
   platform: NodalStudioPlatform;
@@ -22,6 +24,8 @@ interface QueryPageProps {
   runtimeKind?: "desktop" | "web";
   openRequest?: OpenQueryRequest;
   onConsumeOpenRequest?: () => void;
+  openTableRequest?: OpenTableRequest;
+  onConsumeOpenTable?: (id: string) => void;
   settings?: EffectiveSettings;
   semantics?: SemanticBundle;
   selectedTable?: TableDefinition;
@@ -39,7 +43,14 @@ function queryError(bt: Translate, error: unknown): { kind: QueryErrorKind; mess
   return { kind: "internal", message: error instanceof Error ? error.message : bt("business.queryExecutionFailed") };
 }
 
-export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onConsumeOpenRequest, settings, semantics, selectedTable, draftSeed, onOpenAiSettings }: QueryPageProps) {
+interface ActiveQuery { id: string; registered: boolean; cancelRequested: boolean }
+
+function requestCancel(platform: NodalStudioPlatform, query: ActiveQuery) {
+  query.cancelRequested = true;
+  return query.registered ? platform.cancelQuery(query.id) : undefined;
+}
+
+export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onConsumeOpenRequest, openTableRequest, onConsumeOpenTable, settings, semantics, selectedTable, draftSeed, onOpenAiSettings }: QueryPageProps) {
   const { t: bt } = useI18n();
   const [draftRequested, setDrafting] = useState(Boolean(snapshot?.database.databaseType !== "sqlite" && draftSeed && draftSeed.sourceId === snapshot?.sourceId && draftSeed.snapshotId === snapshot?.id));
   const draftBinding = JSON.stringify([settings?.source, settings?.app.privacy, semantics?.logicalRelationships, semantics?.domainGroups, semantics?.knowledge]);
@@ -67,7 +78,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   const [executing, setExecuting] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const editorRef = useRef<SqlEditorHandle>(null);
-  const activeQueryId = useRef<string | undefined>(undefined);
+  const activeQuery = useRef<ActiveQuery | undefined>(undefined);
   const previousSourceId = useRef(sourceId);
   const sourceRevision = useRef(0);
   const stopResizeRef = useRef<(() => void) | undefined>(undefined);
@@ -93,11 +104,23 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   useEffect(() => () => stopResizeRef.current?.(), []);
   useEffect(() => () => {
     sourceRevision.current += 1;
-    if (activeQueryId.current) void platform.cancelQuery(activeQueryId.current).catch(() => {});
+    if (activeQuery.current) void requestCancel(platform, activeQuery.current)?.catch(() => {});
   }, [platform, sourceId]);
 
-  async function run(sqlText: string) {
-    if (!snapshot || !desktopReady || executing || activeQueryId.current || drafting || pendingOpen) return;
+  const runOpenTable = useEffectEvent((request: OpenTableRequest) => {
+    if (activeQuery.current) return;
+    onConsumeOpenTable?.(request.id);
+    if (request.sourceId === sourceId && desktopReady) void run(request.sql, true);
+  });
+  useEffect(() => {
+    if (!openTableRequest || executing) return;
+    let current = true;
+    queueMicrotask(() => { if (current) runOpenTable(openTableRequest); });
+    return () => { current = false; };
+  }, [openTableRequest, executing, sourceId]);
+
+  async function run(sqlText: string, openingTable = false) {
+    if (!snapshot || !desktopReady || executing || activeQuery.current || (!openingTable && (drafting || pendingOpen))) return;
     if (!sqlText.trim()) {
       setSession((current) => ({ ...current, message: bt("business.enterOneReadOnlySELECTStatementBeforeRunningThe"), activeTab: "message", outputCollapsed: false }));
       editorRef.current?.focus();
@@ -107,12 +130,34 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     setDraftExecution(undefined);
     const queryId = crypto.randomUUID();
     const revision = sourceRevision.current;
-    activeQueryId.current = queryId;
+    const operation = { id: queryId, registered: !openingTable, cancelRequested: false };
+    activeQuery.current = operation;
+    const rowLimit = openingTable ? TABLE_PREVIEW_ROW_LIMIT : session.rowLimit;
+    if (openingTable) {
+      showEditor();
+      setGeneratedRequest(undefined);
+    }
     setExecuting(true);
     setElapsedMs(0);
-    setSession((current) => ({ ...current, message: bt("business.executingReadOnlyQuery"), activeTab: "message", outputCollapsed: false }));
+    setSession((current) => ({
+      ...current,
+      ...(openingTable ? {
+        draft: sqlText,
+        previousDraft: current.previousDraft ?? { sql: current.draft, rowLimit: current.rowLimit },
+        rowLimit,
+        result: undefined,
+        outcome: undefined,
+      } : {}),
+      message: bt("business.executingReadOnlyQuery"),
+      activeTab: "message",
+      outputCollapsed: false,
+    }));
     try {
-      const result: QueryExecutionResult = await platform.executeReadonlyQuery({ queryId, sourceId, sql: sqlText, rowLimit: session.rowLimit, timeoutMs: 30_000 });
+      const input = { queryId, sourceId, sql: sqlText, rowLimit, timeoutMs: 30_000 };
+      const result = await (openingTable ? platform.executeReadonlyQuery(input, () => {
+        operation.registered = true;
+        if (operation.cancelRequested) void requestCancel(platform, operation)?.catch(() => {});
+      }) : platform.executeReadonlyQuery(input));
       if (sourceRevision.current !== revision) return;
       setDraftExecution({ sourceId, snapshotId: snapshot.id, sql: sqlText, result });
       const summary = bt("business.rowsInMs", { value0: result.rowCount, value1: result.durationMs, value2: result.truncated ? " · truncated at the selected row limit" : "" });
@@ -122,7 +167,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
       const normalized = queryError(bt, error);
       setSession((current) => ({ ...current, outcome: "failed", message: `${bt(queryErrorMessages[normalized.kind])}: ${normalized.message}`, activeTab: "message", outputCollapsed: false }));
     } finally {
-      activeQueryId.current = undefined;
+      activeQuery.current = undefined;
       setExecuting(false);
       const entries = await platform.listQueryHistory(sourceId).catch(() => []);
       if (sourceRevision.current === revision) setHistoryRecord({ sourceId, entries });
@@ -130,11 +175,19 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   }
 
   function stopQuery() {
-    if (activeQueryId.current) void platform.cancelQuery(activeQueryId.current).catch((error: unknown) => {
+    if (activeQuery.current) void requestCancel(platform, activeQuery.current)?.catch((error: unknown) => {
       setSession((current) => ({ ...current, message: bt("business.unableToStopQuery", { value0: queryError(bt, error).message }), activeTab: "message" }));
     });
   }
   function showEditor() { setDrafting(false); setFocusOutput(false); }
+  function restorePreviousDraft() {
+    setSession((current) => current.previousDraft ? {
+      ...current, draft: current.previousDraft.sql, rowLimit: current.previousDraft.rowLimit,
+      previousDraft: undefined, result: undefined, outcome: undefined, activeTab: "results",
+    } : current);
+    setDraftExecution(undefined);
+    editorRef.current?.focus();
+  }
   function selectTab(tab: QueryTab) { setSession((current) => ({ ...current, activeTab: tab, outputCollapsed: false })); }
   function beginResultResize(event: ReactMouseEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -188,6 +241,9 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
       </div>
     </header>
     {!desktopReady ? <div className="query-runtime-notice">{runtimeKind === "web" ? bt("business.queryIsAvailableOnlyInTheDesktopAppThe") : capability.scope}</div> : null}
+    {!drafting && session.previousDraft ? <div className="query-draft-notice">
+      <button type="button" disabled={executing} onClick={restorePreviousDraft}>{bt("databaseExport.restorePreviousDraft")}</button>
+    </div> : null}
     {!drafting && appliedDraft && appliedDraft.sourceId === sourceId && appliedDraft.snapshotId === snapshot?.id && session.draft === appliedDraft.sql ? <div className="query-draft-notice" role="status"><span>{bt("business.aIDraftReviewTheSQLThenChooseRunWhen")}</span><button type="button" onClick={() => { setSession((current) => ({ ...current, draft: appliedDraft.previous })); setAppliedDraft(undefined); editorRef.current?.focus(); }}>{bt("business.undoReplacement")}</button></div> : null}
     <div className="query-editor-heading">
       <div className="query-input-tabs" role="tablist" aria-label={bt("business.queryInput")} onKeyDown={(event) => {

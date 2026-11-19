@@ -83,6 +83,58 @@ async function editCurrentConnection() {
   fireEvent.click(screen.getByRole("menuitem", { name: "Edit current connection…" }));
 }
 
+it("keeps the PostgreSQL source menu focused on connection actions", async () => {
+  const postgres: DataSourceProfile = { ...profile, databaseType: "postgreSql" };
+  const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([postgres]) });
+  render(<ConnectionPanel enabled activeSourceId={postgres.id} platform={platform} onSnapshot={vi.fn()} onRefresh={vi.fn()}
+    defaultDatabaseType="postgreSql" defaultSslMode="prefer" />);
+  const database = await screen.findByRole("button", { name: "Data source: flow" });
+  expect(screen.queryByRole("button", { name: "Connection actions" })).not.toBeInTheDocument();
+  fireEvent.click(database);
+  const switcher = screen.getByRole("menu", { name: "Switch database" });
+  expect(within(switcher).queryByRole("menuitem", { name: "Dump SQL File" })).not.toBeInTheDocument();
+
+  fireEvent.contextMenu(database);
+  const actions = screen.getByRole("menu", { name: "Actions for flow" });
+  expect(screen.queryByRole("menu", { name: "Switch database" })).not.toBeInTheDocument();
+  expect(within(actions).getByRole("menuitem", { name: "New connection…" })).toBeEnabled();
+  expect(within(actions).getByRole("menuitem", { name: "Manage connections…" })).toBeEnabled();
+  expect(within(actions).getByRole("menuitem", { name: "Refresh schema" })).toBeEnabled();
+  expect(within(actions).queryByRole("menuitem", { name: /Dump SQL File/ })).not.toBeInTheDocument();
+  fireEvent.keyDown(actions, { key: "Escape" });
+  expect(database).toHaveFocus();
+
+  fireEvent.keyDown(database, { key: "F10", shiftKey: true });
+  const keyboardMenu = screen.getByRole("menu", { name: "Actions for flow" });
+  fireEvent.keyDown(keyboardMenu, { key: "End" });
+  expect(within(keyboardMenu).getByRole("menuitem", { name: "Refresh schema" })).toHaveFocus();
+  fireEvent.keyDown(keyboardMenu, { key: "Escape" });
+  expect(database).toHaveFocus();
+});
+
+it("disables schema SQL dump on SSH while keeping table export available", async () => {
+  const postgres: DataSourceProfile = {
+    ...profile, databaseType: "postgreSql",
+    security: { tls: {}, ssh: { host: "jump.test", port: 22, username: "fixture", authentication: "agent" } },
+  };
+  const model = { ...reportSnapshot, sourceId: postgres.id };
+  const onDump = vi.fn();
+  const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([postgres]) });
+  render(<ConnectionPanel enabled activeSourceId={postgres.id} platform={platform} onSnapshot={vi.fn()}
+    defaultDatabaseType="postgreSql" defaultSslMode="prefer">
+    <SchemaTree snapshot={model} onSelectTable={vi.fn()} onExportTable={vi.fn()} onDumpSchema={onDump} />
+  </ConnectionPanel>);
+  const schema = await screen.findByRole("button", { name: /^public\s*\d+$/ });
+  fireEvent.contextMenu(schema);
+  expect(screen.getByRole("menuitem", { name: "Dump SQL File (direct connections only)" })).toBeDisabled();
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search database objects" }), { target: { value: "public.orders" } });
+  fireEvent.contextMenu(screen.getByRole("button", { name: /^orders/ }));
+  expect(screen.queryByRole("menuitem", { name: /Dump SQL File/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Export Wizard…" })).toBeEnabled();
+  expect(onDump).not.toHaveBeenCalled();
+});
+
 function renderWorkspace(platform: NodalStudioPlatform) {
   const onSnapshot = vi.fn(), onSourceDeleted = vi.fn();
   function Workspace() {

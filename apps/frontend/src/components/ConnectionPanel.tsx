@@ -1,11 +1,12 @@
 import { useI18n } from "../i18n";
-import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ConnectionTestStatus } from "./ConnectionTestStatus";
 import { connectionFailure, type ConnectionTestState } from "./connection-test-state";
 import { ConnectionSecurityFields } from "./ConnectionSecurityFields";
 import { ConnectionManager } from "./ConnectionManager";
 import { SchemaObjectMenu } from "./SchemaObjectMenu";
 import { DataSourcePicker } from "./DataSourcePicker";
+import { ConnectionSourceContext } from "./connection-source-context";
 import "./model-navigation.css";
 import type {
   DataSourceProfile,
@@ -87,7 +88,6 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
 };
   const navigation = useRef<HTMLElement>(null);
   const connectionDialog = useRef<HTMLElement>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number }>();
   const [managerOpen, setManagerOpen] = useState(false);
   const [form, setForm] = useState<SaveDataSourceInput>(() => newConnectionForm(defaultDatabaseType, defaultSslMode, bt("business.localDevelopment")));
   const [profiles, setProfiles] = useState<DataSourceProfile[]>([]);
@@ -96,6 +96,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   const [testState, setTestState] = useState<ConnectionTestState>({ status: "idle" });
   const [error, setError] = useState<string>();
   const openContext = useMemo(() => ({ sourceId: activeSourceId }), [activeSourceId]);
+  const [menu, setMenu] = useState<{ x: number; y: number; trigger: HTMLElement; context: typeof openContext }>();
   const [openError, setOpenError] = useState<{ context: typeof openContext; profile: DataSourceProfile; message: string }>();
   const [pending, setPending] = useState(false);
   const [connectionTab, setConnectionTab] = useState<"general" | "tls" | "ssh">("general");
@@ -345,23 +346,37 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   }
 
   const activeProfile = profiles.find((profile) => profile.id === activeSourceId);
+  const visibleMenu = menu?.context === openContext ? menu : undefined;
+  const menuProfile = visibleMenu && visibleMenu.trigger !== navigation.current ? activeProfile : undefined;
   // A successful open from another entry point supersedes this attempt, even
   // when its rejection arrives after the workspace has already changed.
   const visibleOpenError = openError?.context === openContext ? openError : undefined;
 
+  function openConnectionMenu(event: MouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>) {
+    if (dialogOpen || managerOpen) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const trigger = event.currentTarget;
+    const bounds = trigger.getBoundingClientRect();
+    const pointer = "clientX" in event && (event.clientX !== 0 || event.clientY !== 0);
+    const fromNavigation = trigger === navigation.current;
+    setMenu({
+      x: pointer ? event.clientX : bounds.left + (fromNavigation ? 12 : 0),
+      y: pointer ? event.clientY : fromNavigation ? bounds.top + 40 : bounds.bottom,
+      trigger,
+      context: openContext,
+    });
+  }
+
   return (
     <section ref={navigation} className="connection-stack model-navigation" aria-label={bt("business.dataSources")} tabIndex={0}
       onContextMenu={(event) => {
-        if (dialogOpen || managerOpen) return;
         if ((event.target as Element).closest('button, input, select, textarea, a, [role="dialog"], [role="menu"], .tree-row')) return;
-        event.preventDefault(); event.stopPropagation();
-        setMenu({ x: event.clientX, y: event.clientY });
+        openConnectionMenu(event);
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
-        event.preventDefault();
-        const bounds = event.currentTarget.getBoundingClientRect();
-        setMenu({ x: bounds.left + 12, y: bounds.top + 40 });
+        openConnectionMenu(event);
       }}>
       <header className="source-navigation-heading">
         <h2 id="data-sources-title">{bt("business.databases")}</h2>
@@ -370,24 +385,29 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
       {profiles.length > 0 ? <div className="source-navigation-current">
         <DataSourcePicker profiles={profiles} activeProfile={activeProfile} disabled={!enabled || pending}
           onSelect={(profile) => { void handleExistingOpen(profile); }}
-          onEdit={openEditDialog} onManage={() => setManagerOpen(true)} />
+          onEdit={openEditDialog} onManage={() => setManagerOpen(true)} onContextMenu={openConnectionMenu} />
       </div> : null}
       {visibleOpenError ? <div className="connection-status error-message" role="alert">
         <p>{bt("business.couldNotOpen")} {visibleOpenError.profile.database}. {visibleOpenError.message}</p>
         <button type="button" disabled={pending} onClick={() => { void handleExistingOpen(visibleOpenError.profile); }}>{bt("business.retryOpeningDatabase")}</button>
       </div> : null}
-      {menu ? <SchemaObjectMenu {...menu} name={bt("business.databases")} actions={[
-        { label: bt("business.newConnection"), disabled: !enabled || pending, run: openCreateDialog },
-        { label: bt("business.manageConnections"), disabled: !enabled || pending, run: () => setManagerOpen(true) },
-        { label: bt("business.refreshSchema"), separatorBefore: true, disabled: !activeProfile || !onRefresh || refreshDisabled || pending, run: () => onRefresh?.() },
-      ]} onClose={(restore) => { setMenu(undefined); if (restore) navigation.current?.focus(); }} /> : null}
+      {visibleMenu ? <SchemaObjectMenu x={visibleMenu.x} y={visibleMenu.y}
+        name={menuProfile?.database ?? bt("business.databases")}
+        actions={[
+          { label: bt("business.newConnection"), disabled: !enabled || pending, run: openCreateDialog },
+          { label: bt("business.manageConnections"), disabled: !enabled || pending, run: () => setManagerOpen(true) },
+          { label: bt("business.refreshSchema"), separatorBefore: true, disabled: !activeProfile || !onRefresh || refreshDisabled || pending, run: () => onRefresh?.() },
+        ]} onClose={(restoreFocus) => {
+          setMenu(undefined);
+          if (restoreFocus) (visibleMenu.trigger.isConnected ? visibleMenu.trigger : navigation.current)?.focus();
+        }} /> : null}
       {managerOpen ? <ConnectionManager profiles={profiles} activeSourceId={activeSourceId} onClose={() => setManagerOpen(false)}
         onCreate={() => { setManagerOpen(false); openCreateDialog(); }}
         onEdit={(profile) => { setManagerOpen(false); openEditDialog(profile); }}
         onOpen={(profile) => { setManagerOpen(false); if (profile.id !== activeSourceId) void handleExistingOpen(profile); }} /> : null}
       {profiles.length > 0 ? (
         <div className="saved-sources">
-          {activeProfile ? <div key={activeProfile.id}>{children}</div> : null}
+          {activeProfile ? <div key={activeProfile.id}><ConnectionSourceContext.Provider value={activeProfile}>{children}</ConnectionSourceContext.Provider></div> : null}
         </div>
       ) : (
         <button type="button" className="empty-data-source" onClick={openCreateDialog} disabled={!enabled}>

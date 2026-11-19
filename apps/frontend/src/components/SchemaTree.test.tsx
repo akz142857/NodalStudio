@@ -116,30 +116,36 @@ describe("SchemaTree", () => {
   });
 
   it("provides app actions instead of the WebView menu, supports keyboard navigation and restores focus", () => {
-    const select = vi.fn(); const query = vi.fn();
-    render(<SchemaTree snapshot={snapshot} onSelectTable={select} onOpenQuery={query} />);
+    const select = vi.fn(); const query = vi.fn(); const openTable = vi.fn();
+    render(<SchemaTree snapshot={snapshot} onSelectTable={select} onOpenQuery={query} onOpenTable={openTable} />);
     fireEvent.click(screen.getByRole("button", { name: /Tables/ }));
     const row = screen.getByRole("button", { name: /^orders/ });
+    expect(screen.queryByRole("button", { name: "Actions for public.orders" })).not.toBeInTheDocument();
     const event = createEvent.contextMenu(row, { clientX: 40, clientY: 80 });
     fireEvent(row, event);
     expect(event.defaultPrevented).toBe(true);
-    expect(screen.queryByRole("menu")).toBeNull();
-    const trigger = screen.getByRole("button", { name: "Actions for public.orders" });
-    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open Table" }));
+    expect(openTable).toHaveBeenCalledWith(snapshot.schemas[0].tables[0]);
+    expect(row).toHaveFocus();
+    fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+    expect(screen.getByRole("menuitem", { name: "Open Table" })).toHaveFocus();
     const menu = screen.getByRole("menu", { name: "Actions for public.orders" });
     const locate = within(menu).getByRole("menuitem", { name: "Locate in diagram" });
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Open Table" }), { key: "ArrowDown" });
     expect(locate).toHaveFocus();
     fireEvent.keyDown(locate, { key: "ArrowDown" });
     expect(screen.getByRole("menuitem", { name: "Open read-only query…" })).toHaveFocus();
     fireEvent.keyDown(menu, { key: "Escape" });
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument(); expect(trigger).toHaveFocus();
-    fireEvent.click(trigger);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(row).toHaveFocus();
+    fireEvent.keyDown(row, { key: "ContextMenu" });
     fireEvent.click(screen.getByRole("menuitem", { name: "Locate in diagram" }));
     expect(select).toHaveBeenCalledWith(snapshot.schemas[0].tables[0]);
-    fireEvent.click(trigger);
+    fireEvent.contextMenu(row);
     fireEvent.click(screen.getByRole("menuitem", { name: "Open read-only query…" }));
     expect(query).toHaveBeenCalledWith(snapshot.schemas[0].tables[0]);
-    fireEvent.click(trigger); fireEvent.pointerDown(document.body);
+    fireEvent.contextMenu(row);
+    fireEvent.pointerDown(document.body);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
@@ -148,13 +154,56 @@ describe("SchemaTree", () => {
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     render(<SchemaTree snapshot={snapshot} onSelectTable={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /Tables/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Actions for public.orders" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: /^orders/ }));
     expect(screen.queryByRole("menuitem", { name: "Open read-only query…" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy qualified name" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Clipboard denied");
     fireEvent.click(screen.getByRole("button", { name: "Retry name copy" }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Copied public.orders"));
     expect(writeText).toHaveBeenLastCalledWith("public.orders");
+  });
+
+  it("routes both SQL dump modes to the selected schema and keeps table actions scoped to the table", () => {
+    const dump = vi.fn();
+    const model = { ...snapshot, schemas: [...snapshot.schemas, { name: "service", tables: [], views: [], enums: [] }] };
+    render(<SchemaTree snapshot={model} onSelectTable={vi.fn()} onDumpSchema={dump} onOpenTable={vi.fn()} onExportTable={vi.fn()} />);
+    const publicSchema = screen.getByRole("button", { name: /^public\s*\d+$/ });
+    fireEvent.contextMenu(publicSchema);
+    const parent = screen.getByRole("menuitem", { name: "Dump SQL File" });
+    fireEvent.keyDown(parent, { key: "ArrowRight" });
+    expect(screen.getByRole("menuitem", { name: "Structure and Data…" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Structure Only…" }));
+    expect(publicSchema).toHaveFocus();
+    expect(dump).toHaveBeenLastCalledWith("public", "structureOnly");
+    expect(publicSchema).toHaveAttribute("aria-expanded", "false");
+    const service = screen.getByRole("button", { name: /^service\s*\d+$/ });
+    fireEvent.keyDown(service, { key: "F10", shiftKey: true });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Dump SQL File" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Structure and Data…" }));
+    expect(dump).toHaveBeenLastCalledWith("service", "structureAndData");
+    expect(service).toHaveFocus();
+
+    fireEvent.click(publicSchema);
+    const tables = screen.getByRole("button", { name: /^Tables\s*\d+$/ });
+    fireEvent.contextMenu(tables);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    fireEvent.click(tables);
+    fireEvent.contextMenu(screen.getByRole("button", { name: /^orders/ }));
+    expect(screen.getByRole("menuitem", { name: "Open Table" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Export Wizard…" })).toBeEnabled();
+    expect(screen.queryByRole("menuitem", { name: /Dump SQL File/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps the preview available for foreign tables and hides unsupported exports", () => {
+    const table = { ...snapshot.schemas[0].tables[0], tableKind: "foreign" as const };
+    const model = { ...snapshot, schemas: [{ ...snapshot.schemas[0], tables: [table] }] };
+    render(<SchemaTree snapshot={model} onSelectTable={vi.fn()} onOpenTable={vi.fn()}
+      onExportTable={vi.fn()} onDumpSchema={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Tables/ }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: /^orders/ }));
+    expect(screen.getByRole("menuitem", { name: "Open Table" })).toBeEnabled();
+    expect(screen.queryByRole("menuitem", { name: "Dump SQL File" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Export Wizard…" })).toBeNull();
   });
 
   it("previews actual view SQL read-only and never treats a view as a physical table", () => {

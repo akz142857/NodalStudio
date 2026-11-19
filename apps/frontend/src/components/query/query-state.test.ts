@@ -44,6 +44,19 @@ describe("SQL draft restart preservation", () => {
     expect(assertUpdateCanRestart).not.toThrow();
   });
 
+  it("restores the original draft and its row limit after opening a table and restarting", async () => {
+    const state = await import("./query-state");
+    state.saveQuerySession("workspace", { ...state.loadQuerySession("workspace"),
+      draft: 'SELECT * FROM "public"."orders" LIMIT 101;',
+      previousDraft: { sql: "SELECT 42;", rowLimit: 500 } });
+    vi.resetModules();
+    const reopened = await import("./query-state");
+    expect(reopened.loadQuerySession("workspace")).toMatchObject({
+      draft: 'SELECT * FROM "public"."orders" LIMIT 101;',
+      previousDraft: { sql: "SELECT 42;", rowLimit: 500 },
+    });
+  });
+
   it("removes persisted and in-memory drafts on factory reset without clearing unrelated preferences", async () => {
     const state = await import("./query-state");
     state.saveQuerySession("workspace", { ...state.loadQuerySession("workspace"), draft: "SELECT 42" });

@@ -5,6 +5,7 @@ export type QueryTab = "results" | "message" | "history";
 
 export interface QuerySession {
   draft: string;
+  previousDraft?: { sql: string; rowLimit: number };
   result?: QueryExecutionResult;
   message: string;
   activeTab: QueryTab;
@@ -33,13 +34,23 @@ export function loadQuerySession(sourceId: string): QuerySession {
   const existing = sessions.get(sourceId);
   if (existing) return existing;
   let draft = "";
+  let previousDraft: QuerySession["previousDraft"];
   let restoreFailed = false;
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(draftKey(sourceId)) ?? "null");
     if (stored && typeof stored === "object" && "draft" in stored && typeof stored.draft === "string") draft = stored.draft;
+    if (stored && typeof stored === "object" && "previousDraft" in stored) {
+      const previous = stored.previousDraft;
+      if (previous && typeof previous === "object" && "sql" in previous && typeof previous.sql === "string"
+        && "rowLimit" in previous && typeof previous.rowLimit === "number" && Number.isInteger(previous.rowLimit)
+        && previous.rowLimit >= 1 && previous.rowLimit <= 5000) {
+        previousDraft = { sql: previous.sql, rowLimit: previous.rowLimit };
+      }
+    }
   } catch { restoreFailed = true; }
   return {
     draft,
+    previousDraft,
     message: restoreFailed ? "The saved SQL draft could not be restored from local storage." : "Ready. Only one read-only SELECT statement can be executed.",
     activeTab: restoreFailed ? "message" : "results",
     rowLimit: 100,
@@ -53,7 +64,7 @@ export function saveQuerySession(sourceId: string, session: QuerySession): void 
   // Persist only the editor draft, never query results or database row contents.
   // The blocker survives QueryPage unmounting when Settings is opened.
   try {
-    if (session.draft) localStorage.setItem(draftKey(sourceId), JSON.stringify({ draft: session.draft }));
+    if (session.draft || session.previousDraft) localStorage.setItem(draftKey(sourceId), JSON.stringify({ draft: session.draft, previousDraft: session.previousDraft }));
     else localStorage.removeItem(draftKey(sourceId));
     setUpdateBlocker(`query-draft:${sourceId}`, undefined);
   } catch {

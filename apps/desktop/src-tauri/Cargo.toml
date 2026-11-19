@@ -15,8 +15,10 @@ tauri-build.workspace = true
 [dependencies]
 storekit-bridge = { path = "../../../crates/storekit-bridge", optional = true }
 ai-context = { path = "../../../crates/ai-context" }
+base64 = "0.22"
 chrono.workspace = true
 extension-model = { path = "../../../crates/extension-model" }
+futures-util = "0.3"
 git-workspace = { path = "../../../crates/git-workspace" }
 keyring.workspace = true
 sqlite-adapter = { path = "../../../crates/sqlite-adapter" }
@@ -24,6 +26,7 @@ mysql-adapter = { path = "../../../crates/mysql-adapter" }
 postgres-adapter = { path = "../../../crates/postgres-adapter" }
 query-engine = { path = "../../../crates/query-engine" }
 reqwest.workspace = true
+rustls-native-certs = "0.8"
 schema-diff = { path = "../../../crates/schema-diff" }
 schema-model = { path = "../../../crates/schema-model" }
 semver.workspace = true
@@ -35,7 +38,7 @@ sha2.workspace = true
 snapshot-store = { path = "../../../crates/snapshot-store" }
 sqlx.workspace = true
 tauri.workspace = true
-tokio = { workspace = true, features = ["process"] }
+tokio = { workspace = true, features = ["fs", "io-util", "net", "process"] }
 tempfile = "3.27.0"
 tokio-util.workspace = true
 uuid.workspace = true

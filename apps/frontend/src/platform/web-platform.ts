@@ -113,6 +113,8 @@ function downloadFile(blob: Blob, fileName: string): Promise<FileExportReceipt> 
 }
 
 export class WebPlatform implements NodalStudioPlatform {
+  exportDatabaseFile(): Promise<never> { return Promise.reject(new Error("Database file export requires the desktop app.")); }
+  cancelDatabaseExport(): Promise<boolean> { return Promise.resolve(false); }
   previewRelationshipBatch(): Promise<import("./relationship-batches").ReviewPreview> { return Promise.reject(new Error("Batch review requires the desktop app.")); }
   applyRelationshipBatch(): Promise<import("./relationship-batches").ReviewBatch> { return Promise.reject(new Error("Batch review requires the desktop app.")); }
   listRelationshipBatches(): Promise<import("./relationship-batches").ReviewBatch[]> { return Promise.resolve([]); }

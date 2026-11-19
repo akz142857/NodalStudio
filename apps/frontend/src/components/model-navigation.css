@@ -81,3 +81,6 @@
 .connection-manager footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; }
 .schema-object-menu > button:disabled { opacity: .4; cursor: default; }
 .schema-object-menu > hr { height: 1px; margin: 5px 7px; border: 0; background: var(--ds-border); }
+.schema-menu-surface { display: contents; }
+.schema-object-menu > button[aria-haspopup="menu"] { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.schema-menu-chevron { font-size: 16px; line-height: 1; }

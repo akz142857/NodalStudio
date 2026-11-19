@@ -618,6 +618,7 @@ pub async fn install_update(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     updates: State<'_, UpdateState>,
+    exports: State<'_, crate::database_export::Jobs>,
 ) -> Result<(), String> {
     let _operation = updates
         .operation
@@ -627,11 +628,12 @@ pub async fn install_update(
     let result: Result<PathBuf, String> = async {
         let selected = feed(&app, &state, false).await?;
         if selected.manual { return Err("This build requires manual installation from GitHub Releases.".into()); }
-        if !state.active_queries.lock().await.is_empty()
+        if exports.has_active_jobs()
+            || !state.active_queries.lock().await.is_empty()
             || state.snapshot_captures.lock().await.values().any(|s| s.available_permits() == 0)
             || state.cloud_operations.lock().await.values().any(|s| s.available_permits() == 0)
             || state.ai_limiter.available_permits() < 840 {
-            return Err("Wait for active queries, captures, AI requests and synchronization to finish, then retry.".to_owned());
+            return Err("Wait for active exports, queries, captures, AI requests and synchronization to finish, then retry.".to_owned());
         }
         let (update, bytes) = {
             let mut s = updates.session.lock().map_err(|_| "Update state unavailable")?;

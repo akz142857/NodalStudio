@@ -251,6 +251,7 @@ fn allowed_without_purchase(command: &str) -> bool {
             | "export_query_result"
             | "save_layout"
             | "cancel_query"
+            | "cancel_database_export"
             | "cancel_connection_test"
             | "cancel_knowledge_draft"
             | "cancel_table_explanation"

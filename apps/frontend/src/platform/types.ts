@@ -570,6 +570,8 @@ export interface QueryExportInput { locale?: "en" | "zh-CN"; result: QueryExecut
 
 export interface NodalStudioPlatform {
   exportQueryResult(input: QueryExportInput): Promise<string | null>;
+  exportDatabaseFile(input: import("./database-export").DatabaseExportRequest, onProgress: (progress: import("./database-export").DatabaseExportProgress) => void): Promise<import("./database-export").DatabaseExportReceipt | null>;
+  cancelDatabaseExport(jobId: string): Promise<boolean>;
   prepareDiscovery(input: import("./discovery-types").DiscoveryInput): Promise<import("./discovery-types").DiscoveryPreview>;
   runDiscovery(requestId: string): Promise<import("./discovery-types").DiscoveryResult>;
   cancelDiscovery(requestId: string): Promise<void>;
@@ -598,7 +600,7 @@ export interface NodalStudioPlatform {
   listSnapshots(sourceId: string): Promise<SnapshotSummary[]>;
   getSnapshot(snapshotId: string): Promise<DatabaseSnapshot>;
   compareSnapshots(beforeSnapshotId: string, afterSnapshotId: string): Promise<SchemaChangeSet>;
-  executeReadonlyQuery(input: ExecuteReadonlyQueryInput): Promise<QueryExecutionResult>;
+  executeReadonlyQuery(input: ExecuteReadonlyQueryInput, onRegistered?: () => void): Promise<QueryExecutionResult>;
   cancelQuery(queryId: string): Promise<boolean>;
   listQueryHistory(sourceId: string, limit?: number): Promise<QueryHistoryEntry[]>;
   deleteQueryHistory(sourceId: string, historyId: string): Promise<boolean>;

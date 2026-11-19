@@ -241,6 +241,22 @@ and team. Share links default to seven days and can be listed, rotated, or revok
 from Settings. Production deployments must replace the development secret and
 terminate HTTPS in front of the stack.
 
+## Export PostgreSQL data
+
+Right-click a table and choose **Open Table** to run a preview of up to 100 rows
+in Query. Use **Export Wizard** to save the selected columns as CSV or JSON.
+CSV defaults to spreadsheet formula protection. On Community desktop builds
+with a direct PostgreSQL connection, right-click a schema such as `public`
+and choose **Dump SQL File**. Choose **Structure and Data** or
+**Structure Only** to dump the selected schema.
+
+SQL dumps use the installed PostgreSQL client tools. Use a `pg_dump` version at
+least as new as the source server. The dump streams to the selected disk.
+Choose a new filename for each export. A plain SQL file can be larger than the
+source's on-disk size. Restore to a database where the selected schema is absent
+and prepare any dependencies in other schemas first. For a `public` dump, use an
+empty restore database with its default `public` schema removed.
+
 ## Privacy boundary
 
 Schema capture reads PostgreSQL/MySQL catalogs or SQLite schema metadata only.

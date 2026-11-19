@@ -53,6 +53,8 @@ function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"])
     pickWorkspacePath: vi.fn(),
     pickConnectionFile: vi.fn(),
     exportQueryResult: vi.fn(),
+    exportDatabaseFile: vi.fn(),
+    cancelDatabaseExport: vi.fn(),
     getChangeReview: vi.fn(),
     applyChangeReview: vi.fn(),
     prepareKnowledgeDraft: vi.fn(),

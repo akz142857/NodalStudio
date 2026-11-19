@@ -1,5 +1,7 @@
 import type { DatabaseSnapshot, TableDefinition } from "../../platform";
 
+export const TABLE_PREVIEW_ROW_LIMIT = 100;
+
 export function quotePostgresIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }

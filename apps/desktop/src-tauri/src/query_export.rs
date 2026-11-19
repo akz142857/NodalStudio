@@ -57,7 +57,7 @@ fn cell_text(cell: &QueryCell) -> String {
         QueryCell::Binary { byte_length } => format!("[BINARY NOT LOADED: {byte_length} bytes]"),
     }
 }
-fn csv_field(value: &str, protect: bool) -> String {
+pub(crate) fn csv_field(value: &str, protect: bool) -> String {
     let prefix = if protect
         && (value.trim_start().starts_with(['=', '+', '-', '@'])
             || value.starts_with(['\t', '\r', '\n']))

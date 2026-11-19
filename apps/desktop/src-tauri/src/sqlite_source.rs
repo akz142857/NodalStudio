@@ -139,6 +139,7 @@ pub async fn query(
     profile: DataSourceProfile,
     input: ExecuteReadonlyQueryInput,
     request: ExecuteQueryRequest,
+    on_registered: Option<tauri::ipc::Channel<()>>,
 ) -> Result<QueryExecutionResult, QueryCommandError> {
     let id = request.query_id;
     request
@@ -155,6 +156,9 @@ pub async fn query(
             ));
         }
         active.insert(id, (profile.id, token.clone()));
+    }
+    if let Some(channel) = on_registered {
+        let _ = channel.send(());
     }
     let state = state.clone();
     // No await separates registration from spawning the owner. A Stop received
@@ -323,8 +327,9 @@ mod tests {
         let id = request.query_id;
         let input = query_input(&profile, &request);
         let (worker_state, worker_profile) = (state.clone(), profile.clone());
-        let caller =
-            tokio::spawn(async move { query(&worker_state, worker_profile, input, request).await });
+        let caller = tokio::spawn(async move {
+            query(&worker_state, worker_profile, input, request, None).await
+        });
         tokio::time::timeout(Duration::from_secs(2), async {
             while !state.active_queries.lock().await.contains_key(&id) {
                 tokio::task::yield_now().await;
@@ -351,7 +356,14 @@ mod tests {
         .await
         .unwrap();
         let next = query_request("SELECT 1");
-        let result = query(&state, profile.clone(), query_input(&profile, &next), next).await;
+        let result = query(
+            &state,
+            profile.clone(),
+            query_input(&profile, &next),
+            next,
+            None,
+        )
+        .await;
         assert!(
             result.is_ok(),
             "following query must not see a stale active entry"
@@ -371,7 +383,7 @@ mod tests {
         );
         let id = request.query_id;
         let input = query_input(&profile, &request);
-        let mut pending = Box::pin(query(&state, profile, input, request));
+        let mut pending = Box::pin(query(&state, profile, input, request, None));
         std::future::poll_fn(|context| {
             assert!(pending.as_mut().poll(context).is_pending());
             std::task::Poll::Ready(())

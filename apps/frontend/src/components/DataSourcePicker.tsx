@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject, type MouseEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import type { DataSourceProfile } from "../platform";
 import { ActionIcon } from "./ActionIcon";
@@ -16,13 +16,14 @@ function address(profile: DataSourceProfile) {
   return `${host}:${profile.port}`;
 }
 
-export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect, onEdit, onManage }: {
+export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect, onEdit, onManage, onContextMenu }: {
   profiles: DataSourceProfile[];
   activeProfile?: DataSourceProfile;
   disabled: boolean;
   onSelect: (profile: DataSourceProfile) => void;
   onEdit?: (profile: DataSourceProfile) => void;
   onManage?: () => void;
+  onContextMenu?: (event: MouseEvent<HTMLButtonElement> | KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const { t: bt, locale } = useI18n();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -35,13 +36,23 @@ export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect, 
     setOpening(undefined);
     if (restoreFocus) trigger.current?.focus();
   }, []);
+  function openContextMenu(event: MouseEvent<HTMLButtonElement> | KeyboardEvent<HTMLButtonElement>) {
+    if (disabled || !activeProfile || !onContextMenu) return;
+    setOpening(undefined);
+    onContextMenu(event);
+  }
   return <>
     <button ref={trigger} type="button" className="source-navigation-picker" aria-disabled={disabled || undefined}
       aria-label={activeProfile ? bt("business.dataSourceDetail", { value0: activeProfile.database }) : bt("business.selectDatabase")} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
       title={activeProfile ? bt("business.switchDatabase", { value0: activeProfile.database, value1: engine(activeProfile), value2: activeProfile.displayName, value3: address(activeProfile) }) : bt("business.selectADatabaseToOpenItsSavedModel")}
-      onClick={() => { if (!disabled) setOpening(open ? undefined : { sourceId: activeSourceId, focus: "selected" }); }}
+      onClick={() => {
+        if (disabled) return;
+        setOpening(open ? undefined : { sourceId: activeSourceId, focus: "selected" });
+      }}
+      onContextMenu={openContextMenu}
       onKeyDown={(event) => {
         if (disabled) return;
+        if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { openContextMenu(event); return; }
         if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
         event.preventDefault(); event.stopPropagation();
         setOpening({ sourceId: activeSourceId, focus: event.key === "ArrowDown" ? "first" : "last" });

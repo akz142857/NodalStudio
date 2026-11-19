@@ -66,12 +66,14 @@ mod connection_security;
 mod file_access;
 pub use connection_security::run_askpass_helper;
 mod change_review;
+mod database_export;
 mod diagram_export;
 mod discovery;
 mod export_file;
 mod git_readiness;
 mod github_releases;
 mod knowledge;
+mod postgres_export;
 mod purchase;
 mod query_export;
 mod relationship_batches;
@@ -1387,17 +1389,28 @@ async fn capture_snapshot_using(
 }
 
 #[tauri::command]
-#[allow(
-    clippy::too_many_lines,
-    reason = "Keep query cancellation and history cleanup in the same operation"
-)]
 async fn execute_readonly_query(
     input: ExecuteReadonlyQueryInput,
     state: State<'_, AppState>,
 ) -> Result<QueryExecutionResult, QueryCommandError> {
+    run_readonly_query(input, &state, None).await
+}
+
+#[tauri::command]
+async fn execute_table_preview_query(
+    input: ExecuteReadonlyQueryInput,
+    state: State<'_, AppState>,
+    on_registered: tauri::ipc::Channel<()>,
+) -> Result<QueryExecutionResult, QueryCommandError> {
+    run_readonly_query(input, &state, Some(on_registered)).await
+}
+
+async fn run_readonly_query(
+    input: ExecuteReadonlyQueryInput,
+    state: &AppState,
+    on_registered: Option<tauri::ipc::Channel<()>>,
+) -> Result<QueryExecutionResult, QueryCommandError> {
     let query_id = input.query_id;
-    let started = std::time::Instant::now();
-    let executed_at = Utc::now().to_rfc3339();
     let request = ExecuteQueryRequest {
         query_id,
         sql: input.sql.clone(),
@@ -1413,7 +1426,7 @@ async fn execute_readonly_query(
         .map_err(|_| query_command_error(query_id, QueryError::Connection))?
         .ok_or_else(|| query_command_error(query_id, QueryError::Connection))?;
     if profile.database_type == DatabaseType::Sqlite {
-        return sqlite_source::query(&state, profile, input, request).await;
+        return sqlite_source::query(state, profile, input, request, on_registered).await;
     }
     connection_credentials::require_binding(&profile)
         .map_err(|message| query_command_error(query_id, QueryError::Validation(message)))?;
@@ -1423,29 +1436,6 @@ async fn execute_readonly_query(
         DatabaseType::MySql => request.validate_mysql(),
     }
     .map_err(|error| query_command_error(query_id, error))?;
-    let password = credential_entry(profile.id)
-        .map_err(|_| query_command_error(query_id, QueryError::Connection))?
-        .get_password()
-        .map_err(|_| query_command_error(query_id, QueryError::Connection))?;
-    let source_settings = state
-        .store
-        .get_data_source_settings(profile.id)
-        .await
-        .map_err(|_| query_command_error(query_id, QueryError::Connection))?;
-    connection_security::validate(&profile.security, profile.ssl_mode)
-        .map_err(|error| query_command_error(query_id, QueryError::Validation(error)))?;
-    let ssh_password =
-        connection_credentials::resolve_ssh(Some(profile.id), &profile.security, None)
-            .map_err(|error| query_command_error(query_id, QueryError::Validation(error)))?;
-    let tunnel = connection_security::Tunnel::open(
-        &profile.security,
-        &profile.host,
-        profile.port,
-        profile.database_type,
-        ssh_password.as_deref(),
-    )
-    .await
-    .map_err(|error| query_command_error(query_id, QueryError::Validation(error)))?;
     let cancellation = CancellationToken::new();
     {
         let mut active = state.active_queries.lock().await;
@@ -1461,10 +1451,35 @@ async fn execute_readonly_query(
         }
         active.insert(query_id, (input.source_id, cancellation.clone()));
     }
-    let connect_timeout = Duration::from_secs(u64::from(
-        source_settings.refresh.connection_timeout_seconds,
-    ));
-    // Register before connecting, so Stop works during pool acquisition as well.
+    let _cancel_on_drop = cancellation.clone().drop_guard();
+    if let Some(channel) = on_registered {
+        let _ = channel.send(());
+    }
+    let state = state.clone();
+    tokio::spawn(async move {
+        let result = run_network_query(&state, profile, input, request, cancellation).await;
+        state.active_queries.lock().await.remove(&query_id);
+        result
+    })
+    .await
+    .map_err(|_| query_command_error(query_id, QueryError::Internal))?
+}
+
+async fn run_network_query(
+    state: &AppState,
+    profile: DataSourceProfile,
+    input: ExecuteReadonlyQueryInput,
+    request: ExecuteQueryRequest,
+    cancellation: CancellationToken,
+) -> Result<QueryExecutionResult, QueryCommandError> {
+    let query_id = input.query_id;
+    let started = std::time::Instant::now();
+    let executed_at = Utc::now().to_rfc3339();
+    let (password, tunnel, connect_timeout) = tokio::select! {
+        biased;
+        () = cancellation.cancelled() => return Err(query_command_error(query_id, QueryError::Cancelled)),
+        prepared = prepare_readonly_connection(state, &profile) => prepared.map_err(|error| query_command_error(query_id, error))?,
+    };
     let result = match profile.database_type {
         DatabaseType::Sqlite => unreachable!("SQLite queried before network setup"),
         DatabaseType::PostgreSql => {
@@ -1505,7 +1520,6 @@ async fn execute_readonly_query(
             }
         }
     };
-    state.active_queries.lock().await.remove(&query_id);
 
     let history = match &result {
         Ok(value) => QueryHistoryEntry {
@@ -1535,6 +1549,44 @@ async fn execute_readonly_query(
     };
     let _ = state.store.save_query_history(&history).await;
     result.map_err(|error| query_command_error(query_id, error))
+}
+
+async fn prepare_readonly_connection(
+    state: &AppState,
+    profile: &DataSourceProfile,
+) -> Result<(String, connection_security::Tunnel, Duration), QueryError> {
+    let profile_id = profile.id;
+    let security = profile.security.clone();
+    let (password, ssh_password) = tokio::task::spawn_blocking(move || {
+        let password = credential_entry(profile_id)
+            .and_then(|entry| entry.get_password().map_err(|_| String::new()))
+            .map_err(|_| QueryError::Connection)?;
+        let ssh_password = connection_credentials::resolve_ssh(Some(profile_id), &security, None)
+            .map_err(QueryError::Validation)?;
+        Ok::<_, QueryError>((password, ssh_password))
+    })
+    .await
+    .map_err(|_| QueryError::Internal)??;
+    let source_settings = state
+        .store
+        .get_data_source_settings(profile.id)
+        .await
+        .map_err(|_| QueryError::Connection)?;
+    connection_security::validate(&profile.security, profile.ssl_mode)
+        .map_err(QueryError::Validation)?;
+    let tunnel = connection_security::Tunnel::open(
+        &profile.security,
+        &profile.host,
+        profile.port,
+        profile.database_type,
+        ssh_password.as_deref(),
+    )
+    .await
+    .map_err(QueryError::Validation)?;
+    let timeout = Duration::from_secs(u64::from(
+        source_settings.refresh.connection_timeout_seconds,
+    ));
+    Ok((password, tunnel, timeout))
 }
 
 #[tauri::command]
@@ -5274,6 +5326,7 @@ pub fn run() {
                 cloud_operations: Arc::new(Mutex::new(HashMap::new())),
                 active_queries: Arc::new(Mutex::new(HashMap::new())),
             });
+            app.manage(database_export::Jobs::default());
             purchase::start(app.handle().clone());
             Ok(())
         })
@@ -5298,6 +5351,8 @@ pub fn run() {
                 save_diagram_export_binary,
                 save_schema_report,
                 query_export::export_query_result,
+                database_export::export_database_file,
+                database_export::cancel_database_export,
                 get_runtime_info,
                 purchase::get_purchase_status,
                 purchase::restore_app_purchase,
@@ -5313,6 +5368,7 @@ pub fn run() {
                 verify_and_refresh_data_source,
                 capture_postgres_snapshot,
                 execute_readonly_query,
+                execute_table_preview_query,
                 cancel_query,
                 list_query_history,
                 delete_query_history,
@@ -5408,8 +5464,9 @@ pub fn run() {
             ];
             handler(invoke)
         })
-        .run(tauri::generate_context!())
-        .expect("failed to run Nodal Studio desktop application");
+        .build(tauri::generate_context!())
+        .expect("failed to build Nodal Studio desktop application")
+        .run(database_export::handle_app_event);
 }
 
 #[cfg(test)]

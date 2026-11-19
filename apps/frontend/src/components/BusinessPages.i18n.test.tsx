@@ -68,7 +68,7 @@ it("preserves tree search and raw object names while translating actions", () =>
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "public.orders" } });
   view.chinese();
   expect(screen.getByRole("searchbox", { name: "搜索数据库对象" })).toHaveValue("public.orders");
-  fireEvent.click(screen.getByRole("button", { name: "public.orders 的操作" }));
+  fireEvent.contextMenu(screen.getByRole("button", { name: /^orders/ }));
   expect(screen.getByRole("menuitem", { name: "复制限定名称" })).toBeVisible();
   view.english();
   expect(screen.getByRole("searchbox")).toHaveValue("public.orders");

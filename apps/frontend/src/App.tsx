@@ -21,13 +21,14 @@ import { ChangesEmptyState } from "./components/ChangesEmptyState";
 import { SchemaChangesPanel } from "./components/SchemaChangesPanel";
 import { SchemaChangesDiagram } from "./components/SchemaChangesDiagram";
 import { SchemaTree } from "./components/SchemaTree";
+import { DatabaseExportDialog, type DatabaseExportTarget } from "./components/DatabaseExportDialog";
 import { SchemaReportExportAction } from "./components/SchemaReportExportAction";
 import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
 import type { QueryDraftSeed } from "./components/query/QueryDraftPanel";
-import type { OpenQueryRequest } from "./components/query/QueryPage";
-import { tablePreviewSql } from "./components/query/query-format";
+import type { OpenQueryRequest, OpenTableRequest } from "./components/query/QueryPage";
+import { TABLE_PREVIEW_ROW_LIMIT, tablePreviewSql } from "./components/query/query-format";
 import { clearQuerySessions } from "./components/query/query-state";
 import { searchSchema, type SchemaSearchResult } from "./graph/schema-search";
 import { domainMembershipAddition } from "./graph/table-selection";
@@ -179,6 +180,8 @@ export function App() {
   const [noticesOpen, setNoticesOpen] = useState(false);
   const [queryDraftSeed, setQueryDraftSeed] = useState<QueryDraftSeed>();
   const [openQueryRequest, setOpenQueryRequest] = useState<OpenQueryRequest>();
+  const [openTableRequest, setOpenTableRequest] = useState<OpenTableRequest>();
+  const [databaseExport, setDatabaseExport] = useState<{ snapshot: DatabaseSnapshot; target: DatabaseExportTarget }>();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const autoConnectAttempted = useRef(false);
   const startupRevision = useRef(0);
@@ -210,6 +213,8 @@ export function App() {
   const queryTarget = currentCapabilityTarget(runtime.data?.kind, snapshot?.database.databaseType);
   const queryScope = queryTarget ? t(capabilityMessages["read-only-query"].targets[queryTarget]) : t("navigation.query.unknown");
   const querySupported = Boolean(snapshot) && queryCapability.status === "supported";
+  const postgresExport = runtime.data?.kind === "desktop" && snapshot?.database.databaseType === "postgreSql" && !historyPreview;
+  const postgresDump = postgresExport && runtime.data?.distribution !== "macAppStore";
   const domainWorkspace = useRef({ snapshot, semantics, semanticsSnapshot, runtimeKind: runtime.data?.kind, mode });
   const pendingDomainUpdates = useRef(new Set<string>());
   useLayoutEffect(() => {
@@ -876,9 +881,25 @@ export function App() {
     if (!querySupported) return;
     setPreflightOpen(false);
     setLocateRequest(undefined);
+    setOpenTableRequest(undefined);
     setOpenQueryRequest({ id: Date.now(), sql: tablePreviewSql(table, 100, snapshot?.database.databaseType) });
     setMode("query");
   }, [querySupported, snapshot?.database.databaseType, setPreflightOpen]);
+
+  function openTable(table: TableDefinition) {
+    if (!snapshot || !querySupported || historyPreview) return;
+    setPreflightOpen(false);
+    setLocateRequest(undefined);
+    setQueryDraftSeed(undefined);
+    setDiscoverySnapshot(undefined);
+    setOpenQueryRequest(undefined);
+    setOpenTableRequest({
+      id: crypto.randomUUID(),
+      sourceId: snapshot.sourceId,
+      sql: tablePreviewSql(table, TABLE_PREVIEW_ROW_LIMIT + 1, snapshot.database.databaseType),
+    });
+    setMode("query");
+  }
 
   const documentObject = objectDocument && objectDocument.snapshot === snapshot ? findDocumentObject(snapshot, objectDocument.key) : undefined;
   const documentVisible = Boolean(documentObject && mode === "explore" && !preflightOpen);
@@ -907,7 +928,12 @@ export function App() {
         <Segmented
           label={t("navigation.viewMode")}
           value={mode}
-          onChange={(next) => { setPreflightOpen(false); setLocateRequest(undefined); setMode(next); }}
+          onChange={(next) => {
+            setPreflightOpen(false);
+            setLocateRequest(undefined);
+            if (next !== "query") setOpenTableRequest(undefined);
+            setMode(next);
+          }}
           options={[
             { value: "explore", label: t("navigation.database") },
             {
@@ -1058,12 +1084,17 @@ export function App() {
                 onOpenObject={openObjectDocument}
                 onCloseObject={closeObjectDocument}
                 onSelectTable={locateTable}
+                onOpenTable={querySupported && !historyPreview ? openTable : undefined}
+                onExportTable={postgresExport ? (table) => setDatabaseExport({ snapshot, target: { kind: "tableData", table } }) : undefined}
+                onDumpSchema={postgresDump ? (schema, dumpMode) => setDatabaseExport({ snapshot, target: { kind: "sqlDump", schema, mode: dumpMode } }) : undefined}
                 onOpenQuery={querySupported ? openTableInQuery : undefined}
               />
             ) : null}
           </ConnectionPanel>
 
         </aside>
+        {databaseExport ? <DatabaseExportDialog platform={platform} snapshot={databaseExport.snapshot} target={databaseExport.target}
+          onClose={() => setDatabaseExport(undefined)} /> : null}
 
         <SidebarRail
           side="left"
@@ -1116,6 +1147,8 @@ export function App() {
               onOpenAiSettings={() => openSettings("ai")}
               openRequest={openQueryRequest}
               onConsumeOpenRequest={() => setOpenQueryRequest(undefined)}
+              openTableRequest={openTableRequest}
+              onConsumeOpenTable={(id) => setOpenTableRequest((current) => current?.id === id ? undefined : current)}
             />
             </Suspense>
           ) : mode === "changes" && !changeSet ? (
@@ -1199,7 +1232,7 @@ export function App() {
             snapshot={snapshot} semantics={semantics} settings={settings} platform={platform} desktop
             initialTable={historicalSelection ? undefined : selectedTable}
             sourceLabel={dataSources.find((source) => source.id === snapshot.sourceId)?.displayName}
-            onDraftQuery={querySupported ? (seed) => { setQueryDraftSeed({ ...seed, id: Date.now() }); setDiscoverySnapshot(undefined); setOpenQueryRequest(undefined); setMode("query"); } : undefined}
+            onDraftQuery={querySupported ? (seed) => { setQueryDraftSeed({ ...seed, id: Date.now() }); setDiscoverySnapshot(undefined); setOpenQueryRequest(undefined); setOpenTableRequest(undefined); setMode("query"); } : undefined}
             onClose={() => setDiscoverySnapshot(undefined)}
             onLocate={(table) => { setDiscoverySnapshot(undefined); locateTable(table); }}
             onExplain={(table) => { setDiscoverySnapshot(undefined); locateTable(table); setRightPanel((panel) => ({ ...panel, expanded: true })); setExplainRequest((value) => value + 1); }}
@@ -1295,6 +1328,7 @@ export function App() {
             clearQuerySessions();
             setMode("explore");
             setOpenQueryRequest(undefined);
+            setOpenTableRequest(undefined);
             setSnapshot(undefined);
             setChangeSet(undefined);
             setSelectedTable(undefined);

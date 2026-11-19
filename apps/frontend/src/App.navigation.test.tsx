@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -7,6 +7,7 @@ import { getPlatform, type CaptureSnapshotResult, type SchemaChangeSet } from ".
 import { reportSemantics, reportSnapshot } from "./test/schema-report-fixture";
 import { enumSnapshot } from "./test/enum-fixture";
 import type { CanvasLocateRequest, SchemaCanvasProps } from "./components/SchemaCanvas";
+import { clearQuerySessions, loadQuerySession, saveQuerySession } from "./components/query/query-state";
 const changes: SchemaChangeSet = { id: "changes", beforeSnapshotId: "before", afterSnapshotId: reportSnapshot.id, createdAt: reportSnapshot.capturedAt, operations: [], riskSummary: { high: 0, medium: 0, low: 0, informational: 0 } };
 vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot, children }: { onSnapshot: (result: CaptureSnapshotResult) => void; children: ReactNode }) => <>
   <button onClick={() => onSnapshot({ snapshot: reportSnapshot, stored: false, changeSet: null })}>Load navigation fixture</button>
@@ -41,6 +42,82 @@ const pickOrders = () => {
 };
 describe("App sidebar object navigation", () => {
   beforeEach(() => localStorage.clear()); afterEach(() => vi.restoreAllMocks());
+  it("runs Open Table inside Query, exports chosen table columns, and dumps the selected schema", async () => {
+    const showModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
+    const close = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "close");
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value(this: HTMLDialogElement) { this.open = true; } });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value(this: HTMLDialogElement) { this.open = false; } });
+    clearQuerySessions();
+    saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 42;", rowLimit: 500 });
+    try {
+      const platform = await mount();
+      const query = vi.spyOn(platform, "executeReadonlyQuery").mockResolvedValue({
+        queryId: "preview", columns: [{ name: "id", databaseType: "int8" }], rows: [[{ kind: "text", value: "5678", truncated: false }]],
+        rowCount: 1, truncated: false, durationMs: 1, notices: [],
+      });
+      const exportFile = vi.spyOn(platform, "exportDatabaseFile").mockImplementation((_input, progress) => {
+        progress({ stage: "exporting", bytes: 2048 });
+        return Promise.resolve({ path: "/exports/orders.json", bytes: 2048 });
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Load navigation fixture" }));
+      fireEvent.change(screen.getByRole("searchbox", { name: "Search database objects" }), { target: { value: "public.orders" } });
+      const row = screen.getByRole("button", { name: /^orders/ });
+      fireEvent.contextMenu(row);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Open Table" }));
+      const queryWorkspace = await screen.findByRole("region", { name: /Query workspace/i });
+      expect(await within(queryWorkspace).findByRole("cell", { name: "5678" })).toBeVisible();
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(queryWorkspace.querySelector(".cm-content")).toHaveTextContent('"public"."orders"');
+      expect(within(queryWorkspace).getByRole("combobox", { name: "Row limit" })).toHaveValue("100");
+      expect(query).toHaveBeenCalledOnce();
+      expect(query).toHaveBeenCalledWith(expect.objectContaining({ sourceId: reportSnapshot.sourceId, rowLimit: 100,
+        sql: 'SELECT *\nFROM "public"."orders"\nLIMIT 101;' }), expect.any(Function));
+      fireEvent.click(within(queryWorkspace).getByRole("button", { name: "Restore previous SQL draft" }));
+      expect(queryWorkspace.querySelector(".cm-content")).toHaveTextContent("SELECT 42;");
+      expect(within(queryWorkspace).getByRole("combobox", { name: "Row limit" })).toHaveValue("500");
+      const cancel = vi.spyOn(platform, "cancelQuery").mockResolvedValue(true);
+      let registered: () => void = () => {};
+      query.mockImplementationOnce((_input, onRegistered) => {
+        registered = onRegistered ?? registered;
+        return new Promise(() => {});
+      });
+      fireEvent.contextMenu(row);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Open Table" }));
+      await waitFor(() => expect(query).toHaveBeenCalledTimes(2));
+      fireEvent.click(screen.getByRole("button", { name: "Database" }));
+      expect(cancel).not.toHaveBeenCalled();
+      registered();
+      expect(cancel).toHaveBeenCalledWith(query.mock.calls[1][0].queryId);
+
+      fireEvent.contextMenu(row);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Export Wizard…" }));
+      const wizard = within(screen.getByRole("dialog", { name: "Export Wizard…" }));
+      expect(wizard.getByRole("checkbox", { name: /Protect spreadsheet formulas/ })).toBeChecked();
+      fireEvent.change(wizard.getByRole("combobox", { name: "File format" }), { target: { value: "json" } });
+      fireEvent.click(wizard.getByRole("checkbox", { name: "customer_id" }));
+      fireEvent.click(wizard.getByRole("button", { name: "Choose file and export…" }));
+      expect(await wizard.findByText(/Saved 2 KiB to/)).toBeVisible();
+      expect(exportFile).toHaveBeenCalledWith(expect.objectContaining({ sourceId: reportSnapshot.sourceId, export: {
+        kind: "tableData", table: { kind: "table", schema: "public", name: "orders" }, format: "json", protectFormulas: true, columns: ["id", "total"],
+      } }), expect.any(Function));
+      fireEvent.click(wizard.getByRole("button", { name: "Done" }));
+      fireEvent.contextMenu(screen.getByRole("button", { name: /^public\s*\d+$/ }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Dump SQL File" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Structure Only…" }));
+      const dump = within(screen.getByRole("dialog", { name: "Dump SQL File" }));
+      expect(dump.getByText("Commerce / public")).toBeVisible();
+      fireEvent.click(dump.getByRole("button", { name: "Choose file and export…" }));
+      await waitFor(() => expect(exportFile).toHaveBeenLastCalledWith(expect.objectContaining({
+        sourceId: reportSnapshot.sourceId,
+        export: { kind: "sqlDump", schema: "public", mode: "structureOnly" },
+      }), expect.any(Function)));
+    } finally {
+      cleanup();
+      clearQuerySessions();
+      if (showModal) Object.defineProperty(HTMLDialogElement.prototype, "showModal", showModal); else Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+      if (close) Object.defineProperty(HTMLDialogElement.prototype, "close", close); else Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
+    }
+  });
   it("opens field details, highlights and locates repeated clicks, and clears stale field selection", async () => {
     const scrolled: HTMLElement[] = [];
     const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
