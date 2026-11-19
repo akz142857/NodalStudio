@@ -365,6 +365,13 @@ impl DumpClient {
         })
     }
 
+    #[cfg_attr(
+        not(unix),
+        allow(
+            clippy::unnecessary_wraps,
+            reason = "Unix creates an anonymous password file here; keep the same caller contract on all platforms"
+        )
+    )]
     pub fn command(
         &self,
         executable: &Path,
