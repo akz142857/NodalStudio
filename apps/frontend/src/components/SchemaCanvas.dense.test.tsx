@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useStoreApi, type NodeProps } from "@xyflow/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { TableNode } from "../graph/schema-graph";
+import { seedCanvasGeometry } from "../graph/canvas-geometry";
 import { defaultAppSettings, type NodalStudioPlatform } from "../platform";
 import { diagramColumn, diagramForeignKey, diagramTable, diagramAfter } from "../test/diagram-comparison-fixture";
 import { animationFrames, diagramExportFrameBudget } from "../test/animation-frames";
@@ -14,9 +15,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 const canvasStyles = readFileSync(resolve("src/styles.css"), "utf8").replace(/^@import[^\n]*\n/, "");
 
-const probe = vi.hoisted(() => ({ store: undefined as ReturnType<typeof useStoreApi> | undefined, fitView: vi.fn().mockResolvedValue(true) }));
+const probe = vi.hoisted(() => ({ store: undefined as ReturnType<typeof useStoreApi<TableNode>> | undefined, fitView: vi.fn().mockResolvedValue(true) }));
 vi.mock("./TableNode", () => ({ TableNode: memo(function TestNode({ id, data }: NodeProps<TableNode>) {
-  const store = useStoreApi(); useEffect(() => { probe.store = store; }, [store]);
+  const store = useStoreApi<TableNode>(); useEffect(() => { probe.store = store; }, [store]);
   const detailed = useExportTableDetail(id);
   return <article className="table-node" data-overview={detailed !== undefined && !detailed || undefined}>{data.table.key.name}</article>;
 }) }));
@@ -28,6 +29,53 @@ vi.mock("../graph/elk-layout", async (load) => ({ ...await load<typeof import(".
   layoutSchemaGraph: vi.fn((nodes: TableNode[]) => Promise.resolve(nodes.map((node, i) => ({ ...node, position: { x: i * 320, y: i % 2 * 250 } })))),
 }));
 afterEach(() => { document.querySelectorAll("style[data-canvas-regression]").forEach((style) => style.remove()); vi.restoreAllMocks(); vi.unstubAllGlobals(); probe.store = undefined; });
+
+it("shares and exports all paths in an edge-heavy diagram with fewer than 100 tables", async () => {
+  const frames = animationFrames(16);
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  vi.stubGlobal("DOMMatrixReadOnly", class { m22 = 1; });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1200);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(700);
+  const columns = Array.from({ length: 6 }, (_, index) => diagramColumn(`ref${index}`, index + 2));
+  const tables = Array.from({ length: 70 }, (_, index) => ({
+    ...diagramTable(`t${index}`, [diagramColumn("id"), ...columns]),
+    foreignKeys: columns.map((column, target) => diagramForeignKey(`fk${index}_${target}`, column.name, `t${target}`)),
+  }));
+  const snapshot = { ...diagramAfter, id: "edge-heavy", fingerprint: "edge-heavy", schemas: [{ name: "public", tables, views: [], enums: [] }] };
+  const saveDiagramExport = vi.fn().mockResolvedValue({ path: "/tmp/edge-heavy.svg" });
+  const { container } = render(<SchemaCanvas snapshot={snapshot} query="" canvasSettings={defaultAppSettings().canvas}
+    runtimeKind="web" onSelectTable={vi.fn()} platform={{ saveDiagramExport } as unknown as NodalStudioPlatform} />);
+  const exportButton = screen.getByRole("button", { name: "Export SVG" });
+  await frames.until(() => expect(exportButton).toBeEnabled());
+  const store = probe.store!;
+  expect(store.getState().edges).toHaveLength(420);
+  act(() => {
+    // The mocked cards don't measure their DOM. Supply the geometry that
+    // React Flow would receive from ResizeObserver in the real medium diagram.
+    const nodeLookup = new Map(store.getState().nodeLookup);
+    for (const [id, node] of nodeLookup) {
+      const geometry = seedCanvasGeometry(node, true);
+      nodeLookup.set(id, { ...node, ...geometry, measured: geometry.measured ?? node.measured });
+    }
+    store.setState({ width: 1200, height: 700, transform: [0, 0, 1], nodeLookup });
+  });
+  await frames.until(() => expect(container.querySelectorAll('[data-shared-edge="true"] .react-flow__edge-path')).toHaveLength(420));
+  expect(container.querySelectorAll("[data-shared-edge-layer]")).toHaveLength(1);
+  const expected = new Set(store.getState().edges.map((edge) => edge.id));
+  const exported = new Set<string>();
+  const capture = vi.spyOn(exporter, "createDiagramSvgCapture").mockImplementation((options) => ({
+    appendEdges: () => {
+      for (const edge of options.root.querySelectorAll(".react-flow__edge")) exported.add(edge.getAttribute("data-id")!);
+    },
+    appendTables: () => {},
+    finish: () => ({ svg: "<svg/>", width: 100, height: 100 }),
+  }));
+  fireEvent.click(exportButton);
+  await frames.until(() => expect(saveDiagramExport).toHaveBeenCalledOnce(),
+    diagramExportFrameBudget({ edgeCount: expected.size, tableCount: tables.length }));
+  expect(capture).toHaveBeenCalledOnce();
+  expect(exported).toEqual(expected);
+});
 
 it.each([16, 250])("retains the dense model, selects, exports and rebuilds all edges with %i ms frames", async (interval) => {
   const frames = animationFrames(interval);

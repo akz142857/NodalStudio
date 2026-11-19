@@ -266,8 +266,8 @@ it("collapses unreadable fields in overview, keeps relation anchors and restores
   const rowHeight = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(27);
   const node = buildSchemaGraph(diagramAfter, { beforeSnapshot: diagramBefore, changeSet: diagramChangeSet }).nodes.find((item) => item.id === "public.orders")!;
   const props = { ...node, selected: false, dragging: false, zIndex: 0, isConnectable: false, positionAbsoluteX: 0, positionAbsoluteY: 0 } as NodeProps<TableNodeType>;
-  function Diagram({ zoom = .2, selected = false, exporting = false, exportTableIds }: { zoom?: number; selected?: boolean; exporting?: boolean; exportTableIds?: ReadonlySet<string> }) {
-    return <ReactFlowProvider><TestZoom zoom={zoom} /><CanvasInteractionProvider value={{ spacePanMode: false, overviewEnabled: true, exportRendering: exporting, exportDetails: (() => { const store = createExportDetailStore(); store.set(exportTableIds); return store; })() }}><TableNode {...props} selected={selected} /></CanvasInteractionProvider></ReactFlowProvider>;
+  function Diagram({ zoom = .2, large = true, selected = false, exporting = false, exportTableIds }: { zoom?: number; large?: boolean; selected?: boolean; exporting?: boolean; exportTableIds?: ReadonlySet<string> }) {
+    return <ReactFlowProvider><TestZoom zoom={zoom} /><CanvasInteractionProvider value={{ spacePanMode: false, overviewEnabled: large, exportRendering: exporting, exportDetails: (() => { const store = createExportDetailStore(); store.set(exportTableIds); return store; })() }}><TableNode {...props} selected={selected} /></CanvasInteractionProvider></ReactFlowProvider>;
   }
   const { container, rerender } = render(<Diagram />);
   expect(container.querySelector(".table-node")).toHaveAttribute("data-overview", "true");
@@ -281,6 +281,12 @@ it("collapses unreadable fields in overview, keeps relation anchors and restores
   expect(container.querySelector('[data-column-name="legacy_note"]')).toHaveAttribute("data-change", "deleted");
   expect(container.querySelector('[data-handleid="source:user_id:right"]')?.parentElement?.style.top).toBe(anchor);
   rerender(<Diagram zoom={.6} />);
+  expect(container.querySelectorAll(".table-column").length).toBeGreaterThan(0);
+  rerender(<Diagram zoom={.1} large={false} />);
+  expect(container.querySelector(".table-node")).toHaveAttribute("data-overview", "true");
+  expect(container.querySelectorAll(".table-column")).toHaveLength(0);
+  expect(container.querySelector('[data-handleid="source:user_id:right"]')?.parentElement?.style.top).toBe(anchor);
+  rerender(<Diagram zoom={.2} large={false} />);
   expect(container.querySelectorAll(".table-column").length).toBeGreaterThan(0);
   rerender(<Diagram exporting />);
   expect(container.querySelectorAll(".table-column").length).toBeGreaterThan(0);

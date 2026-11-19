@@ -1,6 +1,6 @@
 .workspace > .sidebar { display: flex; flex-direction: column; padding: 14px 10px; overflow-x: hidden; }
 .workspace > .sidebar[hidden] { display: none; }
-.model-navigation { flex: 1; align-content: start; min-width: 0; gap: 8px; }
+.model-navigation { flex: 1; align-content: start; min-width: 0; gap: 8px; --tree-row-height: 29px; }
 .model-navigation [hidden] { display: none !important; }
 .source-navigation-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 0 2px; }
 .model-navigation .source-navigation-heading h2 { min-width: 0; margin: 0; font: 600 11px/16px var(--ds-font-ui); color: var(--ds-secondary); }
@@ -21,7 +21,12 @@
 .source-navigation-heading button:disabled, .source-navigation-current :disabled { opacity: .45; cursor: default; }
 .model-navigation .saved-sources, .model-navigation .tree-node { min-width: 0; }
 .model-navigation .saved-sources .schema-tree { margin: 0; padding: 0; }
-.model-navigation .tree-row { box-sizing: border-box; min-width: 0; min-height: 29px; font-size: var(--ds-text-control); gap: 7px; }
+.model-navigation .tree-row { box-sizing: border-box; min-width: 0; min-height: var(--tree-row-height); font-size: var(--ds-text-control); gap: 7px; }
+.model-navigation .tree-object-chunk[data-deferred] {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto calc(var(--object-chunk-rows) * var(--tree-row-height));
+}
+.model-navigation .tree-object-chunk[data-deferred] button:focus-visible { outline-offset: -2px; }
 .model-navigation .tree-row-main { min-width: 0; }
 .model-navigation .tree-row-schema { font-weight: 400; color: var(--ds-secondary); }
 .model-navigation .tree-row-type { color: var(--ds-secondary); }

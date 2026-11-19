@@ -50,10 +50,11 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
   // land on a column that has no relationship yet.
   const revealAllHandles = data.relationshipConnectTargets !== undefined && !rowConnectionActive;
 
-  // A boolean selector only notifies nodes when crossing the detail threshold.
-  const overviewZoom = useStore((state) => state.transform[2] < 0.35);
+  // At a distant zoom the field text is unreadable even in a smaller model.
+  // Keep only the card summary and its existing relationship anchors there.
+  const overviewZoom = useStore((state) => state.transform[2] < (overviewEnabled ? 0.35 : 0.2));
   const measurementKey = JSON.stringify([visibleColumns.map((column) => column.name), settings.showTableComments && data.table.comment, width, height]);
-  const compact = exportDetail !== undefined ? !exportDetail : Boolean(overviewEnabled && overviewZoom && !exportRendering && !selected
+  const compact = exportDetail !== undefined ? !exportDetail : Boolean(overviewZoom && !exportRendering && !selected
     && !data.inspectorFocused && !data.relationshipHighlighted && !revealAllHandles && !rowConnectionActive
     && (measuredLayout === measurementKey || data.initialColumnCenters !== undefined));
   // Overview keeps measurable ports for React Flow's own ResizeObserver, but

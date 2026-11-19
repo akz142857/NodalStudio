@@ -1,9 +1,9 @@
 import { SchemaIndexDetails } from "./SchemaIndexDetails";
 import { translateUiLabel } from "../i18n/business-labels";
 import { useI18n } from "../i18n";
-import { useCallback, useState, type MouseEvent, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useState, type MouseEvent, type KeyboardEvent, type ReactNode, type CSSProperties } from "react";
 import type { DatabaseSnapshot, ObjectKey, TableDefinition } from "../platform";
-import type { EnumDefinition, ViewDefinition, ProgramDefinition } from "../platform/types";
+import type { EnumDefinition, ViewDefinition, ProgramDefinition, SchemaDefinition } from "../platform/types";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
 import { OperationFeedback } from "./OperationFeedback";
 import { SchemaObjectMenu, type SchemaObjectMenuAction } from "./SchemaObjectMenu";
@@ -11,6 +11,7 @@ import { useOperation } from "./use-operation";
 import { TreeDisclosureIcon } from "./TreeDisclosureIcon";
 import { ObjectDependencies, ProgramDetails } from "./SchemaProgramDetails";
 import { SchemaEnumDetails } from "./SchemaEnumDetails";
+import { findDocumentObject } from "./object-document-model";
 
 interface SchemaTreeProps {
   snapshot: DatabaseSnapshot;
@@ -30,8 +31,72 @@ const OBJECT_TYPE_ICONS: Record<ObjectType, ActionIconName> = {
   tables: "table", views: "copy", enums: "list",
   functions: "function", procedures: "procedure", triggers: "trigger",
 };
-type MenuObject = TableDefinition | ViewDefinition | EnumDefinition | ProgramDefinition;
-type MenuTarget = { object: MenuObject; trigger: HTMLButtonElement; x: number; y: number; scope: string };
+type SchemaObject = TableDefinition | ViewDefinition | EnumDefinition | ProgramDefinition;
+type MenuTarget = { object: SchemaObject; trigger: HTMLButtonElement; x: number; y: number; scope: string };
+type RowEvent = MouseEvent<HTMLButtonElement> | KeyboardEvent<HTMLButtonElement>;
+type ObjectGroup = { type: ObjectType; objects: readonly SchemaObject[] };
+
+const OBJECT_TYPES: Partial<Record<ObjectKey["kind"], ObjectType>> = {
+  table: "tables", view: "views", enum: "enums", function: "functions", procedure: "procedures", trigger: "triggers",
+};
+
+function schemaGroups(schema: SchemaDefinition): ObjectGroup[] {
+  const functions: ProgramDefinition[] = [];
+  const procedures: ProgramDefinition[] = [];
+  const triggers: ProgramDefinition[] = [];
+  for (const program of schema.programs ?? []) {
+    if (program.key.kind === "function") functions.push(program);
+    if (program.key.kind === "procedure") procedures.push(program);
+    if (program.key.kind === "trigger") triggers.push(program);
+  }
+  const groups: ObjectGroup[] = [
+    { type: "tables", objects: schema.tables },
+    { type: "views", objects: schema.views },
+    { type: "enums", objects: schema.enums },
+    { type: "functions", objects: functions },
+    { type: "procedures", objects: procedures },
+    { type: "triggers", objects: triggers },
+  ];
+  return groups.filter(({ objects }) => objects.length > 0);
+}
+
+const SchemaObjectRows = memo(function SchemaObjectRows({ objects, selectedName, selectedProgram, menuObject, onSelectTable, onOpenObject, onShowMenu }: {
+  objects: readonly SchemaObject[];
+  selectedName?: string;
+  selectedProgram?: ProgramDefinition;
+  menuObject?: SchemaObject;
+  onSelectTable: (table: TableDefinition) => void;
+  onOpenObject: (key: ObjectKey) => void;
+  onShowMenu: (event: RowEvent, object: SchemaObject) => void;
+}) {
+  const { t } = useI18n();
+  const rows = objects.map((object) => {
+    const { schema, name } = object.key;
+    const table = "columns" in object ? object : undefined;
+    const selected = "arguments" in object ? selectedProgram === object : name === selectedName;
+    return <div className="tree-object-row" key={name}>
+      <button type="button" className="tree-row tree-row-object" title={name}
+        aria-current={selected ? "true" : undefined}
+        onClick={() => table ? onSelectTable(table) : onOpenObject(object.key)}
+        onDragStart={"arguments" in object ? undefined : (event) => event.preventDefault()}>
+        <span className="tree-label">{name}</span>
+        {table ? <small>{table.columns.length}</small> : "materialized" in object && object.materialized ? <small>{t("business.materializedView")}</small> : null}
+      </button>
+      <button type="button" className="tree-object-actions"
+        aria-label={t("business.actionsFor", { value0: schema, value1: name })}
+        aria-haspopup="menu" aria-expanded={menuObject === object} onClick={(event) => onShowMenu(event, object)}><ActionIcon name="more" /></button>
+    </div>;
+  });
+  // The first rows must paint with the branch disclosure. Only later chunks can
+  // defer their layout until they approach the scroll viewport.
+  const chunkSize = 32;
+  if (rows.length <= chunkSize) return rows;
+  return Array.from({ length: Math.ceil(rows.length / chunkSize) }, (_, index) => {
+    const chunk = rows.slice(index * chunkSize, (index + 1) * chunkSize);
+    return <div className="tree-object-chunk" key={index} data-deferred={index > 0 || undefined}
+      style={{ "--object-chunk-rows": chunk.length } as CSSProperties}>{chunk}</div>;
+  });
+});
 
 /** Filtering expands matches without changing the user's normal disclosure state. */
 export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery, navigation, selectedObject, onOpenObject, onCloseObject }: SchemaTreeProps) {
@@ -59,36 +124,50 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     if (filtering) setSearchOpen((current) => ({ ...current, [key]: !(current[key] ?? true) }));
     else setOpen((current) => ({ ...current, [key]: !current[key] }));
   };
-  const visible = snapshot.schemas.map((schema) => {
-    const matches = (key: ObjectKey) => normalized.split(/\s+/).every((term) => `${key.schema}.${key.name}`.toLocaleLowerCase().includes(term));
-    return { ...schema, tables: schema.tables.filter((table) => matches(table.key)), views: schema.views.filter((view) => matches(view.key)), enums: schema.enums.filter(item => matches(item.key)), programs: (schema.programs ?? []).filter(item => matches(item.key)) };
-  }).filter((schema) => !filtering || schema.tables.length + schema.views.length + schema.enums.length + schema.programs.length > 0);
-  const totals = visible.reduce((sum, schema) => sum + schema.tables.length + schema.views.length + schema.enums.length + schema.programs.length, 0);
+  // Disclosure and menu state share the same groups until the model or filter changes.
+  const catalog = useMemo(() => snapshot.schemas.map((schema) => {
+    const groups = schemaGroups(schema);
+    return { name: schema.name, groups, count: groups.reduce((total, group) => total + group.objects.length, 0) };
+  }), [snapshot.schemas]);
+  const visible = useMemo(() => {
+    if (!normalized) return catalog;
+    const terms = normalized.split(/\s+/);
+    return catalog.flatMap(({ name, groups }) => {
+      const matches = groups.flatMap(({ type, objects }) => {
+        const filtered = objects.filter(({ key }) => {
+          const qualified = `${key.schema}.${key.name}`.toLocaleLowerCase();
+          return terms.every((term) => qualified.includes(term));
+        });
+        return filtered.length ? [{ type, objects: filtered }] : [];
+      });
+      return matches.length ? [{ name, groups: matches, count: matches.reduce((total, group) => total + group.objects.length, 0) }] : [];
+    });
+  }, [catalog, normalized]);
+  const totals = filtering ? visible.reduce((sum, schema) => sum + schema.count, 0) : 0;
   const activeKey = selectedObject ?? previewKey;
-  const openObject = (key: ObjectKey) => {
+  const openObject = useCallback((key: ObjectKey) => {
     if (onOpenObject && key.kind !== "enum") { setPreviewKey(undefined); onOpenObject(key); }
     else { onCloseObject?.(); setPreviewKey(key); }
-  };
-  const preview = activeKey?.kind === "view" ? snapshot.schemas.flatMap((schema) => schema.views).find((view) => view.key.schema === activeKey.schema && view.key.name === activeKey.name) : undefined;
-  const enumPreview = activeKey?.kind === "enum" ? snapshot.schemas.flatMap((schema) => schema.enums).find((item) => item.key.schema === activeKey.schema && item.key.name === activeKey.name) : undefined;
-  const programPreview = snapshot.schemas.flatMap(s => s.programs ?? []).find(p => p.key.kind === activeKey?.kind && p.key.schema === activeKey.schema && p.key.name === activeKey.name);
-  if (previewKey && !preview && !enumPreview && !programPreview) setPreviewKey(undefined);
-  const selectedId = selectedTable && !preview && !enumPreview && !programPreview ? `${selectedTable.key.schema}.${selectedTable.key.name}` : undefined;
+  }, [onCloseObject, onOpenObject]);
+  const activeObject = activeKey && findDocumentObject(snapshot, activeKey);
+  const preview = activeObject && !("arguments" in activeObject) && !("values" in activeObject) ? activeObject : undefined;
+  const enumPreview = activeObject && "values" in activeObject ? activeObject : undefined;
+  const programPreview = activeObject && "arguments" in activeObject ? activeObject : undefined;
+  if (previewKey && !activeObject) setPreviewKey(undefined);
+  const selectedKey = (activeObject ?? selectedTable)?.key;
 
   const closeMenu = useCallback((restoreFocus: boolean) => {
     setContext(undefined);
     if (restoreFocus && context?.trigger.isConnected) context.trigger.focus();
   }, [context]);
-  const showMenu = (event: MouseEvent<HTMLButtonElement> | KeyboardEvent<HTMLButtonElement>, object: MenuObject) => {
+  const showMenu = useCallback((event: RowEvent, object: SchemaObject) => {
     event.preventDefault(); event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     const pointer = "clientX" in event && (event.clientX !== 0 || event.clientY !== 0);
     setContext({ object, trigger: event.currentTarget, scope: menuScope,
       x: pointer ? event.clientX : rect.left + 16, y: pointer ? event.clientY : rect.bottom });
-  };
-  const chooseTable = (table: TableDefinition) => { setPreviewKey(undefined); onSelectTable(table); };
-  const showView = (view: ViewDefinition) => openObject(view.key);
-  const showEnum = (item: EnumDefinition) => openObject(item.key);
+  }, [menuScope]);
+  const chooseTable = useCallback((table: TableDefinition) => { setPreviewKey(undefined); onSelectTable(table); }, [onSelectTable]);
   const closePreview = (event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => {
     const tree = event.currentTarget.closest(".schema-tree");
     const target = tree?.querySelector<HTMLButtonElement>('.tree-row[aria-current="true"]') ?? tree?.querySelector<HTMLInputElement>('input[type="search"]');
@@ -103,15 +182,16 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
       return name;
     }, { running: bt("business.copyingObjectName"), success: (name) => bt("business.copied", { value0: name }), failure: bt("business.unableToCopyObjectName") });
   };
-  const actions: SchemaObjectMenuAction[] = activeMenu ? [
-    ...("columns" in activeMenu.object ? [
-      { label: bt("business.locateInDiagram"), run: () => chooseTable(activeMenu.object as TableDefinition) },
-      ...(onOpenQuery ? [{ label: bt("business.openReadOnlyQuery"), run: () => onOpenQuery(activeMenu.object as TableDefinition) }] : []),
-    ] : "values" in activeMenu.object ? [{ label: bt("business.showEnumDetails"), run: () => showEnum(activeMenu.object as EnumDefinition) }]
-      : "arguments" in activeMenu.object ? [{ label: bt("objects.showDetails"), run: () => openObject(activeMenu.object.key) }]
-      : [{ label: bt("business.showViewDefinition"), run: () => showView(activeMenu.object as ViewDefinition) }]),
-    { label: bt("business.copyQualifiedName"), run: () => copyName(activeMenu.object.key) },
-  ] : [];
+  const menuObject = activeMenu?.object;
+  const actions: SchemaObjectMenuAction[] = menuObject ? [
+      ...("columns" in menuObject ? [
+        { label: bt("business.locateInDiagram"), run: () => chooseTable(menuObject) },
+        ...(onOpenQuery ? [{ label: bt("business.openReadOnlyQuery"), run: () => onOpenQuery(menuObject) }] : []),
+      ] : "values" in menuObject ? [{ label: bt("business.showEnumDetails"), run: () => openObject(menuObject.key) }]
+        : "arguments" in menuObject ? [{ label: bt("objects.showDetails"), run: () => openObject(menuObject.key) }]
+        : [{ label: bt("business.showViewDefinition"), run: () => openObject(menuObject.key) }]),
+      { label: bt("business.copyQualifiedName"), run: () => copyName(menuObject.key) },
+    ] : [];
 
   return <section className="schema-tree" aria-label={bt("business.databaseStructure")} onContextMenu={(event) => {
     event.preventDefault();
@@ -138,39 +218,30 @@ export function SchemaTree({ snapshot, selectedTable, onSelectTable, onOpenQuery
     </section> : null}
     {programPreview && !onOpenObject ? <ProgramDetails snapshot={snapshot} program={programPreview} onClose={closePreview} onSelect={setPreviewKey} onSelectTable={chooseTable} /> : null}
     {enumPreview ? <SchemaEnumDetails snapshot={snapshot} item={enumPreview} onLocate={onSelectTable} onClose={closePreview} /> : null}
-    {visible.map((schema) => {
-      const schemaOpen = expanded(schema.name);
-      const counts: Record<ObjectType, number> = { tables: schema.tables.length, views: schema.views.length, enums: schema.enums.length, functions: schema.programs.filter(p => p.key.kind === "function").length, procedures: schema.programs.filter(p => p.key.kind === "procedure").length, triggers: schema.programs.filter(p => p.key.kind === "trigger").length };
-      return <div className="tree-node" key={schema.name}>
-        <button type="button" className="tree-row tree-row-schema" title={schema.name} aria-expanded={schemaOpen} onClick={() => toggle(schema.name)}>
-          <TreeDisclosureIcon open={schemaOpen} /><span className="tree-label">{schema.name}</span><small>{Object.values(counts).reduce((a,b) => a+b,0)}</small>
+    {visible.map(({ name, groups, count }) => {
+      const schemaOpen = expanded(name);
+      return <div className="tree-node" key={name}>
+        <button type="button" className="tree-row tree-row-schema" title={name} aria-expanded={schemaOpen} onClick={() => toggle(name)}>
+          <TreeDisclosureIcon open={schemaOpen} /><span className="tree-label">{name}</span><small>{count}</small>
         </button>
-        {schemaOpen ? (Object.keys(TYPE_LABEL) as ObjectType[]).filter((type) => counts[type] > 0).map((type) => {
-          const key = `${schema.name}:${type}`; const typeOpen = expanded(key); const count = counts[type];
+        {schemaOpen ? groups.map(({ type, objects }) => {
+          const key = `${name}:${type}`;
+          const typeOpen = expanded(key);
+          const selectedName = selectedKey?.schema === name && OBJECT_TYPES[selectedKey.kind] === type ? selectedKey.name : undefined;
+          const selectedProgram = selectedName !== undefined ? programPreview : undefined;
+          const groupMenu = menuObject && menuObject.key.schema === name && OBJECT_TYPES[menuObject.key.kind] === type
+            ? menuObject : undefined;
           return <div className="tree-node tree-node-type" key={key}>
-            <button type="button" className="tree-row tree-row-type" aria-expanded={typeOpen} disabled={count === 0} onClick={() => toggle(key)}>
-              <TreeDisclosureIcon open={typeOpen} /><ActionIcon name={OBJECT_TYPE_ICONS[type]} /><span className="tree-label">{TYPE_LABEL[type]}</span><small>{count}</small>
+            <button type="button" className="tree-row tree-row-type" aria-expanded={typeOpen} onClick={() => toggle(key)}>
+              <TreeDisclosureIcon open={typeOpen} /><ActionIcon name={OBJECT_TYPE_ICONS[type]} /><span className="tree-label">{TYPE_LABEL[type]}</span><small>{objects.length}</small>
             </button>
-            {typeOpen && ["functions", "procedures", "triggers"].includes(type) ? schema.programs.filter(p => `${p.key.kind}s` === type).map(program => <div className="tree-object-row" key={program.key.name}><button type="button" className="tree-row tree-row-object" title={program.key.name} aria-current={program === programPreview ? "true" : undefined} onClick={() => openObject(program.key)}><span className="tree-label">{program.key.name}</span></button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", {value0:program.key.schema,value1:program.key.name})} aria-haspopup="menu" aria-expanded={activeMenu?.object === program} onClick={event => showMenu(event,program)}><ActionIcon name="more" /></button></div>) : null}
-            {typeOpen && type === "tables" ? schema.tables.map((table) => <div className="tree-object-row" key={table.key.name}><button type="button" key={table.key.name} className="tree-row tree-row-object" title={table.key.name}
-              aria-current={`${schema.name}.${table.key.name}` === selectedId ? "true" : undefined}
-              onClick={() => chooseTable(table)} onDragStart={(event) => event.preventDefault()}>
-              <span className="tree-label">{table.key.name}</span><small>{table.columns.length}</small>
-            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: table.key.schema, value1: table.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === table} onClick={(event) => showMenu(event, table)}><ActionIcon name="more" /></button></div>) : null}
-            {typeOpen && type === "views" ? schema.views.map((view) => <div className="tree-object-row" key={view.key.name}><button type="button" key={view.key.name} className="tree-row tree-row-object" title={view.key.name}
-              aria-current={preview?.key.schema === view.key.schema && preview.key.name === view.key.name ? "true" : undefined}
-              onClick={() => showView(view)} onDragStart={(event) => event.preventDefault()}>
-              <span className="tree-label">{view.key.name}</span>{view.materialized ? <small>{bt("business.materializedView")}</small> : null}
-            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: view.key.schema, value1: view.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === view} onClick={(event) => showMenu(event, view)}><ActionIcon name="more" /></button></div>) : null}
-            {typeOpen && type === "enums" ? schema.enums.map((item) => <div className="tree-object-row" key={item.key.name}><button type="button" className="tree-row tree-row-object" title={item.key.name} key={item.key.name}
-              aria-current={enumPreview?.key.schema === item.key.schema && enumPreview.key.name === item.key.name ? "true" : undefined}
-              onClick={() => showEnum(item)} onDragStart={(event) => event.preventDefault()}>
-              <span className="tree-label">{item.key.name}</span>
-            </button><button type="button" className="tree-object-actions" aria-label={bt("business.actionsFor", { value0: item.key.schema, value1: item.key.name })} aria-haspopup="menu" aria-expanded={activeMenu?.object === item} onClick={(event) => showMenu(event, item)}><ActionIcon name="more" /></button></div>) : null}
+            {typeOpen ? <SchemaObjectRows objects={objects} selectedName={selectedName} selectedProgram={selectedProgram} menuObject={groupMenu}
+              onSelectTable={chooseTable} onOpenObject={openObject} onShowMenu={showMenu} /> : null}
           </div>;
         }) : null}
       </div>;
     })}
-    {activeMenu ? <SchemaObjectMenu x={activeMenu.x} y={activeMenu.y} name={`${activeMenu.object.key.schema}.${activeMenu.object.key.name}`} actions={actions} onClose={closeMenu} /> : null}
+    {activeMenu ? <SchemaObjectMenu x={activeMenu.x} y={activeMenu.y}
+      name={`${activeMenu.object.key.schema}.${activeMenu.object.key.name}`} actions={actions} onClose={closeMenu} /> : null}
   </section>;
 }

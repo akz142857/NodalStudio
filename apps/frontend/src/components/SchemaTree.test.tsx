@@ -1,6 +1,7 @@
 import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DatabaseSnapshot } from "../platform";
+import type { ProgramDefinition } from "../platform/types";
 import { SchemaTree } from "./SchemaTree";
 
 function table(name: string) {
@@ -81,6 +82,37 @@ describe("SchemaTree", () => {
     fireEvent.change(search, { target: { value: "orders" } });
     rerender(<SchemaTree snapshot={{ ...multi, sourceId: "other" }} onSelectTable={vi.fn()} />);
     expect(search).toHaveValue("");
+  });
+
+  it("opens large catalog groups without rescanning closed schemas and retains the last trigger", () => {
+    const program = (kind: "function" | "trigger", i: number): ProgramDefinition => ({
+      key: { kind, schema: "service", name: `${kind}_${i}` },
+      arguments: "", definition: "SELECT 1", language: "sql", owner: "demo", resultType: null, table: null, enabled: null,
+    });
+    const readClosedTable = vi.fn(() => "orders");
+    const closedTable = { ...snapshot.schemas[0].tables[0], key: {
+      kind: "table" as const, schema: "public", get name() { return readClosedTable(); },
+    } };
+    const model = { ...snapshot, schemas: [
+      { ...snapshot.schemas[0], tables: [closedTable] },
+      { name: "service", tables: [], views: [], enums: [], programs: [
+        ...Array.from({ length: 86 }, (_, i) => program("function", i)),
+        ...Array.from({ length: 136 }, (_, i) => program("trigger", i)),
+      ] },
+    ] };
+    render(<SchemaTree snapshot={model} onSelectTable={vi.fn()} />);
+    readClosedTable.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /^service/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Functions/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Triggers/ }));
+    expect(readClosedTable).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "trigger_0" }).closest(".tree-object-chunk")).not.toHaveAttribute("data-deferred");
+    expect(screen.getByRole("button", { name: "trigger_135" }).closest(".tree-object-chunk")).toHaveAttribute("data-deferred", "true");
+    expect(screen.getByRole("button", { name: "trigger_135" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "function_85" })).toBeVisible();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "SERVICE trigger_135" } });
+    expect(screen.getByRole("status")).toHaveTextContent("1 match");
+    expect(screen.getByRole("button", { name: "trigger_135" })).toBeVisible();
   });
 
   it("provides app actions instead of the WebView menu, supports keyboard navigation and restores focus", () => {

@@ -882,10 +882,11 @@ export function App() {
 
   const documentObject = objectDocument && objectDocument.snapshot === snapshot ? findDocumentObject(snapshot, objectDocument.key) : undefined;
   const documentVisible = Boolean(documentObject && mode === "explore" && !preflightOpen);
-  const openObjectDocument = (key: ObjectKey) => {
+  const openObjectDocument = useCallback((key: ObjectKey) => {
     if (!snapshot) return;
     setObjectDocument({ snapshot, key }); setMode("explore"); setPreflightOpen(false); setDiscoverySnapshot(undefined);
-  };
+  }, [snapshot, setPreflightOpen]);
+  const closeObjectDocument = useCallback(() => setObjectDocument(undefined), []);
 
   return (
     <I18nProvider value={i18n}>
@@ -1055,7 +1056,7 @@ export function App() {
                 selectedTable={selectedTable}
                 selectedObject={documentVisible ? documentObject?.key : undefined}
                 onOpenObject={openObjectDocument}
-                onCloseObject={() => setObjectDocument(undefined)}
+                onCloseObject={closeObjectDocument}
                 onSelectTable={locateTable}
                 onOpenQuery={querySupported ? openTableInQuery : undefined}
               />
@@ -1193,7 +1194,7 @@ export function App() {
             </>
           )}
           {preflightMounted && !preflightOpen && snapshot && mode === "explore" ? <div className="preflight-resume ds-surface"><button onClick={() => setPreflightOpen(true)}>{t("preflight.resume")}</button></div> : null}
-          {documentVisible && snapshot && documentObject ? <ObjectDocument key={JSON.stringify([snapshot.id, documentObject.key])} snapshot={snapshot} object={documentObject} onClose={() => setObjectDocument(undefined)} onSelect={openObjectDocument} onSelectTable={locateTable} /> : null}
+          {documentVisible && snapshot && documentObject ? <ObjectDocument key={JSON.stringify([snapshot.id, documentObject.key])} snapshot={snapshot} object={documentObject} onClose={closeObjectDocument} onSelect={openObjectDocument} onSelectTable={locateTable} /> : null}
           {snapshot && discoverySnapshot === snapshot && mode === "explore" && !preflightOpen && runtime.data?.kind === "desktop" ? <BusinessExplorer
             snapshot={snapshot} semantics={semantics} settings={settings} platform={platform} desktop
             initialTable={historicalSelection ? undefined : selectedTable}

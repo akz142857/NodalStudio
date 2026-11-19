@@ -90,6 +90,8 @@ import "@xyflow/react/dist/style.css";
 const nodeTypes = { table: TableNode } satisfies NodeTypes;
 const edgeTypes = { comparison: ComparisonEdge };
 const sharedEdgeTypes = { comparison: SharedEdge, default: SharedEdge, smoothstep: SharedEdge };
+// Painting one SVG per relationship is expensive even for diagrams with relatively few tables.
+const SHARED_EDGE_THRESHOLD = 400;
 const multiSelectionKeys = ["Shift", "Meta", "Control"];
 const zoomActivationKeys = ["Meta", "Control"];
 const emptyDomainGroups: DomainGroup[] = [];
@@ -338,7 +340,9 @@ function SchemaCanvasInner({
     : savedView && !persistentViewId ? "domain" : query ? "search" : focusNodeId ? "focus" : undefined);
   const temporaryReason = temporaryViewLabel || (temporaryViewKind === "historical" ? bt("business.historicalSnapshot") : temporaryViewKind === "discovery" ? bt("businessExtra.discoveryTemporaryView") : readOnlyPreview ? bt("business.readOnlyDDLPreviewNoSourceWorkspaceOrDatabase") : changeSet ? bt("business.comparisonDiagram") : runtimeKind === "web" ? bt("business.sharedWebDiagram")
     : savedView && !persistentViewId ? bt("business.businessDomain") : query ? bt("business.searchResults") : focusNodeId ? bt("business.focusedDiagram") : undefined);
-  const inPlaceExport = exportRendering && nodes.length < 100;
+  const shareEdgeRendering = graph.edges.length >= SHARED_EDGE_THRESHOLD;
+  const batchedExport = nodes.length >= 100 || shareEdgeRendering;
+  const inPlaceExport = exportRendering && !batchedExport;
   const canvasInteraction = useMemo(() => ({ spacePanMode, rowConnectionActive: fieldConnection.active, overviewEnabled: nodes.length >= 100, exportRendering: inPlaceExport, layoutEditingDisabled: inPlaceExport || !layoutReady || (!temporaryMode && !layoutLoaded) }), [spacePanMode, fieldConnection.active, layoutReady, temporaryMode, layoutLoaded, nodes.length, inPlaceExport]);
   const layoutScope = JSON.stringify([selectionScope, query, focusNodeId, savedView?.id, runtimeKind, layoutLoaded, readOnlyPreview, temporaryMode]);
   const historyScope = useMemo(() => JSON.stringify([layoutScope, graph.nodes.map((node) => node.id).sort()]), [layoutScope, graph.nodes]);
@@ -526,7 +530,7 @@ function SchemaCanvasInner({
       return localized;
     });
   }, [bt]);
-  const flowEdges = useMemo(() => denseModel ? projectFlowEdges(renderedEdges) : localizeEdges(renderedEdges), [denseModel, renderedEdges, projectFlowEdges, localizeEdges]);
+  const flowEdges = useMemo(() => shareEdgeRendering ? projectFlowEdges(renderedEdges) : localizeEdges(renderedEdges), [shareEdgeRendering, renderedEdges, projectFlowEdges, localizeEdges]);
   const activateSharedEdge = useCallback((event: EdgeActivationEvent, id: string, edit: boolean) => {
     const edge = edges.find((candidate) => candidate.id === id);
     if (!edge) return;
@@ -966,7 +970,7 @@ function SchemaCanvasInner({
         onTouchStartCapture={(event) => { guardExportInput(event, exportRendering); }}
         onContextMenuCapture={(event) => { guardExportInput(event, exportRendering); }}>
       <CanvasInteractionProvider value={canvasInteraction}>
-      <SharedEdgeLayer enabled={denseModel} activate={activateSharedEdge} clear={clearSharedEdge} graphScope={graph}>
+      <SharedEdgeLayer enabled={shareEdgeRendering} activate={activateSharedEdge} clear={clearSharedEdge} graphScope={graph}>
       <ReactFlow<TableNodeType, FieldEdge>
         ariaLabelConfig={{
           "node.a11yDescription.default": bt("canvasAccessibility.node"),
@@ -996,7 +1000,7 @@ function SchemaCanvasInner({
         edges={graph.nodes.length >= 500 && !layoutReady ? [] : flowEdges}
         onlyRenderVisibleElements={nodes.length >= 100}
         nodeTypes={nodeTypes}
-        edgeTypes={denseModel ? sharedEdgeTypes : edgeTypes}
+        edgeTypes={shareEdgeRendering ? sharedEdgeTypes : edgeTypes}
         onNodesChange={(incoming: NodeChange<TableNodeType>[]) => {
           const fixed = new Set(latestNodes.current.filter((node) => node.data.layoutPinned).map((node) => node.id));
           const changes = incoming.filter((change) => !("id" in change && fixed.has(change.id) && (change.type === "position" || (change.type === "dimensions" && change.resizing !== undefined))));
@@ -1300,7 +1304,6 @@ function SchemaCanvasInner({
         capture={async () => {
           const root = flowRef.current;
           if (!root) throw new Error(bt("business.theDiagramIsNoLongerOpen"));
-          const batched = nodes.length >= 100;
           const settle = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
           const assertCurrent = () => {
             if (flowRef.current !== root || !root.isConnected || currentLayoutScope.current !== layoutScope) throw new Error(bt("business.theDiagramIsNoLongerOpen"));
@@ -1312,7 +1315,7 @@ function SchemaCanvasInner({
           try {
             await settle(); assertCurrent();
             performance.measure("diagram-export:mount", { start: mountStarted, end: performance.now() });
-            if (!batched) return captureDiagramSvg(options);
+            if (!batchedExport) return captureDiagramSvg(options);
             const surface = exportSurface.current;
             const exportRoot = surface?.root();
             if (!surface || !exportRoot) throw new Error(bt("business.theDiagramExportSurfaceIsUnavailable"));
