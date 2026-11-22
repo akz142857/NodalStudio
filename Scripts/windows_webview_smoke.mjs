@@ -51,12 +51,22 @@ async function evaluate(expression) {
 }
 const invoke = (name, args = {}) => evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(name)}, ${JSON.stringify(args)})`);
 try {
-  for (let attempt = 0; attempt < 30; attempt++) {
-    if (await evaluate('document.querySelector("#root")?.innerText.length > 100')) break;
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  const workspaceReady = `(() => {
+    const selected = document.querySelector('#root .app-shell > .topbar > .segmented button[aria-pressed="true"]');
+    const workspace = document.querySelector('#root .app-shell > .workspace');
+    const visible = element => Boolean(element?.getClientRects().length && getComputedStyle(element).visibility === 'visible');
+    return visible(selected) && visible(workspace) && Boolean(selected.innerText.trim() && workspace.innerText.trim());
+  })()`;
+  let rendered = false;
+  for (let attempt = 0; attempt < 30 && !rendered; attempt++) {
+    rendered = await evaluate(workspaceReady);
+    if (!rendered) await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  const text = await evaluate('document.querySelector("#root")?.innerText ?? ""');
-  assert(text.length > 100 && /Nodal Studio/.test(text), 'Application UI did not render');
+  if (!rendered) {
+    const screenshot = await command('Page.captureScreenshot', { format: 'png' });
+    await writeFile(join(output, `windows-${phase}-unready.png`), Buffer.from(screenshot.data, 'base64'));
+  }
+  assert(rendered, 'Installed application workspace and active navigation did not render');
   const runtime = await invoke('get_runtime_info');
   assert.equal(runtime.kind, 'desktop');
   if (expectedVersion) assert.equal(runtime.version, expectedVersion, 'Installed application version mismatch');
