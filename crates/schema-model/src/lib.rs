@@ -54,6 +54,7 @@ pub enum ObjectKind {
     Function,
     Procedure,
     Trigger,
+    Event,
     Table,
     View,
     Enum,
@@ -293,6 +294,8 @@ pub struct SqliteTableMetadata {
 pub struct TableDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite: Option<SqliteTableMetadata>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub includes_inherited_rows: Option<bool>,
     pub key: ObjectKey,
     pub table_kind: TableKind,
     pub columns: Vec<ColumnDefinition>,
@@ -307,6 +310,7 @@ impl TableDefinition {
     pub fn empty(schema: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             sqlite: None,
+            includes_inherited_rows: None,
             key: ObjectKey::table(schema, name),
             table_kind: TableKind::Ordinary,
             columns: Vec::new(),

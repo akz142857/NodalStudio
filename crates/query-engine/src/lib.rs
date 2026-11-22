@@ -1,9 +1,10 @@
-//! Safe, bounded, read-only query execution for `Nodal Studio`.
+//! Bounded read-only queries and explicit schema execution for `Nodal Studio`.
 
 mod guard;
 mod mysql;
 mod mysql_value;
 mod postgres;
+pub mod schema_ddl;
 mod sqlite;
 mod value;
 

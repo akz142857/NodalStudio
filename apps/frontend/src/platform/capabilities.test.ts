@@ -5,7 +5,7 @@ import type { DatabaseInfo, RuntimeInfo } from "./types";
 describe("declared capability matrix", () => {
   it("defines every feature once, with all six combinations and an explicit scope", () => {
     expect(new Set(capabilityDefinitions.map((definition) => definition.id)).size).toBe(capabilityDefinitions.length);
-    expect(capabilityDefinitions).toHaveLength(23);
+    expect(capabilityDefinitions).toHaveLength(24);
     for (const definition of capabilityDefinitions) {
       expect(Object.keys(definition.targets).sort()).toEqual(capabilityTargets.map((target) => target.id).sort());
       for (const target of capabilityTargets) {
@@ -19,6 +19,7 @@ describe("declared capability matrix", () => {
     expect(currentCapabilityTarget(target.runtime, target.database)).toBe(target.id);
     expect(resolveCapability("database-connection", target.runtime, target.database).status).toBe(target.runtime === "desktop" ? "supported" : "unavailable");
     expect(resolveCapability("read-only-query", target.runtime, target.database).status).toBe(target.runtime === "desktop" ? "supported" : "unavailable");
+    expect(resolveCapability("table-data-edit", target.runtime, target.database).status).toBe(target.id === "desktop-sqlite" ? "supported" : "unavailable");
   });
   it.each(capabilityTargets.filter((target) => target.runtime === "web"))("keeps Web writes/history/AI unavailable while allowing temporary layouts and local exports for $label", (target) => {
     for (const id of ["semantic-edit", "logical-relationships", "layout-persistence", "snapshot-history", "cloud-publish", "git-workspace", "portable-backup", "ai-explanation"] as const) expect(resolveCapability(id, target.runtime, target.database).status).toBe("unavailable");

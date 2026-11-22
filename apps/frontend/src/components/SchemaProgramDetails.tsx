@@ -8,21 +8,24 @@ interface DependencyProps {
   objectKey: ObjectKey;
   onSelect?: (key: ObjectKey) => void;
   onSelectTable?: (table: TableDefinition) => void;
+  omitEmpty?: boolean;
 }
-export function ObjectDependencies({ snapshot, objectKey, onSelect, onSelectTable }: DependencyProps) {
+export function ObjectDependencies({ snapshot, objectKey, onSelect, onSelectTable, omitEmpty }: DependencyProps) {
   const { t } = useI18n();
   const edges = snapshot.schemas.flatMap(s => s.dependencies ?? []);
+  const groups = ([false, true] as const).map(incoming => ({
+    incoming,
+    keys: edges.filter(edge => same(incoming ? edge.target : edge.source, objectKey)).map(edge => incoming ? edge.source : edge.target),
+  })).filter(({ keys }) => !omitEmpty || keys.length > 0);
+  if (!groups.length) return null;
   const link = (key: ObjectKey) => {
     const table = snapshot.schemas.flatMap(s => s.tables).find(table => same(table.key, key));
     const available = table ? Boolean(onSelectTable) : Boolean(onSelect) && snapshot.schemas.some(s => [...s.views, ...s.enums, ...(s.programs ?? [])].some(o => same(o.key, key)));
     return <li key={JSON.stringify(key)}>{available ? <button type="button" className="object-dependency-link" onClick={() => table ? onSelectTable?.(table) : onSelect?.(key)}>{key.schema}.{key.name}</button> : <span>{key.schema}.{key.name}</span>}</li>;
   };
   return <section className="object-dependencies inspector-section">
+    {groups.map(({ incoming, keys }) => <div className="object-dependency-group" key={String(incoming)}><h3>{t(incoming ? "objects.dependents" : "objects.dependencies")}</h3>{keys.length ? <ul className="inspector-list">{keys.map(link)}</ul> : <p>{t("objects.none")}</p>}</div>)}
     <p className="muted-copy">{t("objects.coverage")}</p>
-    {([false, true] as const).map(incoming => {
-      const keys = edges.filter(e => same(incoming ? e.target : e.source, objectKey)).map(e => incoming ? e.source : e.target);
-      return <div className="object-dependency-group" key={String(incoming)}><h3>{t(incoming ? "objects.dependents" : "objects.dependencies")}</h3>{keys.length ? <ul className="inspector-list">{keys.map(link)}</ul> : <p>{t("objects.none")}</p>}</div>;
-    })}
   </section>;
 }
 interface Props extends Omit<DependencyProps, "objectKey"> {
@@ -36,7 +39,7 @@ export function ProgramDetails({ program, snapshot, onClose, onSelect, onSelectT
   useEffect(() => {
     detail.current?.scrollIntoView?.({ block: "start" });
   }, [identity]);
-  const kind = program.key.kind === "procedure" ? t("objects.procedure") : program.key.kind === "trigger" ? t("objects.trigger") : t("objects.function");
+  const kind = program.key.kind === "procedure" ? t("objects.procedure") : program.key.kind === "trigger" ? t("objects.trigger") : program.key.kind === "event" ? t("objects.event") : t("objects.function");
   const status = program.enabled === "O" ? t("objects.enabledO") : program.enabled === "D" ? t("objects.enabledD") : program.enabled === "R" ? t("objects.enabledR") : program.enabled === "A" ? t("objects.enabledA") : program.enabled === "enabled" ? t("objects.enabledA") : program.enabled;
   return <section ref={detail} className="ds-surface schema-object-preview schema-program-preview" aria-label={`${kind} ${program.key.name}`} onKeyDown={e => {if(e.key === "Escape") {e.stopPropagation(); onClose(e);}}}>
     <header><strong>{kind} · {program.key.schema}.{program.key.name}</strong><button type="button" aria-label={t("objects.close")} onClick={onClose}>×</button></header>
@@ -61,6 +64,6 @@ export function TableCatalogDetails({snapshot, table, onOpenObject}: {snapshot: 
   return <>
     {triggers.length ? <section className="inspector-section"><h3>{t("objects.triggers")}</h3><ul className="inspector-list">{triggers.map(p => <li key={JSON.stringify(p.key)}><button type="button" className="object-dependency-link" aria-expanded={program === p} onClick={() => onOpenObject ? onOpenObject(p.key) : setSelected(p.key)}>{p.key.name}</button></li>)}</ul></section> : null}
     {program ? <ProgramDetails program={program} snapshot={snapshot} onClose={() => setSelected(undefined)}/> : null}
-    <ObjectDependencies snapshot={snapshot} objectKey={table.key} onSelect={onOpenObject}/>
+    <ObjectDependencies snapshot={snapshot} objectKey={table.key} onSelect={onOpenObject} omitEmpty />
   </>;
 }

@@ -7,6 +7,14 @@ DROP TRIGGER IF EXISTS catalog_account_guard;
 CREATE TRIGGER catalog_account_guard BEFORE INSERT ON catalog_accounts FOR EACH ROW SET NEW.balance = ABS(NEW.balance);
 CREATE OR REPLACE VIEW catalog_account_view AS SELECT * FROM catalog_accounts;
 CREATE TABLE IF NOT EXISTS catalog_index_cases (id integer PRIMARY KEY, label varchar(100), UNIQUE KEY catalog_label_unique(label), KEY catalog_label_prefix(label(12) DESC), KEY catalog_label_expression((lower(label))));
+CREATE TABLE IF NOT EXISTS catalog_generated_flags (
+    id integer PRIMARY KEY,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    derived integer GENERATED ALWAYS AS (id + 1) STORED
+);
 
 DROP FUNCTION IF EXISTS catalog_hidden;
 CREATE FUNCTION catalog_hidden() RETURNS integer DETERMINISTIC NO SQL RETURN 1;
+
+DROP EVENT IF EXISTS catalog_daily_check;
+CREATE EVENT catalog_daily_check ON SCHEDULE EVERY 1 DAY DISABLE DO SET @catalog_checked = 1;

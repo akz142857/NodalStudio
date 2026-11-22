@@ -21,26 +21,25 @@ async function mount(kind: "desktop" | "web") {
 describe("App capability integration", () => {
   beforeEach(() => { localStorage.clear(); window.history.replaceState(null, "", "/"); });
   afterEach(() => vi.restoreAllMocks());
-  it("opens Changes without a source and explains how to begin", async () => {
+  it("starts in Model with no Changes segment before a source is selected", async () => {
     await mount("desktop");
-    const changes = screen.getByRole("button", { name: "Changes" });
-    expect(changes).toBeEnabled();
-    fireEvent.click(changes);
-    expect(screen.getByRole("region", { name: "Schema changes" })).toHaveTextContent("Select a database to review changes.");
+    const navigation = within(screen.getByRole("group", { name: "View mode" }));
+    expect(navigation.getByRole("button", { name: "Model" })).toHaveAttribute("aria-pressed", "true");
+    expect(navigation.queryByRole("button", { name: "Changes" })).not.toBeInTheDocument();
   });
-  it.each([1, 2])("shows a useful MySQL Changes empty state with %s saved versions", async (count) => {
+  it.each([1, 2])("shows the MySQL history comparison empty state with %s saved versions", async (count) => {
     vi.spyOn(getPlatform(), "listSnapshots").mockResolvedValue(Array.from({ length: count }, (_, i) => ({
       id: `snapshot-${i}`, sourceId: "mysql", capturedAt: reportSnapshot.capturedAt,
       fingerprint: `${i}`, databaseName: reportSnapshot.database.name, schemaCount: 1, tableCount: 3,
     })));
     await mount("desktop");
     fireEvent.click(screen.getByRole("button", { name: "Load MySQL fixture" }));
-    fireEvent.click(screen.getByRole("button", { name: "Changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review understanding" }));
     fireEvent.click(screen.getByRole("button", { name: "History comparison" }));
     expect(await screen.findByText(count === 1 ? "Your first snapshot is the starting point." : "Choose two snapshots to compare.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Open history" }));
     expect(screen.getByRole("button", { name: "History" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Changes" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute("aria-pressed", "true");
   });
   it.each(["desktop", "web"] as const)("uses the matrix to restrict query entry points in %s", async (kind) => {
     await mount(kind);
@@ -55,8 +54,8 @@ describe("App capability integration", () => {
   it("opens the matrix from the command palette and supplies the loaded MySQL context", async () => {
     await mount("desktop"); fireEvent.click(screen.getByRole("button", { name: "Load MySQL fixture" }));
     fireEvent.click(screen.getByRole("button", { name: "Open command palette" }));
-    fireEvent.click(screen.getByRole("button", { name: /Open capability matrix/ }));
-    const settings = await screen.findByRole("region", { name: "Settings" });
+    fireEvent.click(screen.getByRole("option", { name: /Open capability matrix/ }));
+    const settings = await screen.findByRole("dialog", { name: "Settings" });
     expect(within(settings).getByRole("columnheader", { name: "Desktop · MySQL Current" })).toHaveAttribute("data-current", "true");
     expect(window.location.hash).toBe("#/settings/capabilities");
   });

@@ -54,54 +54,44 @@ export function TableStructure({ table, snapshot, onOpenQuery, columnFocus, focu
   const logicalField = focusedEvidence?.kind === "logicalRelationship" ? focusedEvidence.columns[0] : undefined;
   const primaryColumns = new Set(table.primaryKey?.columns ?? []);
   const foreignColumns = new Set(table.foreignKeys.flatMap((key) => key.columns));
+  const tableEvidence = focusedEvidence?.kind !== "logicalRelationship" && focused("table", table.key.name);
+  const sqliteOptions = [table.sqlite?.strict ? "STRICT" : null, table.sqlite?.withoutRowid ? "WITHOUT ROWID" : null, table.sqlite?.virtualTable ? "VIRTUAL TABLE" : null].filter(Boolean).join(" · ");
 
   return (
     <div ref={structure} className="table-structure">
-      <p className="inspector-comment" tabIndex={-1} data-evidence-target={focusedEvidence?.kind !== "logicalRelationship" && focused("table", table.key.name) ? "true" : undefined}>{table.comment ?? `${table.key.schema}.${table.key.name}`}</p>
-      {table.sqlite ? <details className="inspector-section"><summary>{bt("sqlite.definition")}</summary>
-        <p>{[table.sqlite.strict ? "STRICT" : null, table.sqlite.withoutRowid ? "WITHOUT ROWID" : null, table.sqlite.virtualTable ? "VIRTUAL TABLE" : null].filter(Boolean).join(" · ")}</p>
-        {table.sqlite.diagnostics.map((message) => <p key={message} role="note">{message}</p>)}
-        <pre tabIndex={0}>{table.sqlite.definition}</pre>
-      </details> : null}
-      <dl className="snapshot-summary">
-        <div>
-          <dt>{bt("business.kind")}</dt>
-          <dd>{translateUiLabel(table.tableKind, bt)}</dd>
-        </div>
-        <div>
-          <dt>{bt("business.columnsDetail")}</dt>
-          <dd>{table.columns.length}</dd>
-        </div>
-        <div>
-          <dt>{bt("business.relationships")}</dt>
-          <dd>{table.foreignKeys.length}</dd>
-        </div>
-      </dl>
-      {onOpenQuery ? <div className="inspector-actions"><button type="button" className="inspector-query-button" onClick={() => onOpenQuery(table)}>{bt("business.previewRowsInQuery")}</button></div> : null}
+      {table.comment || tableEvidence ? <p className="inspector-comment" tabIndex={-1} data-evidence-target={tableEvidence ? "true" : undefined}>{table.comment || `${table.key.schema}.${table.key.name}`}</p> : null}
+      {table.tableKind !== "ordinary" && <p className="muted-copy">{bt("business.kind")} · {translateUiLabel(table.tableKind, bt)}</p>}
 
-      <section className="inspector-section">
-        <h3>{bt("business.columnsDetail")}</h3>
+      <section className="inspector-section table-structure-columns">
+        <div className="table-structure-columns-heading">
+          <h3>{bt("business.columnsDetail")}</h3>
+          {onOpenQuery ? <button type="button" className="inspector-query-button" onClick={() => onOpenQuery(table)}>{bt("business.previewRowsInQuery")}</button> : null}
+        </div>
         <div className="inspector-columns">
-          {table.columns.map((column) => (
-            <div key={column.name} tabIndex={-1} data-column-focus={columnFocus?.name === column.name ? "true" : undefined} data-evidence-target={focused("column", column.name) || logicalField === column.name ? "true" : undefined} data-evidence-focus={focused("column", column.name) || focusedEvidence?.columns.includes(column.name) ? "true" : undefined}>
-              <span>
-                {primaryColumns.has(column.name) ? <b>{bt("business.pKDetail")}</b> : null}
-                {foreignColumns.has(column.name) ? <b>{bt("business.fK")}</b> : null}
-                <strong>{column.name}</strong>
-              </span>
-              <small>
-                {column.formattedType}
-                {column.nullable ? "" : bt("business.notNullDetail")}
-              </small>
-              {table.sqlite?.columns?.[column.name] ? <small>{table.sqlite.columns[column.name].affinity}{table.sqlite.columns[column.name].generationExpression ? ` · ${table.sqlite.columns[column.name].generationMode ?? "VIRTUAL"}: ${table.sqlite.columns[column.name].generationExpression}` : ""}</small> : null}
-              {column.comment ? <p>{column.comment}</p> : null}
-              {onShowColumnSource ? <>
-                {column.identity ? <small>{bt("businessMeta.identity")}: {column.identity}</small> : null}
-                {column.defaultValue !== null ? <small>{bt("businessMeta.default")}: {column.defaultValue}</small> : null}
-                <button type="button" onClick={() => onShowColumnSource(column.name)}>{bt("business.showColumnSource")} · {column.name}</button>
-              </> : null}
-            </div>
-          ))}
+          {table.columns.map((column) => {
+            const sqliteColumn = table.sqlite?.columns?.[column.name];
+            return (
+              <div key={column.name} tabIndex={-1} data-column-focus={columnFocus?.name === column.name ? "true" : undefined} data-evidence-target={focused("column", column.name) || logicalField === column.name ? "true" : undefined} data-evidence-focus={focused("column", column.name) || focusedEvidence?.columns.includes(column.name) ? "true" : undefined}>
+                <span>
+                  {primaryColumns.has(column.name) ? <b>{bt("business.pKDetail")}</b> : null}
+                  {foreignColumns.has(column.name) ? <b>{bt("business.fK")}</b> : null}
+                  <strong>{column.name}</strong>
+                </span>
+                <small>
+                  {column.formattedType}
+                  {column.nullable ? "" : bt("business.notNullDetail")}
+                </small>
+                {sqliteColumn && sqliteColumn.affinity !== column.formattedType.trim().toUpperCase() ? <small>{bt("sqlite.affinity")} · {sqliteColumn.affinity}</small> : null}
+                {sqliteColumn?.generationExpression ? <small>{sqliteColumn.generationMode ?? "VIRTUAL"} · {sqliteColumn.generationExpression}</small> : null}
+                {column.comment ? <p>{column.comment}</p> : null}
+                {onShowColumnSource ? <>
+                  {column.identity ? <small>{bt("businessMeta.identity")}: {column.identity}</small> : null}
+                  {column.defaultValue !== null ? <small>{bt("businessMeta.default")}: {column.defaultValue}</small> : null}
+                  <button type="button" onClick={() => onShowColumnSource(column.name)}>{bt("business.showColumnSource")} · {column.name}</button>
+                </> : null}
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -139,6 +129,11 @@ export function TableStructure({ table, snapshot, onOpenQuery, columnFocus, focu
         </section>
       ) : null}
       {snapshot ? <TableCatalogDetails snapshot={snapshot} table={table} onOpenObject={onOpenObject} /> : null}
+      {table.sqlite ? <details className="inspector-section table-structure-sqlite"><summary>{bt("sqlite.definition")}</summary>
+        {sqliteOptions ? <p>{sqliteOptions}</p> : null}
+        {table.sqlite.diagnostics.map((message) => <p key={message} role="note">{message}</p>)}
+        <pre tabIndex={0}>{table.sqlite.definition}</pre>
+      </details> : null}
     </div>
   );
 }

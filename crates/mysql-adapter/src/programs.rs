@@ -4,6 +4,7 @@ use schema_model::{
     ProgramDefinition, SchemaDefinition,
 };
 use sqlx::{MySqlPool, Row};
+use std::fmt::Write;
 
 pub async fn load(
     pool: &MySqlPool,
@@ -11,8 +12,65 @@ pub async fn load(
 ) -> Result<(), MySqlAdapterError> {
     load_routines(pool, schema).await?;
     load_triggers(pool, schema).await?;
+    load_events(pool, schema).await?;
     load_dependencies(pool, schema).await?;
     load_constraints(pool, schema).await?;
+    Ok(())
+}
+
+async fn load_events(
+    pool: &MySqlPool,
+    schema: &mut SchemaDefinition,
+) -> Result<(), MySqlAdapterError> {
+    let rows = sqlx::query(
+        "SELECT EVENT_NAME AS name, EVENT_DEFINITION AS definition, DEFINER AS owner, STATUS AS status, \
+         CAST(EXECUTE_AT AS CHAR) AS execute_at, INTERVAL_VALUE AS interval_value, INTERVAL_FIELD AS interval_field, \
+         CAST(STARTS AS CHAR) AS starts, CAST(ENDS AS CHAR) AS ends, TIME_ZONE AS time_zone, ON_COMPLETION AS completion \
+         FROM information_schema.EVENTS WHERE EVENT_SCHEMA=DATABASE()",
+    )
+    .fetch_all(pool)
+    .await?;
+    for row in rows {
+        let mut schedule = if let Some(at) = row.try_get::<Option<String>, _>("execute_at")? {
+            format!("-- Schedule: AT {at}")
+        } else {
+            let value: Option<String> = row.try_get("interval_value")?;
+            let unit: Option<String> = row.try_get("interval_field")?;
+            format!(
+                "-- Schedule: EVERY {} {}",
+                value.unwrap_or_default(),
+                unit.unwrap_or_default()
+            )
+        };
+        for (field, label) in [("starts", "STARTS"), ("ends", "ENDS")] {
+            if let Some(value) = row.try_get::<Option<String>, _>(field)? {
+                let _ = write!(schedule, " {label} {value}");
+            }
+        }
+        let zone: String = row.try_get("time_zone")?;
+        let completion: String = row.try_get("completion")?;
+        let body: Option<String> = row.try_get("definition")?;
+        let mut definition =
+            format!("{schedule}\n-- Time zone: {zone} · On completion: {completion}");
+        if let Some(body) = body {
+            definition.push_str("\n\n");
+            definition.push_str(&body);
+        }
+        schema.programs.push(ProgramDefinition {
+            key: ObjectKey::new(
+                ObjectKind::Event,
+                &schema.name,
+                row.try_get::<String, _>("name")?,
+            ),
+            definition: Some(definition),
+            arguments: String::new(),
+            language: "SQL".into(),
+            result_type: None,
+            owner: row.try_get("owner")?,
+            table: None,
+            enabled: row.try_get("status")?,
+        });
+    }
     Ok(())
 }
 

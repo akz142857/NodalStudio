@@ -143,7 +143,7 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
         data-overview={compact || undefined}
         data-selected={selected || undefined}
         data-inspector-focused={data.inspectorFocused || undefined}
-        data-change={data.changeStatus}
+        data-change={data.modelChangeStatus ?? data.changeStatus}
         data-core={data.isCore || undefined}
         data-pinned={data.layoutPinned || undefined}
         data-relationship-highlighted={data.relationshipHighlighted || undefined}
@@ -156,7 +156,9 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
         {settings.showSchema ? <span>{data.schema}</span> : null}
         <strong>{data.isCore ? "★ " : ""}{data.table.key.name}</strong>
         {data.layoutPinned ? <span className="table-pin-badge" title={bt("business.positionFixedUnlockToMoveOrResize")} aria-label={bt("business.tablePositionFixed")}>{bt("business.fixed")}</span> : null}
-        {data.changeStatus ? <em className="comparison-badge" data-change={data.changeStatus} title={data.changeStatus === "deleted" ? bt("business.deletedTableBeforeSnapshot") : bt("business.comparedBeforeAfter")}>{changeMarker(data.changeStatus)} {data.changeStatus}</em> : null}
+        {data.modelChangeStatus ? <em className="comparison-badge" data-change={data.modelChangeStatus}>
+          {changeMarker(data.modelChangeStatus)} {bt(`modelChanges.${data.modelChangeStatus}`)}
+        </em> : data.changeStatus ? <em className="comparison-badge" data-change={data.changeStatus} title={data.changeStatus === "deleted" ? bt("business.deletedTableBeforeSnapshot") : bt("business.comparedBeforeAfter")}>{changeMarker(data.changeStatus)} {data.changeStatus}</em> : null}
         {data.onOpenQuery ? <div className="table-node-actions nodrag nopan">
           <button type="button" aria-label={bt("business.query", { value0: data.table.key.name })} aria-expanded={actionsOpen} onClick={(event) => { event.stopPropagation(); setActionsOpen((value) => !value); }}>•••</button>
           {actionsOpen ? <div role="menu"><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>{bt("business.previewRows")}</button><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>{bt("business.openInQuery")}</button></div> : null}

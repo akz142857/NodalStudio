@@ -266,6 +266,18 @@ export const capabilityMessages = {
       "web-mysql": "capabilities.ddlImport.webMysql.scope"
     }
   },
+  "table-data-edit": {
+    "name": "capabilities.tableEdit.name",
+    "category": "capabilities.databaseConnection.category",
+    "targets": {
+      "desktop-sqlite": "capabilities.tableEdit.sqlite",
+      "web-sqlite": "capabilities.tableEdit.other",
+      "desktop-postgres": "capabilities.tableEdit.other",
+      "desktop-mysql": "capabilities.tableEdit.other",
+      "web-postgres": "capabilities.tableEdit.other",
+      "web-mysql": "capabilities.tableEdit.other"
+    }
+  },
   "physical-edit": {
     "name": "capabilities.physicalEdit.name",
     "category": "capabilities.databaseConnection.category",

@@ -1,5 +1,7 @@
-//! Read-only local `SQLite` access. Never applies migrations or changes journal mode.
+//! Local `SQLite` access with separate read-only and structured table operations.
 mod metadata;
+pub mod schema_edit;
+pub mod table_data;
 pub use metadata::inspect_schema;
 use schema_model::{DatabaseInfo, DatabaseType};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -47,6 +49,20 @@ pub async fn connect(path: &Path) -> Result<SqliteConnection, SqliteError> {
             .create_if_missing(false)
             .busy_timeout(Duration::from_millis(250))
             .pragma("query_only", "ON")
+            .pragma("trusted_schema", "OFF"),
+    )
+    .await?)
+}
+
+// SQLite writes can require access to journal files in the containing directory.
+async fn connect_for_write(path: &Path) -> Result<SqliteConnection, table_data::TableError> {
+    validate_path(path).map_err(|_| table_data::TableError::File)?;
+    Ok(SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(false)
+            .busy_timeout(Duration::from_millis(250))
+            .foreign_keys(true)
             .pragma("trusted_schema", "OFF"),
     )
     .await?)

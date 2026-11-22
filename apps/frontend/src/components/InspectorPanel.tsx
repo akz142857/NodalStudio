@@ -1,7 +1,7 @@
 import { translateUiLabel } from "../i18n/business-labels";
 import { useI18n } from "../i18n";
 import { KnowledgeReview } from "./KnowledgeReview";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   DatabaseSnapshot,
   EffectiveSettings,
@@ -22,6 +22,8 @@ import { KnowledgePanel } from "./KnowledgePanel";
 import { ProvenancePanel } from "./ProvenancePanel";
 import { Segmented } from "./Segmented";
 import { TableKnowledgeForm, TableStructure } from "./TableInspector";
+import { ModelTableChangeDetails } from "./ModelTableChanges";
+import { modelTableKey, type ModelTableChange } from "../graph/model-table-changes";
 
 type InspectorSegment = "structure" | "semantics" | "history" | "ai";
 
@@ -35,6 +37,9 @@ interface InspectorPanelProps {
   selectedTable?: TableDefinition;
   historicalSelection?: boolean;
   changeSet?: SchemaChangeSet;
+  modelChangeSet?: SchemaChangeSet;
+  modelTableChange?: ModelTableChange;
+  modelChangeRequest?: number;
   semantics: SemanticBundle;
   settings: EffectiveSettings;
   runtime?: RuntimeInfo;
@@ -80,6 +85,9 @@ export function InspectorPanel({
   selectedTable,
   historicalSelection = false,
   changeSet,
+  modelChangeSet,
+  modelTableChange,
+  modelChangeRequest,
   semantics,
   settings,
   runtime,
@@ -118,6 +126,19 @@ export function InspectorPanel({
       setEvidenceSelection(undefined);
     }
   }
+  const [handledModelChangeRequest, setHandledModelChangeRequest] = useState(modelChangeRequest);
+  if (modelChangeRequest !== handledModelChangeRequest) {
+    setHandledModelChangeRequest(modelChangeRequest);
+    if (modelChangeRequest) {
+      setSegment("structure");
+      setEvidenceSelection(undefined);
+    }
+  }
+  const inspectorView = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const scrollArea = inspectorView.current?.closest<HTMLElement>(".inspector");
+    if (modelChangeRequest && scrollArea) scrollArea.scrollTop = 0;
+  }, [modelChangeRequest]);
   const [evidenceRequestId, setEvidenceRequestId] = useState<string>();
   const handleAiTaskChange = useCallback((requestId: string | undefined) => {
     setEvidenceRequestId(requestId);
@@ -148,7 +169,7 @@ export function InspectorPanel({
   }
 
   return (
-    <div className="ds-surface inspector-view">
+    <div className="ds-surface inspector-view" ref={inspectorView}>
       <header className="inspector-header">
         <span className="inspector-context">{selectedTable ? bt("business.tableDetail", { value0: (segment === "structure" && evidenceTable ? evidenceTable : selectedTable).key.schema }) : bt("business.database")}</span>
         <h2 className="inspector-title">{segment === "structure" && evidenceTable ? `${evidenceTable.key.schema}.${evidenceTable.key.name}` : selectedTable ? selectedTable.key.name : snapshot.database.name}</h2>
@@ -167,6 +188,9 @@ export function InspectorPanel({
       {segment === "structure" ? (
         selectedTable ? (
           <>
+            {modelTableChange && modelChangeSet && !focusedEvidence && <ModelTableChangeDetails
+              key={JSON.stringify([modelChangeSet.id, modelTableKey(modelTableChange.key)])} change={modelTableChange}
+              changeSet={modelChangeSet} snapshot={snapshot} platform={platform} runtimeKind={runtime?.kind} />}
             {focusedEvidence && evidenceTable ? <section className="ai-evidence-source" aria-label={bt("business.locatedEvidence")}>
               <strong>{focusedEvidence.id} · {focusedEvidence.label}</strong>
               <p>{focusedEvidence.kind} {bt("business.snapshot")} {snapshot.fingerprint.slice(0, 12)}</p>

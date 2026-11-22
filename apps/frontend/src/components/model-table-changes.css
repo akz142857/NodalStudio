@@ -1,0 +1,23 @@
+.model-table-change-details { padding-bottom: 12px; }
+.model-table-change-details h3 { margin: 0 0 8px; font-size: var(--ds-text-body); }
+.model-table-change-details ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.model-table-change-details li {
+  padding: 8px;
+  border: 1px solid var(--ds-separator);
+  border-radius: var(--ds-radius-control);
+  background: var(--ds-sidebar);
+}
+.model-table-change-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; overflow-wrap: anywhere; }
+.model-table-change-heading span, .model-table-change-values dt { color: var(--ds-secondary); font-size: 11px; }
+.model-table-change-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 6px 0 0; }
+.model-table-change-values dd { margin: 2px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.model-table-property-changes > div { margin-block-start: 8px; }
+.model-table-property-changes > div + div { padding-block-start: 8px; border-block-start: 1px solid var(--ds-separator); }
+.model-table-property-changes small { font-weight: 600; }
+.model-table-property-changes .model-table-change-values { margin-block-start: 4px; }
+.model-table-change-details > button { margin-top: 8px; }
+.model-table-definition-change { margin: 8px 0 0; color: var(--ds-secondary); }
+.model-table-definition-change summary { cursor: pointer; }
+.model-table-definition-change dl { display: grid; gap: 8px; margin: 8px 0 0; }
+.model-table-definition-change dd { margin: 0; }
+.model-table-definition-change pre { max-block-size: 12em; overflow: auto; margin: 4px 0 0; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--ds-sidebar); color: var(--ds-text); }

@@ -1,6 +1,8 @@
 import { Channel } from "@tauri-apps/api/core";
 import type { DatabaseExportProgress, DatabaseExportReceipt, DatabaseExportRequest } from "./database-export";
 import { invoke } from "./desktop-invoke";
+import type { SchemaDdlInput, SchemaDdlReceipt } from "./schema-ddl";
+import type { SaveSqliteTableInput, SqliteTableData, SqliteTableReadOptions, SqliteTableTarget } from "./sqlite-table";
 import type {
   FileExportReceipt,
   SchemaReportExportInput,
@@ -197,6 +199,34 @@ export class TauriPlatform implements NodalStudioPlatform {
     const onRegistered = new Channel<null>();
     onRegistered.onmessage = receiveRegistration;
     return invoke<QueryExecutionResult>("execute_table_preview_query", { input, onRegistered });
+  }
+
+  readTableRowCounts(input: import("./table-row-counts").TableRowCountRequest): Promise<import("./table-row-counts").TableRowCount[]> {
+    return invoke("read_table_row_counts", { input });
+  }
+
+  executeSchemaDdl(input: SchemaDdlInput): Promise<SchemaDdlReceipt> {
+    if (input.databaseType === "sqlite") {
+      const { sourceId, filePath, sql } = input;
+      return invoke("execute_sqlite_ddl", { input: { sourceId, filePath, sql } });
+    }
+    return invoke("execute_network_ddl", { input });
+  }
+
+  readTableDdl(input: Parameters<NodalStudioPlatform["readTableDdl"]>[0]): Promise<string> {
+    return invoke("read_table_ddl", { input });
+  }
+
+  loadSqliteTable(input: SqliteTableTarget, options: SqliteTableReadOptions): Promise<SqliteTableData> {
+    return invoke("load_sqlite_table", { input, options });
+  }
+
+  countSqliteTableRows(input: SqliteTableTarget, filter?: import("./table-data-filter").TableFilter): Promise<string> {
+    return invoke("count_sqlite_table_rows", { input, options: { filter } });
+  }
+
+  saveSqliteTable(input: SaveSqliteTableInput): Promise<void> {
+    return invoke("save_sqlite_table", { input });
   }
 
   cancelQuery(queryId: string): Promise<boolean> {

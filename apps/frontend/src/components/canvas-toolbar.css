@@ -7,6 +7,7 @@
 .canvas-command-dock [hidden] { display: none !important; }
 .canvas-command-popover, .canvas-command-popover button { box-sizing: border-box; }
 .canvas-command-bar, .canvas-command-restore { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px; width: fit-content; max-width: 100%; padding: 5px; border: 1px solid var(--ds-border); border-radius: 12px; background: var(--ds-surface); box-shadow: 0 4px 16px #0002, 0 1px 3px #0001; pointer-events: auto; }
+.canvas-command-bar { background: var(--ds-glass-fill); border-color: var(--ds-glass-edge); -webkit-backdrop-filter: var(--ds-glass-filter); backdrop-filter: var(--ds-glass-filter); }
 .canvas-command-dock button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 6px 9px; border: 0; border-radius: 7px; font: inherit; line-height: 1.3; color: var(--ds-text); background: transparent; cursor: pointer; }
 .canvas-command-dock .canvas-selection-tools button { border: 0; background: transparent; padding: 6px 9px; border-radius: 7px; }
 .canvas-command-bar .create-view-action { color: var(--ds-accent); }

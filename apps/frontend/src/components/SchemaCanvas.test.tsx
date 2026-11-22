@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildSchemaGraph, type TableNode as TableNodeType } from "../graph/schema-graph";
+import { collectModelTableChanges } from "../graph/model-table-changes";
 import { restoreOrExtendLayout, layoutSchemaGraph, layoutSelectedSchemaGraph } from "../graph/elk-layout";
 import type { TableDefinition } from "../platform";
 import { defaultAppSettings } from "../platform";
@@ -73,6 +74,20 @@ describe("SchemaCanvas table selection", () => {
     expect(inspect).toHaveBeenLastCalledWith(reportSnapshot.schemas[0].tables[1], "total");
     fireEvent.click(node.querySelector(".table-node > header strong")!);
     expect(inspect).toHaveBeenLastCalledWith(reportSnapshot.schemas[0].tables[1], undefined);
+  });
+
+  it("marks changed tables on the live model without adding removed nodes or disabling layout", async () => {
+    const inspect = vi.fn();
+    const changes = collectModelTableChanges(diagramAfter, diagramChangeSet);
+    const { container } = render(<CanvasHarness snapshot={diagramAfter} modelTableChanges={changes} onSelectTable={inspect} />);
+    await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
+    const orders = container.querySelector('[data-id="public.orders"] .table-node');
+    expect(orders).toHaveAttribute("data-change", "modified");
+    expect(container.querySelector('[data-id="public.partners"] .table-node')).toHaveAttribute("data-change", "added");
+    expect(container.querySelector('[data-id="public.audit"]')).not.toBeInTheDocument();
+    fireEvent.click(orders!.querySelector("header strong")!);
+    expect(inspect).toHaveBeenCalledWith(diagramAfter.schemas[0].tables[1], undefined);
+    expect(screen.queryByRole("button", { name: /tables? changed/i })).not.toBeInTheDocument();
   });
 
   it.each(["web", "historical"])("preserves %s layout history and positions when the language changes", async (mode) => {

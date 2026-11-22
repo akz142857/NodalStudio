@@ -7,6 +7,7 @@ import { ConnectionManager } from "./ConnectionManager";
 import { SchemaObjectMenu } from "./SchemaObjectMenu";
 import { DataSourcePicker } from "./DataSourcePicker";
 import { ConnectionSourceContext } from "./connection-source-context";
+import { ModalSurface } from "../design-system/ModalSurface";
 import "./model-navigation.css";
 import type {
   DataSourceProfile,
@@ -26,6 +27,7 @@ interface ConnectionPanelProps {
   children?: ReactNode;
   platform: NodalStudioPlatform;
   onSnapshot: (result: CaptureSnapshotResult) => void;
+  onSourceSaved?: (source: DataSourceProfile) => void;
   onSourceOpenStart?: () => void;
   onRefresh?: () => void;
   refreshDisabled?: boolean;
@@ -77,7 +79,7 @@ function connectionDetailsDiffer(
   );
 }
 
-export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, children, platform, onSnapshot, onSourceOpenStart, onSourceDeleted, onRefresh, refreshDisabled, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
+export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, children, platform, onSnapshot, onSourceSaved, onSourceOpenStart, onSourceDeleted, onRefresh, refreshDisabled, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
   const { t: bt } = useI18n();
   const sslModeDescriptions: Record<SslMode, string> = {
   disable: bt("business.tLSIsDisabledForThisConnection"),
@@ -87,7 +89,6 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   verifyFull: bt("business.requireTLSAndVerifyTheDatabaseServerIdentity"),
 };
   const navigation = useRef<HTMLElement>(null);
-  const connectionDialog = useRef<HTMLElement>(null);
   const [managerOpen, setManagerOpen] = useState(false);
   const [form, setForm] = useState<SaveDataSourceInput>(() => newConnectionForm(defaultDatabaseType, defaultSslMode, bt("business.localDevelopment")));
   const [profiles, setProfiles] = useState<DataSourceProfile[]>([]);
@@ -117,19 +118,6 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
       });
     return () => { current = false; };
   }, [enabled, platform, sourcesRevision]);
-
-  useEffect(() => {
-    if (!dialogOpen) return;
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !pending) {
-        setDialogOpen(false);
-        setForm((current) => ({ ...current, password: "", sshPassword: "" }));
-        setError(undefined);
-      }
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [dialogOpen, pending]);
 
   function updateField<Key extends keyof SaveDataSourceInput>(
     key: Key,
@@ -206,6 +194,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     try {
       if (editingProfile) {
         const profile = await platform.saveDataSource(form);
+        onSourceSaved?.(profile);
         setProfiles((current) => [
           profile,
           ...current.filter((item) => item.id !== profile.id),
@@ -217,6 +206,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
       }
       await platform.testPostgresConnection(form);
       const profile = await platform.saveDataSource(form);
+      onSourceSaved?.(profile);
       setProfiles((current) => [
         profile,
         ...current.filter((item) => item.id !== profile.id),
@@ -243,6 +233,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     try {
       const result = await platform.verifyAndRefreshDataSource(form);
       const profile = result.profile;
+      onSourceSaved?.(profile);
       setProfiles((current) => [
         profile,
         ...current.filter((item) => item.id !== profile.id),
@@ -420,16 +411,11 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
       {error && !dialogOpen ? <p className="error-message connection-status">{error}</p> : null}
 
       {dialogOpen ? (
+        <ModalSurface labelledBy="connection-dialog-title" describedBy="connection-dialog-description" onDismiss={closeDialog}>
         <div className="connection-dialog-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget) closeDialog();
         }}>
-          <section ref={connectionDialog} className="connection-dialog" role="dialog" aria-modal="true" aria-labelledby="connection-dialog-title" aria-describedby="connection-dialog-description" onKeyDown={(event) => {
-            if (event.key !== "Tab") return;
-            const controls = Array.from(connectionDialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex="0"]') ?? []).filter((element) => !element.closest('[hidden]') && element.getClientRects().length > 0);
-            const first = controls[0], last = controls.at(-1);
-            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-          }}>
+          <section className="connection-dialog">
             <header>
               <div>
                 <h2 id="connection-dialog-title">
@@ -460,11 +446,11 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
               <section className="connection-form-section">
                 <div className="connection-form-grid connection-identity-grid">
                   <label>
-                    {bt("business.name")}<input autoFocus={Boolean(editingProfile)} value={form.displayName} onChange={(event) => updateField("displayName", event.target.value)} disabled={!enabled || pending} />
+                    {bt("business.name")}<input data-modal-focus={editingProfile ? true : undefined} value={form.displayName} onChange={(event) => updateField("displayName", event.target.value)} disabled={!enabled || pending} />
                   </label>
                   <label>
                     {bt("business.databaseEngine")}<select
-                      autoFocus={!editingProfile}
+                      data-modal-focus={editingProfile ? undefined : true}
                       value={form.databaseType}
                       onChange={(event) => {
                         const databaseType = event.target.value as SaveDataSourceInput["databaseType"];
@@ -603,6 +589,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
             </form>
           </section>
         </div>
+        </ModalSurface>
       ) : null}
     </section>
   );

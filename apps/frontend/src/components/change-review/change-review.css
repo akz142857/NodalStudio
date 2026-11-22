@@ -24,10 +24,8 @@
 @container(max-width:900px) { .review-evidence { grid-template-columns:1fr; } .review-columns { grid-template-columns:minmax(160px,210px) minmax(0,1fr); } }
 @container(max-width:650px) { .review-columns { grid-template-columns:1fr; } .review-list { max-height:180px; } }
 /* These entry points sit outside the surface's shared button reset. */
-.review-entry,.changes-view-toolbar > button { appearance:none; border:1px solid var(--ds-border); border-radius:8px; padding:7px 12px; background:var(--ds-surface); color:var(--ds-text); font:inherit; cursor:pointer; }
-.changes-view-toolbar:has(>button[aria-pressed]) { justify-content:flex-start; gap:8px; }
-.changes-view-toolbar > button[aria-pressed=true] { background:var(--ds-accent-soft,#e5efff); color:var(--ds-accent); border-color:var(--ds-accent); }
-.review-entry:focus-visible,.changes-view-toolbar > button:focus-visible { outline:2px solid var(--ds-accent); outline-offset:3px; }
+.review-entry { appearance:none; border:1px solid var(--ds-border); border-radius:8px; padding:7px 12px; background:var(--ds-surface); color:var(--ds-text); font:inherit; cursor:pointer; }
+.review-entry:focus-visible { outline:var(--ds-focus-ring); outline-offset:2px; }
 .review-evidence { margin-top:16px; }
 .review-evidence summary { cursor:pointer; }
 .review-detail > .review-actions { position:sticky; bottom:0; padding:12px 0; background:var(--ds-surface); border-top:1px solid var(--ds-border); }

@@ -32,7 +32,7 @@ describe("business discovery app integration", () => {
     const { save } = mount(); await screen.findByText("Discovery runtime"); fireEvent.click(screen.getByRole("button", { name: "Load business fixture" }));
     await screen.findByRole("button", { name: "Business question" });
     fireEvent.click(screen.getByRole("button", { name: "Arrange original view" }));
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search schema" }), { target: { value: "customer" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Search schema" }), { target: { value: "customer" } });
     const original = screen.getByRole("region", { name: "Full model canvas" });
     fireEvent.click(screen.getByRole("button", { name: "Business question" }));
     expect(screen.getByTestId("original-paused")).toHaveTextContent("true");

@@ -13,19 +13,20 @@ import { SchemaIndexDetails } from "./SchemaIndexDetails";
 import "./object-document.css";
 
 import type { DocumentObject } from "./object-document-model";
-export function ObjectDocument({ snapshot, object, onClose, onSelect, onSelectTable }: {
+export function ObjectDocument({ snapshot, object, onClose, onSelect, onSelectTable, backLabel }: {
   snapshot: DatabaseSnapshot; object: DocumentObject; onClose: () => void;
   onSelect: (key: ObjectKey) => void; onSelectTable: (table: TableDefinition) => void;
+  backLabel?: string;
 }) {
   const { t } = useI18n();
   const [section, setSection] = useState<"definition" | "properties" | "dependencies">("definition");
   const [wrap, setWrap] = useState(true);
   const [copyStatus, setCopyStatus] = useState("");
   const definition = "values" in object ? object.values.join("\n") : object.definition;
-  const kind = object.key.kind === "view" ? ("materialized" in object && object.materialized ? t("business.materializedView") : t("business.view")) : object.key.kind === "procedure" ? t("objects.procedure") : object.key.kind === "trigger" ? t("objects.trigger") : object.key.kind === "enum" ? t("business.enums") : t("objects.function");
+  const kind = objectKind(object, t);
   return <section className="ds-surface object-document" aria-label={t("document.label")}>
     <header className="object-document-header">
-      <button type="button" onClick={onClose}>← {t("document.diagram")}</button>
+      <button type="button" onClick={onClose}>← {backLabel ?? t("document.diagram")}</button>
       <div><small>{kind} · {object.key.schema}</small><h2>{object.key.name}</h2></div>
       <button type="button" aria-label={t("objects.close")} onClick={onClose}>×</button>
     </header>
@@ -42,7 +43,7 @@ export function ObjectDocument({ snapshot, object, onClose, onSelect, onSelectTa
   </section>;
 }
 
-function DefinitionReader({ value, wrap, dialect }: { value: string; wrap: boolean; dialect: "postgreSql" | "mySql" | "sqlite" }) {
+export function DefinitionReader({ value, wrap, dialect }: { value: string; wrap: boolean; dialect: "postgreSql" | "mySql" | "sqlite" }) {
   const { t } = useI18n();
   const label = t("document.reader");
   const host = useRef<HTMLDivElement>(null);
@@ -75,7 +76,7 @@ function DefinitionReader({ value, wrap, dialect }: { value: string; wrap: boole
 export function ObjectDocumentProperties({ object }: { object: DocumentObject }) {
   const { t } = useI18n();
   const program = "arguments" in object ? object : undefined;
-  const kind = object.key.kind === "view" ? ("materialized" in object && object.materialized ? t("business.materializedView") : t("business.view")) : object.key.kind === "procedure" ? t("objects.procedure") : object.key.kind === "trigger" ? t("objects.trigger") : object.key.kind === "enum" ? t("business.enums") : t("objects.function");
+  const kind = objectKind(object, t);
   const enabled = program?.enabled;
   const status = enabled === "O" ? t("objects.enabledO") : enabled === "D" ? t("objects.enabledD") : enabled === "R" ? t("objects.enabledR") : enabled === "A" || enabled === "enabled" ? t("objects.enabledA") : enabled;
   return <section className="object-properties-panel" aria-label={t("document.properties")}>
@@ -94,4 +95,15 @@ export function ObjectDocumentProperties({ object }: { object: DocumentObject })
         {"comment" in object && object.comment ? <p>{object.comment}</p> : null}
         {"materialized" in object ? <SchemaIndexDetails indexes={object.indexes ?? []} /> : null}
   </section>;
+}
+
+function objectKind(object: DocumentObject, t: ReturnType<typeof useI18n>["t"]) {
+  switch (object.key.kind) {
+    case "view": return "materialized" in object && object.materialized ? t("business.materializedView") : t("business.view");
+    case "procedure": return t("objects.procedure");
+    case "trigger": return t("objects.trigger");
+    case "event": return t("objects.event");
+    case "enum": return t("business.enums");
+    default: return t("objects.function");
+  }
 }

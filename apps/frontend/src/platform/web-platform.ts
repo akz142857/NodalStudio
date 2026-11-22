@@ -216,6 +216,15 @@ export class WebPlatform implements NodalStudioPlatform {
     return Promise.reject(new Error("Query execution requires the desktop app."));
   }
 
+  readTableRowCounts(): Promise<[]> { return Promise.resolve([]); }
+
+  executeSchemaDdl(): Promise<never> { return Promise.reject(new Error("Manual DDL requires the desktop app.")); }
+  readTableDdl(): Promise<never> { return Promise.reject(new Error("Reading live table DDL requires the desktop app.")); }
+
+  loadSqliteTable(): Promise<never> { return Promise.reject(new Error("Table data requires the desktop app.")); }
+  countSqliteTableRows(): Promise<never> { return Promise.reject(new Error("Table data requires the desktop app.")); }
+  saveSqliteTable(): Promise<never> { return Promise.reject(new Error("Table editing requires the desktop app.")); }
+
   cancelQuery(): Promise<boolean> { return Promise.resolve(false); }
   listQueryHistory(): Promise<[]> { return Promise.resolve([]); }
   deleteQueryHistory(): Promise<boolean> { return Promise.resolve(false); }

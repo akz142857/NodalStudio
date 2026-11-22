@@ -33,7 +33,7 @@ describe("App snapshot operation feedback", () => {
     const tools = within(screen.getByRole("group", { name: "Application tools" }));
     for (const name of ["Import DDL", "Structure preflight", "Export structure document", "Export interactive viewer", "Refresh schema", "Open Settings", "Open command palette", "Open notifications"]) {
       const button = tools.getByRole("button", { name });
-      expect(button.textContent).toBe("");
+      if (button.textContent) expect(button.querySelector(".icon-button-menu-label")).toHaveAttribute("aria-hidden", "true");
     }
     const preflight = tools.getByRole("button", { name: "Structure preflight" });
     fireEvent.focus(preflight);

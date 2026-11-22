@@ -187,6 +187,7 @@ async fn load_tables(
     for row in rows {
         schema.tables.push(TableDefinition {
             sqlite: None,
+            includes_inherited_rows: None,
             key: ObjectKey::table(&schema.name, row.try_get::<String, _>("table_name")?),
             table_kind: TableKind::Ordinary,
             columns: vec![],
@@ -207,6 +208,7 @@ async fn load_columns(
     let rows = sqlx::query("SELECT c.TABLE_NAME AS table_name, c.COLUMN_NAME AS column_name, c.ORDINAL_POSITION AS ordinal_position, c.COLUMN_TYPE AS column_type, c.DATA_TYPE AS data_type, c.IS_NULLABLE AS is_nullable, c.COLUMN_DEFAULT AS column_default, c.EXTRA AS extra, c.COLUMN_COMMENT AS column_comment FROM information_schema.columns c JOIN information_schema.tables t ON t.TABLE_SCHEMA=c.TABLE_SCHEMA AND t.TABLE_NAME=c.TABLE_NAME WHERE c.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE='BASE TABLE' ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION").fetch_all(pool).await?;
     for row in rows {
         let table_name: String = row.try_get("table_name")?;
+        let extra: String = row.try_get("extra")?;
         table_mut(schema, &table_name)?
             .columns
             .push(ColumnDefinition {
@@ -220,11 +222,11 @@ async fn load_columns(
                 type_name: row.try_get("data_type")?,
                 nullable: row.try_get::<String, _>("is_nullable")? == "YES",
                 default_value: row.try_get("column_default")?,
-                identity: row
-                    .try_get::<String, _>("extra")?
+                identity: extra
                     .contains("auto_increment")
                     .then_some(IdentityKind::ByDefault),
-                generated: row.try_get::<String, _>("extra")?.contains("GENERATED"),
+                generated: extra.contains("VIRTUAL GENERATED")
+                    || extra.contains("STORED GENERATED"),
                 comment: non_empty(row.try_get("column_comment")?),
             });
     }

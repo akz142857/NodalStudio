@@ -1,3 +1,4 @@
+mod schema_ddl;
 mod sqlite_source;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -79,6 +80,8 @@ mod query_export;
 mod relationship_batches;
 mod schema_report;
 mod storage_errors;
+mod table_ddl;
+mod table_row_counts;
 mod table_understanding;
 mod updates;
 
@@ -227,6 +230,8 @@ struct ExecuteReadonlyQueryInput {
     sql: String,
     row_limit: u32,
     timeout_ms: u64,
+    #[serde(default)]
+    table_browse: bool,
 }
 
 #[derive(Deserialize)]
@@ -1230,21 +1235,23 @@ async fn capture_snapshot(
     result
 }
 
+async fn snapshot_capture_gate(state: &AppState, source_id: Uuid) -> Arc<Semaphore> {
+    let mut captures = state.snapshot_captures.lock().await;
+    Arc::clone(
+        captures
+            .entry(source_id)
+            .or_insert_with(|| Arc::new(Semaphore::new(1))),
+    )
+}
+
 #[allow(clippy::too_many_lines)]
 async fn capture_snapshot_using(
     input: CaptureSnapshotInput,
     state: &AppState,
     verified: Option<(&DataSourceProfile, &SaveDataSourceInput)>,
 ) -> Result<CaptureSnapshotResult, String> {
-    let capture_gate = {
-        let mut captures = state.snapshot_captures.lock().await;
-        Arc::clone(
-            captures
-                .entry(input.source_id)
-                .or_insert_with(|| Arc::new(Semaphore::new(1))),
-        )
-    };
-    let _capture_permit = capture_gate
+    let _capture_permit = snapshot_capture_gate(state, input.source_id)
+        .await
         .try_acquire_owned()
         .map_err(|_| "A snapshot capture is already running for this data source.".to_owned())?;
     let source_settings = state
@@ -1478,49 +1485,22 @@ async fn run_network_query(
     let (password, tunnel, connect_timeout) = tokio::select! {
         biased;
         () = cancellation.cancelled() => return Err(query_command_error(query_id, QueryError::Cancelled)),
-        prepared = prepare_readonly_connection(state, &profile) => prepared.map_err(|error| query_command_error(query_id, error))?,
+        prepared = prepare_query_connection(state, &profile) => prepared.map_err(|error| query_command_error(query_id, error))?,
     };
-    let result = match profile.database_type {
-        DatabaseType::Sqlite => unreachable!("SQLite queried before network setup"),
-        DatabaseType::PostgreSql => {
-            let options = connection_options_from_profile(&profile, &password)
-                .with_socket(tunnel.postgres_socket())
-                .with_connect_timeout(connect_timeout);
-            let connected = tokio::select! {
-                biased;
-                () = cancellation.cancelled() => Err(QueryError::Cancelled),
-                pool = connect(&options) => pool.map_err(|_| QueryError::Connection),
-            };
-            match connected {
-                Ok(pool) => {
-                    let result = execute_postgres_query(&pool, &request, &cancellation).await;
-                    pool.close().await;
-                    result
-                }
-                Err(error) => Err(error),
-            }
-        }
-        DatabaseType::MySql => {
-            let options = mysql_connection_options_from_profile(&profile, &password)
-                .with_socket(tunnel.mysql_socket())
-                .with_connect_timeout(connect_timeout);
-            let connected = tokio::select! {
-                biased;
-                () = cancellation.cancelled() => Err(QueryError::Cancelled),
-                pool = connect_mysql(&options) => pool.map_err(|_| QueryError::Connection),
-            };
-            match connected {
-                Ok(pool) => {
-                    let result =
-                        query_engine::execute_mysql_query(&pool, &request, &cancellation).await;
-                    pool.close().await;
-                    result
-                }
-                Err(error) => Err(error),
-            }
-        }
-    };
+    let result = execute_prepared_network_query(
+        &profile,
+        &password,
+        &tunnel,
+        connect_timeout,
+        &request,
+        &cancellation,
+    )
+    .await;
 
+    // Generated page SQL includes boundary values read from the table.
+    if input.table_browse {
+        return result.map_err(|error| query_command_error(query_id, error));
+    }
     let history = match &result {
         Ok(value) => QueryHistoryEntry {
             id: Uuid::new_v4(),
@@ -1551,7 +1531,57 @@ async fn run_network_query(
     result.map_err(|error| query_command_error(query_id, error))
 }
 
-async fn prepare_readonly_connection(
+async fn execute_prepared_network_query(
+    profile: &DataSourceProfile,
+    password: &str,
+    tunnel: &connection_security::Tunnel,
+    connect_timeout: Duration,
+    request: &ExecuteQueryRequest,
+    cancellation: &CancellationToken,
+) -> Result<QueryExecutionResult, QueryError> {
+    match profile.database_type {
+        DatabaseType::Sqlite => unreachable!("SQLite queried before network setup"),
+        DatabaseType::PostgreSql => {
+            let options = connection_options_from_profile(profile, password)
+                .with_socket(tunnel.postgres_socket())
+                .with_connect_timeout(connect_timeout);
+            let connected = tokio::select! {
+                biased;
+                () = cancellation.cancelled() => Err(QueryError::Cancelled),
+                pool = connect(&options) => pool.map_err(|_| QueryError::Connection),
+            };
+            match connected {
+                Ok(pool) => {
+                    let result = execute_postgres_query(&pool, request, cancellation).await;
+                    pool.close().await;
+                    result
+                }
+                Err(error) => Err(error),
+            }
+        }
+        DatabaseType::MySql => {
+            let options = mysql_connection_options_from_profile(profile, password)
+                .with_socket(tunnel.mysql_socket())
+                .with_connect_timeout(connect_timeout);
+            let connected = tokio::select! {
+                biased;
+                () = cancellation.cancelled() => Err(QueryError::Cancelled),
+                pool = connect_mysql(&options) => pool.map_err(|_| QueryError::Connection),
+            };
+            match connected {
+                Ok(pool) => {
+                    let result =
+                        query_engine::execute_mysql_query(&pool, request, cancellation).await;
+                    pool.close().await;
+                    result
+                }
+                Err(error) => Err(error),
+            }
+        }
+    }
+}
+
+async fn prepare_query_connection(
     state: &AppState,
     profile: &DataSourceProfile,
 ) -> Result<(String, connection_security::Tunnel, Duration), QueryError> {
@@ -5369,6 +5399,13 @@ pub fn run() {
                 capture_postgres_snapshot,
                 execute_readonly_query,
                 execute_table_preview_query,
+                table_ddl::read_table_ddl,
+                table_row_counts::read_table_row_counts,
+                sqlite_source::load_sqlite_table,
+                sqlite_source::count_sqlite_table_rows,
+                sqlite_source::save_sqlite_table,
+                sqlite_source::execute_sqlite_ddl,
+                schema_ddl::execute_network_ddl,
                 cancel_query,
                 list_query_history,
                 delete_query_history,

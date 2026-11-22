@@ -94,7 +94,7 @@ async function sourceSave(pending: PendingSave[], source: "a" | "b") {
 
 async function openAiSettings() {
   fireEvent.click(screen.getByRole("button", { name: "Open Settings" }));
-  const settings = within(await screen.findByRole("region", { name: "Settings" }));
+  const settings = within(await screen.findByRole("dialog", { name: "Settings" }));
   fireEvent.click(settings.getByRole("button", { name: "AI" }));
   return settings;
 }

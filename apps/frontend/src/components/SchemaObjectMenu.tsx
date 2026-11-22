@@ -2,11 +2,11 @@ import { useI18n } from "../i18n";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
-type MenuItem = { label: string; disabled?: boolean; separatorBefore?: boolean; run: () => void };
+type MenuItem = { label: string; disabled?: boolean; description?: string; separatorBefore?: boolean; checked?: boolean; run: () => void };
 export type SchemaObjectMenuAction = MenuItem | { label: string; disabled?: boolean; separatorBefore?: boolean; children: MenuItem[] };
 
 function items(menu: HTMLElement | null) {
-  return Array.from(menu?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
+  return Array.from(menu?.querySelectorAll<HTMLButtonElement>(':is([role="menuitem"], [role="menuitemradio"]):not(:disabled)') ?? []);
 }
 
 function place(menu: HTMLElement, x: number, y: number) {
@@ -17,8 +17,8 @@ function place(menu: HTMLElement, x: number, y: number) {
 }
 
 /** Object actions live outside the scrolling sidebar; all coordinates respect UI zoom. */
-export function SchemaObjectMenu({ x, y, name, actions, onClose }: {
-  x: number; y: number; name: string; actions: SchemaObjectMenuAction[]; onClose: (restoreFocus: boolean) => void;
+export function SchemaObjectMenu({ x, y, name, actions, onClose, showName = true, className }: {
+  x: number; y: number; name: string; actions: SchemaObjectMenuAction[]; onClose: (restoreFocus: boolean) => void; showName?: boolean; className?: string;
 }) {
   const { t: bt } = useI18n();
   const surface = useRef<HTMLDivElement>(null);
@@ -84,16 +84,20 @@ export function SchemaObjectMenu({ x, y, name, actions, onClose }: {
         onPointerEnter={(event) => {
           if (!action.disabled && submenu?.label !== action.label) setSubmenu({ label: action.label, trigger: event.currentTarget, focus: false });
         }}>{action.label}<span className="schema-menu-chevron" aria-hidden="true">›</span></button>
-        : <button type="button" role="menuitem" disabled={action.disabled}
+        : <button type="button" role={action.checked === undefined ? "menuitem" : "menuitemradio"}
+          aria-checked={action.checked} disabled={action.disabled} aria-description={action.description} title={action.description}
           onPointerEnter={() => { if (!inSubmenu && !sub.current?.contains(document.activeElement)) setSubmenu(undefined); }}
-          onClick={() => { onClose(true); action.run(); }}>{action.label}</button>}
+          onClick={() => { onClose(true); action.run(); }}>
+          {action.checked !== undefined && <span className="schema-menu-check" aria-hidden="true">{action.checked ? "✓" : ""}</span>}
+          {action.label}
+        </button>}
     </Fragment>);
   }
 
   return createPortal(<div ref={surface} className="schema-menu-surface" onContextMenu={(event) => event.preventDefault()}>
-    <div ref={root} className="schema-object-menu" role="menu" tabIndex={-1} aria-label={bt("business.actionsForDetail", { value0: name })}
+    <div ref={root} className={className ? `schema-object-menu ${className}` : "schema-object-menu"} role="menu" tabIndex={-1} aria-label={bt("business.actionsForDetail", { value0: name })}
       style={{ left: x, top: y }} onKeyDown={(event) => navigate(event)}>
-      <p>{name}</p>{renderActions(actions)}
+      {showName && <p>{name}</p>}{renderActions(actions)}
     </div>
     {current && "children" in current ? <div ref={sub} className="schema-object-menu" role="menu" tabIndex={-1}
       aria-label={current.label} onKeyDown={(event) => navigate(event, true)}>{renderActions(current.children, true)}</div> : null}

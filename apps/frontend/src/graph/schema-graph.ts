@@ -17,6 +17,7 @@ export interface TableNodeData extends Record<string, unknown> {
   layoutPinned?: boolean;
   table: TableDefinition;
   changeStatus?: ChangeStatus;
+  modelChangeStatus?: ChangeStatus;
   inspectionTable?: TableDefinition;
   columnChanges?: Record<string, ChangeStatus | undefined>;
   columnNotes?: Record<string, string>;

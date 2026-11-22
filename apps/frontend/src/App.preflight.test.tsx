@@ -30,7 +30,7 @@ describe("App structure preflight integration", () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => vi.restoreAllMocks());
 
-  it("checks the entire loaded snapshot independent of diagram search and comparison ghosts, locating a table returns to Database", async () => {
+  it("checks the entire loaded snapshot independent of diagram search and comparison ghosts, locating a table returns to Model", async () => {
     await mount();
     fireEvent.change(screen.getByPlaceholderText("Table, field, schema…"), { target: { value: "no-tables-match" } });
     fireEvent.click(screen.getByRole("button", { name: "Structure preflight" }));
@@ -39,7 +39,7 @@ describe("App structure preflight integration", () => {
     expect(screen.getByRole("article", { name: "table-primary-key: public.orders" })).toBeVisible();
     expect(panel).not.toHaveTextContent("public.audit");
     fireEvent.click(screen.getByRole("button", { name: "Locate table" }));
-    expect(screen.getByRole("button", { name: "Database" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByPlaceholderText("Table, field, schema…")).toHaveValue("");
     expect(screen.getByTestId("preflight-canvas")).toHaveTextContent("Canvas query: none · Selected: orders");
     expect(screen.queryByRole("region", { name: "Structure preflight" })).not.toBeInTheDocument();

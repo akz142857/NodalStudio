@@ -643,7 +643,7 @@ it("opens SQLite through a file picker without network or credential fields", as
   await waitFor(() => expect(screen.getByDisplayValue("/tmp/local.sqlite")).toBeInTheDocument());
   expect(pickWorkspacePath).toHaveBeenCalledWith("openSqlite");
   fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
-  await screen.findByText("SQLite is ready. The original database is opened read-only.");
+  await screen.findByText("SQLite passed the read-only connection test.");
   expect(testPostgresConnection).toHaveBeenCalledWith(expect.objectContaining({ databaseType: "sqlite", sqlite: { path: "/tmp/local.sqlite" }, password: "" }), expect.anything());
   expect(screen.queryByRole("group", { name: "TLS status" })).not.toBeInTheDocument();
 });

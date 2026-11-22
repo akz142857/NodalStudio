@@ -12,7 +12,7 @@
 .settings-header .settings-back { background: transparent; border-color: transparent; }
 .settings-search { position: relative; width: min(280px, 30vw); margin-left: auto; }
 .settings-search > svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--ds-secondary); pointer-events: none; width: 14px; height: 14px; }
-.settings-search input { width: 100%; padding-left: 29px; }
+.settings-search input { width: 100%; min-height: var(--ds-toolbar-height); padding-left: 29px; }
 .settings-save-state { max-width: 25%; font-size: var(--ds-text-caption); color: var(--ds-secondary); overflow-wrap: anywhere; }
 .settings-save-state[data-state="error"] { color: var(--ds-danger); }
 .settings-layout { display: grid; grid-template-columns: 224px minmax(0, 1fr); flex: 1; min-height: 0; }

@@ -20,7 +20,7 @@ it("loads the persisted language, updates navigation, and retains it across app 
   await screen.findByRole("group", { name: "视图模式" });
   expect(screen.getByRole("button", { name: "数据库" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
-  const settings = within(await screen.findByRole("region", { name: "设置" }));
+  const settings = within(await screen.findByRole("dialog", { name: "设置" }));
   const before = read.mock.calls.length;
   fireEvent.change(settings.getByRole("combobox", { name: "语言" }), { target: { value: "en" } });
   await screen.findByRole("group", { name: "View mode" });

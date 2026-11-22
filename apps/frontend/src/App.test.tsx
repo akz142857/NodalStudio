@@ -20,13 +20,13 @@ describe("App", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: "Nodal Studio" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Nodal Studio" })).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Your database model, kept visible." }),
     ).toBeVisible();
     expect(await screen.findByText("Web runtime")).toBeVisible();
-    expect(screen.getByTestId("runtime-badge").closest(".brand-block")).toHaveAttribute("title", "Web runtime");
-    expect(screen.getByRole("searchbox", { name: "Search schema" })).toBeDisabled();
+    expect(screen.getByTestId("runtime-badge")).toHaveAttribute("title", "Web runtime");
+    expect(screen.getByRole("combobox", { name: "Search schema" })).toBeDisabled();
   });
 
   it("says so when stored settings cannot be loaded instead of quietly using defaults", async () => {

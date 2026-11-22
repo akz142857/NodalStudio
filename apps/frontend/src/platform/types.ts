@@ -117,6 +117,7 @@ export interface EnumDefinition {
 }
 
 export interface TableDefinition {
+  includesInheritedRows?: boolean;
   sqlite?: { definition: string; strict: boolean; withoutRowid: boolean; virtualTable: boolean; columnsUnavailable?: boolean; columns?: Record<string, { hidden: number; affinity: string; generationExpression: string | null; generationMode: string | null }>; diagnostics: string[] };
   key: {
     kind: "table";
@@ -470,6 +471,7 @@ export interface SnapshotSummary {
 export type OperationType =
   | "addTable"
   | "dropTable"
+  | "alterTable"
   | "addColumn"
   | "dropColumn"
   | "renameColumn"
@@ -530,6 +532,7 @@ export interface ExecuteReadonlyQueryInput {
   sql: string;
   rowLimit: number;
   timeoutMs: number;
+  tableBrowse?: boolean;
 }
 
 export interface QueryColumn {
@@ -601,6 +604,12 @@ export interface NodalStudioPlatform {
   getSnapshot(snapshotId: string): Promise<DatabaseSnapshot>;
   compareSnapshots(beforeSnapshotId: string, afterSnapshotId: string): Promise<SchemaChangeSet>;
   executeReadonlyQuery(input: ExecuteReadonlyQueryInput, onRegistered?: () => void): Promise<QueryExecutionResult>;
+  readTableRowCounts(input: import("./table-row-counts").TableRowCountRequest): Promise<import("./table-row-counts").TableRowCount[]>;
+  executeSchemaDdl(input: import("./schema-ddl").SchemaDdlInput): Promise<import("./schema-ddl").SchemaDdlReceipt>;
+  readTableDdl(input: { sourceId: string; connectionRevision: string; schema: string; name: string }): Promise<string>;
+  loadSqliteTable(input: import("./sqlite-table").SqliteTableTarget, options: import("./sqlite-table").SqliteTableReadOptions): Promise<import("./sqlite-table").SqliteTableData>;
+  countSqliteTableRows(input: import("./sqlite-table").SqliteTableTarget, filter?: import("./table-data-filter").TableFilter): Promise<string>;
+  saveSqliteTable(input: import("./sqlite-table").SaveSqliteTableInput): Promise<void>;
   cancelQuery(queryId: string): Promise<boolean>;
   listQueryHistory(sourceId: string, limit?: number): Promise<QueryHistoryEntry[]>;
   deleteQueryHistory(sourceId: string, historyId: string): Promise<boolean>;

@@ -26,6 +26,7 @@ interface SqlEditorProps {
   onRun: (sqlText: string) => void;
   executing: boolean;
   disabled: boolean;
+  ddlEngine?: string;
   onStop: () => void;
 }
 
@@ -45,7 +46,7 @@ function completions(snapshot: DatabaseSnapshot | undefined, t: Translate): Comp
 
 
 export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function SqlEditor(
-  { value, snapshot, onChange, onRun, executing, disabled, onStop },
+  { value, snapshot, onChange, onRun, executing, disabled, ddlEngine, onStop },
   ref,
 ) {
   const { t: bt, locale } = useI18n();
@@ -87,7 +88,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
         sqlLanguage(dialect),
         syntaxHighlighting(sqlHighlightStyle),
         history(),
-        language.of([EditorState.phrases.of({ Completions: eventBt("queryEditor.completions") }), placeholder(eventBt("business.writeAReadOnlySELECTQuery")), EditorView.contentAttributes.of({ "aria-label": eventBt("business.sQLEditor") })]),
+        language.of([EditorState.phrases.of({ Completions: eventBt("queryEditor.completions") }), placeholder(ddlEngine ? eventBt("schemaDdl.editorPlaceholder", { value0: ddlEngine }) : eventBt("business.writeAReadOnlySELECTQuery")), EditorView.contentAttributes.of({ "aria-label": eventBt("business.sQLEditor") })]),
         linter((view) => sqlSyntaxDiagnostics(view.state), { delay: 250 }),
         lineNumbers(),
         highlightActiveLine(),
@@ -131,11 +132,11 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       view.destroy();
       viewRef.current = undefined;
     };
-  }, [snapshot, dialect, language, eventBt]);
+  }, [snapshot, dialect, language, eventBt, ddlEngine]);
 
   useEffect(() => {
-    viewRef.current?.dispatch({ effects: language.reconfigure([EditorState.phrases.of({ Completions: bt("queryEditor.completions") }), placeholder(bt("business.writeAReadOnlySELECTQuery")), EditorView.contentAttributes.of({ "aria-label": bt("business.sQLEditor") })]) });
-  }, [bt, language]);
+    viewRef.current?.dispatch({ effects: language.reconfigure([EditorState.phrases.of({ Completions: bt("queryEditor.completions") }), placeholder(ddlEngine ? bt("schemaDdl.editorPlaceholder", { value0: ddlEngine }) : bt("business.writeAReadOnlySELECTQuery")), EditorView.contentAttributes.of({ "aria-label": bt("business.sQLEditor") })]) });
+  }, [bt, language, ddlEngine]);
 
   useLayoutEffect(() => {
     const view = viewRef.current;

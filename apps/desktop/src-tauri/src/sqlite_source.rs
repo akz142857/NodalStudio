@@ -1,7 +1,10 @@
 //! `SQLite` operations own the file grant until the driver worker has stopped.
+use crate::schema_ddl::DdlReceipt;
 use crate::{AppState, ExecuteReadonlyQueryInput, QueryCommandError, query_command_error};
+use futures_util::TryStreamExt;
 use query_engine::{ExecuteQueryRequest, QueryError, QueryExecutionResult};
 use schema_model::{DataSourceProfile, DatabaseInfo, DatabaseSnapshot, SqliteFile};
+use sqlite_adapter::{schema_edit, table_data};
 use sqlx::Connection;
 use std::{
     path::Path,
@@ -40,6 +43,226 @@ fn access(file: &SqliteFile) -> Result<crate::file_access::Access, String> {
         return Ok(grant);
     }
     crate::file_access::access(path)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableInput {
+    source_id: uuid::Uuid,
+    table: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveTableInput {
+    target: TableInput,
+    version: String,
+    changes: Vec<table_data::Change>,
+}
+
+async fn sqlite_profile(
+    state: &AppState,
+    source_id: uuid::Uuid,
+) -> Result<DataSourceProfile, String> {
+    state
+        .store
+        .get_data_source(source_id)
+        .await
+        .map_err(crate::safe_store_error)?
+        .filter(|profile| {
+            profile.database_type == schema_model::DatabaseType::Sqlite && profile.sqlite.is_some()
+        })
+        .ok_or_else(|| "Select a live local SQLite connection to open table data.".into())
+}
+
+async fn table_file(state: &AppState, source_id: uuid::Uuid) -> Result<SqliteFile, String> {
+    sqlite_profile(state, source_id)
+        .await?
+        .sqlite
+        .ok_or_else(|| "Choose a local SQLite database file.".into())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DdlInput {
+    source_id: uuid::Uuid,
+    file_path: String,
+    sql: String,
+}
+
+#[tauri::command]
+pub async fn execute_sqlite_ddl(
+    input: DdlInput,
+    state: tauri::State<'_, AppState>,
+) -> Result<DdlReceipt, String> {
+    let state = state.inner().clone();
+    tokio::spawn(async move { execute_ddl(&state, input).await })
+        .await
+        .map_err(|_| "Unable to complete the SQLite schema operation.".to_owned())?
+}
+
+async fn execute_ddl(state: &AppState, input: DdlInput) -> Result<DdlReceipt, String> {
+    let gate = crate::snapshot_capture_gate(state, input.source_id).await;
+    let _permit = tokio::time::timeout(Duration::from_secs(15), gate.acquire_owned())
+        .await
+        .map_err(|_| "A database snapshot is still being captured. Try again shortly.".to_owned())?
+        .map_err(|_| "Unable to lock the SQLite schema workspace.".to_owned())?;
+    let profile = sqlite_profile(state, input.source_id).await?;
+    let file = profile
+        .sqlite
+        .as_ref()
+        .filter(|file| file.path == input.file_path)
+        .ok_or_else(|| {
+            "The selected SQLite file changed. Review the statement again.".to_owned()
+        })?;
+    {
+        let _access = access(file)?;
+        schema_edit::execute(Path::new(&file.path), &input.sql)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    // A failed refresh is reported separately. The schema transaction has committed.
+    Ok(
+        match capture_after_ddl(state, profile, &input.file_path).await {
+            Ok(capture) => DdlReceipt::Refreshed {
+                capture: Box::new(capture),
+            },
+            Err(message) => DdlReceipt::RefreshFailed { message },
+        },
+    )
+}
+
+async fn capture_after_ddl(
+    state: &AppState,
+    profile: DataSourceProfile,
+    expected_path: &str,
+) -> Result<crate::CaptureSnapshotResult, String> {
+    let source_id = profile.id;
+    let settings = state
+        .store
+        .get_data_source_settings(source_id)
+        .await
+        .map_err(crate::safe_store_error)?;
+    let snapshot = capture(
+        profile,
+        Duration::from_secs(u64::from(settings.refresh.introspection_timeout_seconds)),
+    )
+    .await?;
+    if table_file(state, source_id).await?.path != expected_path {
+        return Err("The SQLite source now points to a different file.".into());
+    }
+    state
+        .store
+        .save_captured_snapshot(&snapshot)
+        .await
+        .map_err(crate::safe_store_error)
+}
+
+#[tauri::command]
+pub async fn load_sqlite_table(
+    input: TableInput,
+    options: Option<table_data::ReadOptions>,
+    state: tauri::State<'_, AppState>,
+) -> Result<table_data::TableData, String> {
+    let file = table_file(&state, input.source_id).await?;
+    tokio::spawn(async move {
+        let _access = access(&file)?;
+        table_data::load(
+            Path::new(&file.path),
+            &input.table,
+            &options.unwrap_or_default(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|_| "Unable to open the SQLite table data.".to_owned())?
+}
+
+pub(crate) async fn read_table_ddl(file: SqliteFile, name: String) -> Result<String, String> {
+    tokio::spawn(async move {
+        let _access = access(&file)?;
+        let mut connection = sqlite_adapter::connect(Path::new(&file.path))
+            .await
+            .map_err(|_| "Unable to open the SQLite file.")?;
+        let result = async {
+            let mut rows = sqlx::query_scalar::<_, Option<String>>(
+                "SELECT CASE WHEN length(CAST(sql AS BLOB)) <= ?1 THEN sql END
+                 FROM main.sqlite_schema
+                 WHERE tbl_name = ?2 AND type IN ('table', 'index') AND sql IS NOT NULL
+                 ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END, name",
+            )
+            .bind(
+                i64::try_from(crate::table_ddl::MAX_DDL_BYTES)
+                    .map_err(|_| crate::table_ddl::DDL_TOO_LARGE)?,
+            )
+            .bind(name)
+            .fetch(&mut connection);
+            let mut definition = String::new();
+            while let Some(statement) = rows
+                .try_next()
+                .await
+                .map_err(|_| "Unable to read the SQLite table definition.")?
+            {
+                crate::table_ddl::append_statement(
+                    &mut definition,
+                    &statement.ok_or(crate::table_ddl::DDL_TOO_LARGE)?,
+                )?;
+            }
+            if definition.is_empty() {
+                return Err("The SQLite table definition is unavailable.");
+            }
+            Ok(definition)
+        }
+        .await;
+        connection
+            .close()
+            .await
+            .map_err(|_| "Unable to close the SQLite connection.")?;
+        result.map_err(str::to_owned)
+    })
+    .await
+    .map_err(|_| "Unable to read the SQLite table definition.".to_owned())?
+}
+
+#[tauri::command]
+pub async fn count_sqlite_table_rows(
+    input: TableInput,
+    options: table_data::CountOptions,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    let file = table_file(&state, input.source_id).await?;
+    tokio::spawn(async move {
+        let _access = access(&file)?;
+        table_data::count_rows(Path::new(&file.path), &input.table, &options)
+            .await
+            .map(|count| count.to_string())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| "Unable to count the SQLite table rows.".to_owned())?
+}
+
+#[tauri::command]
+pub async fn save_sqlite_table(
+    input: SaveTableInput,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let file = table_file(&state, input.target.source_id).await?;
+    // The worker owns the file grant through commit/rollback and connection shutdown.
+    tokio::spawn(async move {
+        let _access = access(&file)?;
+        table_data::save(
+            Path::new(&file.path),
+            &input.target.table,
+            &input.version,
+            &input.changes,
+        )
+        .await
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|_| "Unable to complete the SQLite table save.".to_owned())?
 }
 
 async fn run(
@@ -134,6 +357,18 @@ pub async fn capture(
         _ => Err("Invalid SQLite capture result.".into()),
     }
 }
+pub(super) async fn execute_sqlite_readonly(
+    profile: DataSourceProfile,
+    request: ExecuteQueryRequest,
+    token: CancellationToken,
+) -> Result<QueryExecutionResult, QueryError> {
+    let timeout = Duration::from_millis(request.timeout_ms);
+    match run(profile, Operation::Query(request), timeout, token).await? {
+        Output::Query(result) => Ok(result),
+        _ => Err(QueryError::Internal),
+    }
+}
+
 pub async fn query(
     state: &AppState,
     profile: DataSourceProfile,
@@ -178,14 +413,11 @@ async fn query_owned(
     let id = request.query_id;
     let started = Instant::now();
     let at = chrono::Utc::now().to_rfc3339();
-    let timeout = Duration::from_millis(request.timeout_ms);
-    let result = run(profile, Operation::Query(request), timeout, token)
-        .await
-        .and_then(|output| match output {
-            Output::Query(result) => Ok(result),
-            _ => Err(QueryError::Internal),
-        });
+    let result = execute_sqlite_readonly(profile, request, token).await;
     state.active_queries.lock().await.remove(&id);
+    if input.table_browse {
+        return result.map_err(|e| query_command_error(id, e));
+    }
     let history = snapshot_store::QueryHistoryEntry {
         id: uuid::Uuid::new_v4(),
         source_id: input.source_id,
@@ -302,6 +534,86 @@ mod tests {
             max_result_bytes: 1024 * 1024,
         }
     }
+    #[tokio::test]
+    async fn ddl_checks_the_bound_file_and_persists_the_new_schema() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("schema.sqlite");
+        std::fs::write(&path, []).unwrap();
+        let profile = profile(&path);
+        let state = app_state(&profile).await;
+        let mut input = DdlInput {
+            source_id: profile.id,
+            file_path: "/another.sqlite".into(),
+            sql: "CREATE TABLE items (id INTEGER PRIMARY KEY)".into(),
+        };
+        assert!(
+            execute_ddl(
+                &state,
+                DdlInput {
+                    source_id: input.source_id,
+                    file_path: input.file_path.clone(),
+                    sql: input.sql.clone(),
+                }
+            )
+            .await
+            .is_err()
+        );
+        assert!(
+            state
+                .store
+                .latest_snapshot(profile.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        input.file_path = path.to_string_lossy().into_owned();
+        let DdlReceipt::Refreshed { capture } = execute_ddl(&state, input).await.unwrap() else {
+            panic!("committed DDL should produce a captured model");
+        };
+        assert!(capture.stored);
+        assert_eq!(capture.snapshot.schemas[0].tables[0].key.name, "items");
+        assert_eq!(
+            state
+                .store
+                .latest_snapshot(profile.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .id,
+            capture.snapshot.id
+        );
+    }
+    #[tokio::test]
+    async fn table_ddl_reads_only_the_named_table_and_its_explicit_indexes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("ddl.db");
+        std::fs::write(&path, []).unwrap();
+        let mut database = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+        )
+        .await
+        .unwrap();
+        sqlx::raw_sql(
+            r#"CREATE TABLE "O'Reilly" (title TEXT UNIQUE, price INTEGER);
+               CREATE INDEX by_price ON "O'Reilly" (price);
+               CREATE TABLE unrelated (value TEXT);"#,
+        )
+        .execute(&mut database)
+        .await
+        .unwrap();
+        database.close().await.unwrap();
+
+        let file = profile(&path).sqlite.unwrap();
+        let ddl = read_table_ddl(file.clone(), "O'Reilly".into())
+            .await
+            .unwrap();
+        assert_eq!(
+            ddl,
+            "CREATE TABLE \"O'Reilly\" (title TEXT UNIQUE, price INTEGER);\n\nCREATE INDEX by_price ON \"O'Reilly\" (price);"
+        );
+        assert!(read_table_ddl(file, "Missing".into()).await.is_err());
+    }
+
     fn query_input(
         profile: &DataSourceProfile,
         request: &ExecuteQueryRequest,
@@ -312,6 +624,7 @@ mod tests {
             sql: request.sql.clone(),
             row_limit: request.row_limit,
             timeout_ms: request.timeout_ms,
+            table_browse: false,
         }
     }
     #[tokio::test]

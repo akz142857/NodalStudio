@@ -1,5 +1,5 @@
 use mysql_adapter::{MySqlConnectionOptions, connect, inspect_schema};
-use schema_model::ObjectKind;
+use schema_model::{ObjectKind, SchemaDefinition};
 use uuid::Uuid;
 #[tokio::test]
 async fn reads_programs_trigger_dependencies_and_checks() {
@@ -9,6 +9,7 @@ async fn reads_programs_trigger_dependencies_and_checks() {
     let pool = connect(&MySqlConnectionOptions::new(url)).await.unwrap();
     let snapshot = inspect_schema(&pool, Uuid::nil()).await.unwrap();
     let schema = &snapshot.schemas[0];
+    assert_generated_flags(schema);
     let cases = schema
         .tables
         .iter()
@@ -49,6 +50,7 @@ async fn reads_programs_trigger_dependencies_and_checks() {
         "a hidden body must remain unavailable, not fabricated SQL"
     );
     assert!(function.arguments.contains("value_in"));
+    assert_event_definition(schema);
     assert!(
         function
             .definition
@@ -85,4 +87,39 @@ async fn reads_programs_trigger_dependencies_and_checks() {
             .unwrap()
             .fingerprint
     );
+}
+
+fn assert_generated_flags(schema: &SchemaDefinition) {
+    let columns = &schema
+        .tables
+        .iter()
+        .find(|table| table.key.name == "catalog_generated_flags")
+        .unwrap()
+        .columns;
+    let timestamp = columns
+        .iter()
+        .find(|column| column.name == "created_at")
+        .unwrap();
+    assert!(timestamp.default_value.is_some() && !timestamp.generated);
+    assert!(
+        columns
+            .iter()
+            .find(|column| column.name == "derived")
+            .unwrap()
+            .generated
+    );
+}
+
+fn assert_event_definition(schema: &SchemaDefinition) {
+    let event = schema
+        .programs
+        .iter()
+        .find(|program| {
+            program.key.kind == ObjectKind::Event && program.key.name == "catalog_daily_check"
+        })
+        .expect("the catalog includes scheduled events");
+    assert_eq!(event.enabled.as_deref(), Some("DISABLED"));
+    let definition = event.definition.as_deref().unwrap();
+    assert!(definition.contains("EVERY 1 DAY"));
+    assert!(definition.contains("@catalog_checked"));
 }

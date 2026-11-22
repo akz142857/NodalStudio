@@ -6,7 +6,7 @@ export const diagramColumn = (name: string, ordinalPosition = 1): ColumnDefiniti
   nullable: false, defaultValue: null, identity: null, generated: false, comment: null,
 });
 export const diagramTable = (name: string, columns: ColumnDefinition[] = [diagramColumn("id")]): TableDefinition => ({
-  key: { kind: "table", schema: "public", name }, tableKind: "ordinary", columns,
+  key: { kind: "table", schema: "public", name }, tableKind: "ordinary", includesInheritedRows: false, columns,
   primaryKey: { name: `${name}_pk`, columns: ["id"] }, foreignKeys: [], indexes: [], constraints: [], comment: null,
 });
 export const diagramForeignKey = (name: string, column: string, target: string): ForeignKeyDefinition => ({

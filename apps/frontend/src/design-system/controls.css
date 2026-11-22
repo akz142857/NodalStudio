@@ -4,6 +4,24 @@
 :where(button, select, input, [role="button"], [role="tab"], [role="menuitem"], [role="switch"]):is(:disabled, [aria-disabled="true"]) { cursor: default; }
 :where(button, a[href], summary, [role="button"], [role="tab"], [role="menuitem"]):not(:disabled):not([aria-disabled="true"]):hover { background-color: var(--ds-hover); }
 
+/* Modal content owns its layout. The native top layer provides background inertness. */
+.ds-modal-root {
+  position: fixed;
+  inset: 0;
+  width: var(--ds-viewport-width);
+  height: var(--ds-viewport-height);
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.ds-modal-root::backdrop { background: transparent; }
+.ds-modal-root:focus { outline: none; }
+
 /* Opt-in control primitives. Native semantics and keyboard behavior are kept. */
 .ds-surface {
   color-scheme: var(--ds-color-scheme);

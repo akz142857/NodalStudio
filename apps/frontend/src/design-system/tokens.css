@@ -33,6 +33,9 @@
   --ds-control-height-small: max(26px, 2rem);
   --ds-toolbar-height: max(32px, 2.462rem);
   --ds-focus-ring: 2px solid var(--ds-accent);
+  --ds-glass-fill: var(--ds-sidebar);
+  --ds-glass-edge: var(--ds-border);
+  --ds-glass-filter: none;
   --ds-shadow-popover: 0 6px 20px #0005;
   --ds-shadow-dialog: 0 12px 40px #0004;
   --ds-overlay: #0005;
@@ -192,6 +195,21 @@
   }
 }
 :root[data-density="compact"] { --ds-row-height: 44px; }
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  :root {
+    --ds-glass-fill: linear-gradient(to bottom, color-mix(in srgb, var(--ds-text) 6%, transparent), transparent),
+      color-mix(in srgb, var(--ds-sidebar) 88%, transparent);
+    --ds-glass-edge: color-mix(in srgb, var(--ds-text) 17%, var(--ds-border));
+    --ds-glass-filter: blur(18px) saturate(140%);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
+  :root {
+    --ds-glass-fill: var(--ds-sidebar);
+    --ds-glass-edge: var(--ds-border);
+    --ds-glass-filter: none;
+  }
+}
 :root[data-reduce-motion="true"] { --ds-motion-fast: 0ms; }
 @media (prefers-reduced-motion: reduce) { :root { --ds-motion-fast: 0ms; } }
 @media (prefers-contrast: more) {

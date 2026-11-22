@@ -7,7 +7,7 @@ import { incompleteCell } from "./result-profile";
 
 
 
-export function ResultExportDialog({ result, selected, platform, onClose }: { result: QueryExecutionResult; selected: number[]; platform: NodalStudioPlatform; onClose: () => void }) {
+export function ResultExportDialog({ result, selected, platform, currentTablePage, onClose }: { result: QueryExecutionResult; selected: number[]; platform: NodalStudioPlatform; currentTablePage?: boolean; onClose: () => void }) {
   const { t: bt, formatNumber, locale } = useI18n();
   const formats = [
   { value: "csv", name: "CSV", description: bt("business.spreadsheetText"), extension: ".csv" },
@@ -49,7 +49,7 @@ export function ResultExportDialog({ result, selected, platform, onClose }: { re
       <label className="result-export-range"><span>{bt("business.rowsDetailDetail")}</span><span className="result-export-select"><select aria-label={bt("business.rowsDetailDetail")} value={scope} disabled={busy} onChange={(e) => { setScope(e.target.value); setAcknowledged(false); setMessage(""); setSaved(false); }}><option value="all">{bt("resultExport.allRows", { count: formatNumber(result.rows.length) })}</option><option value="selected" disabled={!selected.length}>{bt("resultExport.selectedRows", { count: formatNumber(selected.length) })}</option></select><ActionIcon name="chevronUp" /></span></label>
       {format === "csv" ? <label className="result-check result-export-protection"><span><strong>{bt("business.protectSpreadsheetFormulas")}</strong><small>{bt("business.keepFormulaLikeTextFromRunningInSpreadsheets")}</small></span><input type="checkbox" checked={protect} disabled={busy} onChange={(e) => setProtect(e.target.checked)} /></label> : null}
     </div>
-    <p className="result-export-scope"><ActionIcon name="info" /><span><strong>{bt("resultExport.scope", { count: formatNumber(indices.length), total: formatNumber(result.rows.length) })}</strong> {bt("business.allLoadedPages")}<br />{bt("business.thisDoesNotRunSQLAgainOrExportThe")}</span></p>
+    <p className="result-export-scope"><ActionIcon name="info" /><span><strong>{bt("resultExport.scope", { count: formatNumber(indices.length), total: formatNumber(result.rows.length) })}</strong> {bt(currentTablePage ? "tableData.currentPage" : "business.allLoadedPages")}<br />{bt("business.thisDoesNotRunSQLAgainOrExportThe")}</span></p>
     {result.truncated ? <p className="result-warning">{bt("business.resultLimitReachedThisExportDoesNotContainEvery")}</p> : null}
     {incomplete ? <div className="result-warning"><p>{incomplete} {bt("business.cellsContainTruncatedValuesOrBinaryDataThatWas")}</p><label className="result-check"><input type="checkbox" checked={acknowledged} disabled={busy} onChange={(e) => setAcknowledged(e.target.checked)} />{bt("business.exportTheseIncompleteValues")}</label></div> : null}
     <details className="result-format-details"><summary>{bt("business.formatDetails")}</summary><p>{format === "csv" ? bt("business.uTF8WithBOMAndHeadersNULLUnquotedN") : format === "json" ? bt("business.columnOrderAndDuplicateNamesArePreservedNULLRemains") : bt("business.includesResultsAndExportInfoSheetsNULLCellsAre")}</p></details>

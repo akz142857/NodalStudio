@@ -34,10 +34,10 @@ export function SchemaReportExportAction({ snapshot, semantics, platform }: Sche
   };
 
   return <div className="schema-report-export">
-    <IconButton icon="report" label={operation.busy && format === "report" ? bt("business.exportingReport") : bt("business.exportHTMLReport")}
+    <IconButton menuLabel icon="report" label={operation.busy && format === "report" ? bt("business.exportingReport") : bt("business.exportHTMLReport")}
       aria-busy={operation.busy && format === "report"} disabled={!semantics || operation.busy} onClick={() => void exportReport()}
       description={!semantics ? bt("business.theSemanticModelMustFinishLoadingBeforeExportingA") : bt("business.exportAStandaloneHTMLDataDictionaryForTheEntire")} />
-    <IconButton icon="viewer" label={operation.busy && format === "viewer" ? bt("business.exportingOfflineViewer") : bt("business.exportOfflineViewer")}
+    <IconButton menuLabel icon="viewer" label={operation.busy && format === "viewer" ? bt("business.exportingOfflineViewer") : bt("business.exportOfflineViewer")}
       aria-busy={operation.busy && format === "viewer"} disabled={!semantics || operation.busy} onClick={() => void exportReport("viewer")}
       description={!semantics ? bt("business.theCurrentSemanticModelMustFinishLoadingBeforeExport") : bt("business.exportOneEntireLoadedSnapshotAndCurrentSavedSemantics")} />
     {operation.state ? <div className="schema-report-result">

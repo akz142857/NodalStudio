@@ -5,11 +5,12 @@ interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 
   label: string;
   description?: string;
   icon: ActionIconName;
+  menuLabel?: boolean;
   children?: ReactNode;
 }
 
 /** A named action with a tooltip for both pointer and keyboard users, including when disabled. */
-export function IconButton({ label, description, icon, className = "", children, onFocus, onBlur, onKeyDown, onClick, ...props }: IconButtonProps) {
+export function IconButton({ label, description, icon, menuLabel, className = "", children, onFocus, onBlur, onKeyDown, onClick, ...props }: IconButtonProps) {
   const tooltipId = useId();
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -39,8 +40,8 @@ export function IconButton({ label, description, icon, className = "", children,
       onFocus={(event) => { cancelHover(); setFocused(true); setDismissed(false); onFocus?.(event); }}
       onBlur={(event) => { setFocused(false); onBlur?.(event); }}
       onKeyDown={(event) => { if (event.key === "Escape") setDismissed(true); onKeyDown?.(event); }}
-      onClick={(event) => { cancelHover(); setDismissed(true); onClick?.(event); }}>
-      <ActionIcon name={icon} />{children}
+      onClick={(event) => { cancelHover(); onClick?.(event); setDismissed(true); }}>
+      <ActionIcon name={icon} />{menuLabel && <span className="icon-button-menu-label" aria-hidden="true">{label}</span>}{children}
     </button>
     <span id={tooltipId} className="icon-action-tooltip" role="tooltip" hidden={!showTooltip}>
       <strong>{label}</strong>{description ? <> <span>{description}</span></> : null}

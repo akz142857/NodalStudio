@@ -17,6 +17,9 @@ tokio-util.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+mysql-adapter = { path = "../mysql-adapter" }
+postgres-adapter = { path = "../postgres-adapter" }
+schema-model = { path = "../schema-model" }
 sqlite-adapter = { path = "../sqlite-adapter" }
 tempfile = "3.27.0"
 

@@ -29,6 +29,8 @@ export function Segmented<T extends string>({
   onChange,
   className,
 }: SegmentedProps<T>) {
+  const enabled = options.filter((option) => !option.disabled);
+  const focusValue = enabled.some((option) => option.value === value) ? value : enabled[0]?.value;
   return (
     <div
       role="group"
@@ -42,8 +44,23 @@ export function Segmented<T extends string>({
           className={option.value === value ? "active" : ""}
           aria-pressed={option.value === value}
           disabled={option.disabled}
+          tabIndex={option.value === focusValue ? 0 : -1}
           title={option.title}
           onClick={() => onChange(option.value)}
+          onKeyDown={(event) => {
+            const { key } = event;
+            if (key !== "ArrowLeft" && key !== "ArrowRight" && key !== "Home" && key !== "End") return;
+            const group = event.currentTarget.parentElement;
+            if (!group) return;
+            event.preventDefault();
+            const buttons = [...group.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+            const index = buttons.indexOf(event.currentTarget);
+            const direction = getComputedStyle(group).direction === "rtl" ? -1 : 1;
+            const step = key === "ArrowRight" ? direction : -direction;
+            const next = key === "Home" ? 0 : key === "End" ? buttons.length - 1 : (index + step + buttons.length) % buttons.length;
+            buttons[next]?.focus();
+            if (next !== index) onChange(enabled[next].value);
+          }}
         >
           {option.label}
         </button>

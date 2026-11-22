@@ -78,6 +78,7 @@ import { presentEdgesDuringDrag, prioritiseMovingEdges } from "../graph/drag-edg
 import { useProgressiveEdges } from "./use-progressive-edges";
 import { CanvasInteractionProvider } from "./CanvasInteractionContext";
 import { CanvasSettingsProvider } from "./CanvasSettingsContext";
+import { modelTableKey, type ModelTableChange } from "../graph/model-table-changes";
 import { RelationshipCreatePopover, type RelationshipDraft } from "./relationships/RelationshipCreatePopover";
 import { RelationshipInspector } from "./relationships/RelationshipInspector";
 import { RelationshipDeleteDialog } from "./relationships/RelationshipDeleteDialog";
@@ -113,6 +114,7 @@ export interface SchemaCanvasProps {
   snapshot: DatabaseSnapshot;
   query: string;
   changeSet?: SchemaChangeSet;
+  modelTableChanges?: ReadonlyMap<string, ModelTableChange>;
   beforeSnapshot?: DatabaseSnapshot;
   onSelectTable: (table: TableDefinition | undefined, columnName?: string) => void;
   selectedTable?: TableDefinition;
@@ -171,6 +173,7 @@ function SchemaCanvasInner({
   snapshot,
   query,
   changeSet,
+  modelTableChanges,
   beforeSnapshot,
   onSelectTable,
   selectedTable,
@@ -579,7 +582,8 @@ function SchemaCanvasInner({
             ? selectedEdge.data?.targetColumn
             : undefined
         : undefined;
-      return [node.id, { inspectorFocused, relationshipHighlighted, relationshipColumn, relationshipConnectTargets }] as const;
+      const modelChangeStatus = modelTableChanges?.get(modelTableKey(node.data.table.key))?.status;
+      return [node.id, { inspectorFocused, relationshipHighlighted, relationshipColumn, relationshipConnectTargets, modelChangeStatus }] as const;
     }));
     const cache = new WeakMap<TableNodeType["data"], TableNodeType["data"]>();
     return (current: TableNodeType[]) => current.map((node) => {
@@ -589,7 +593,7 @@ function SchemaCanvasInner({
       if (!data) { data = { ...node.data, ...overlay }; cache.set(node.data, data); }
       return { ...node, data };
     });
-  }, [activeRelationshipSource, graph.nodes, selectedEdge, selectedTableNodeId]);
+  }, [activeRelationshipSource, graph.nodes, modelTableChanges, selectedEdge, selectedTableNodeId]);
   const displayedNodes = useMemo(() => presentNodes(nodes), [presentNodes, nodes]);
 
   const endpointFromHandle = useCallback((nodeId: string | null | undefined, handleId: string | null | undefined): RelationshipEndpoint | undefined => {
@@ -909,7 +913,8 @@ function SchemaCanvasInner({
     <DatabaseSnapshotHeader snapshot={snapshot} latestSnapshotId={latestSnapshotId} refreshState={refreshState} onOpenHistory={onOpenHistory}
       title={controls?.picker ?? <h2>{savedView?.name ?? (temporaryViewKind === "historical" ? bt("business.historicalModel") : changeSet ? bt("business.schemaComparison") : readOnlyPreview ? bt("business.dDLPreview") : bt("business.fullModel"))}</h2>}
       tableCount={graph.nodes.length} viewActions={controls?.menu}
-      tools={<>{layoutActions("history")}<button className="workspace-select-button" type="button" aria-label={bt("business.boxSelect")} title={boxSelectMode ? bt("business.dragEmptyCanvasToSelectTablesHoldSpaceTo") : bt("business.boxSelectShiftDragOrShiftCtrlClickTo")} aria-pressed={boxSelectMode} disabled={!layoutReady || exportRendering} onClick={() => setBoxSelectMode((value) => !value)}><ActionIcon name="select" /><span>{bt("business.select")}</span></button></>} />
+      tools={<>
+        {layoutActions("history")}<button className="workspace-select-button" type="button" aria-label={bt("business.boxSelect")} title={boxSelectMode ? bt("business.dragEmptyCanvasToSelectTablesHoldSpaceTo") : bt("business.boxSelectShiftDragOrShiftCtrlClickTo")} aria-pressed={boxSelectMode} disabled={!layoutReady || exportRendering} onClick={() => setBoxSelectMode((value) => !value)}><ActionIcon name="select" /><span>{bt("business.select")}</span></button></>} />
     {controls?.notice}
       <CanvasToolbar key={selectionScope}
         minimapVisible={showMiniMap} onToggleMinimap={() => setShowMiniMap((value) => !value)}

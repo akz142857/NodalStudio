@@ -788,6 +788,7 @@ const fn kind_name(kind: ObjectKind) -> &'static str {
         ObjectKind::Function => "function",
         ObjectKind::Procedure => "procedure",
         ObjectKind::Trigger => "trigger",
+        ObjectKind::Event => "event",
     }
 }
 

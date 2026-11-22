@@ -3,8 +3,8 @@ import { findDocumentObject } from "./components/object-document-model";
 import { ObjectDocument, ObjectDocumentProperties } from "./components/ObjectDocument";
 import { capabilityMessages } from "./i18n/capabilities";
 import { I18nProvider, useI18n, useEventTranslator } from "./i18n";
-import { useQuery } from "@tanstack/react-query";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ModelViewNavigation } from "./components/ModelViewNavigation";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { InspectorPanel } from "./components/InspectorPanel";
@@ -21,18 +21,29 @@ import { ChangesEmptyState } from "./components/ChangesEmptyState";
 import { SchemaChangesPanel } from "./components/SchemaChangesPanel";
 import { SchemaChangesDiagram } from "./components/SchemaChangesDiagram";
 import { SchemaTree } from "./components/SchemaTree";
+import { SqliteTableWorkspace } from "./components/SqliteTableWorkspace";
+import { useTableRowCounts } from "./components/use-table-row-counts";
+import { DEFAULT_ROW_PANEL_WIDTH, clearTableDataPreferences, readRowPanelWidth, saveRowPanelWidth } from "./platform/table-data-preferences";
+import { TableDataPreview } from "./components/TableDataPreview";
+import { TableDdlDialog } from "./components/TableDdlDialog";
+import { EmptyState } from "./design-system/EmptyState";
 import { DatabaseExportDialog, type DatabaseExportTarget } from "./components/DatabaseExportDialog";
 import { SchemaReportExportAction } from "./components/SchemaReportExportAction";
 import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
 import type { QueryDraftSeed } from "./components/query/QueryDraftPanel";
-import type { OpenQueryRequest, OpenTableRequest } from "./components/query/QueryPage";
-import { TABLE_PREVIEW_ROW_LIMIT, tablePreviewSql } from "./components/query/query-format";
+import type { OpenQueryRequest } from "./components/query/QueryPage";
+import { QuickQueryDock } from "./components/query/QuickQueryDock";
+import { tablePreviewSql } from "./components/query/query-format";
 import { clearQuerySessions } from "./components/query/query-state";
+import { clearSavedQueries, deleteNamedQuery, listSavedQueries, saveNamedQuery, type SavedQuery } from "./components/query/saved-queries";
 import { searchSchema, type SchemaSearchResult } from "./graph/schema-search";
 import { domainMembershipAddition } from "./graph/table-selection";
+import { collectModelTableChanges, modelTableKey } from "./graph/model-table-changes";
 import { getPlatform } from "./platform";
+import { schemaDdlTarget, schemaDdlTargetKey, type SchemaDdlTarget } from "./platform/schema-ddl";
+import { sqliteTableSourceKey, type SqliteTableTarget } from "./platform/sqlite-table";
 import type {
   AppSettings,
   CaptureSnapshotResult,
@@ -40,6 +51,7 @@ import type {
   DataSourceSettings,
   DatabaseSnapshot,
   EffectiveSettings,
+  QueryExecutionResult,
   SavedView,
   SchemaChangeSet,
   SemanticBundle,
@@ -58,7 +70,8 @@ const SettingsPage = lazy(() => import("./components/SettingsPage").then((module
 const QueryPage = lazy(() => import("./components/query/QueryPage").then((module) => ({ default: module.QueryPage })));
 const DdlImportPanel = lazy(() => import("./components/DdlImportPanel").then((module) => ({ default: module.DdlImportPanel })));
 
-type ViewMode = "explore" | "query" | "changes";
+type ViewMode = "explore" | "database" | "query" | "changes";
+type OpenSqliteTable = { target: SqliteTableTarget; binding: string; key: string; retain?: boolean };
 type AppNotice = { id: string; title: string; message: string; createdAt: string; settingsCategory?: SettingsCategory };
 
 function noticeReason(reason: unknown): string {
@@ -86,11 +99,13 @@ const emptySemantics: SemanticBundle = {
 };
 
 export function App() {
+  const queryClient = useQueryClient();
   const [snapshot, setSnapshot] = useState<DatabaseSnapshot>();
   const [historyPreview, setHistoryPreview] = useState(false);
   const latestWorkspace = useRef<{ snapshot: DatabaseSnapshot; view?: SavedView } | undefined>(undefined);
   const [changeSet, setChangeSet] = useState<SchemaChangeSet>();
   const [mode, setMode] = useState<ViewMode>("explore");
+  const viewMode = mode === "changes" ? "explore" : mode;
   const [preflightOpen, restorePreflightOpen] = useState(false);
   const [preflightMounted, setPreflightMounted] = useState(false);
   const [preflightDetailsExpanded, setPreflightDetailsExpanded] = useState(true);
@@ -121,6 +136,7 @@ export function App() {
   const [explainRequest, setExplainRequest] = useState(0);
   const [activeSearchResult, setActiveSearchResult] = useState(0);
   const [objectDocument, setObjectDocument] = useState<{ snapshot: DatabaseSnapshot; key: ObjectKey }>();
+  const [databaseObjectSelection, setDatabaseObjectSelection] = useState<{ sourceId: string; key: ObjectKey; definition: boolean }>();
   const [selectedTable, setSelectedTable] = useState<TableDefinition>();
   const [columnFocus, setColumnFocus] = useState<{ snapshot: DatabaseSnapshot | undefined; table: TableDefinition; name: string }>();
   const [semanticsSettledSnapshot, setSemanticsSettledSnapshot] = useState<DatabaseSnapshot>();
@@ -159,12 +175,7 @@ export function App() {
     rightPanelInteracted.current = true;
     restoreRightPanel(update);
   }, []);
-  const inspectTable = useCallback((table: TableDefinition | undefined, columnName?: string) => {
-    setSelectedTable(table);
-    setLocateRequest(undefined);
-    setColumnFocus(table && columnName ? { snapshot, table, name: columnName } : undefined);
-    if (columnName) setRightPanel((panel) => ({ ...panel, expanded: true }));
-  }, [snapshot, setRightPanel]);
+  const [modelChangeRequest, setModelChangeRequest] = useState(0);
   const [settings, setSettings] = useState<EffectiveSettings>(() => defaultEffectiveSettings());
   const i18n = useI18n(settings.app.general.language);
   const { t } = i18n;
@@ -178,10 +189,30 @@ export function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [notices, setNotices] = useState<AppNotice[]>([]);
   const [noticesOpen, setNoticesOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const workspaceTools = useRef<HTMLDivElement>(null);
+  const workspaceToolsId = useId();
+  const searchListId = useId();
   const [queryDraftSeed, setQueryDraftSeed] = useState<QueryDraftSeed>();
   const [openQueryRequest, setOpenQueryRequest] = useState<OpenQueryRequest>();
-  const [openTableRequest, setOpenTableRequest] = useState<OpenTableRequest>();
+  const [savedQueryCatalog, setSavedQueryCatalog] = useState<{ sourceId: string; queries: SavedQuery[] }>();
+  const [quickQueryView, setQuickQueryView] = useState<{ scope?: string; result?: { result: QueryExecutionResult; sql: string }; reset: number }>({ reset: 0 });
+  const [sqliteEditors, setSqliteEditors] = useState<OpenSqliteTable[]>([]);
+  const retainSqliteEditor = useCallback((target: SqliteTableTarget, binding: string, retain: boolean) => {
+    const key = JSON.stringify([target.sourceId, binding, target.table]);
+    setSqliteEditors((current) => {
+      const entry = current.find((editor) => editor.key === key);
+      if (!entry || Boolean(entry.retain) === retain) return current;
+      return current.map((editor) => editor === entry ? { ...editor, retain } : editor);
+    });
+  }, []);
+  const [rowPanelWidth, setRowPanelWidth] = useState(readRowPanelWidth);
+  const resizeRowPanel = useCallback((width: number) => {
+    setRowPanelWidth(width);
+    saveRowPanelWidth(width);
+  }, []);
   const [databaseExport, setDatabaseExport] = useState<{ snapshot: DatabaseSnapshot; target: DatabaseExportTarget }>();
+  const [showTableDdl, setShowTableDdl] = useState<string>();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const autoConnectAttempted = useRef(false);
   const startupRevision = useRef(0);
@@ -203,6 +234,20 @@ export function App() {
     queryFn: () => platform.listSnapshots(snapshot!.sourceId),
     enabled: runtime.data?.kind === "desktop" && !!snapshot,
   });
+  const capturedModelChanges = !historyPreview && snapshot && changeSet?.afterSnapshotId === snapshot.id ? changeSet : undefined;
+  const previousModelSnapshot = snapshot && discoveryLatest.data?.[0]?.id === snapshot.id ? discoveryLatest.data[1] : undefined;
+  const storedModelChanges = useQuery({
+    queryKey: ["model-table-changes", snapshot?.sourceId, previousModelSnapshot?.id, snapshot?.id],
+    queryFn: () => platform.compareSnapshots(previousModelSnapshot!.id, snapshot!.id),
+    enabled: mode === "explore" && !historyPreview && !capturedModelChanges && Boolean(previousModelSnapshot),
+    networkMode: "always",
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const modelChangeSet = mode === "explore" && !historyPreview ? capturedModelChanges ?? storedModelChanges.data : undefined;
+  const modelTableChanges = useMemo(() => snapshot && modelChangeSet
+    ? collectModelTableChanges(snapshot, modelChangeSet) : undefined, [modelChangeSet, snapshot]);
   useEffect(() => {
     const openReview = () => { setReviewView("review"); setMode("changes"); setPreflightOpen(false); };
     window.addEventListener("nodalstudio:change-review", openReview);
@@ -213,6 +258,46 @@ export function App() {
   const queryTarget = currentCapabilityTarget(runtime.data?.kind, snapshot?.database.databaseType);
   const queryScope = queryTarget ? t(capabilityMessages["read-only-query"].targets[queryTarget]) : t("navigation.query.unknown");
   const querySupported = Boolean(snapshot) && queryCapability.status === "supported";
+  const sourceId = snapshot?.sourceId;
+  const savedQueries = useMemo(() => sourceId
+    ? (savedQueryCatalog?.sourceId === sourceId ? savedQueryCatalog.queries : listSavedQueries(sourceId)) : [], [savedQueryCatalog, sourceId]);
+  const databaseObject = useMemo(() => databaseObjectSelection && databaseObjectSelection.sourceId === snapshot?.sourceId
+    ? findDocumentObject(snapshot, databaseObjectSelection.key) : undefined, [databaseObjectSelection, snapshot]);
+  const activeProfile = dataSources.find((source) => source.id === snapshot?.sourceId);
+  const countProfile = activeProfile && querySupported && !historyPreview && activeProfile.databaseType === snapshot?.database.databaseType
+    && (activeProfile.databaseType === "sqlite" ||
+      (settingsAvailable && !settings.app.privacy.offlineMode && activeProfile.database === snapshot.database.name))
+    ? activeProfile : undefined;
+  const tableRowCounts = useTableRowCounts(platform, countProfile, leftPanel.expanded);
+  const sqliteBinding = activeProfile?.sqlite?.path;
+  const ddlTarget = useMemo(() => {
+    if (runtime.data?.kind !== "desktop" || historyPreview || !snapshot || !activeProfile
+      || activeProfile.databaseType !== snapshot.database.databaseType
+      || (activeProfile.databaseType !== "sqlite" && activeProfile.database !== snapshot.database.name)) return undefined;
+    return schemaDdlTarget(activeProfile);
+  }, [runtime.data?.kind, historyPreview, snapshot, activeProfile]);
+  const liveSqlite = !historyPreview && Boolean(sqliteBinding)
+    && resolveCapability("table-data-edit", runtime.data?.kind, snapshot?.database.databaseType).status === "supported";
+  const currentTable = snapshot && selectedTable
+    ? snapshot.schemas.find((schema) => schema.name === selectedTable.key.schema)?.tables.find((table) => table.key.name === selectedTable.key.name)
+    : undefined;
+  const browsableTable = querySupported && !historyPreview ? currentTable : undefined;
+  const browsableView = querySupported && !historyPreview && databaseObject && "materialized" in databaseObject && !databaseObjectSelection?.definition
+    ? databaseObject : undefined;
+  const databaseDocument = browsableView ? undefined : databaseObject;
+  const previewRelation = browsableView ?? browsableTable;
+  const quickQueryRelation = mode === "database" && !databaseDocument ? previewRelation : undefined;
+  const quickQueryScope = quickQueryRelation && JSON.stringify([sourceId, activeProfile?.updatedAt, quickQueryRelation.key]);
+  const tableDdlScope = mode === "database" && !databaseObject && browsableTable && countProfile ? quickQueryScope : undefined;
+  const openTableDdl = tableDdlScope ? () => setShowTableDdl(tableDdlScope) : undefined;
+  if (showTableDdl && showTableDdl !== tableDdlScope) setShowTableDdl(undefined);
+  if (quickQueryView.scope !== quickQueryScope) setQuickQueryView({ scope: quickQueryScope, reset: 0 });
+  const quickQueryResult = quickQueryView.scope === quickQueryScope ? quickQueryView.result : undefined;
+  const activeSqliteEditor = liveSqlite && browsableTable?.key.schema === "main"
+    && !browsableTable.sqlite?.virtualTable && !browsableTable.sqlite?.columnsUnavailable
+    ? sqliteEditors.find((editor) => editor.target.sourceId === snapshot?.sourceId
+      && editor.binding === sqliteBinding && editor.target.table === browsableTable.key.name) : undefined;
+  const modelInspectorVisible = mode !== "database";
   const postgresExport = runtime.data?.kind === "desktop" && snapshot?.database.databaseType === "postgreSql" && !historyPreview;
   const postgresDump = postgresExport && runtime.data?.distribution !== "macAppStore";
   const domainWorkspace = useRef({ snapshot, semantics, semanticsSnapshot, runtimeKind: runtime.data?.kind, mode });
@@ -247,14 +332,26 @@ export function App() {
   }, [translate]);
 
   const schemaSearchResults = useMemo(() => searchSchema(snapshot, query), [query, snapshot]);
+  const showSearchResults = searchOpen && Boolean(query.trim());
+  const selectedSearchResult = schemaSearchResults[activeSearchResult];
+  const activeSearchOption = showSearchResults && selectedSearchResult ? `${searchListId}-${activeSearchResult}` : undefined;
+  useEffect(() => {
+    if (activeSearchOption) document.getElementById(activeSearchOption)?.scrollIntoView?.({ block: "nearest" });
+  }, [activeSearchOption]);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !workspaceTools.current?.contains(event.target)) setToolsOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [toolsOpen]);
   const WorkspaceCanvas = mode === "changes" && changeSet ? SchemaChangesDiagram : SchemaCanvas;
-  const historicalSelection = Boolean(snapshot && selectedTable && !snapshot.schemas.some((schema) =>
-    schema.tables.some((table) => table.key.schema === selectedTable.key.schema && table.key.name === selectedTable.key.name)));
+  const historicalSelection = Boolean(snapshot && selectedTable && !currentTable);
 
   const openSchemaSearch = useCallback(() => {
     setSettingsOpen(false);
     setPreflightOpen(false);
-    setMode("explore");
     setSearchOpen(true);
     window.requestAnimationFrame(() => {
       searchInputRef.current?.focus();
@@ -265,6 +362,7 @@ export function App() {
   const locateTable = useCallback((table: TableDefinition) => {
     if (!snapshot) return;
     setObjectDocument(undefined);
+    setDatabaseObjectSelection(undefined);
     setMode("explore");
     setDiscoverySnapshot(undefined);
     setPreflightOpen(false);
@@ -277,6 +375,18 @@ export function App() {
       nodeId: `${table.key.schema}.${table.key.name}`, revision: ++locateRevision.current });
   }, [snapshot, setPreflightOpen]);
   const locateSearchResult = useCallback((result: SchemaSearchResult) => locateTable(result.table), [locateTable]);
+  const revealModelTableChanges = useCallback(() => {
+    setRightPanel((panel) => ({ ...panel, expanded: true }));
+    setModelChangeRequest((request) => request + 1);
+  }, [setRightPanel]);
+  const inspectTable = useCallback((table: TableDefinition | undefined, columnName?: string) => {
+    setSelectedTable(table);
+    setDatabaseObjectSelection(undefined);
+    setLocateRequest(undefined);
+    setColumnFocus(table && columnName ? { snapshot, table, name: columnName } : undefined);
+    if (table && modelTableChanges?.has(modelTableKey(table.key))) revealModelTableChanges();
+    else if (columnName) setRightPanel((panel) => ({ ...panel, expanded: true }));
+  }, [modelTableChanges, revealModelTableChanges, setRightPanel, snapshot]);
 
   const publishNotice = useCallback((notice: AppNotice) => {
     if (isQuietHours(settings.app.notifications)) return;
@@ -345,17 +455,20 @@ export function App() {
   }, [snapshot]);
   const healthCheckFailing = useRef(false);
 
-  const handleCapture = useCallback((result: CaptureSnapshotResult) => {
+  const handleCapture = useCallback((result: CaptureSnapshotResult, preserveMode = false) => {
     startupRevision.current += 1;
     const sameSource = snapshot?.sourceId === result.snapshot.sourceId;
     setHistoryPreview(false);
     setSnapshot(result.snapshot);
+    if (!preserveMode || !sameSource) setDatabaseObjectSelection(undefined);
     setChangeSet(result.changeSet ?? undefined);
     setChangesView("list");
-    setMode(sameSource ? "explore" : result.changeSet ? "changes" : "explore");
-    setSelectedTable(undefined);
+    if (!preserveMode) setMode("explore");
+    setSelectedTable((table) => preserveMode && sameSource && table
+      ? result.snapshot.schemas.find((schema) => schema.name === table.key.schema)?.tables.find((item) => item.key.name === table.key.name)
+      : undefined);
     setLocateRequest(undefined);
-    if (!sameSource) setSavedView(undefined);
+    if (!sameSource) { setSavedView(undefined); setOpenQueryRequest(undefined); }
     else if (historyPreview) setSavedView(latestWorkspace.current?.view);
     latestWorkspace.current = { snapshot: result.snapshot, view: sameSource ? (historyPreview ? latestWorkspace.current?.view : savedView) : undefined };
     const notificationSettings = settings.app.notifications;
@@ -375,14 +488,37 @@ export function App() {
     }
   }, [publishNotice, settings.app.notifications, settings.source?.refresh.changeNotifications, snapshot?.sourceId, savedView, historyPreview, translate]);
 
+  const ddlWorkspace = useRef<{ snapshot: DatabaseSnapshot; targetKey: string; accept: typeof handleCapture } | undefined>(undefined);
+  useLayoutEffect(() => {
+    ddlWorkspace.current = ddlTarget && snapshot
+      ? { snapshot, targetKey: schemaDdlTargetKey(ddlTarget), accept: handleCapture } : undefined;
+  }, [handleCapture, ddlTarget, snapshot]);
+
+  const acceptSchemaDdl = useCallback((target: SchemaDdlTarget, result?: CaptureSnapshotResult) => {
+    if (target.databaseType === "sqlite") {
+      void queryClient.invalidateQueries({ queryKey: sqliteTableSourceKey(target.sourceId, target.filePath) });
+    }
+    const current = ddlWorkspace.current;
+    if (result && current && current.targetKey === schemaDdlTargetKey(target)
+      && result.snapshot.id !== current.snapshot.id
+      && Date.parse(result.snapshot.capturedAt) >= Date.parse(current.snapshot.capturedAt)) {
+      current.accept(result, true);
+    }
+  }, [queryClient]);
+
   const refreshActive = useCallback(async (trigger: "manual" | "background" = "manual") => {
     if (!snapshot) return;
     await runRefresh(async (isCurrent) => {
       const result = await platform.capturePostgresSnapshot(snapshot.sourceId, trigger);
-      if (isCurrent() && result.stored) handleCapture(result);
+      const visible = domainWorkspace.current;
+      if (isCurrent() && result.stored && visible.snapshot === snapshot) {
+        handleCapture(result, visible.mode === "database" || visible.mode === "explore");
+        if (trigger === "manual") void queryClient.invalidateQueries({ queryKey: ["table-row-estimates", snapshot.sourceId] });
+        if (sqliteBinding) void queryClient.invalidateQueries({ queryKey: sqliteTableSourceKey(snapshot.sourceId, sqliteBinding) });
+      }
       return result;
     }, { running: translate("navigation.refreshing", { value0: snapshot.database.name }), success: (result) => translate("navigation.snapshotRefreshedTablesStructuralChanges", { value0: result.snapshot.schemas.reduce((count, schema) => count + schema.tables.length, 0), value1: result.changeSet?.operations.length ?? 0, value2: result.stored ? "" : translate("navigation.refresh.noSnapshot") }), failure: translate("navigation.unableToRefreshTheLoadedSnapshotRemainsAvailable", { value0: snapshot.database.name }) });
-  }, [handleCapture, runRefresh, snapshot, translate]);
+  }, [handleCapture, queryClient, runRefresh, snapshot, sqliteBinding, translate]);
 
   useEffect(() => {
     const intervalSeconds = settings.source?.refresh.intervalSeconds ?? 30;
@@ -536,14 +672,14 @@ export function App() {
     if (!settingsLoaded || runtime.data?.kind !== "desktop" || !snapshot) return;
     if (
       settings.app.general.lastSourceId === snapshot.sourceId &&
-      settings.app.general.lastViewMode === mode
+      settings.app.general.lastViewMode === viewMode
     ) return;
     const next = {
       ...settings.app,
       general: {
         ...settings.app.general,
         lastSourceId: snapshot.sourceId,
-        lastViewMode: mode,
+        lastViewMode: viewMode,
       },
     };
     let active = true;
@@ -568,7 +704,7 @@ export function App() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [mode, runtime.data?.kind, settings.app, settingsLoaded, snapshot, translate]);
+  }, [viewMode, runtime.data?.kind, settings.app, settingsLoaded, snapshot, translate]);
 
   useEffect(() => {
     if (!settings.app.general.confirmBeforeQuit || refreshState !== "refreshing") return;
@@ -650,7 +786,8 @@ export function App() {
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
       if (ddlPreviewOpen || event.defaultPrevented) return;
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest("dialog[open], [aria-modal='true']")) return;
       if (
         !event.metaKey &&
         !event.ctrlKey &&
@@ -847,12 +984,14 @@ export function App() {
     const latest = await platform.getSnapshot(summaries[0].id);
     if (activeSemanticSession.current !== session) return;
     setSnapshot(latest); setHistoryPreview(false); setChangeSet(undefined); setMode("explore");
+    setDatabaseObjectSelection(undefined);
     setSavedView(latestWorkspace.current?.snapshot.sourceId === latest.sourceId ? latestWorkspace.current.view : undefined);
     setQuery(""); setSelectedTable(undefined); setLocateRequest(undefined);
   }
 
   function handleHistorySnapshot(historySnapshot: DatabaseSnapshot) {
     rememberLatestWorkspace();
+    setDatabaseObjectSelection(undefined);
     setHistoryPreview(true);
     setSnapshot(historySnapshot);
     setChangeSet(undefined);
@@ -866,6 +1005,7 @@ export function App() {
 
   function handleComparison(afterSnapshot: DatabaseSnapshot, comparison: SchemaChangeSet) {
     rememberLatestWorkspace();
+    setDatabaseObjectSelection(undefined);
     setHistoryPreview(true);
     setSnapshot(afterSnapshot);
     setChangeSet(comparison);
@@ -881,10 +1021,24 @@ export function App() {
     if (!querySupported) return;
     setPreflightOpen(false);
     setLocateRequest(undefined);
-    setOpenTableRequest(undefined);
     setOpenQueryRequest({ id: Date.now(), sql: tablePreviewSql(table, 100, snapshot?.database.databaseType) });
     setMode("query");
   }, [querySupported, snapshot?.database.databaseType, setPreflightOpen]);
+
+  function openSavedQuery(query?: SavedQuery) {
+    if (!sourceId || !querySupported) return;
+    setPreflightOpen(false);
+    setDiscoverySnapshot(undefined);
+    setQueryDraftSeed(undefined);
+    setOpenQueryRequest({ id: Date.now(), sourceId, sql: query?.sql ?? "", kind: query ? "saved" : "new", savedQuery: query });
+    setMode("query");
+  }
+
+  function deleteSavedQuery(query: SavedQuery) {
+    if (!sourceId || !window.confirm(t("savedQueries.confirmDelete", { value0: query.name }))) return;
+    if (deleteNamedQuery(sourceId, query.id)) setSavedQueryCatalog({ sourceId, queries: listSavedQueries(sourceId) });
+    else publishNotice({ id: "saved-query-delete", title: t("savedQueries.storageError"), message: query.name, createdAt: new Date().toISOString() });
+  }
 
   function openTable(table: TableDefinition) {
     if (!snapshot || !querySupported || historyPreview) return;
@@ -893,12 +1047,21 @@ export function App() {
     setQueryDraftSeed(undefined);
     setDiscoverySnapshot(undefined);
     setOpenQueryRequest(undefined);
-    setOpenTableRequest({
-      id: crypto.randomUUID(),
-      sourceId: snapshot.sourceId,
-      sql: tablePreviewSql(table, TABLE_PREVIEW_ROW_LIMIT + 1, snapshot.database.databaseType),
-    });
-    setMode("query");
+    setDatabaseObjectSelection(undefined);
+    setSelectedTable(table);
+    setColumnFocus(undefined);
+    setMode("database");
+    if (liveSqlite && sqliteBinding && table.key.schema === "main"
+      && !table.sqlite?.virtualTable && !table.sqlite?.columnsUnavailable) {
+      const target: SqliteTableTarget = { sourceId: snapshot.sourceId, table: table.key.name };
+      const key = JSON.stringify([target.sourceId, sqliteBinding, target.table]);
+      setSqliteEditors((current) => {
+        const retained = current.filter((editor) => editor.key === key || editor.retain);
+        return retained.some((editor) => editor.key === key) ? retained : [...retained, { target, binding: sqliteBinding, key }];
+      });
+    } else {
+      setSqliteEditors((current) => current.some((editor) => !editor.retain) ? current.filter((editor) => editor.retain) : current);
+    }
   }
 
   const documentObject = objectDocument && objectDocument.snapshot === snapshot ? findDocumentObject(snapshot, objectDocument.key) : undefined;
@@ -908,6 +1071,13 @@ export function App() {
     setObjectDocument({ snapshot, key }); setMode("explore"); setPreflightOpen(false); setDiscoverySnapshot(undefined);
   }, [snapshot, setPreflightOpen]);
   const closeObjectDocument = useCallback(() => setObjectDocument(undefined), []);
+  const openDatabaseObject = useCallback((key: ObjectKey, definition = false) => {
+    if (snapshot) setDatabaseObjectSelection({ sourceId: snapshot.sourceId, key, definition });
+  }, [snapshot]);
+  function closeDatabaseDocument() {
+    if (databaseDocument?.key.kind === "view" && querySupported && !historyPreview) openDatabaseObject(databaseDocument.key);
+    else setDatabaseObjectSelection(undefined);
+  }
 
   return (
     <I18nProvider value={i18n}>
@@ -920,70 +1090,82 @@ export function App() {
             setLeftPanel((current) => ({ ...current, expanded: !current.expanded }))
           }
         />
-        <div className="brand-block" title={runtime.isPending ? t("navigation.detectingRuntime") : runtime.data?.label}>
-          <p className="eyebrow">{t("navigation.lIVINGSYSTEMBLUEPRINT")}</p>
-          <h1>Nodal Studio</h1>
-          <span className="visually-hidden" data-testid="runtime-badge">{runtime.isPending ? t("navigation.detectingRuntime") : runtime.data?.label}</span>
-        </div>
+        <span className="visually-hidden" data-testid="runtime-badge"
+          title={runtime.isPending ? t("navigation.detectingRuntime") : runtime.data?.label}>
+          {runtime.isPending ? t("navigation.detectingRuntime") : runtime.data?.label}
+        </span>
         <Segmented
           label={t("navigation.viewMode")}
-          value={mode}
+          value={viewMode}
           onChange={(next) => {
+            if (next === "database" && !databaseObject && browsableTable) {
+              openTable(browsableTable);
+              return;
+            }
             setPreflightOpen(false);
             setLocateRequest(undefined);
-            if (next !== "query") setOpenTableRequest(undefined);
             setMode(next);
           }}
           options={[
-            { value: "explore", label: t("navigation.database") },
+            { value: "explore", label: t("navigation.model") },
+            { value: "database", label: t("navigation.database") },
             {
               value: "query",
               label: t("navigation.query"),
               disabled: runtime.data?.kind === "web" || Boolean(snapshot && !querySupported),
               title: queryCapability.status === "supported" ? undefined : queryScope,
             },
-            { value: "changes", label: t("navigation.changes") },
           ]}
         />
-        <label className="global-search">
-          <span className="visually-hidden">{t("navigation.searchSchema")}</span>
+        <div className="global-search">
           <ActionIcon name="search" />
           <input
             ref={searchInputRef}
             type="search"
+            role="combobox"
+            aria-label={t("navigation.searchSchema")}
+            autoComplete="off"
+            aria-autocomplete="list"
+            aria-expanded={showSearchResults && schemaSearchResults.length > 0}
+            aria-controls={showSearchResults && schemaSearchResults.length > 0 ? searchListId : undefined}
+            aria-activedescendant={activeSearchOption}
             placeholder={t("navigation.tableFieldSchema")}
             value={query}
             onFocus={() => setSearchOpen(true)}
-            onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
+            onBlur={() => setSearchOpen(false)}
             onChange={(event) => {
-              setPreflightOpen(false);
               setQuery(event.target.value);
               setActiveSearchResult(0);
               setSearchOpen(true);
-              if (mode !== "explore") setMode("explore");
             }}
             onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing) return;
               if (event.key === "Escape") {
+                if (!showSearchResults) return;
+                event.preventDefault();
                 setSearchOpen(false);
                 setQuery("");
-                event.currentTarget.blur();
               } else if (event.key === "ArrowDown" && schemaSearchResults.length) {
                 event.preventDefault();
-                setActiveSearchResult((value) => (value + 1) % schemaSearchResults.length);
+                setActiveSearchResult((value) => showSearchResults ? (value + 1) % schemaSearchResults.length : 0);
+                setSearchOpen(true);
               } else if (event.key === "ArrowUp" && schemaSearchResults.length) {
                 event.preventDefault();
-                setActiveSearchResult((value) => (value - 1 + schemaSearchResults.length) % schemaSearchResults.length);
-              } else if (event.key === "Enter" && schemaSearchResults[activeSearchResult]) {
+                setActiveSearchResult((value) => showSearchResults ? (value - 1 + schemaSearchResults.length) % schemaSearchResults.length : schemaSearchResults.length - 1);
+                setSearchOpen(true);
+              } else if (event.key === "Enter" && showSearchResults && selectedSearchResult) {
                 event.preventDefault();
-                locateSearchResult(schemaSearchResults[activeSearchResult]);
+                locateSearchResult(selectedSearchResult);
               }
             }}
             disabled={!snapshot}
           />
-          {searchOpen && query.trim() ? <div className="global-search-results" role="listbox" aria-label={t("navigation.schemaSearchResults")}>
+          {showSearchResults ? <div className="global-search-results" id={searchListId} role={schemaSearchResults.length ? "listbox" : "status"} aria-label={t("navigation.schemaSearchResults")}>
             {schemaSearchResults.length ? schemaSearchResults.map((result, index) => <button
               type="button"
               role="option"
+              id={`${searchListId}-${index}`}
+              tabIndex={-1}
               aria-selected={index === activeSearchResult}
               key={`${result.schema}.${result.table.key.name}`}
               onMouseDown={(event) => event.preventDefault()}
@@ -993,14 +1175,30 @@ export function App() {
               <span>{result.schema}{result.matchingColumns.length ? ` · ${result.matchingColumns.slice(0, 3).join(", ")}` : ""}</span>
             </button>) : <p>{t("navigation.noMatchingTablesOrFields")}</p>}
           </div> : null}
-        </label>
+        </div>
         <div className="runtime-actions" role="group" aria-label={t("navigation.applicationTools")}>
+          <div className="workspace-tools" ref={workspaceTools} data-open={toolsOpen || undefined}
+            onBlur={(event) => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setToolsOpen(false); }}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || !toolsOpen) return;
+              event.preventDefault();
+              setToolsOpen(false);
+              event.currentTarget.querySelector<HTMLButtonElement>(".workspace-tools-toggle button")?.focus();
+            }}>
+          <div className="workspace-tools-toggle"><IconButton icon="more" label={t("navigation.moreWorkspaceTools")} aria-expanded={toolsOpen}
+            aria-controls={workspaceToolsId} onClick={(event) => {
+              event.currentTarget.focus({ preventScroll: true });
+              setToolsOpen((open) => !open);
+            }} /></div>
+          <div id={workspaceToolsId} className="workspace-tools-panel" role="group" aria-label={t("navigation.workspaceActions")}>
           {snapshot && runtime.data?.kind === "desktop" && !historyPreview ? <button className="review-entry" onClick={() => window.dispatchEvent(new Event("nodalstudio:change-review"))}>{i18n.locale === "zh-CN" ? "复核理解" : "Review understanding"}{pendingUnderstandingCount > 0 ? ` · ${pendingUnderstandingCount}` : ""}</button> : null}
-          {snapshot && runtime.data?.kind === "desktop" && discoveryLatest.data?.[0]?.id === snapshot.id && mode === "explore" && !preflightOpen && semanticsSettledSnapshot === snapshot ? <IconButton icon="question" label={t("navigation.businessQuestion")} description={t("navigation.findRelevantTablesFromABusinessQuestion")} aria-pressed={Boolean(discoverySnapshot)} onClick={() => { setSearchOpen(false); setDiscoverySnapshot(snapshot); }} /> : null}
-          <IconButton icon="import" label={t("navigation.importDDL")} onClick={() => setDdlPreviewOpen(true)} description={t("navigation.openATemporaryPostgreSQLMySQLFileOrClipboard")} />
-          {refreshOperation.state?.phase === "error" ? <div className="refresh-operation-result"><OperationFeedback label={t("navigation.snapshotRefresh")} state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel={t("navigation.retrySnapshotRefresh")} onDismiss={refreshOperation.dismiss} /></div> : null}
-          {snapshot ? <IconButton icon="preflight" label={t("navigation.structurePreflight")} aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} description={t("navigation.checkTheEntireLoadedSnapshotWithDialectAware")} /> : null}
+          {snapshot && runtime.data?.kind === "desktop" && discoveryLatest.data?.[0]?.id === snapshot.id && mode === "explore" && !preflightOpen && semanticsSettledSnapshot === snapshot ? <IconButton menuLabel icon="question" label={t("navigation.businessQuestion")} description={t("navigation.findRelevantTablesFromABusinessQuestion")} aria-pressed={Boolean(discoverySnapshot)} onClick={() => { setSearchOpen(false); setDiscoverySnapshot(snapshot); }} /> : null}
+          <IconButton menuLabel icon="import" label={t("navigation.importDDL")} onClick={() => setDdlPreviewOpen(true)} description={t("navigation.openATemporaryPostgreSQLMySQLFileOrClipboard")} />
+          {snapshot ? <IconButton menuLabel icon="preflight" label={t("navigation.structurePreflight")} aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} description={t("navigation.checkTheEntireLoadedSnapshotWithDialectAware")} /> : null}
           {snapshot ? <SchemaReportExportAction key={snapshot.id} snapshot={snapshot} semantics={semanticsSnapshot === snapshot ? semantics : undefined} platform={platform} /> : null}
+          </div>
+          </div>
+          {refreshOperation.state?.phase === "error" ? <div className="refresh-operation-result"><OperationFeedback label={t("navigation.snapshotRefresh")} state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel={t("navigation.retrySnapshotRefresh")} onDismiss={refreshOperation.dismiss} /></div> : null}
           {snapshot && runtime.data?.kind === "desktop" ? (
             <IconButton
               icon="refresh"
@@ -1021,19 +1219,25 @@ export function App() {
             icon="settings"
             label={t("navigation.openSettings")}
             description={t("navigation.settings")}
-            onClick={() => openSettings()}
+            onClick={(event) => {
+              event.currentTarget.focus({ preventScroll: true });
+              openSettings();
+            }}
           />
-          <IconButton icon="command" label={t("navigation.openCommandPalette")} description={t("navigation.commandPaletteP")} onClick={() => setCommandPaletteOpen(true)} />
+          <IconButton icon="command" label={t("navigation.openCommandPalette")} description={t("navigation.commandPaletteP")} onClick={(event) => {
+            event.currentTarget.focus({ preventScroll: true });
+            setCommandPaletteOpen(true);
+          }} />
           <IconButton icon="bell" label={t("navigation.openNotifications")} description={notices.length ? t("navigation.notifications", { value0: notices.length }) : t("navigation.noNotifications")} className="notification-button" aria-expanded={noticesOpen} onClick={() => setNoticesOpen((value) => !value)}>{notices.length ? <b aria-hidden="true">{notices.length > 99 ? "99+" : notices.length}</b> : null}</IconButton>
           {noticesOpen ? <section className="notification-popover" aria-label={t("settings.notifications")}><header><strong>{t("settings.notifications")}</strong><button type="button" onClick={() => setNotices([])}>{t("navigation.clear")}</button></header>{notices.length ? notices.map((notice) => <article key={notice.id}><strong>{notice.title}</strong><p>{notice.message}</p><small>{i18n.formatDate(notice.createdAt, "local", { timeStyle: "medium" })}</small>{notice.settingsCategory ? <button type="button" className="notification-update-action" onClick={() => openSettings(notice.settingsCategory)}>{t("navigation.viewUpdate")}</button> : null}</article>) : <p>{t("navigation.noNotificationsDetail")}</p>}</section> : null}
         </div>
-        <HeaderSidebarToggle
+        {modelInspectorVisible && <HeaderSidebarToggle
           side="right"
           expanded={preflightOpen ? preflightDetailsExpanded : rightPanel.expanded}
           onToggle={() =>
             preflightOpen ? setPreflightDetailsExpanded(value => !value) : setRightPanel((current) => ({ ...current, expanded: !current.expanded }))
           }
-        />
+        />}
       </header>
 
       {showUpdateBanner && availableUpdate ? <UpdateBanner version={availableUpdate} onOpen={() => openSettings("updates")} onDismiss={() => setDismissedUpdate(availableUpdate)} /> : null}
@@ -1044,7 +1248,7 @@ export function App() {
         style={
           {
             "--left-sidebar-width": `${leftPanel.expanded ? leftPanel.width : 0}px`,
-            "--right-sidebar-width": `${(preflightOpen ? preflightDetailsExpanded : rightPanel.expanded) ? rightPanel.width : 0}px`,
+            "--right-sidebar-width": `${modelInspectorVisible && (preflightOpen ? preflightDetailsExpanded : rightPanel.expanded) ? rightPanel.width : 0}px`,
           } as CSSProperties
         }
       >
@@ -1055,11 +1259,15 @@ export function App() {
             platform={platform}
             sourcesRevision={sourcesRevision}
             onSnapshot={handleCapture}
+            onSourceSaved={(profile) => setDataSources((current) => [...current.filter((source) => source.id !== profile.id), profile])}
             onSourceOpenStart={beginSourceOpen}
             onRefresh={snapshot && !historyPreview ? () => void refreshActive() : undefined}
             refreshDisabled={refreshState === "refreshing"}
             onSourceDeleted={(sourceId) => {
+              clearSavedQueries(sourceId);
+              setSavedQueryCatalog((catalog) => catalog?.sourceId === sourceId ? undefined : catalog);
               setDataSources((current) => current.filter((source) => source.id !== sourceId));
+              setSqliteEditors((current) => current.filter((editor) => editor.target.sourceId !== sourceId));
               if (snapshot?.sourceId === sourceId) {
                 setSnapshot(undefined);
                 setChangeSet(undefined);
@@ -1075,15 +1283,23 @@ export function App() {
           >
             {snapshot ? (
               <SchemaTree
-                navigation={runtime.data?.kind === "desktop" ? <ModelViewNavigation sourceId={snapshot.sourceId} views={semantics.savedViews} activeView={savedView}
+                navigation={runtime.data?.kind === "desktop" && mode !== "database" ? <ModelViewNavigation sourceId={snapshot.sourceId} views={semantics.savedViews} activeView={savedView}
                   disabled={historyPreview || semanticsSnapshot !== snapshot}
                   onApply={(view) => { setObjectDocument(undefined); setMode("explore"); setPreflightOpen(false); setDiscoverySnapshot(undefined); setSearchOpen(false); applyView(view); }} /> : undefined}
                 snapshot={snapshot}
+                databaseMode={mode === "database"}
+                savedQueries={mode === "database" && querySupported && !historyPreview ? savedQueries : undefined}
+                onOpenSavedQuery={openSavedQuery}
+                onNewQuery={() => openSavedQuery()}
+                onDeleteSavedQuery={deleteSavedQuery}
+                rowCounts={tableRowCounts}
                 selectedTable={selectedTable}
-                selectedObject={documentVisible ? documentObject?.key : undefined}
-                onOpenObject={openObjectDocument}
-                onCloseObject={closeObjectDocument}
-                onSelectTable={locateTable}
+                selectedObject={mode === "database" ? databaseObject?.key : documentVisible ? documentObject?.key : undefined}
+                onOpenObject={mode === "database" ? openDatabaseObject : openObjectDocument}
+                onCloseObject={mode === "database" ? () => setDatabaseObjectSelection(undefined) : closeObjectDocument}
+                onOpenView={mode === "database" && querySupported && !historyPreview ? (view) => openDatabaseObject(view.key) : undefined}
+                onShowDefinition={mode === "database" ? (key) => openDatabaseObject(key, true) : undefined}
+                onSelectTable={mode === "database" && querySupported && !historyPreview ? openTable : locateTable}
                 onOpenTable={querySupported && !historyPreview ? openTable : undefined}
                 onExportTable={postgresExport ? (table) => setDatabaseExport({ snapshot, target: { kind: "tableData", table } }) : undefined}
                 onDumpSchema={postgresDump ? (schema, dumpMode) => setDatabaseExport({ snapshot, target: { kind: "sqlDump", schema, mode: dumpMode } }) : undefined}
@@ -1095,6 +1311,9 @@ export function App() {
         </aside>
         {databaseExport ? <DatabaseExportDialog platform={platform} snapshot={databaseExport.snapshot} target={databaseExport.target}
           onClose={() => setDatabaseExport(undefined)} /> : null}
+        {showTableDdl && tableDdlScope === showTableDdl && browsableTable && countProfile && (
+          <TableDdlDialog platform={platform} profile={countProfile} table={browsableTable} onClose={() => setShowTableDdl(undefined)} />
+        )}
 
         <SidebarRail
           side="left"
@@ -1108,9 +1327,30 @@ export function App() {
           }
         />
 
-        <section className={`canvas-placeholder${snapshot && mode === "explore" ? " database-workspace" : ""}${mode === "changes" ? " changes-workspace" : ""}`}>
+        <section className={`canvas-placeholder${(snapshot && mode === "explore") || mode === "database" ? " database-workspace" : ""}${mode === "changes" ? " changes-workspace" : ""}`}>
+          {snapshot && quickQueryRelation && <QuickQueryDock
+            key={JSON.stringify([snapshot.sourceId, activeProfile?.updatedAt])}
+            platform={platform} snapshot={snapshot} relation={quickQueryRelation} reset={quickQueryView.reset}
+            onResult={(result, sql) => setQuickQueryView((current) => current.scope === quickQueryScope && current.reset === quickQueryView.reset
+              ? { ...current, result: { result, sql } } : current)} />}
+          {sqliteEditors.map((editor) => {
+            const activeTable = mode === "database" && !databaseObject && activeSqliteEditor?.key === editor.key;
+            const pageVisible = activeTable && !quickQueryResult;
+            return (
+              <div key={editor.key} className="table-data-host" hidden={!pageVisible}>
+                <SqliteTableWorkspace platform={platform} target={editor.target} binding={editor.binding} activeTable={activeTable} pageVisible={pageVisible}
+                  modelColumns={activeTable ? browsableTable?.columns : undefined}
+                  onShowDdl={activeTable ? openTableDdl : undefined}
+                  onRetainChange={retainSqliteEditor}
+                  panelWidth={rowPanelWidth} onPanelWidthChange={resizeRowPanel} />
+              </div>
+            );
+          })}
           {historyPreview && snapshot ? <div className="workspace-history-banner" role="status"><span>{t("navigation.historicalWorkspaceLayoutChangesAreTemporary")}</span><button type="button" onClick={() => { void returnToLatestModel().catch((reason: unknown) => publishNotice({ id: "return-latest-failed", title: t("navigation.unableToOpenLatestModel"), message: noticeReason(reason), createdAt: new Date().toISOString() })); }}>{t("navigation.returnToLatestModel")}</button></div> : null}
-          {mode === "changes" ? <div className="changes-view-toolbar"><button aria-pressed={reviewView === "review"} onClick={() => setReviewView("review")}>{i18n.locale === "zh-CN" ? "本轮复核" : "Current review"}</button><button aria-pressed={reviewView === "history"} onClick={() => setReviewView("history")}>{i18n.locale === "zh-CN" ? "历史比较" : "History comparison"}</button></div> : null}
+          {mode === "changes" ? <div className="changes-view-toolbar">
+            <Segmented label={t("navigation.reviewView")} value={reviewView} onChange={setReviewView}
+              options={[{ value: "review", label: t("navigation.currentReview") }, { value: "history", label: t("navigation.historyComparison") }]} />
+          </div> : null}
           {!preflightOpen && mode === "changes" && reviewView === "history" && changeSet ? (
             <div className="changes-view-toolbar">
               <Segmented
@@ -1135,6 +1375,19 @@ export function App() {
               if (table) locateSearchResult({ schema: table.key.schema, table, matchingColumns: [] });
               return Boolean(table);
             }} /> : <p>{i18n.locale === "zh-CN" ? "请返回桌面应用中的最新数据库模型进行复核。" : "Return to the latest connected desktop model to review changes."}</p>
+          ) : mode === "database" ? (
+            snapshot && databaseDocument ? <ObjectDocument key={JSON.stringify([snapshot.sourceId, databaseDocument.key])} snapshot={snapshot}
+              object={databaseDocument} backLabel={t(databaseDocument.key.kind === "view" && querySupported && !historyPreview ? "objects.openViewData" : "navigation.database")}
+              onClose={closeDatabaseDocument} onSelect={openDatabaseObject} onSelectTable={querySupported && !historyPreview ? openTable : locateTable} />
+            : !databaseObject && activeSqliteEditor && !quickQueryResult ? null : snapshot && previewRelation ? (
+              <TableDataPreview key={JSON.stringify([snapshot.sourceId, activeProfile?.updatedAt, previewRelation.key])}
+                platform={platform} snapshot={snapshot} table={previewRelation} connectionRevision={activeProfile?.updatedAt}
+                onShowDdl={openTableDdl}
+                quickQuery={quickQueryResult ? { ...quickQueryResult, onReturn: () => setQuickQueryView((current) => ({ scope: current.scope, reset: current.reset + 1 })) } : undefined}
+                onShowDefinition={browsableView && (() => openDatabaseObject(browsableView.key, true))} />
+            ) : <EmptyState className="table-data-empty" icon={<ActionIcon name="grid" />}
+              title={t(runtime.data?.kind === "web" ? "tableData.desktopOnly" : historyPreview ? "tableData.latestModel" : snapshot ? "objects.chooseDatabaseObject" : "tableData.openDatabase")}
+              description={snapshot && !historyPreview && runtime.data?.kind === "desktop" ? t("objects.chooseDatabaseObjectHint") : undefined} />
           ) : mode === "query" ? (
             <Suspense fallback={<div className="workspace-loading" role="status">{t("navigation.loadingWorkspace")}</div>}><QueryPage
               platform={platform}
@@ -1145,10 +1398,15 @@ export function App() {
               selectedTable={historicalSelection ? undefined : selectedTable}
               draftSeed={queryDraftSeed}
               onOpenAiSettings={() => openSettings("ai")}
+              ddlTarget={ddlTarget}
+              onSchemaDdlCommitted={acceptSchemaDdl}
               openRequest={openQueryRequest}
               onConsumeOpenRequest={() => setOpenQueryRequest(undefined)}
-              openTableRequest={openTableRequest}
-              onConsumeOpenTable={(id) => setOpenTableRequest((current) => current?.id === id ? undefined : current)}
+              onSaveQuery={sourceId && querySupported && !historyPreview ? (name, sql, id) => {
+                const outcome = saveNamedQuery(sourceId, name, sql, id);
+                if ("query" in outcome) setSavedQueryCatalog({ sourceId, queries: listSavedQueries(sourceId) });
+                return outcome;
+              } : undefined}
             />
             </Suspense>
           ) : mode === "changes" && !changeSet ? (
@@ -1181,6 +1439,7 @@ export function App() {
               snapshot={snapshot}
               query={query}
               changeSet={mode === "changes" ? changeSet : undefined}
+              modelTableChanges={modelTableChanges}
               onSelectTable={inspectTable}
               selectedTable={selectedTable}
               locateRequest={mode === "explore" ? locateRequest : undefined}
@@ -1232,7 +1491,7 @@ export function App() {
             snapshot={snapshot} semantics={semantics} settings={settings} platform={platform} desktop
             initialTable={historicalSelection ? undefined : selectedTable}
             sourceLabel={dataSources.find((source) => source.id === snapshot.sourceId)?.displayName}
-            onDraftQuery={querySupported ? (seed) => { setQueryDraftSeed({ ...seed, id: Date.now() }); setDiscoverySnapshot(undefined); setOpenQueryRequest(undefined); setOpenTableRequest(undefined); setMode("query"); } : undefined}
+            onDraftQuery={querySupported ? (seed) => { setQueryDraftSeed({ ...seed, id: Date.now() }); setDiscoverySnapshot(undefined); setOpenQueryRequest(undefined); setMode("query"); } : undefined}
             onClose={() => setDiscoverySnapshot(undefined)}
             onLocate={(table) => { setDiscoverySnapshot(undefined); locateTable(table); }}
             onExplain={(table) => { setDiscoverySnapshot(undefined); locateTable(table); setRightPanel((panel) => ({ ...panel, expanded: true })); setExplainRequest((value) => value + 1); }}
@@ -1240,7 +1499,7 @@ export function App() {
           /> : null}
         </section>
 
-        <SidebarRail
+        {modelInspectorVisible && <SidebarRail
           side="right"
           expanded={(preflightOpen ? preflightDetailsExpanded : rightPanel.expanded)}
           width={rightPanel.width}
@@ -1250,9 +1509,9 @@ export function App() {
           onToggle={() =>
             preflightOpen ? setPreflightDetailsExpanded(value => !value) : setRightPanel((current) => ({ ...current, expanded: !current.expanded }))
           }
-        />
+        />}
 
-        <aside className="inspector" hidden={!(preflightOpen ? preflightDetailsExpanded : rightPanel.expanded)}>
+        <aside className="inspector" hidden={!modelInspectorVisible || !(preflightOpen ? preflightDetailsExpanded : rightPanel.expanded)}>
           {/* changeSet is not gated on the view mode here: the canvas overlay is
               a rendering mode, while the History segment owns time whatever the
               main area happens to be showing. */}
@@ -1267,6 +1526,9 @@ export function App() {
             selectedTable={selectedTable}
             historicalSelection={historicalSelection}
             changeSet={changeSet}
+            modelChangeSet={modelChangeSet}
+            modelTableChange={currentTable ? modelTableChanges?.get(modelTableKey(currentTable.key)) : undefined}
+            modelChangeRequest={modelChangeRequest}
             semantics={semanticsSnapshot === snapshot ? semantics : emptySemantics}
             settings={settings}
             runtime={runtime.data}
@@ -1304,6 +1566,7 @@ export function App() {
           onUpdateSource={updateSourceSettings}
           onResetApp={async () => {
             await platform.resetAppSettings();
+            resizeRowPanel(DEFAULT_ROW_PANEL_WIDTH);
             setSettings(await platform.getSettings(snapshot?.sourceId));
           }}
           onResetSource={async () => {
@@ -1326,9 +1589,14 @@ export function App() {
           }}
           onFactoryReset={() => {
             clearQuerySessions();
+            clearSavedQueries();
+            setSavedQueryCatalog(undefined);
+            clearTableDataPreferences();
+            setSqliteEditors([]);
+            resizeRowPanel(DEFAULT_ROW_PANEL_WIDTH);
             setMode("explore");
             setOpenQueryRequest(undefined);
-            setOpenTableRequest(undefined);
+            setDatabaseObjectSelection(undefined);
             setSnapshot(undefined);
             setChangeSet(undefined);
             setSelectedTable(undefined);

@@ -35,7 +35,7 @@ it("keeps the shell mounted and selection visible while each first-use page load
   await act(async () => { gates.query.resolve(); await gates.query.promise; });
   expect(await screen.findByText("Query loaded")).toBeVisible();
   expect(modes.closest("main")).toBe(shell);
-  for (const label of ["Changes", "Database"]) {
+  for (const label of ["Model", "Database"]) {
     fireEvent.click(within(modes).getByRole("button", { name: label }));
     expect(within(modes).getAllByRole("button", { pressed: true })).toHaveLength(1);
     expect(within(modes).getByRole("button", { name: label })).toHaveClass("active");

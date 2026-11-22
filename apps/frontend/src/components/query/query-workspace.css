@@ -20,6 +20,17 @@
 .query-editor-heading { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 16px; background: var(--ds-field); color: var(--ds-secondary); font-size: var(--ds-text-caption); }
 .query-editor-heading strong { font-weight: 500; }
 .query-editor-heading > span { color: var(--ds-tertiary); }
+.query-dialog .saved-query-name { display: grid; gap: 6px; margin-block: 12px; }
+.saved-query-name input { width: 100%; min-height: 32px; }
+.query-ddl-trigger { flex: none; white-space: nowrap; color: var(--ds-text); background: var(--ds-control); border: 1px solid var(--ds-border); border-radius: 6px; padding: 5px 9px; font: inherit; }
+.query-ddl-trigger:disabled { opacity: .55; }
+.query-ddl-dialog { box-sizing: border-box; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; padding: 20px; border: 1px solid var(--ds-border); border-radius: 10px; background: var(--ds-sidebar); color: var(--ds-text); }
+.query-ddl-dialog::backdrop { background: rgb(0 0 0 / 48%); }
+.query-ddl-dialog h3 { margin: 0 0 8px; }
+.query-ddl-dialog p, .query-ddl-dialog dt { color: var(--ds-secondary); }
+.query-ddl-dialog dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.query-ddl-dialog pre { max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px; border: 1px solid var(--ds-border); border-radius: 6px; background: var(--ds-field); }
+.query-ddl-dialog footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .query-page .query-editor-pane { min-height: 100px; }
 .query-page .query-result-resizer { flex-basis: 8px; background: var(--ds-sidebar); }
 .query-page .query-result-resizer span { top: 3px; left: calc(50% - 16px); right: auto; width: 32px; height: 2px; border-radius: 2px; background: var(--ds-secondary); }

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { QueryExecutionResult } from "../../platform";
 import { QueryResultGrid } from "./QueryResultGrid";
 
@@ -42,5 +42,14 @@ describe("QueryResultGrid", () => {
     fireEvent.mouseUp(window, { clientX: 360 });
     expect(resizer).toHaveAttribute("aria-valuenow", "280");
     expect(document.body).not.toHaveClass("is-resizing-query-column");
+
+    Object.defineProperty(resizer, "offsetWidth", { value: 8 });
+    vi.spyOn(resizer, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 12, 20));
+    fireEvent.mouseDown(resizer, { clientX: 300 });
+    fireEvent.mouseMove(window, { clientX: 360 });
+    expect(resizer).toHaveAttribute("aria-valuenow", "320");
+    expect(resizer).toHaveAttribute("data-resizing", "true");
+    fireEvent.mouseUp(window);
+    expect(resizer).not.toHaveAttribute("data-resizing");
   });
 });

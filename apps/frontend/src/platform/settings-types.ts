@@ -33,7 +33,7 @@ export interface AppSettings {
     confirmBeforeQuit: boolean;
     dateTimeFormat: DateTimeFormat;
     lastSourceId: string | null;
-    lastViewMode: "explore" | "query" | "changes" | "history";
+    lastViewMode: "explore" | "database" | "query" | "changes" | "history";
   };
   appearance: {
     density: Density;

@@ -223,6 +223,9 @@ async fn load_tables(
             namespace.nspname AS schema_name,
             relation.relname AS table_name,
             relation.relkind::text AS relation_kind,
+            relation.relkind = 'r' AND EXISTS (
+                SELECT 1 FROM pg_inherits WHERE inhparent = relation.oid
+            ) AS includes_inherited_rows,
             obj_description(relation.oid, 'pg_class') AS comment
         FROM pg_class relation
         JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
@@ -241,6 +244,7 @@ async fn load_tables(
         let relation_kind: String = row.try_get("relation_kind")?;
         let mut table = TableDefinition::empty(&schema_name, table_name);
         table.table_kind = parse_table_kind(&relation_kind)?;
+        table.includes_inherited_rows = Some(row.try_get("includes_inherited_rows")?);
         table.comment = row.try_get("comment")?;
         find_schema_mut(schemas, &schema_name)?.tables.push(table);
     }

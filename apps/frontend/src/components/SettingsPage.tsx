@@ -1,5 +1,6 @@
 import { AiReplyPreferences } from "./settings/AiReplyPreferences";
 import { Button } from "../design-system/Button";
+import { ModalSurface } from "../design-system/ModalSurface";
 import { I18nProvider, useI18n, type Locale, formatDate } from "../i18n";
 import applicationLicense from "../../../../LICENSE?raw";
 import { PrivacyPolicy } from "./settings/PrivacyPolicy";
@@ -295,7 +296,8 @@ function SettingsContent({
   }
 
   return (
-    <section className="ds-surface settings-page" aria-label={t("settings.settings")}>
+    <ModalSurface label={t("settings.settings")} onDismiss={onClose}>
+    <section className="ds-surface settings-page">
       <header className="settings-header">
         <Button variant="ghost" className="settings-back" onClick={onClose}>{t("settings.back")}</Button>
         <h1>{t("settings.settings")}</h1>
@@ -303,7 +305,7 @@ function SettingsContent({
           <span className="settings-visually-hidden">{t("settings.searchSettings")}</span>
           <ActionIcon name="search" />
           <input
-            autoFocus
+            data-modal-focus
             type="search"
             placeholder={t("settings.searchSettingsDetail")}
             value={query}
@@ -650,6 +652,7 @@ function SettingsContent({
         </div>
       </div>
     </section>
+    </ModalSurface>
   );
 }
 

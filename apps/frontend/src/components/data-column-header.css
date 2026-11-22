@@ -1,0 +1,101 @@
+.data-column-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+  padding-inline-end: 4px;
+}
+
+.data-column-label { flex: 1; min-width: 0; }
+.data-column-label > :is(span, small) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.data-column-heading > .data-column-name {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.data-column-heading > .data-column-name:is(:hover, :active):not(:disabled) { background: transparent; color: var(--ds-accent); }
+.data-column-heading > .data-column-name:focus-visible { outline-offset: -1px; }
+
+.data-column-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  min-height: 20px;
+}
+
+.data-column-sort-direction {
+  color: var(--ds-accent);
+  font: 12px/1 var(--ds-font-ui);
+}
+
+.data-column-actions > .data-column-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  min-height: 20px;
+  min-width: 20px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ds-secondary);
+  font: 12px/1 var(--ds-font-ui);
+}
+
+.data-column-actions > .data-column-menu-trigger:is(:hover, :focus-visible) { background: var(--ds-hover); }
+
+@media (hover: hover) and (pointer: fine) {
+  .data-column-header:not(:hover) .data-column-menu-trigger:not(:focus-visible) {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+.data-column-chevron {
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.data-column-resizer {
+  position: absolute;
+  z-index: 2;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.data-column-resizer:is(:hover, :focus-visible, [data-resizing]) { box-shadow: inset -2px 0 var(--ds-accent); outline: none; }
+
+.data-column-comment {
+  position: fixed;
+  z-index: 1000;
+  width: max-content;
+  max-width: min(24rem, calc(var(--ds-viewport-width) - 12px));
+  padding: 6px 10px;
+  border: 1px solid var(--ds-border);
+  border-radius: 8px;
+  background: var(--ds-control);
+  color: var(--ds-text);
+  box-shadow: var(--ds-shadow-popover);
+  font: var(--ds-text-control)/1.4 var(--ds-font-ui);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}

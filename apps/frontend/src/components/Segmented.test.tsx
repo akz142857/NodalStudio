@@ -45,6 +45,21 @@ describe("Segmented", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("uses one tab stop and skips disabled segments with the arrow keys", () => {
+    const onChange = vi.fn();
+    render(<Segmented label="View mode" value="explore" options={options} onChange={onChange} />);
+    const database = screen.getByRole("button", { name: "Database" });
+    const history = screen.getByRole("button", { name: "History" });
+    expect(database.tabIndex).toBe(0);
+    expect(history.tabIndex).toBe(-1);
+    fireEvent.keyDown(database, { key: "ArrowRight" });
+    expect(history).toHaveFocus();
+    expect(onChange).toHaveBeenLastCalledWith("history");
+    fireEvent.keyDown(history, { key: "Home" });
+    expect(database).toHaveFocus();
+    expect(onChange).toHaveBeenLastCalledWith("explore");
+  });
+
   it("names the group so the segments are not four loose buttons", () => {
     render(
       <Segmented label="View mode" value="explore" options={options} onChange={vi.fn()} />,

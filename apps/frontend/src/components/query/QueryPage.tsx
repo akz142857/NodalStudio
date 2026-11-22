@@ -1,7 +1,8 @@
-import { queryErrorMessages } from "../../i18n/query-errors";
-import { useI18n, type Translate } from "../../i18n";
-import { useEffect, useEffectEvent, useId, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
-import type { DatabaseSnapshot, QueryErrorKind, QueryExecutionResult, QueryHistoryEntry, NodalStudioPlatform } from "../../platform";
+import { normalizeQueryError, queryErrorMessages } from "../../i18n/query-errors";
+import { useI18n } from "../../i18n";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import type { CaptureSnapshotResult, DatabaseSnapshot, QueryExecutionResult, QueryHistoryEntry, NodalStudioPlatform } from "../../platform";
+import { ddlEngineNames, schemaDdlTargetKey, type SchemaDdlInput, type SchemaDdlReceipt, type SchemaDdlTarget } from "../../platform/schema-ddl";
 import { QueryRunControls } from "./QueryRunControls";
 import { queryKeys } from "./query-shortcuts";
 import { QueryDraftPanel, type QueryDraftSeed } from "./QueryDraftPanel";
@@ -13,10 +14,11 @@ import { QueryResultGrid } from "./QueryResultGrid";
 import { loadQuerySession, resizedQueryResultHeight, saveQuerySession, type QuerySession, type QueryTab } from "./query-state";
 import { SqlEditor, type SqlEditorHandle } from "./SqlEditor";
 import { resolveCapability } from "../../platform/capabilities";
-import { TABLE_PREVIEW_ROW_LIMIT } from "./query-format";
+import { SchemaDdlDialog } from "./SchemaDdlDialog";
+import type { SavedQuery, SaveQueryOutcome } from "./saved-queries";
+import { ModalSurface } from "../../design-system/ModalSurface";
 
-export interface OpenQueryRequest { id: number; sql: string }
-export interface OpenTableRequest { id: string; sourceId: string; sql: string }
+export interface OpenQueryRequest { id: number; sql: string; sourceId?: string; kind?: "saved" | "new"; savedQuery?: SavedQuery }
 
 interface QueryPageProps {
   platform: NodalStudioPlatform;
@@ -24,33 +26,17 @@ interface QueryPageProps {
   runtimeKind?: "desktop" | "web";
   openRequest?: OpenQueryRequest;
   onConsumeOpenRequest?: () => void;
-  openTableRequest?: OpenTableRequest;
-  onConsumeOpenTable?: (id: string) => void;
   settings?: EffectiveSettings;
   semantics?: SemanticBundle;
   selectedTable?: TableDefinition;
   draftSeed?: QueryDraftSeed;
   onOpenAiSettings?: () => void;
+  ddlTarget?: SchemaDdlTarget;
+  onSchemaDdlCommitted?: (target: SchemaDdlTarget, capture?: CaptureSnapshotResult) => void;
+  onSaveQuery?: (name: string, sql: string, id?: string) => SaveQueryOutcome;
 }
 
-function queryError(bt: Translate, error: unknown): { kind: QueryErrorKind; message: string } {
-  if (typeof error === "object" && error && "kind" in error && "message" in error) {
-    return { kind: String(error.kind) as QueryErrorKind, message: String(error.message) };
-  }
-  if (typeof error === "string") {
-    try { return queryError(bt, JSON.parse(error)); } catch { return { kind: "internal", message: error }; }
-  }
-  return { kind: "internal", message: error instanceof Error ? error.message : bt("business.queryExecutionFailed") };
-}
-
-interface ActiveQuery { id: string; registered: boolean; cancelRequested: boolean }
-
-function requestCancel(platform: NodalStudioPlatform, query: ActiveQuery) {
-  query.cancelRequested = true;
-  return query.registered ? platform.cancelQuery(query.id) : undefined;
-}
-
-export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onConsumeOpenRequest, openTableRequest, onConsumeOpenTable, settings, semantics, selectedTable, draftSeed, onOpenAiSettings }: QueryPageProps) {
+export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onConsumeOpenRequest, settings, semantics, selectedTable, draftSeed, onOpenAiSettings, ddlTarget, onSchemaDdlCommitted, onSaveQuery }: QueryPageProps) {
   const { t: bt } = useI18n();
   const [draftRequested, setDrafting] = useState(Boolean(snapshot?.database.databaseType !== "sqlite" && draftSeed && draftSeed.sourceId === snapshot?.sourceId && draftSeed.snapshotId === snapshot?.id));
   const draftBinding = JSON.stringify([settings?.source, settings?.app.privacy, semantics?.logicalRelationships, semantics?.domainGroups, semantics?.knowledge]);
@@ -61,7 +47,8 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   const draftTabRef = useRef<HTMLButtonElement>(null);
   const editorId = useId();
   const pendingGenerated = generatedRequest?.sourceId === snapshot?.sourceId && generatedRequest?.snapshotId === snapshot?.id && generatedRequest?.binding === draftBinding ? generatedRequest : undefined;
-  const pendingOpen = pendingGenerated ?? openRequest;
+  const currentOpen = openRequest && (!openRequest.sourceId || openRequest.sourceId === snapshot?.sourceId) ? openRequest : undefined;
+  const pendingOpen = pendingGenerated ?? currentOpen;
   const closeOpen = () => { if (pendingGenerated) setGeneratedRequest(undefined); else onConsumeOpenRequest?.(); };
   const outputId = useId();
   const outputRef = useRef<HTMLElement>(null);
@@ -73,19 +60,39 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   const drafting = canDraft && draftRequested;
   const sessionKey = "query-workspace";
   const [session, setSession] = useState<QuerySession>(() => loadQuerySession(sessionKey));
+  const [savedQuery, setSavedQuery] = useState<SavedQuery>();
+  const [saveName, setSaveName] = useState<string>();
+  const [saveFeedback, setSaveFeedback] = useState<"saved" | "nameTaken" | "storageError">();
   const [historyRecord, setHistoryRecord] = useState<{ sourceId: string; entries: QueryHistoryEntry[] }>({ sourceId, entries: [] });
   const history = desktopReady && historyRecord.sourceId === sourceId ? historyRecord.entries : [];
   const [executing, setExecuting] = useState(false);
+  const [ddlPreview, setDdlPreview] = useState<SchemaDdlInput>();
+  const [applyingDdl, setApplyingDdl] = useState(false);
+  const ddlInFlight = useRef(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const editorRef = useRef<SqlEditorHandle>(null);
-  const activeQuery = useRef<ActiveQuery | undefined>(undefined);
+  const activeQuery = useRef<string | undefined>(undefined);
   const previousSourceId = useRef(sourceId);
   const sourceRevision = useRef(0);
   const stopResizeRef = useRef<(() => void) | undefined>(undefined);
+  const liveDdlTarget = desktopReady && ddlTarget?.sourceId === sourceId && ddlTarget.databaseType === snapshot?.database.databaseType
+    ? ddlTarget : undefined;
+  const ddlEngine = liveDdlTarget && ddlEngineNames[liveDdlTarget.databaseType];
+  const targetKey = liveDdlTarget && schemaDdlTargetKey(liveDdlTarget);
+  const activeDdlPreview = ddlPreview && schemaDdlTargetKey(ddlPreview) === targetKey ? ddlPreview : undefined;
+  const currentDdlTargetKey = useRef(targetKey);
+  useLayoutEffect(() => {
+    currentDdlTargetKey.current = targetKey;
+    return () => { currentDdlTargetKey.current = undefined; };
+  }, [targetKey]);
+  if (ddlPreview && !activeDdlPreview) setDdlPreview(undefined);
 
   if (previousSourceId.current !== sourceId) {
     previousSourceId.current = sourceId;
     setDrafting(false);
+    setSavedQuery(undefined);
+    setSaveName(undefined);
+    setSaveFeedback(undefined);
     setSession((current) => ({ ...current, result: undefined, outcome: undefined, message: bt("business.dataSourceChangedTheSQLDraftWasPreservedRun"), activeTab: "message" }));
   }
   useEffect(() => { saveQuerySession(sessionKey, session); }, [session]);
@@ -104,23 +111,11 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   useEffect(() => () => stopResizeRef.current?.(), []);
   useEffect(() => () => {
     sourceRevision.current += 1;
-    if (activeQuery.current) void requestCancel(platform, activeQuery.current)?.catch(() => {});
+    if (activeQuery.current) void platform.cancelQuery(activeQuery.current).catch(() => {});
   }, [platform, sourceId]);
 
-  const runOpenTable = useEffectEvent((request: OpenTableRequest) => {
-    if (activeQuery.current) return;
-    onConsumeOpenTable?.(request.id);
-    if (request.sourceId === sourceId && desktopReady) void run(request.sql, true);
-  });
-  useEffect(() => {
-    if (!openTableRequest || executing) return;
-    let current = true;
-    queueMicrotask(() => { if (current) runOpenTable(openTableRequest); });
-    return () => { current = false; };
-  }, [openTableRequest, executing, sourceId]);
-
-  async function run(sqlText: string, openingTable = false) {
-    if (!snapshot || !desktopReady || executing || activeQuery.current || (!openingTable && (drafting || pendingOpen))) return;
+  async function run(sqlText: string) {
+    if (!snapshot || !desktopReady || executing || activeQuery.current || ddlInFlight.current || activeDdlPreview || drafting || pendingOpen) return;
     if (!sqlText.trim()) {
       setSession((current) => ({ ...current, message: bt("business.enterOneReadOnlySELECTStatementBeforeRunningThe"), activeTab: "message", outputCollapsed: false }));
       editorRef.current?.focus();
@@ -130,41 +125,26 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     setDraftExecution(undefined);
     const queryId = crypto.randomUUID();
     const revision = sourceRevision.current;
-    const operation = { id: queryId, registered: !openingTable, cancelRequested: false };
-    activeQuery.current = operation;
-    const rowLimit = openingTable ? TABLE_PREVIEW_ROW_LIMIT : session.rowLimit;
-    if (openingTable) {
-      showEditor();
-      setGeneratedRequest(undefined);
-    }
+    activeQuery.current = queryId;
+    const rowLimit = session.rowLimit;
     setExecuting(true);
     setElapsedMs(0);
     setSession((current) => ({
       ...current,
-      ...(openingTable ? {
-        draft: sqlText,
-        previousDraft: current.previousDraft ?? { sql: current.draft, rowLimit: current.rowLimit },
-        rowLimit,
-        result: undefined,
-        outcome: undefined,
-      } : {}),
       message: bt("business.executingReadOnlyQuery"),
       activeTab: "message",
       outputCollapsed: false,
     }));
     try {
       const input = { queryId, sourceId, sql: sqlText, rowLimit, timeoutMs: 30_000 };
-      const result = await (openingTable ? platform.executeReadonlyQuery(input, () => {
-        operation.registered = true;
-        if (operation.cancelRequested) void requestCancel(platform, operation)?.catch(() => {});
-      }) : platform.executeReadonlyQuery(input));
+      const result = await platform.executeReadonlyQuery(input);
       if (sourceRevision.current !== revision) return;
       setDraftExecution({ sourceId, snapshotId: snapshot.id, sql: sqlText, result });
       const summary = bt("business.rowsInMs", { value0: result.rowCount, value1: result.durationMs, value2: result.truncated ? " · truncated at the selected row limit" : "" });
       setSession((current) => ({ ...current, result, outcome: "succeeded", message: [summary, ...result.notices].join("\n"), activeTab: "results", outputCollapsed: false }));
     } catch (error) {
       if (sourceRevision.current !== revision) return;
-      const normalized = queryError(bt, error);
+      const normalized = normalizeQueryError(bt, error);
       setSession((current) => ({ ...current, outcome: "failed", message: `${bt(queryErrorMessages[normalized.kind])}: ${normalized.message}`, activeTab: "message", outputCollapsed: false }));
     } finally {
       activeQuery.current = undefined;
@@ -174,17 +154,96 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     }
   }
 
+  function showDdlMessage(message: string, outcome?: QuerySession["outcome"]) {
+    setSession((current) => ({ ...current, result: undefined, outcome, message, activeTab: "message", outputCollapsed: false }));
+  }
+
+  function prepareDdl() {
+    if (!liveDdlTarget || drafting || pendingOpen || activeQuery.current || ddlInFlight.current) return;
+    const sql = editorRef.current?.getExecutableSql() ?? "";
+    if (!sql.trim()) {
+      showDdlMessage(bt("schemaDdl.enterStatement"));
+      editorRef.current?.focus();
+      return;
+    }
+    setDdlPreview({ ...liveDdlTarget, sql });
+  }
+
+  async function applyDdl(request: SchemaDdlInput) {
+    if (request !== activeDdlPreview || activeQuery.current || ddlInFlight.current) return;
+    const revision = sourceRevision.current;
+    const requestKey = schemaDdlTargetKey(request);
+    const isCurrent = () => sourceRevision.current === revision && currentDdlTargetKey.current === requestKey;
+    ddlInFlight.current = true;
+    setApplyingDdl(true);
+    setDdlPreview(undefined);
+    setDraftExecution(undefined);
+    showDdlMessage("");
+    let receipt: SchemaDdlReceipt;
+    try {
+      receipt = await platform.executeSchemaDdl(request);
+    } catch (error) {
+      if (isCurrent()) showDdlMessage(bt("schemaDdl.failed", { value0: normalizeQueryError(bt, error).message }), "failed");
+      return;
+    } finally {
+      ddlInFlight.current = false;
+      setApplyingDdl(false);
+    }
+    if (receipt.kind === "outcomeUnknown") {
+      if (isCurrent()) showDdlMessage(bt("schemaDdl.outcomeUnknown"));
+      return;
+    }
+    onSchemaDdlCommitted?.(request, receipt.kind === "refreshed" ? receipt.capture : undefined);
+    if (!isCurrent()) return;
+    showDdlMessage(receipt.kind === "refreshed" ? bt("schemaDdl.committed")
+      : bt("schemaDdl.refreshFailed", { value0: receipt.message }), "succeeded");
+  }
+
   function stopQuery() {
-    if (activeQuery.current) void requestCancel(platform, activeQuery.current)?.catch((error: unknown) => {
-      setSession((current) => ({ ...current, message: bt("business.unableToStopQuery", { value0: queryError(bt, error).message }), activeTab: "message" }));
+    if (activeQuery.current) void platform.cancelQuery(activeQuery.current).catch((error: unknown) => {
+      setSession((current) => ({ ...current, message: bt("business.unableToStopQuery", { value0: normalizeQueryError(bt, error).message }), activeTab: "message" }));
     });
   }
   function showEditor() { setDrafting(false); setFocusOutput(false); }
+  function loadRequestedQuery(sql: string, append: boolean) {
+    const namedRequest = !pendingGenerated && (currentOpen?.kind === "saved" || currentOpen?.kind === "new");
+    setSavedQuery(append || pendingGenerated ? undefined : currentOpen?.savedQuery);
+    setSaveName(undefined);
+    setSaveFeedback(undefined);
+    if (namedRequest) setDraftExecution(undefined);
+    showEditor();
+    setSession((current) => ({
+      ...current,
+      draft: append ? `${current.draft.trimEnd()}\n\n${sql}` : sql,
+      previousDraft: namedRequest && !append && current.draft.trim() && current.draft !== sql
+        ? { sql: current.draft, rowLimit: current.rowLimit } : current.previousDraft,
+      ...(namedRequest ? { result: undefined, outcome: undefined, activeTab: "results", message: bt("business.ready") } as const : {}),
+    }));
+    closeOpen();
+    requestAnimationFrame(() => editorRef.current?.focus());
+  }
+  function saveCurrentQuery(event: React.FormEvent) {
+    event.preventDefault();
+    if (!onSaveQuery || !saveName?.trim() || !session.draft.trim()) return;
+    const outcome = onSaveQuery(saveName.trim(), session.draft, savedQuery?.id);
+    if ("error" in outcome) {
+      setSaveFeedback(outcome.error);
+      return;
+    }
+    setSavedQuery(outcome.query);
+    setSaveName(undefined);
+    setSaveFeedback("saved");
+  }
+  function closeSaveQuery() {
+    setSaveName(undefined);
+    setSaveFeedback(undefined);
+  }
   function restorePreviousDraft() {
     setSession((current) => current.previousDraft ? {
       ...current, draft: current.previousDraft.sql, rowLimit: current.previousDraft.rowLimit,
       previousDraft: undefined, result: undefined, outcome: undefined, activeTab: "results",
     } : current);
+    setSavedQuery(undefined);
     setDraftExecution(undefined);
     editorRef.current?.focus();
   }
@@ -217,15 +276,23 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     { id: "message", label: bt("business.message") },
     { id: "history", label: bt("business.history"), count: history.length },
   ];
+  const openTitle = pendingGenerated ? bt("business.useThisSQLDraft")
+    : currentOpen?.kind === "saved" ? bt("savedQueries.open", { value0: currentOpen.savedQuery?.name ?? "" })
+    : currentOpen?.kind === "new" ? bt("savedQueries.new")
+    : session.draft.trim() ? bt("business.editorAlreadyContainsSQL") : bt("business.previewTableRows");
+  const openMessage = pendingGenerated ? bt("business.thisReplacesTheEditorDraftYouCanUndoThe")
+    : currentOpen?.kind ? bt(session.draft.trim() ? "savedQueries.draftPreserved" : "savedQueries.openEditor")
+    : bt(session.draft.trim() ? "business.replaceItAppendTheGeneratedTableQueryOrKeep" : "business.openTheGeneratedReadOnlyQueryInTheEditor");
 
   return <section className="query-page" aria-label={bt("business.queryWorkspace")} data-focus-output={focusOutput || undefined} style={{ "--query-output-height": outputHeight } as CSSProperties} onKeyDownCapture={(event) => {
+    if (event.target instanceof Element && event.target.closest("dialog")) return;
     if (!(event.metaKey || event.ctrlKey) || event.altKey || event.nativeEvent.isComposing) return;
     const key = event.key.toLowerCase();
     if (key !== "r" && key !== "enter" && key !== ".") return;
     if (drafting && key === "enter") return; // The chat composer owns its send shortcut.
     // Own query shortcuts inside this workspace, including disabled states, so ⌘R cannot refresh the schema.
     event.preventDefault(); event.stopPropagation();
-    if (event.repeat || pendingOpen) return;
+    if (event.repeat || pendingOpen || activeDdlPreview || applyingDdl) return;
     if (key === ".") { if (!event.shiftKey) stopQuery(); return; }
     if (drafting || (key === "enter" && event.shiftKey)) return;
     void run(key === "r" && event.shiftKey ? editorRef.current?.getCurrentStatementSql() ?? "" : editorRef.current?.getExecutableSql() ?? "");
@@ -237,7 +304,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
         <span className="query-readonly" title={bt("business.queriesRunInAReadOnlyTransaction")}><ActionIcon name="shield" />{bt("business.readOnly")}</span>
         <label className="query-limit">{bt("business.rowLimit")}<select value={[100, 500, 1000].includes(session.rowLimit) ? session.rowLimit : "custom"} onChange={(event) => setSession((current) => ({ ...current, rowLimit: event.target.value === "custom" ? 5000 : Number(event.target.value) }))}><option value={100}>100</option><option value={500}>500</option><option value={1000}>1,000</option><option value="custom">{bt("business.custom")}</option></select></label>
         {![100, 500, 1000].includes(session.rowLimit) ? <label className="query-custom-limit"><input aria-label={bt("business.customRowLimit")} type="number" min={1} max={5000} value={session.rowLimit} onChange={(event) => setSession((current) => ({ ...current, rowLimit: Math.min(5000, Math.max(1, Number(event.target.value) || 1)) }))} /></label> : null}
-        <QueryRunControls executing={executing} disabled={!desktopReady || drafting || Boolean(pendingOpen)} onRun={() => void run(editorRef.current?.getExecutableSql() ?? "")} onRunCurrent={() => void run(editorRef.current?.getCurrentStatementSql() ?? "")} onStop={stopQuery} />
+        <QueryRunControls executing={executing} disabled={!desktopReady || drafting || Boolean(pendingOpen) || applyingDdl} onRun={() => void run(editorRef.current?.getExecutableSql() ?? "")} onRunCurrent={() => void run(editorRef.current?.getCurrentStatementSql() ?? "")} onStop={stopQuery} />
       </div>
     </header>
     {!desktopReady ? <div className="query-runtime-notice">{runtimeKind === "web" ? bt("business.queryIsAvailableOnlyInTheDesktopAppThe") : capability.scope}</div> : null}
@@ -256,9 +323,14 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
         {canDraft ? <button ref={draftTabRef} type="button" role="tab" id={`${editorId}-draft`} aria-controls={`${editorId}-draft-panel`} aria-selected={drafting} tabIndex={drafting ? 0 : -1} onClick={() => { setDrafting(true); setFocusOutput(false); }}><ActionIcon name="ai" />{bt("business.draftQuery")}</button> : null}
       </div>
       <span>{drafting ? bt("business.generateADraftThenReviewItInSQLEditor") : bt("business.runASelectionOrUseForTheCurrentStatement", { value0: queryKeys.current })}</span>
+      {onSaveQuery && !drafting && <button type="button" className="query-ddl-trigger" disabled={!session.draft.trim() || Boolean(pendingOpen)}
+        onClick={() => { setSaveName(savedQuery?.name ?? ""); setSaveFeedback(undefined); }}>{bt(savedQuery ? "savedQueries.update" : "savedQueries.save")}</button>}
+      {ddlEngine && !drafting && <button type="button" className="query-ddl-trigger" disabled={executing || applyingDdl || Boolean(pendingOpen)}
+        onClick={prepareDdl}>{bt("schemaDdl.run", { value0: ddlEngine })}</button>}
     </div>
+    {!drafting && saveFeedback === "saved" && <div className="query-draft-notice" role="status">{bt("savedQueries.saved")}</div>}
     <div className="query-input-pane">
-      <div className="query-editor-pane" role="tabpanel" id={`${editorId}-sql-panel`} aria-labelledby={`${editorId}-sql`} hidden={drafting}><SqlEditor ref={editorRef} value={session.draft} snapshot={snapshot} onChange={(draft) => setSession((current) => ({ ...current, draft }))} onRun={(sqlText) => void run(sqlText)} executing={executing} disabled={!desktopReady || Boolean(pendingOpen)} onStop={stopQuery} /></div>
+      <div className="query-editor-pane" role="tabpanel" id={`${editorId}-sql-panel`} aria-labelledby={`${editorId}-sql`} hidden={drafting}><SqlEditor ref={editorRef} value={session.draft} snapshot={snapshot} onChange={(draft) => setSession((current) => ({ ...current, draft }))} onRun={(sqlText) => void run(sqlText)} executing={executing} disabled={!desktopReady || Boolean(pendingOpen) || applyingDdl} ddlEngine={ddlEngine} onStop={stopQuery} /></div>
       {canDraft && snapshot && settings && semantics ? <div className="query-draft-pane" role="tabpanel" id={`${editorId}-draft-panel`} aria-labelledby={`${editorId}-draft`} hidden={!drafting}><QueryDraftPanel platform={platform} snapshot={snapshot} settings={settings} semantics={semantics} seed={draftSeed} initialTable={selectedTable} execution={draftExecution?.sourceId === sourceId && draftExecution.snapshotId === snapshot.id ? draftExecution : undefined} onOpenSettings={() => onOpenAiSettings?.()} onUseSql={(sql) => setGeneratedRequest({ sourceId, snapshotId: snapshot.id, sql, binding: draftBinding })} /></div> : null}
     </div>
     <div className="query-result-resizer" hidden={drafting} role="separator" aria-label={bt("business.resizeQueryResults")} aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={650} aria-valuenow={session.resultHeight} tabIndex={0} onMouseDown={beginResultResize} onKeyDown={(event) => {
@@ -274,7 +346,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
           event.preventDefault(); selectTab(tabs[next].id);
           document.getElementById(`${outputId}-${tabs[next].id}`)?.focus();
         }}>{tab.label}{tab.count !== undefined ? <span className="query-tab-count">{tab.count}</span> : null}</button>)}</div>
-        <span className="query-result-summary" role="status">{executing ? bt("business.runningS", { value0: (elapsedMs / 1000).toFixed(1) }) : session.outcome === "failed" ? bt("business.queryFailedSeeMessage") : session.result ? bt("business.msDetail", { value0: session.result.rowCount, value1: session.result.rowCount === 1 ? bt("businessExtra.row") : bt("business.rows"), value2: session.result.durationMs, value3: session.result.truncated ? bt("businessExtra.limitReached") : "" }) : bt("business.ready")}</span>
+        <span className="query-result-summary" role="status">{applyingDdl ? bt("schemaDdl.applying") : executing ? bt("business.runningS", { value0: (elapsedMs / 1000).toFixed(1) }) : session.outcome === "failed" ? bt("business.queryFailedSeeMessage") : session.result ? bt("business.msDetail", { value0: session.result.rowCount, value1: session.result.rowCount === 1 ? bt("businessExtra.row") : bt("business.rows"), value2: session.result.durationMs, value3: session.result.truncated ? bt("businessExtra.limitReached") : "" }) : bt("business.ready")}</span>
         <div className="query-pane-actions">
           <button type="button" aria-label={focusOutput ? bt("business.restoreSplitView") : bt("business.expandOutputPane")} title={focusOutput ? bt("business.restoreSplitView") : bt("business.expandOutputPane")} aria-pressed={focusOutput} onClick={() => { setFocusOutput(!focusOutput); setSession((current) => ({ ...current, outputCollapsed: false })); }}><ActionIcon name={focusOutput ? "split" : "expand"} /></button>
           <button type="button" aria-label={session.outputCollapsed ? bt("business.expandQueryOutput") : bt("business.collapseQueryOutput")} title={session.outputCollapsed ? bt("business.expandQueryOutput") : bt("business.collapseQueryOutput")} aria-expanded={!session.outputCollapsed} onClick={() => { setFocusOutput(false); setSession((current) => ({ ...current, outputCollapsed: !current.outputCollapsed })); }}><span className="query-collapse-icon" data-collapsed={session.outputCollapsed || undefined}><ActionIcon name="chevronUp" /></span></button>
@@ -283,9 +355,17 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
       {!session.outputCollapsed ? <div className="query-output-body" role="tabpanel" id={`${outputId}-panel`} aria-labelledby={`${outputId}-${session.activeTab}`} tabIndex={0}>{session.activeTab === "results" ? <QueryResultGrid result={session.result} platform={platform} /> : session.activeTab === "message" ? <pre className="query-message">{session.message}</pre> : <QueryHistory entries={history} onRestore={(draft) => { showEditor(); setSession((current) => ({ ...current, draft })); requestAnimationFrame(() => editorRef.current?.focus()); }} onDelete={(id) => { void platform.deleteQueryHistory(sourceId, id).then(() => setHistoryRecord((current) => ({ ...current, entries: current.entries.filter((item) => item.id !== id) }))); }} onClear={() => { if (window.confirm(bt("business.clearAllLocalQueryHistoryForThisDataSource"))) void platform.clearQueryHistory(sourceId).then(() => setHistoryRecord({ sourceId, entries: [] })); }} />}</div> : null}
     </section>
 
-    {pendingOpen ? <div className="query-dialog-backdrop" role="presentation"><section className="query-dialog" role="dialog" aria-modal="true" aria-label={bt("business.openGeneratedQuery")} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeOpen(); } }}><h3>{pendingGenerated ? bt("business.useThisSQLDraft") : session.draft.trim() ? bt("business.editorAlreadyContainsSQL") : bt("business.previewTableRows")}</h3><p>{pendingGenerated ? bt("business.thisReplacesTheEditorDraftYouCanUndoThe") : session.draft.trim() ? bt("business.replaceItAppendTheGeneratedTableQueryOrKeep") : bt("business.openTheGeneratedReadOnlyQueryInTheEditor")}</p>{pendingGenerated ? <pre aria-label={bt("business.sQLToInsert")}>{pendingGenerated.sql}</pre> : null}<div><button type="button" onClick={() => {
+    {activeDdlPreview && <SchemaDdlDialog request={activeDdlPreview} onCancel={() => setDdlPreview(undefined)} onConfirm={() => void applyDdl(activeDdlPreview)} />}
+    {saveName !== undefined && onSaveQuery && !pendingOpen ? <ModalSurface label={bt("savedQueries.save")} onDismiss={closeSaveQuery}><div className="query-dialog-backdrop" role="presentation"><form className="query-dialog ds-surface" onSubmit={saveCurrentQuery}>
+      <h3>{bt(savedQuery ? "savedQueries.update" : "savedQueries.save")}</h3>
+      <label className="saved-query-name">{bt("savedQueries.name")}<input data-modal-focus value={saveName} maxLength={120} onChange={(event) => { setSaveName(event.target.value); setSaveFeedback(undefined); }} /></label>
+      {saveFeedback && <p role="alert">{bt(`savedQueries.${saveFeedback}`)}</p>}
+      <div><button className="ds-primary" type="submit" disabled={!saveName.trim()}>{bt("savedQueries.saveAction")}</button>
+        <button type="button" onClick={closeSaveQuery}>{bt("business.cancel")}</button></div>
+    </form></div></ModalSurface> : null}
+    {pendingOpen ? <ModalSurface label={currentOpen?.kind && !pendingGenerated ? openTitle : bt("business.openGeneratedQuery")} onDismiss={closeOpen}><div className="query-dialog-backdrop" role="presentation"><section className="query-dialog ds-surface"><h3>{openTitle}</h3><p>{openMessage}</p>{pendingGenerated ? <pre aria-label={bt("business.sQLToInsert")}>{pendingGenerated.sql}</pre> : null}<div><button type="button" className="ds-primary" onClick={() => {
       if (pendingGenerated) { setAppliedDraft({ ...pendingGenerated, previous: session.draft }); setDrafting(false); }
-      showEditor(); setSession((current) => ({ ...current, draft: pendingOpen.sql })); closeOpen(); requestAnimationFrame(() => editorRef.current?.focus());
-    }}>{bt("business.replace")}</button>{session.draft.trim() && !pendingGenerated ? <button type="button" onClick={() => { showEditor(); setSession((current) => ({ ...current, draft: `${current.draft.trimEnd()}\n\n${pendingOpen.sql}` })); closeOpen(); }}>{bt("business.append")}</button> : null}<button type="button" autoFocus onClick={closeOpen}>{bt("business.cancel")}</button></div></section></div> : null}
+      loadRequestedQuery(pendingOpen.sql, false);
+    }}>{bt(currentOpen?.kind && !pendingGenerated ? "savedQueries.openAction" : "business.replace")}</button>{session.draft.trim() && !pendingGenerated && !currentOpen?.kind ? <button type="button" onClick={() => loadRequestedQuery(pendingOpen.sql, true)}>{bt("business.append")}</button> : null}<button type="button" data-modal-focus onClick={closeOpen}>{bt("business.cancel")}</button></div></section></div></ModalSurface> : null}
   </section>;
 }

@@ -230,6 +230,9 @@ mod tests {
                 .is_ok()
         );
         assert!(validate_read_only_postgres("SELECT 1 UNION ALL SELECT 2").is_ok());
+        assert!(validate_read_only_postgres(
+            "SELECT * FROM users WHERE (LOWER(CAST(name AS TEXT)) LIKE LOWER($nodal$Café!_%$nodal$) ESCAPE '!') AND (id BETWEEN $nodal$1$nodal$ AND $nodal$10$nodal$) LIMIT 101;"
+        ).is_ok());
     }
 
     #[test]
@@ -265,6 +268,7 @@ mod tests {
             "WITH items AS (SELECT 1 AS id) SELECT id FROM items UNION ALL SELECT 2",
             "SELECT '/*! not executable */', 'INTO', '`', 1 # trailing comment\n",
             "SELECT JSON_EXTRACT('{\"ok\":true}', '$.ok')",
+            "SELECT * FROM users WHERE (LOWER(CONVERT(name USING utf8mb4)) LIKE (LOWER(CONVERT(X'254125' USING utf8mb4)) COLLATE utf8mb4_bin) ESCAPE '!') OR (id IN (1, 2)) LIMIT 101;",
         ] {
             assert!(validate_read_only_mysql(sql).is_ok(), "rejected {sql}");
         }
