@@ -954,8 +954,9 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     const pageKey = tablePageNumberKey(reportSnapshot.sourceId, "public", "orders");
     const jumpToFour = async () => {
       fireEvent.change(screen.getByRole("spinbutton", { name: "Go to page" }), { target: { value: "4" } });
-      await waitFor(() => expect(go).toBeEnabled());
-      fireEvent.click(go);
+      const jumpButton = screen.getByRole("button", { name: "Go" });
+      await waitFor(() => expect(jumpButton).toBeEnabled());
+      fireEvent.click(jumpButton);
       expect(await screen.findByTitle("151")).toBeVisible();
       fireEvent.scroll(grid(), { target: { scrollLeft: 150, scrollTop: 310 } });
     };
