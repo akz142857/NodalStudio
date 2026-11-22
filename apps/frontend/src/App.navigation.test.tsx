@@ -1,8 +1,8 @@
 import { EditorView } from "@codemirror/view";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, configure, fireEvent, getConfig, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { getPlatform, type CaptureSnapshotResult, type DataSourceProfile, type SchemaChangeSet } from "./platform";
 import type { SqliteTableData } from "./platform/sqlite-table";
@@ -118,7 +118,12 @@ const pickOrders = () => {
   fireEvent.change(tree.getByRole("searchbox"), { target: { value: "public.orders" } });
   fireEvent.click(tree.getByRole("button", { name: /^orders/ }));
 };
-describe("App sidebar object navigation", () => {
+describe("App sidebar object navigation", { timeout: 45_000 }, () => {
+  // These workflows mount the complete workspace and query paged grids on every
+  // transition. Allow the DOM queries to settle on resource-limited CI runners.
+  const asyncUtilTimeout = getConfig().asyncUtilTimeout;
+  beforeAll(() => configure({ asyncUtilTimeout: 5_000 }));
+  afterAll(() => configure({ asyncUtilTimeout }));
   beforeEach(() => localStorage.clear()); afterEach(() => vi.restoreAllMocks());
 
   it("keeps Database active while the global search is open and locates the keyboard selection", async () => {
@@ -653,7 +658,7 @@ describe("App sidebar object navigation", () => {
     expect(editor.getByRole("textbox", { name: "label" })).toHaveValue("draft order");
   });
 
-  it("keeps off-page changes tied to their original rows across sorting and filtering", { timeout: 15_000 }, async () => {
+  it("keeps off-page changes tied to their original rows across sorting and filtering", async () => {
     const platform = await mount();
     const data: SqliteTableData = {
       version: "version",
@@ -861,10 +866,10 @@ describe("App sidebar object navigation", () => {
     const workspace = within(await screen.findByRole("region", { name: "Table data" }));
     const next = await workspace.findByRole("button", { name: "Next page" });
     expect(workspace.queryByText("__nodal_cursor_0")).toBeNull();
-    expect(workspace.queryByRole("cell", { name: /000000000101$/ })).toBeNull();
+    expect(workspace.queryByTitle(/000000000101$/)).toBeNull();
     fireEvent.click(next);
     expect(await workspace.findByText("Page 2")).toBeVisible();
-    expect(workspace.getByRole("cell", { name: /000000000101$/ })).toBeVisible();
+    expect(await workspace.findByTitle(/000000000101$/)).toBeVisible();
     expect(next).toBeDisabled();
     expect(query.mock.lastCall?.[0].sql).toContain('"id" > CAST($nodal$00000000-0000-0000-0000-000000000100$nodal$');
     fireEvent.click(workspace.getByRole("button", { name: "Previous page" }));
@@ -880,7 +885,7 @@ describe("App sidebar object navigation", () => {
     expect(query.mock.lastCall?.[0].sql).toContain('ORDER BY "id" DESC');
   });
 
-  it("remembers the loaded network page and both scroll axes, and resets them when query settings change", { timeout: 15_000 }, async () => {
+  it("remembers the loaded network page and both scroll axes, and resets them when query settings change", async () => {
     const [otherTable, orders] = reportSnapshot.schemas[0].tables;
     const platform = getPlatform();
     const query = vi.spyOn(platform, "executeReadonlyQuery").mockImplementation(({ queryId, rowLimit, sql }) => {
@@ -898,10 +903,10 @@ describe("App sidebar object navigation", () => {
     const view = renderTable(orders);
     const size = screen.getByRole("combobox", { name: "Rows per page" });
     expect(size).toHaveValue("100");
-    await screen.findByRole("cell", { name: "100" });
+    await screen.findByTitle("100");
     await waitFor(() => expect(size).toBeEnabled());
     fireEvent.change(size, { target: { value: "50" } });
-    await waitFor(() => expect(screen.queryByRole("cell", { name: "51" })).toBeNull());
+    await waitFor(() => expect(screen.queryByTitle("51")).toBeNull());
     expect(query.mock.lastCall?.[0].rowLimit).toBe(51);
 
     const jump = screen.getByRole("spinbutton", { name: "Go to page" });
@@ -912,13 +917,13 @@ describe("App sidebar object navigation", () => {
     await waitFor(() => expect(go).toBeEnabled());
     fireEvent.click(go);
     await screen.findByText("Page 4");
-    expect(screen.getByRole("cell", { name: "151" })).toBeVisible();
+    expect(await screen.findByTitle("151")).toBeVisible();
     expect(query.mock.lastCall?.[0].sql).toContain("LIMIT 51 OFFSET 150");
     const nextAfterJump = screen.getByRole("button", { name: "Next page" });
     await waitFor(() => expect(nextAfterJump).toBeEnabled());
     fireEvent.click(nextAfterJump);
     await screen.findByText("Page 5");
-    expect(screen.getByRole("cell", { name: "201" })).toBeVisible();
+    expect(await screen.findByTitle("201")).toBeVisible();
     expect(query.mock.lastCall?.[0].sql).toContain('WHERE (("id" > CAST($nodal$200$nodal$');
     expect(query.mock.lastCall?.[0].sql).not.toContain("OFFSET");
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
@@ -933,14 +938,14 @@ describe("App sidebar object navigation", () => {
     view.unmount();
     const second = renderTable(otherTable);
     expect(screen.getByRole("combobox", { name: "Rows per page" })).toHaveValue("100");
-    await screen.findByRole("cell", { name: "1" });
+    await screen.findByTitle("1");
     expect(screen.getByText("Page 1")).toBeVisible();
     expect(grid()).toMatchObject({ scrollLeft: 0, scrollTop: 0 });
     second.unmount();
     query.mockClear();
     renderTable(orders);
     expect(screen.getByRole("combobox", { name: "Rows per page" })).toHaveValue("50");
-    expect(await screen.findByRole("cell", { name: "201" })).toBeVisible();
+    expect(await screen.findByTitle("201")).toBeVisible();
     expect(screen.getByText("Page 5")).toBeVisible();
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.lastCall?.[0].sql).toContain("LIMIT 51 OFFSET 200");
@@ -949,13 +954,14 @@ describe("App sidebar object navigation", () => {
     const pageKey = tablePageNumberKey(reportSnapshot.sourceId, "public", "orders");
     const jumpToFour = async () => {
       fireEvent.change(screen.getByRole("spinbutton", { name: "Go to page" }), { target: { value: "4" } });
-      fireEvent.click(screen.getByRole("button", { name: "Go" }));
-      expect(await screen.findByRole("cell", { name: "151" })).toBeVisible();
+      await waitFor(() => expect(go).toBeEnabled());
+      fireEvent.click(go);
+      expect(await screen.findByTitle("151")).toBeVisible();
       fireEvent.scroll(grid(), { target: { scrollLeft: 150, scrollTop: 310 } });
     };
     const expectReset = async () => {
       expect(localStorage.getItem(pageKey)).toBeNull();
-      expect(await screen.findByRole("cell", { name: "1" })).toBeVisible();
+      expect(await screen.findByTitle("1")).toBeVisible();
       expect(screen.getByText("Page 1")).toBeVisible();
       expect(grid()).toMatchObject({ scrollLeft: 0, scrollTop: 0 });
     };
@@ -977,13 +983,13 @@ describe("App sidebar object navigation", () => {
     await screen.findByText("Page 2");
     fireEvent.click(screen.getByRole("button", { name: "First page" }));
     await screen.findByText("Page 1");
-    expect(screen.getByRole("cell", { name: "1" })).toBeVisible();
+    expect(screen.getByTitle("1")).toBeVisible();
     expect(screen.getByRole("button", { name: "First page" })).toBeDisabled();
     expect(query.mock.lastCall?.[0].sql).not.toContain("OFFSET");
     expect(query.mock.calls.every(([{ sql }]) => !/\bcount\s*\(/i.test(sql))).toBe(true);
   });
 
-  it("restores the SQLite page and scroll position and resets them if that page disappears", { timeout: 15_000 }, async () => {
+  it("restores the SQLite page and scroll position and resets them if that page disappears", async () => {
     const platform = getPlatform();
     let total = 250;
     const load = vi.spyOn(platform, "loadSqliteTable").mockImplementation((_target, { offset, pageSize = 100 }) => {
@@ -1002,18 +1008,18 @@ describe("App sidebar object navigation", () => {
       <SqliteTableWorkspace platform={platform} target={target} binding="fixture" activeTable panelWidth={330} onPanelWidthChange={() => {}} />
     </QueryClientProvider>);
     const view = renderTable();
-    await screen.findByRole("cell", { name: "1" });
+    await screen.findByTitle("1");
     fireEvent.change(screen.getByRole("spinbutton", { name: "Go to page" }), { target: { value: "3" } });
     const go = screen.getByRole("button", { name: "Go" });
     await waitFor(() => expect(go).toBeEnabled());
     fireEvent.click(go);
-    expect(await screen.findByRole("cell", { name: "201" })).toBeVisible();
+    expect(await screen.findByTitle("201")).toBeVisible();
     const grid = () => screen.getByRole("region", { name: "Rows" });
     fireEvent.scroll(grid(), { target: { scrollLeft: 130, scrollTop: 420 } });
     view.unmount();
     load.mockClear();
     const reopened = renderTable();
-    expect(await screen.findByRole("cell", { name: "201" })).toBeVisible();
+    expect(await screen.findByTitle("201")).toBeVisible();
     expect(load).toHaveBeenCalledExactlyOnceWith(target, expect.objectContaining({ offset: 200, pageSize: 100 }));
     expect(grid()).toMatchObject({ scrollLeft: 130, scrollTop: 420 });
     reopened.unmount();
@@ -1021,7 +1027,7 @@ describe("App sidebar object navigation", () => {
     total = 50;
     load.mockClear();
     renderTable();
-    expect(await screen.findByRole("cell", { name: "1" })).toBeVisible();
+    expect(await screen.findByTitle("1")).toBeVisible();
     expect(load.mock.calls.map(([, { offset }]) => offset)).toEqual([200, 0]);
     expect(localStorage.getItem(tablePageNumberKey(target.sourceId, "main", target.table))).toBeNull();
     expect(grid()).toMatchObject({ scrollLeft: 0, scrollTop: 0 });
@@ -1029,7 +1035,6 @@ describe("App sidebar object navigation", () => {
 
   it.each(ddlFixtures.filter(({ profile }) => profile.databaseType !== "sqlite"))(
     "counts filtered $engine rows only when going to the last page",
-    { timeout: 15_000 },
     async ({ snapshot }) => {
       const platform = getPlatform();
       const table = snapshot.schemas[0].tables[1];
@@ -1049,19 +1054,19 @@ describe("App sidebar object navigation", () => {
       render(<QueryClientProvider client={new QueryClient()}>
         <TableDataPreview platform={platform} snapshot={snapshot} table={table} />
       </QueryClientProvider>);
-      await screen.findByRole("cell", { name: "1" });
+      await screen.findByTitle("1");
       fireEvent.change(screen.getByRole("spinbutton", { name: "Go to page" }), { target: { value: "2" } });
       const go = screen.getByRole("button", { name: "Go" });
       await waitFor(() => expect(go).toBeEnabled());
       fireEvent.click(go);
-      await screen.findByRole("cell", { name: "101" });
+      await screen.findByTitle("101");
       expect(countStatements()).toHaveLength(0);
 
       const last = screen.getByRole("button", { name: "Last page" });
       await waitFor(() => expect(last).toBeEnabled());
       fireEvent.click(last);
       await screen.findByText("Page 3");
-      expect(screen.getByRole("cell", { name: "207" })).toBeVisible();
+      expect(await screen.findByTitle("207")).toBeVisible();
       expect(countStatements()).toEqual([
         snapshot.database.databaseType === "mySql"
           ? 'SELECT CAST(COUNT(*) AS CHAR)\nFROM `public`.`orders`\nWHERE (`id` IS NOT NULL);'

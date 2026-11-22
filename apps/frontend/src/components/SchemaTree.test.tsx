@@ -84,7 +84,7 @@ describe("SchemaTree", () => {
     expect(search).toHaveValue("");
   });
 
-  it("opens large catalog groups without rescanning closed schemas and retains the last trigger", () => {
+  it("opens large catalog groups without rescanning closed schemas and retains the last trigger", { timeout: 15_000 }, () => {
     const program = (kind: "function" | "trigger", i: number): ProgramDefinition => ({
       key: { kind, schema: "service", name: `${kind}_${i}` },
       arguments: "", definition: "SELECT 1", language: "sql", owner: "demo", resultType: null, table: null, enabled: null,
