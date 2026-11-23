@@ -1,0 +1,70 @@
+.search-select {
+  display: grid;
+  align-content: start;
+  gap: var(--ds-space-1);
+  min-width: 0;
+}
+
+.search-select-anchor { position: relative; min-width: 0; }
+.search-select-anchor input {
+  box-sizing: border-box;
+  width: 100%;
+  padding-inline-end: 30px;
+  text-overflow: ellipsis;
+}
+.search-select-anchor > svg {
+  position: absolute;
+  inset-inline-end: 9px;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  color: var(--ds-secondary);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.search-select-anchor input:disabled + svg { opacity: .5; }
+
+.search-select-popup {
+  position: fixed;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 224px;
+  padding: 4px;
+  overflow: hidden;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-group);
+  color: var(--ds-text);
+  background: var(--ds-surface);
+  box-shadow: var(--ds-shadow-popover);
+  font-family: var(--ds-font-ui);
+}
+
+.search-select-popup [role="listbox"] { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.search-select-popup .search-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-2);
+  width: 100%;
+  min-height: var(--ds-control-height-small);
+  margin: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--ds-radius-control);
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: var(--ds-text-control);
+  text-align: start;
+}
+.search-select-option > span { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.search-select-option svg { flex: 0 0 14px; width: 14px; height: 14px; }
+.search-select-option small, .search-select-status { color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.search-select-status { flex: none; padding: 6px 8px; }
+.search-select-popup .search-select-option:hover { background: var(--ds-hover); }
+.search-select-popup .search-select-option[data-active="true"] {
+  color: var(--ds-selection-text);
+  background: var(--ds-selection);
+}

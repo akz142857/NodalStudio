@@ -20,7 +20,5 @@
 .object-definition-search input { flex: 1; min-width: 100px; }
 .object-definition-code { flex: 1; min-height: 0; overflow: hidden; font-size: var(--ds-text-control); }
 .object-document .object-dependencies { border-top: 0; padding-top: 0; }
-.inspector > .object-properties-panel { padding: var(--ds-space-4); font-size: var(--ds-text-control); }
-.inspector .object-document-properties > div { grid-template-columns: 1fr; gap: var(--ds-space-1); }
 .object-properties-panel { min-width: 0; overflow-wrap: anywhere; }
 .object-document-actions button[aria-pressed="true"] { background: var(--ds-selection); color: var(--ds-accent); }

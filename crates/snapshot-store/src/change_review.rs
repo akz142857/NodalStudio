@@ -13,6 +13,8 @@ use serde_json::{Value, json};
 use sqlx::{Sqlite, Transaction};
 use uuid::Uuid;
 
+pub mod ontology;
+
 type Result<T> = std::result::Result<T, SnapshotStoreError>;
 fn conflict(message: &str) -> SnapshotStoreError {
     SnapshotStoreError::ReviewConflict(message.into())
@@ -83,6 +85,7 @@ pub struct ReviewRequest {
 pub struct ReviewQuery {
     pub view: Option<String>,
     pub search: Option<String>,
+    pub item_key: Option<String>,
     pub cursor: Option<String>,
     pub limit: Option<usize>,
 }
@@ -108,15 +111,20 @@ impl ReviewQuery {
     /// # Errors
     /// Rejects unsupported views and oversized search/page input before any write.
     pub fn validate(&self) -> Result<()> {
-        if !matches!(
-            self.view.as_deref().unwrap_or("impact"),
-            "impact" | "structure" | "events"
-        ) || self.limit.is_some_and(|n| n == 0 || n > 100)
+        let view = self.view.as_deref().unwrap_or("impact");
+        if !matches!(view, "impact" | "structure" | "events")
+            || self.limit.is_some_and(|n| n == 0 || n > 100)
             || self
                 .search
                 .as_ref()
                 .is_some_and(|q| q.chars().count() > 200)
             || self.cursor.as_ref().is_some_and(|c| c.len() > 2048)
+            || self.item_key.as_deref().is_some_and(|key| {
+                view != "impact"
+                    || key
+                        .strip_prefix("ontology:")
+                        .is_none_or(|id| Uuid::parse_str(id).is_err())
+            })
         {
             return Err(conflict("Invalid review page query."));
         }
@@ -131,7 +139,7 @@ pub fn page_workspace(mut workspace: ReviewWorkspace, query: &ReviewQuery) -> Re
     let view = query.view.as_deref().unwrap_or("impact");
     let search = query.search.as_deref().unwrap_or("").trim().to_lowercase();
     let limit = query.limit.unwrap_or(50);
-    let filter = digest(&(view, &search, limit));
+    let filter = digest(&(view, &search, limit, &query.item_key));
     let offset = if let Some(raw) = &query.cursor {
         let cursor: ReviewCursor =
             serde_json::from_str(raw).map_err(|_| conflict("Invalid review cursor."))?;
@@ -177,6 +185,7 @@ pub fn page_workspace(mut workspace: ReviewWorkspace, query: &ReviewQuery) -> Re
         workspace.events.clear();
         workspace.items.retain(|i| {
             (i.kind == "structure") == (view == "structure")
+                && query.item_key.as_ref().is_none_or(|key| i.key == *key)
                 && format!("{} {}", i.title, i.kind)
                     .to_lowercase()
                     .contains(&search)
@@ -299,6 +308,7 @@ impl LocalSnapshotStore {
             ));
         }
         let text = request.text.as_deref().unwrap_or("").trim();
+        let mut event_text = text.to_owned();
         if text.chars().count() > 2000 {
             return Err(conflict("Use at most 2,000 characters."));
         }
@@ -337,7 +347,7 @@ impl LocalSnapshotStore {
             let identity = knowledge::identity_in(&mut tx, request.source_id).await?;
             if let Some(raw) = receipt {
                 let receipt: Value = serde_json::from_str(&raw)?;
-                if receipt["status"] == "failed"
+                if receipt["status"] != "success"
                     || receipt["identity"]
                         .as_str()
                         .is_some_and(|captured| captured != identity)
@@ -440,7 +450,7 @@ impl LocalSnapshotStore {
                 base.completed = true;
             } else {
                 let item = item
-                    .as_ref()
+                    .as_mut()
                     .ok_or_else(|| conflict("This review item is no longer available."))?;
                 if !item.actions.contains(&request.action) {
                     return Err(conflict(
@@ -455,6 +465,10 @@ impl LocalSnapshotStore {
                     return Err(conflict("Record a reason for this decision."));
                 }
                 match request.action.as_str() {
+                    "confirmOntology" => {
+                        ontology::ensure_capture_available(&current)?;
+                        event_text = ontology::close(&mut tx, &snapshot, item, text).await?;
+                    }
                     "confirm" => {
                         let target = item
                             .object
@@ -616,22 +630,32 @@ impl LocalSnapshotStore {
             at: Utc::now().to_rfc3339(),
             action: request.action.clone(),
             item,
-            text: text.into(),
+            text: event_text,
             items: batch,
             restorable: false,
         };
-        sqlx::query("INSERT INTO change_review_events VALUES(?,?,?,?,?)")
-            .bind(request.operation_id.to_string())
-            .bind(request.source_id.to_string())
-            .bind(base.round.to_string())
-            .bind(request_hash)
-            .bind(serde_json::to_string(&event)?)
-            .execute(&mut *tx)
-            .await?;
+        record_event_in(&mut tx, request.source_id, &request_hash, &event).await?;
         let result = workspace(&mut tx, request.source_id).await?;
         tx.commit().await?;
         Ok(result)
     }
+}
+
+async fn record_event_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    source: Uuid,
+    request_hash: &str,
+    event: &ReviewEvent,
+) -> Result<()> {
+    sqlx::query("INSERT INTO change_review_events VALUES(?,?,?,?,?)")
+        .bind(event.id.to_string())
+        .bind(source.to_string())
+        .bind(event.round_id.to_string())
+        .bind(request_hash)
+        .bind(serde_json::to_string(event)?)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 async fn baseline_in(tx: &mut Transaction<'_, Sqlite>, source: Uuid) -> Result<Option<Baseline>> {
@@ -649,7 +673,14 @@ pub(super) async fn receipt_in(
     tx: &mut Transaction<'_, Sqlite>,
     snapshot: &DatabaseSnapshot,
 ) -> Result<()> {
-    let receipt = json!({"at": Utc::now().to_rfc3339(), "snapshotId": snapshot.id, "identity": knowledge::identity_in(tx, snapshot.source_id).await?, "schemas": snapshot.schemas.iter().map(|s| &s.name).collect::<Vec<_>>(), "coverage": "observedMetadataOnly", "status": "success"});
+    let profile = knowledge::profile_in(tx, snapshot.source_id).await?;
+    let receipt = json!({
+        "at": Utc::now().to_rfc3339(), "snapshotId": snapshot.id,
+        "identity": semantic_model::knowledge::source_identity(profile.as_ref()),
+        "ontologyIdentity": crate::ontology::connection_identity(profile.as_ref()),
+        "schemas": snapshot.schemas.iter().map(|s| &s.name).collect::<Vec<_>>(),
+        "coverage": "observedMetadataOnly", "status": "success"
+    });
     sqlx::query("INSERT INTO change_review_receipts VALUES(?,?) ON CONFLICT(source_id) DO UPDATE SET payload_json=excluded.payload_json")
         .bind(snapshot.source_id.to_string()).bind(receipt.to_string()).execute(&mut **tx).await?;
     Ok(())
@@ -729,7 +760,7 @@ async fn workspace(tx: &mut Transaction<'_, Sqlite>, source: Uuid) -> Result<Rev
             .bind(source.to_string())
             .fetch_optional(&mut **tx)
             .await?;
-    let mut items = Vec::new();
+    let mut items = ontology::project(tx, &target).await?;
     if receipt
         .as_deref()
         .and_then(|r| serde_json::from_str::<Value>(r).ok())
@@ -947,6 +978,7 @@ async fn workspace(tx: &mut Transaction<'_, Sqlite>, source: Uuid) -> Result<Rev
     let mut events: Vec<ReviewEvent> = deserialize_payloads(rows)?;
     for i in &mut items {
         i.evidence = digest(&(&identity, &i.evidence));
+        ontology::project_verification(i, &events, base.as_ref().map(|b| b.round));
         if let Some(e) = events.iter().rev().find(|e| {
             matches!(
                 e.action.as_str(),
@@ -993,6 +1025,7 @@ async fn workspace(tx: &mut Transaction<'_, Sqlite>, source: Uuid) -> Result<Rev
         &groups,
         &views,
         &receipt,
+        &items,
         &events,
     ));
     let restorable: Vec<bool> = events
@@ -1668,6 +1701,48 @@ mod tests {
         assert_eq!(result.pending_count, 126);
         q.limit = Some(101);
         assert!(page_workspace(w, &q).is_err());
+    }
+
+    #[tokio::test]
+    async fn focused_ontology_review_can_find_an_item_off_the_first_page() {
+        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
+        let mut workspace = setup(&store).await;
+        for n in 0..60 {
+            workspace.items.push(item(
+                "annotation",
+                format!("note:{n}"),
+                format!("Description {n:02}"),
+                None,
+                "supportChanged",
+                Value::Null,
+                Value::Null,
+                &["defer"],
+            ));
+        }
+        let key = format!("ontology:{}", Uuid::new_v4());
+        workspace.items.push(item(
+            "ontology",
+            key.clone(),
+            "Paid orders".into(),
+            None,
+            "ontologyBindingChanged",
+            Value::Null,
+            Value::Null,
+            &["confirmOntology"],
+        ));
+        let general = page_workspace(workspace.clone(), &ReviewQuery::default()).unwrap();
+        assert!(general.workspace.items.iter().all(|entry| entry.key != key));
+        let selected = page_workspace(
+            workspace,
+            &ReviewQuery {
+                item_key: Some(key.clone()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(selected.pending_count, general.pending_count);
+        assert_eq!(selected.total, 1);
+        assert_eq!(selected.workspace.items[0].key, key);
     }
 
     #[tokio::test]

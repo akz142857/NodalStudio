@@ -21,6 +21,7 @@ interface TableKnowledgeFormProps {
   table: TableDefinition;
   sourceId: string;
   annotation?: ObjectAnnotation;
+  readOnly?: boolean;
   onSaveAnnotation: (input: SaveAnnotationInput) => Promise<void>;
 }
 
@@ -143,6 +144,7 @@ export function TableKnowledgeForm({
   table,
   sourceId,
   annotation,
+  readOnly = false,
   onSaveAnnotation,
 }: TableKnowledgeFormProps) {
   const { t: bt } = useI18n();
@@ -154,10 +156,12 @@ export function TableKnowledgeForm({
   const [error, setError] = useState<string>();
 
   const normalizedTags = tags.split(",").map((tag) => tag.trim()).filter(Boolean);
-  useUpdateBlocker(bt("business.saveOrDiscardTableKnowledgeEdits"), status === "saving" || description !== (annotation?.description ?? "") || JSON.stringify(normalizedTags) !== JSON.stringify(annotation?.tags ?? []) || owner !== (annotation?.owner ?? "") || isCore !== (annotation?.isCore ?? false));
+  useUpdateBlocker(bt("business.saveOrDiscardTableKnowledgeEdits"), !readOnly && (status === "saving" || description !== (annotation?.description ?? "") || JSON.stringify(normalizedTags) !== JSON.stringify(annotation?.tags ?? []) || owner !== (annotation?.owner ?? "") || isCore !== (annotation?.isCore ?? false)));
 
   async function saveAnnotation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (readOnly || status === "saving") return;
+    setError(undefined);
     setStatus("saving");
     try {
       await onSaveAnnotation({
@@ -179,19 +183,21 @@ export function TableKnowledgeForm({
     <form className="annotation-form" onSubmit={(event) => void saveAnnotation(event)}>
       <div className="annotation-heading">
         <h3>{bt("business.teamKnowledge")}</h3>
-        <span data-status={status}>
-          {status === "saving"
+        <span data-status={status} role={status === "error" ? "alert" : "status"}>
+          {readOnly ? bt("business.readOnly") : status === "saving"
             ? bt("business.saving")
             : status === "saved"
               ? bt("business.saved")
               : status === "error"
                 ? (error ?? bt("business.saveFailed"))
-                : bt("business.editable")}
+                : ""}
         </span>
       </div>
       <label>
         {bt("business.description")}<textarea
           rows={3}
+          readOnly={readOnly}
+          disabled={status === "saving"}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           placeholder={bt("business.whatBusinessRoleDoesThisTablePlay")}
@@ -199,6 +205,8 @@ export function TableKnowledgeForm({
       </label>
       <label>
         {bt("business.tags")}<input
+          readOnly={readOnly}
+          disabled={status === "saving"}
           value={tags}
           onChange={(event) => setTags(event.target.value)}
           placeholder={bt("business.identityBillingCore")}
@@ -206,6 +214,8 @@ export function TableKnowledgeForm({
       </label>
       <label>
         {bt("business.owner")}<input
+          readOnly={readOnly}
+          disabled={status === "saving"}
           value={owner}
           onChange={(event) => setOwner(event.target.value)}
           placeholder={bt("business.teamOrPerson")}
@@ -214,12 +224,13 @@ export function TableKnowledgeForm({
       <label className="core-toggle">
         <input
           type="checkbox"
+          disabled={readOnly || status === "saving"}
           checked={isCore}
           onChange={(event) => setIsCore(event.target.checked)}
         />
         {bt("business.markAsACoreTable")}</label>
-      <div className="inspector-actions"><button className="inspector-primary" type="submit" disabled={status === "saving"}>
-        {bt("business.saveKnowledge")}</button></div>
+      {!readOnly ? <div className="inspector-actions"><button className="inspector-primary" type="submit" disabled={status === "saving"}>
+        {bt("business.saveKnowledge")}</button></div> : null}
     </form>
   );
 }

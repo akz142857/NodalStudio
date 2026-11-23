@@ -1,43 +1,13 @@
 import { translateRelationshipValidation } from "../../i18n/relationship-validation";
 import { translateUiLabel } from "../../i18n/business-labels";
 import { useI18n } from "../../i18n";
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { DatabaseSnapshot, LogicalRelationship, RelationshipCardinality, RelationshipEndpoint, RelationshipValidation, SaveLogicalRelationshipInput } from "../../platform";
 import { useUpdateBlocker } from "../../platform/update-guard";
+import { SearchSelect } from "../SearchSelect";
 import { relationshipCardinalityLabel } from "./relationship-labels";
 
 export type ValidateRelationship = (input: { sourceId: string; source: RelationshipEndpoint; target: RelationshipEndpoint; relationshipId?: string }) => Promise<RelationshipValidation>;
-interface Choice { value: string; label: string; detail?: string }
-
-/** Search stays local; only choosing a result changes the endpoint. */
-function SearchSelect({ label, value, options, onChange }: { label: string; value: string; options: Choice[]; onChange: (value: string) => void }) {
-  const { t: bt } = useI18n();
-  const id = useId();
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [index, setIndex] = useState(0);
-  const selected = options.find((item) => item.value === value);
-  const matches = options.filter((item) => `${item.label} ${item.detail ?? ""}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  const visible = matches.slice(0, 40);
-  const choose = (item: Choice) => { onChange(item.value); setOpen(false); setQuery(""); };
-  return <div className="relationship-search-select">
-    <label htmlFor={id}>{label}</label>
-    <input id={id} role="combobox" autoComplete="off" aria-autocomplete="list" aria-expanded={open} aria-controls={`${id}-options`} aria-activedescendant={open && visible[index] ? `${id}-option-${index}` : undefined}
-      placeholder={bt("business.search", { value0: label.toLowerCase() })} value={open ? query : selected?.label ?? (value ? bt("business.missing", { value0: value }) : "")}
-      onFocus={() => { setOpen(true); setQuery(""); setIndex(0); }} onBlur={() => setOpen(false)}
-      onChange={(event) => { setQuery(event.target.value); setIndex(0); setOpen(true); }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); }
-        if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); setIndex((current) => Math.max(0, Math.min(visible.length - 1, current + (event.key === "ArrowDown" ? 1 : -1)))); }
-        if (event.key === "Enter" && open) { event.preventDefault(); if (visible[index]) choose(visible[index]); }
-      }} />
-    {open ? <div className="relationship-search-results" id={`${id}-options`} role="listbox" aria-label={bt("business.options", { value0: label })}>
-      {visible.map((item, position) => <button type="button" role="option" id={`${id}-option-${position}`} key={item.value} aria-selected={position === index} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(item)}><span>{item.label}</span>{item.detail ? <small>{item.detail}</small> : null}</button>)}
-      {!visible.length ? <p>{bt("business.noMatching")} {label.toLowerCase()}.</p> : matches.length > visible.length ? <p>{bt("business.showing40Of")} {matches.length}{bt("businessExtra.typeToNarrowTheResults")}</p> : null}
-    </div> : null}
-  </div>;
-}
-
 const emptyEndpoint = (): RelationshipEndpoint => ({ schema: "", table: "", columns: [""] });
 const tableKey = (value: Pick<RelationshipEndpoint, "schema" | "table">) => JSON.stringify([value.schema, value.table]);
 const cardinalities: RelationshipCardinality[] = ["manyToOne", "oneToOne", "oneToMany", "manyToMany", "unspecified"];
@@ -65,7 +35,7 @@ export function RelationshipEditor({ snapshot, relationship, onValidate, onSave,
   const pending = useRef(false);
   const [error, setError] = useState("");
   const tables = useMemo(() => snapshot.schemas.flatMap((schema) => schema.tables).sort((a, b) => `${a.key.schema}.${a.key.name}`.localeCompare(`${b.key.schema}.${b.key.name}`)), [snapshot]);
-  const tableOptions = useMemo(() => tables.map((table) => ({ value: tableKey({ schema: table.key.schema, table: table.key.name }), label: `${table.key.schema}.${table.key.name}`, detail: table.comment ?? undefined })), [tables]);
+  const tableOptions = useMemo(() => tables.map((table) => ({ value: tableKey({ schema: table.key.schema, table: table.key.name }), label: `${table.key.schema}.${table.key.name}`, searchName: table.key.name, detail: table.comment ?? undefined })), [tables]);
   const findTable = (endpoint: RelationshipEndpoint) => tables.find((table) => table.key.schema === endpoint.schema && table.key.name === endpoint.table);
   const sourceTable = findTable(source);
   const targetTable = findTable(target);

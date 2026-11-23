@@ -31,10 +31,11 @@ pub async fn apply_change_review(
     query.validate().map_err(safe_store_error)?;
     let _operation = crate::acquire_cloud_operation(&state, input.source_id).await?;
     crate::validated_logical_relationships(&state.store, input.source_id).await?;
-    let full = state
-        .store
-        .apply_change_review(&input)
-        .await
-        .map_err(safe_store_error)?;
+    let result = state.store.apply_change_review(&input).await;
+    let full = if input.action == "confirmOntology" {
+        result.map_err(crate::ontology::ontology_error)
+    } else {
+        result.map_err(safe_store_error)
+    }?;
     page_workspace(full, &query).map_err(safe_store_error)
 }

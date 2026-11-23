@@ -13,12 +13,20 @@ const dictionary: [string, string[]][] = [
   ["退款", ["refund"]], ["发票", ["invoice"]], ["物流", ["shipment", "shipping"]],
 ];
 const stopWords = new Set(["the", "a", "an", "of", "for", "to", "and", "is", "are", "where", "which", "find", "table", "tables", "show", "me", "how", "does"]);
+export interface DiscoveryEvidence {
+  basis: "table" | "field" | "tableComment" | "fieldComment" | "confirmedNote" | "domain";
+  terms: string[];
+  column?: string;
+  expanded: boolean;
+}
+
 export interface DiscoveryCandidate {
   table: TableDefinition;
   score: number;
   matchingColumns: string[];
   reasons: string[];
   direct: boolean;
+  match: DiscoveryEvidence;
 }
 
 // Resolve against the whole snapshot before applying a local domain filter. A
@@ -45,23 +53,27 @@ export function discoverTables(snapshot: DatabaseSnapshot, question: string, dom
   return snapshot.schemas.flatMap((schema) => schema.tables.flatMap((table) => {
     if (domain && !domain.tableKeys.some((key) => objectId(key) === objectId(table.key))) return [];
     const reasons = new Set<string>(); const columns = new Set<string>(); let score = 0; let direct = false;
+    let match: DiscoveryEvidence | undefined;
     const memberships = domains.filter((group) => group.sourceId === snapshot.sourceId && group.tableKeys.some((key) => objectId(key) === objectId(table.key)));
     const fields = [
-      { value: objectLabel(table.key), weight: 8, label: "Table name", column: "" },
-      ...table.columns.map((column) => ({ value: column.name, weight: 4, label: "Field", column: column.name })),
-      ...(includeComments ? [{ value: table.comment ?? "", weight: 3, label: "Database comment", column: "" }, ...table.columns.map((column) => ({ value: column.comment ?? "", weight: 2, label: "Database field comment", column: column.name }))] : []),
-      ...notes.filter(({ owner }) => owner === table).map(({ state }) => ({ value: state.confirmation!.finalText, weight: 5, label: "Confirmed team statement", column: state.objectKey.kind === "column" ? state.objectKey.name : "" })),
-      ...memberships.map((group) => ({ value: group.name, weight: 2, label: "Domain name", column: "" })),
+      { value: objectLabel(table.key), weight: 8, label: "Table name", basis: "table" as const, column: "" },
+      ...table.columns.map((column) => ({ value: column.name, weight: 4, label: "Field", basis: "field" as const, column: column.name })),
+      ...(includeComments ? [{ value: table.comment ?? "", weight: 3, label: "Database comment", basis: "tableComment" as const, column: "" }, ...table.columns.map((column) => ({ value: column.comment ?? "", weight: 2, label: "Database field comment", basis: "fieldComment" as const, column: column.name }))] : []),
+      ...notes.filter(({ owner }) => owner === table).map(({ state }) => ({ value: state.confirmation!.finalText, weight: 5, label: "Confirmed team statement", basis: "confirmedNote" as const, column: state.objectKey.kind === "column" ? state.objectKey.name : "" })),
+      ...memberships.map((group) => ({ value: group.name, weight: 2, label: "Domain name", basis: "domain" as const, column: "" })),
     ];
     for (const field of fields) for (const [terms, expandedTerm] of [[directTerms, false], [expanded, true]] as const) {
       const matches = terms.filter((term) => field.value.toLocaleLowerCase().includes(term));
       if (!matches.length) continue;
+      if (!match || (match.expanded && !expandedTerm)) {
+        match = { basis: field.basis, terms: matches, column: field.column || undefined, expanded: expandedTerm };
+      }
       score += field.weight * (expandedTerm ? 1 : 2) * matches.length;
       direct ||= !expandedTerm;
       if (field.column) columns.add(field.column);
       reasons.add(`${expandedTerm ? "Term hypothesis" : "Direct match"} · ${field.label}${field.column ? ` ${field.column}` : ""}: ${matches.join(", ")}`);
     }
-    return score ? [{ table, score, matchingColumns: [...columns], reasons: [...reasons], direct }] : [];
+    return match ? [{ table, score, matchingColumns: [...columns], reasons: [...reasons], direct, match }] : [];
   })).sort((a, b) => Number(exactName(b.table)) - Number(exactName(a.table)) || b.score - a.score || objectId(a.table.key).localeCompare(objectId(b.table.key)));
 }
 

@@ -20,6 +20,7 @@ use uuid::Uuid;
 pub mod change_review;
 mod import_safety;
 mod knowledge;
+pub mod ontology;
 pub mod relationship_batches;
 mod snapshot_history;
 
@@ -39,6 +40,8 @@ pub enum SnapshotStoreError {
     KnowledgeConflict(String),
     #[error("{0}")]
     ReviewConflict(String),
+    #[error("{0}")]
+    OntologyConflict(String),
     #[error("local database backup failed: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -279,6 +282,11 @@ impl LocalSnapshotStore {
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         profile: &DataSourceProfile,
     ) -> Result<(), SnapshotStoreError> {
+        if ontology::connection_identity_in(tx, profile.id).await?
+            != ontology::connection_identity(Some(profile))
+        {
+            ontology::record_source_change(tx, profile.id).await?;
+        }
         sqlx::query(
             r"
             INSERT INTO data_sources (id, display_name, updated_at, payload_json)
@@ -311,7 +319,7 @@ impl LocalSnapshotStore {
                 "Snapshot source does not match the verified connection.".into(),
             ));
         }
-        self.save_capture(snapshot, Some(profile)).await
+        self.save_capture(snapshot, Some(profile), None).await
     }
 
     /// Accept an inspected snapshot, change set, outbox event and retention atomically.
@@ -322,15 +330,41 @@ impl LocalSnapshotStore {
         &self,
         snapshot: &DatabaseSnapshot,
     ) -> Result<StoredSnapshotCapture, SnapshotStoreError> {
-        self.save_capture(snapshot, None).await
+        self.save_capture(snapshot, None, None).await
+    }
+
+    /// Accepts a capture only if the database connection that produced it is still current.
+    ///
+    /// # Errors
+    /// Rejects a changed connection and propagates persistence failures.
+    pub async fn save_captured_snapshot_for(
+        &self,
+        profile: &DataSourceProfile,
+        snapshot: &DatabaseSnapshot,
+    ) -> Result<StoredSnapshotCapture, SnapshotStoreError> {
+        let identity = ontology::connection_identity(Some(profile));
+        if profile.id != snapshot.source_id {
+            return Err(SnapshotStoreError::KnowledgeConflict(
+                "Snapshot source does not match the captured connection.".into(),
+            ));
+        }
+        self.save_capture(snapshot, None, Some(&identity)).await
     }
 
     async fn save_capture(
         &self,
         snapshot: &DatabaseSnapshot,
         profile: Option<&DataSourceProfile>,
+        expected_identity: Option<&str>,
     ) -> Result<StoredSnapshotCapture, SnapshotStoreError> {
         let mut tx = self.pool.begin().await?;
+        if let Some(expected) = expected_identity
+            && ontology::connection_identity_in(&mut tx, snapshot.source_id).await? != expected
+        {
+            return Err(SnapshotStoreError::KnowledgeConflict(
+                "The connection changed during capture. Refresh its current schema.".into(),
+            ));
+        }
         let previous = sqlx::query("SELECT payload_json FROM schema_snapshots WHERE source_id=? ORDER BY captured_at DESC LIMIT 1")
             .bind(snapshot.source_id.to_string()).fetch_optional(&mut *tx).await?
             .map(|r| serde_json::from_str::<DatabaseSnapshot>(r.get("payload_json"))).transpose()?;
@@ -673,7 +707,8 @@ impl LocalSnapshotStore {
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM change_provenance) +
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM code_lineage) +
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM logical_relationships) +
-              (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM ignored_relationship_inferences) AS semantic_bytes,
+              (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM ignored_relationship_inferences) +
+              (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM ontology_definitions) AS semantic_bytes,
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM canvas_layouts) AS layout_bytes,
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM sync_queue) AS sync_queue_bytes,
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM app_settings) +
@@ -738,7 +773,8 @@ impl LocalSnapshotStore {
               (SELECT COUNT(*) FROM canvas_layouts WHERE source_id = ?) +
               (SELECT COUNT(*) FROM code_lineage WHERE source_id = ?) +
               (SELECT COUNT(*) FROM logical_relationships WHERE source_id = ?) +
-              (SELECT COUNT(*) FROM ignored_relationship_inferences WHERE source_id = ?) AS semantic_records,
+              (SELECT COUNT(*) FROM ignored_relationship_inferences WHERE source_id = ?) +
+              (SELECT COUNT(*) FROM ontology_definitions WHERE source_id = ?1) AS semantic_records,
               (SELECT COUNT(*) FROM sync_queue WHERE source_id = ? AND state IN ('pending', 'conflict')) AS pending_sync_records,
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM schema_snapshots WHERE source_id = ?) +
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM schema_change_sets WHERE after_snapshot_id IN (SELECT id FROM schema_snapshots WHERE source_id = ?)) AS snapshot_bytes,
@@ -748,7 +784,8 @@ impl LocalSnapshotStore {
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM canvas_layouts WHERE source_id = ?) +
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM code_lineage WHERE source_id = ?) +
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM logical_relationships WHERE source_id = ?) +
-              (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM ignored_relationship_inferences WHERE source_id = ?) AS semantic_bytes,
+              (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM ignored_relationship_inferences WHERE source_id = ?) +
+              (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM ontology_definitions WHERE source_id = ?1) AS semantic_bytes,
               (SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM sync_queue WHERE source_id = ?) AS sync_queue_bytes
             ",
         )
@@ -852,6 +889,7 @@ impl LocalSnapshotStore {
                 "DELETE FROM ignored_relationship_inferences WHERE source_id = ?",
                 "DELETE FROM relationship_review_batches WHERE source_id = ?",
                 "DELETE FROM relationship_review_versions WHERE source_id = ?",
+                "DELETE FROM ontology_definitions WHERE source_id = ?",
                 "DELETE FROM sync_queue WHERE source_id = ?",
             ] {
                 affected += sqlx::query(statement)
@@ -905,6 +943,7 @@ impl LocalSnapshotStore {
             "DELETE FROM ignored_relationship_inferences",
             "DELETE FROM relationship_review_batches",
             "DELETE FROM relationship_review_versions",
+            "DELETE FROM ontology_definitions",
             "DELETE FROM sync_queue",
             "DELETE FROM data_source_settings",
             "DELETE FROM data_sources",
@@ -1351,7 +1390,11 @@ impl LocalSnapshotStore {
             .bind(snapshot.id.to_string()).bind(snapshot.source_id.to_string())
             .bind(snapshot.captured_at.to_rfc3339()).bind(&snapshot.fingerprint)
             .bind(serde_json::to_string(snapshot)?).execute(&mut **tx).await?;
-        Ok(result.rows_affected() == 1)
+        let inserted = result.rows_affected() == 1;
+        if inserted {
+            ontology::record_impacts(tx, snapshot).await?;
+        }
+        Ok(inserted)
     }
 
     /// Loads a snapshot by identifier.
@@ -2214,6 +2257,7 @@ impl LocalSnapshotStore {
             self.migrate_snapshot_history().await?;
         }
         self.initialize_semantic_tables().await?;
+        ontology::initialize(&self.pool).await?;
         self.initialize_knowledge().await?;
         self.initialize_change_review().await?;
         self.initialize_relationship_batches().await?;

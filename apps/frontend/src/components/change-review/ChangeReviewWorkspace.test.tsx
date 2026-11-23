@@ -20,6 +20,13 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 describe("current change review", () => {
+  it("points to structure changes when the business impact view is empty", async () => {
+    const { load, save } = setup({ ...base, impactCount: 0, structureCount: 1, total: 0, items: [] });
+    expect(await screen.findByText("No business impact items in this round.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "View structure changes" }));
+    await waitFor(() => expect(load).toHaveBeenCalledWith("source", expect.objectContaining({ view: "structure" })));
+    expect(save).not.toHaveBeenCalled();
+  });
   it("requires an explicit preview and saves edited text against the displayed revision", async () => {
     const { save } = setup();
     const field = await screen.findByLabelText("Description to confirm (keep or revise)");
@@ -107,7 +114,7 @@ describe("current change review", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm decision" }));
     await screen.findByText("Decision saved locally.");
     load.mockResolvedValue({ ...base, revision: "v2" });
-    fireEvent.click(screen.getByRole("button", { name: "Understanding impacts (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Business impact (1)" }));
     expect(await screen.findByLabelText("Description to confirm (keep or revise)")).toHaveValue("Every payment has an order");
   });
   it("clears a confirmed draft so later server text is not replaced by an older edit", async () => {

@@ -16,7 +16,6 @@
 .canvas-command-dock button[aria-expanded="true"] { background: var(--ds-selection); color: var(--ds-selection-text); }
 .canvas-command-dock button:disabled { opacity: .4; cursor: default; }
 .canvas-command-dock svg { flex: none; width: 16px; height: 16px; }
-.canvas-command-dock :focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
 .canvas-command-dock .canvas-command-restore { background: var(--ds-surface); border: 1px solid var(--ds-border); padding: 7px 10px; }
 .canvas-command-count { padding: 0 8px; color: var(--ds-secondary); white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
 .canvas-command-navigation { border-left: 1px solid var(--ds-separator); padding-left: 4px; }

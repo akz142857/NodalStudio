@@ -2,7 +2,7 @@ import { EmptyState } from "../../design-system/EmptyState";
 import { useI18n, useEventTranslator } from "../../i18n";
 import type { NodalStudioPlatform, QueryExecutionResult } from "../../platform";
 import type { TableSort } from "../../platform/table-data-preferences";
-import { useEffect, useState, type KeyboardEvent, type Ref } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
 
 import { ColumnProfileDetails } from "./ColumnProfileDetails";
 import { ResultExportDialog } from "./ResultExportDialog";
@@ -69,6 +69,7 @@ function ResultGrid({ result, platform, columnSort, columnComments, columnWidths
   const [profiles, setProfiles] = useState<ColumnProfile[]>();
   const [profileError, setProfileError] = useState("");
   const [column, setColumn] = useState<number>();
+  const profileTrigger = useRef<HTMLButtonElement>(null);
   const [exporting, setExporting] = useState(false);
   const rowCopy = useDataRowCopy(result.queryId);
   useEffect(() => {
@@ -154,7 +155,10 @@ function ResultGrid({ result, platform, columnSort, columnComments, columnWidths
             canClearSort={columnSort?.requested?.column === column.name}
             onSort={columnSort && ((direction) => columnSort.onChange(direction ? { column: column.name, direction } : undefined))} />)}
         </tr>
-        {profiling && profiles ? <tr className="query-profile-row"><th aria-label={bt("business.columnProfiles")} />{profiles.map((p,i) => <th key={i}><button type="button" aria-label={bt("business.profileDetail", { value0: result.columns[i].name })} aria-expanded={column === i} onClick={() => setColumn(column === i ? undefined : i)}><span className="profile-quality" aria-hidden="true"><i style={{ width: `${p.total ? (p.total-p.nulls)/p.total*100 : 0}%` }} /></span><span>{bt("business.notNULL")} {p.total ? ((p.total-p.nulls)/p.total*100).toFixed(0) : 0}{bt("business.nULL")} {p.nulls}</span><small>{p.distinct === null ? bt("business.incompleteUnavailable") : bt("business.distinctOccurOnce", { value0: p.distinct, value1: p.unique ?? "—" })}</small><span className="profile-spark" aria-hidden="true">{(p.numeric?.bins ?? p.top).map((v,j,all) => <i key={j} style={{ height: `${Math.max(5, v.count/Math.max(1,...all.map((b) => b.count))*100)}%` }} />)}</span></button></th>)}</tr> : null}</thead>
+        {profiling && profiles ? <tr className="query-profile-row"><th aria-label={bt("business.columnProfiles")} />{profiles.map((p,i) => <th key={i}><button type="button" aria-label={bt("business.profileDetail", { value0: result.columns[i].name })} aria-expanded={column === i} onClick={(event) => {
+          profileTrigger.current = event.currentTarget;
+          setColumn(column === i ? undefined : i);
+        }}><span className="profile-quality" aria-hidden="true"><i style={{ width: `${p.total ? (p.total-p.nulls)/p.total*100 : 0}%` }} /></span><span>{bt("business.notNULL")} {p.total ? ((p.total-p.nulls)/p.total*100).toFixed(0) : 0}{bt("business.nULL")} {p.nulls}</span><small>{p.distinct === null ? bt("business.incompleteUnavailable") : bt("business.distinctOccurOnce", { value0: p.distinct, value1: p.unique ?? "—" })}</small><span className="profile-spark" aria-hidden="true">{(p.numeric?.bins ?? p.top).map((v,j,all) => <i key={j} style={{ height: `${Math.max(5, v.count/Math.max(1,...all.map((b) => b.count))*100)}%` }} />)}</span></button></th>)}</tr> : null}</thead>
         <tbody>{visibleRows.map((row, rowIndex) => {
           const absoluteRowIndex = page * PAGE_SIZE + rowIndex;
           const rowNumber = (tableRowOffset ?? 0) + absoluteRowIndex + 1;
@@ -171,7 +175,10 @@ function ResultGrid({ result, platform, columnSort, columnComments, columnWidths
         })}</tbody>
       </table>
     </div>
-    {profiling && profiles && column !== undefined ? <ColumnProfileDetails key={column} column={result.columns[column]} profile={profiles[column]} limited={result.truncated} onClose={() => setColumn(undefined)} /> : null}
+    {profiling && profiles && column !== undefined ? <ColumnProfileDetails key={column} column={result.columns[column]} profile={profiles[column]} limited={result.truncated} onClose={() => {
+      setColumn(undefined);
+      profileTrigger.current?.focus({ preventScroll: true });
+    }} /> : null}
     </div>
     {exporting && platform ? <ResultExportDialog result={result} selected={selected} platform={platform} currentTablePage={tableRowOffset !== undefined} onClose={() => setExporting(false)} /> : null}
     {pageCount > 1 ? <footer className="query-result-pagination"><span>{bt("business.rowsDetailDetail")} {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, result.rows.length)} {bt("business.of")} {result.rows.length}</span><button type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>{bt("business.previous")}</button><button type="button" disabled={page + 1 >= pageCount} onClick={() => setPage((value) => value + 1)}>{bt("business.next")}</button></footer> : null}

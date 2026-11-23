@@ -73,7 +73,12 @@ export function RelationshipManager({ open = true, snapshot, relationships, igno
       return !normalized || [relationship.name, endpointText(relationship.source), endpointText(relationship.target), relationship.note ?? ""].some((value) => value.toLocaleLowerCase().includes(normalized));
     }).sort((a, b) => Number(attentionStatuses.has(b.status)) - Number(attentionStatuses.has(a.status)) || endpointText(a.source).localeCompare(endpointText(b.source)));
   }, [filter, query, relationships]);
-  const selected = relationships.find((item) => item.id === selectedId) ?? visibleRelationships[0];
+  const selected = visibleRelationships.find((item) => item.id === selectedId) ?? visibleRelationships[0];
+  const detailPane = useRef<HTMLDivElement>(null);
+  const detailKey = editor ? "edit" : selected?.id;
+  useLayoutEffect(() => {
+    if (detailPane.current) detailPane.current.scrollTop = 0;
+  }, [detailKey]);
   const locked = busy || editorState.saving;
 
   useLayoutEffect(() => {
@@ -126,7 +131,7 @@ export function RelationshipManager({ open = true, snapshot, relationships, igno
         </button>)}
         {!visibleRelationships.length ? <div className="relationship-manager-empty"><strong>{relationships.length ? bt("business.noMatchingRelationships") : bt("business.noLogicalRelationshipsYet")}</strong><p>{relationships.length ? bt("business.tryAnotherTableFieldOrStatus") : bt("business.createARelationshipHereOrDragBetweenFieldsOn")}</p>{query || filter !== "all" ? <button type="button" disabled={Boolean(editor)} onClick={() => { setQuery(""); setFilter("all"); setSelectedId(undefined); }}>{bt("business.clearFilters")}</button> : null}</div> : null}
       </nav>
-      <div className="relationship-manager-detail">
+      <div ref={detailPane} className="relationship-manager-detail inspector-surface">
         {editor ? <RelationshipEditor key={editor.relationship?.id ?? "new"} snapshot={snapshot} relationship={editor.relationship} onValidate={onValidate} onSave={onSave} onStateChange={setEditorState}
           onCancel={() => requestAction(closeEditor)} onSaved={(saved) => { const created = !editor.relationship; closeEditor(); setSelectedId(saved.id); setMessage(created ? bt("business.relationshipCreatedInThisModel") : bt("business.relationshipSaved")); if (created) { setQuery(""); setFilter("all"); } }} />
           : selected ? <section aria-label={bt("business.relationshipDetails")} key={selected.id}>

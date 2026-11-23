@@ -121,14 +121,14 @@ it("reconfigures SQL editor copy without replacing its view, selection, undo or 
 });
 
 it("keeps history comparison direction and selected versions without reloading", async () => {
-  const summaries: SnapshotSummary[] = [0, 1].map((i) => ({ id: `snapshot-${i}`, sourceId: reportSnapshot.sourceId, capturedAt: `2026-10-${13-i}T08:00:00Z`, fingerprint: `fingerprint-${i}`, databaseName: "Commerce", schemaCount: 2, tableCount: 3 }));
+  const summaries: SnapshotSummary[] = [0, 1].map((i) => ({ id: `snapshot-${i}`, sourceId: reportSnapshot.sourceId, capturedAt: `2026-10-${13-i}T08:00:00Z`, fingerprint: `sample${i}-fingerprint`, databaseName: "Commerce", schemaCount: 2, tableCount: 3 }));
   const listSnapshots = vi.fn().mockResolvedValue(summaries);
   const view = bilingual(<HistoryPanel sourceId={reportSnapshot.sourceId} revision="same" activeSnapshot={reportSnapshot} platform={{ listSnapshots } as unknown as NodalStudioPlatform} onSelect={vi.fn()} onCompare={vi.fn()} />);
   await screen.findByRole("button", { name: "Swap direction" });
   fireEvent.click(screen.getByRole("button", { name: "Swap direction" }));
   view.chinese();
-  expect(screen.getByLabelText("变更前（基线）")).toHaveValue("snapshot-0");
-  expect(screen.getByLabelText("变更后（目标）")).toHaveValue("snapshot-1");
+  expect(screen.getByRole<HTMLInputElement>("combobox", { name: "变更前（基线）" }).value).toContain(summaries[0].fingerprint.slice(0, 8));
+  expect(screen.getByRole<HTMLInputElement>("combobox", { name: "变更后（目标）" }).value).toContain(summaries[1].fingerprint.slice(0, 8));
   expect(listSnapshots).toHaveBeenCalledOnce();
 });
 

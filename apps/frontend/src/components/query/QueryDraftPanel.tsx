@@ -27,6 +27,8 @@ interface Props {
   initialTable?: TableDefinition;
   onUseSql: (sql: string) => void;
   onOpenSettings: () => void;
+  onResolveOntology?: (question: string) => boolean;
+  ontologyLoading?: boolean;
   execution?: { sql: string; result: QueryExecutionResult };
 }
 interface DraftTurn {
@@ -41,7 +43,7 @@ interface DraftTurn {
 export function QueryDraftPanel(props: Props) {
   return <DraftPanel key={JSON.stringify([props.snapshot.id, props.snapshot.sourceId, props.snapshot.fingerprint, props.settings.source, props.settings.app.privacy, props.seed?.id])} {...props} />;
 }
-function DraftPanel({ platform, snapshot, settings, semantics, seed, initialTable, onUseSql, onOpenSettings, execution }: Props) {
+function DraftPanel({ platform, snapshot, settings, semantics, seed, initialTable, onUseSql, onOpenSettings, onResolveOntology, ontologyLoading, execution }: Props) {
   const { t: bt, locale } = useI18n();
   const eventBt = useEventTranslator(bt);
   const semanticBinding = JSON.stringify([semantics.logicalRelationships, semantics.domainGroups, semantics.knowledge]);
@@ -126,7 +128,8 @@ function DraftPanel({ platform, snapshot, settings, semantics, seed, initialTabl
   }
   function submit() {
     const text = question.trim();
-    if (!text) return;
+    if (!text || ontologyLoading) return;
+    if (onResolveOntology?.(text)) return;
     // Carry requests and the questions being answered, never SQL result rows/history.
     const clarification = activeTurn?.answer?.clarification.length ? `\n\nPrevious clarification questions:\n${activeTurn.answer.clarification.join("\n")}` : "";
     const requestQuestion = activeTurn ? `${activeTurn.requestQuestion}${clarification}\n\nFollow-up request:\n${text}` : text;
@@ -172,7 +175,7 @@ function DraftPanel({ platform, snapshot, settings, semantics, seed, initialTabl
         <form className="query-composer" onSubmit={(event) => { event.preventDefault(); submit(); }}>
           <label className="visually-hidden" htmlFor={questionId}>{bt("business.questionDetail")}</label>
           <textarea ref={composer} id={questionId} aria-label={bt("business.questionDetail")} value={question} wrap="soft" rows={2} maxLength={2000} placeholder={bt(turns.length ? "business.followUpQuestionPlaceholder" : "business.initialQuestionPlaceholder")} onChange={(e) => changeQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
-          <div className="query-composer-footer"><span><ActionIcon name="database" />{snapshot.database.name}<span className="query-model-name">{configured ? settings.source?.ai.model : bt("business.aINotConfigured")}</span></span><button className="query-compose-submit" type="submit" aria-label={turns.length ? bt("business.sendFollowUp") : bt("business.createSQLDraft")} disabled={!question.trim()}><ActionIcon name="chevronUp" /></button></div>
+          <div className="query-composer-footer"><span><ActionIcon name="database" />{snapshot.database.name}<span className="query-model-name">{configured ? settings.source?.ai.model : bt("business.aINotConfigured")}</span></span><button className="query-compose-submit" type="submit" aria-label={turns.length ? bt("business.sendFollowUp") : bt("business.createSQLDraft")} disabled={!question.trim() || ontologyLoading}><ActionIcon name="chevronUp" /></button></div>
         </form>
         <p className="query-draft-footnote">{bt("business.enterToSendShiftEnterForANewLine")}</p>
       </div>

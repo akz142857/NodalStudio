@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { NodalStudioPlatform } from "../platform";
 import { reportSemantics, reportSnapshot } from "../test/schema-report-fixture";
 import { discoverySettings } from "../test/discovery-fixture";
-import { objectId } from "../graph/business-discovery";
 import { BusinessExplorer } from "./BusinessExplorer";
 const canvas = vi.hoisted(() => vi.fn<(props: import("./SchemaCanvas").SchemaCanvasProps) => void>());
 vi.mock("./SchemaCanvas", () => ({ SchemaCanvas: (props: import("./SchemaCanvas").SchemaCanvasProps) => { canvas(props); return <div aria-label="Temporary graph" />; } }));
@@ -35,8 +34,12 @@ describe("business exploration flow", () => {
   it("distinguishes absent paths from business unrelatedness, computes two hops and keeps AI scope", async () => {
     const p = props(); render(<BusinessExplorer {...p} />);
     const root = reportSnapshot.schemas[0].tables[0]; const target = reportSnapshot.schemas[1].tables[0];
-    fireEvent.change(screen.getByLabelText("Explicit root table"), { target: { value: objectId(root.key) } });
-    fireEvent.change(screen.getByLabelText("Path destination"), { target: { value: objectId(target.key) } });
+    const choose = (label: string, name: string) => {
+      fireEvent.focus(screen.getByRole("combobox", { name: label }));
+      fireEvent.click(screen.getByRole("option", { name }));
+    };
+    choose("Explicit root table", `${root.key.schema}.${root.key.name}`);
+    choose("Path destination", `${target.key.schema}.${target.key.name}`);
     expect(screen.getByText(/does not prove the tables are unrelated/)).toBeVisible();
     expect(canvas.mock.lastCall![0].semantics?.logicalRelationships).toHaveLength(0);
     fireEvent.change(screen.getByLabelText("Local graph depth"), { target: { value: "2" } });

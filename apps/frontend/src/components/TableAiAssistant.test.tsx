@@ -64,9 +64,11 @@ describe("task-first table understanding", () => {
     p.mocks.prepareTableExplanation.mockImplementation((input: TableAiInput) => Promise.resolve({ ...freshPreview(), context: { ...tableAiPreview.context, scope: "domain", focusColumn: input.focusColumn } }));
     render(<TableAiAssistant {...p} />);
     expect(screen.getByRole("button", { name: "Send and answer" })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Business domain"), { target: { value: "domain-private-id" } });
+    fireEvent.focus(screen.getByRole("combobox", { name: "Business domain" }));
+    fireEvent.click(screen.getByRole("option", { name: reportSemantics.domainGroups[0].name }));
     fireEvent.click(screen.getByText("Selected business domain"));
-    fireEvent.change(screen.getByLabelText("Focus field"), { target: { value: "customer_id" } });
+    fireEvent.focus(screen.getByRole("combobox", { name: "Focus field" }));
+    fireEvent.click(screen.getByRole("option", { name: /^customer_id/ }));
     await ready(); expect(p.mocks.prepareTableExplanation).toHaveBeenCalledWith(expect.objectContaining({ domainId: "domain-private-id", focusColumn: "customer_id", target: aiTable.key }));
   });
   it("cancels an in-flight preparation and disposes its late preview", async () => {

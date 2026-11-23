@@ -74,6 +74,7 @@ mod export_file;
 mod git_readiness;
 mod github_releases;
 mod knowledge;
+mod ontology;
 mod postgres_export;
 mod purchase;
 mod query_export;
@@ -838,18 +839,13 @@ async fn save_data_source_using(
 ) -> Result<DataSourceProfile, String> {
     let now = Utc::now();
     let id = input.id.unwrap_or_else(Uuid::new_v4);
+    let _operation = acquire_cloud_operation(state, id).await?;
     let existing = state
         .store
         .get_data_source(id)
         .await
         .map_err(safe_store_error)?;
     if input.database_type == DatabaseType::Sqlite {
-        let _operation = acquire_cloud_operation(state, id).await?;
-        let existing = state
-            .store
-            .get_data_source(id)
-            .await
-            .map_err(safe_store_error)?;
         if let Some(previous) = existing.as_ref().filter(|previous| {
             previous.database_type == DatabaseType::Sqlite && previous.sqlite == input.sqlite
         }) {
@@ -1300,7 +1296,7 @@ async fn capture_snapshot_using(
         } else {
             state
                 .store
-                .save_captured_snapshot(&snapshot)
+                .save_captured_snapshot_for(&profile, &snapshot)
                 .await
                 .map_err(safe_store_error)
         };
@@ -1390,7 +1386,7 @@ async fn capture_snapshot_using(
     }
     state
         .store
-        .save_captured_snapshot(&snapshot)
+        .save_captured_snapshot_for(&profile, &snapshot)
         .await
         .map_err(safe_store_error)
 }
@@ -2788,6 +2784,7 @@ async fn delete_source_data(
     if !input.selection.connection && !input.selection.history && !input.selection.semantics {
         return Err("Select at least one local data category to delete.".into());
     }
+    let _operation = acquire_cloud_operation(&state, input.source_id).await?;
     let profile = state
         .store
         .get_data_source(input.source_id)
@@ -5468,6 +5465,11 @@ pub fn run() {
                 updates::install_update,
                 get_semantics,
                 change_review::get_change_review,
+                ontology::list_ontology,
+                ontology::confirm_ontology,
+                ontology::draft_ontology_last_month,
+                ontology::save_ontology_sample,
+                ontology::verify_ontology_review,
                 change_review::apply_change_review,
                 knowledge::prepare_knowledge_draft,
                 knowledge::confirm_knowledge_draft,

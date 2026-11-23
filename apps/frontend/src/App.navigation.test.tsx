@@ -538,7 +538,7 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     const readOnly = vi.spyOn(platform, "executeReadonlyQuery");
     fireEvent.click(screen.getByRole("button", { name: "Load SQLite fixture" }));
     const navigation = within(screen.getByRole("group", { name: "View mode" }));
-    expect(navigation.getAllByRole("button").map((button) => button.textContent)).toEqual(["Model", "Database", "Query"]);
+    expect(navigation.getAllByRole("button").map((button) => button.textContent)).toEqual(["Model", "Ontology", "Database", "Query"]);
     const tree = within(screen.getByRole("region", { name: "Database structure" }));
     fireEvent.change(tree.getByRole("searchbox"), { target: { value: "main.orders" } });
     fireEvent.click(tree.getByRole("button", { name: /^orders/ }));
@@ -1651,7 +1651,7 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
   });
   it("switches from change list and preflight back to Diagram without losing the navigation request", async () => {
     await mount(); fireEvent.click(screen.getByRole("button", { name: "Load changed fixture" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review understanding" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
     fireEvent.click(screen.getByRole("button", { name: "History comparison" }));
     expect(screen.queryByRole("region", { name: "Navigation canvas" })).not.toBeInTheDocument();
     pickOrders();

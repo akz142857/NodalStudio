@@ -3,6 +3,7 @@ import { useI18n } from "../../i18n";
 import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import type { LogicalRelationship } from "../../platform";
+import { ActionIcon } from "../ActionIcon";
 import { RelationshipEndpoints } from "./RelationshipPresentation";
 import { relationshipCardinalityLabel, relationshipStatusLabels } from "./relationship-labels";
 import "./relationships.css";
@@ -100,7 +101,7 @@ export function RelationshipInspector({
       ? bt("business.logicalRelationship")
       : bt("business.inferredCandidate");
   return createPortal(
-    <aside ref={inspectorRef} className="ds-surface relationship-inspector nodrag nopan" aria-label={bt("business.relationshipDetails")} style={{ ...position, visibility: positioned ? "visible" : "hidden" }}>
+    <aside ref={inspectorRef} className="ds-surface inspector-surface relationship-inspector nodrag nopan" aria-label={bt("business.relationshipDetails")} style={{ ...position, visibility: positioned ? "visible" : "hidden" }}>
       <header className="relationship-inspector-drag-handle" data-dragging={dragging || undefined} tabIndex={0} aria-label={bt("business.moveRelationshipDetails")} title={bt("business.dragToMoveArrowKeysMove10PxShift")}
         onPointerDown={(event) => {
           if (event.button !== 0 || event.isPrimary === false || (event.target instanceof Element && event.target.closest("button"))) return;
@@ -127,7 +128,7 @@ export function RelationshipInspector({
           const step = event.shiftKey ? 1 : 10;
           movePanel({ left: measured.bounds.left + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0), top: measured.bounds.top + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0) });
         }}
-      ><div><span className="relationship-kind" data-kind={data.relationshipKind}>{kindLabel}</span><h2>{data.relationshipKind === "logical" ? bt("business.modelRelationship") : data.relationshipKind === "physical" ? bt("business.databaseForeignKey") : bt("business.suggestedRelationship")}</h2></div><button type="button" aria-label={bt("business.closeRelationshipDetails")} onClick={onClose}>×</button></header>
+      ><div><span className="relationship-kind" data-kind={data.relationshipKind}>{kindLabel}</span><h2>{data.relationshipKind === "logical" ? bt("business.modelRelationship") : data.relationshipKind === "physical" ? bt("business.databaseForeignKey") : bt("business.suggestedRelationship")}</h2></div><button type="button" aria-label={bt("business.closeRelationshipDetails")} onClick={onClose}><ActionIcon name="close" /></button></header>
       {data.relationshipKind === "logical" ? <p className="relationship-fact-note">{bt("business.userDefinedLinkModelOnlyThisDashedLineIs")}</p> : null}
       {data.constraintName ? <p className="relationship-name">{data.constraintName}</p> : null}
       <RelationshipEndpoints source={logicalRelationship?.source ?? { schema: "", table: edge.source, columns: [data.sourceColumn] }} target={logicalRelationship?.target ?? { schema: "", table: edge.target, columns: [data.targetColumn] }} />

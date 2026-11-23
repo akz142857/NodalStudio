@@ -82,8 +82,12 @@ describe("SchemaCanvas table selection", () => {
     const { container } = render(<CanvasHarness snapshot={diagramAfter} modelTableChanges={changes} onSelectTable={inspect} />);
     await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
     const orders = container.querySelector('[data-id="public.orders"] .table-node');
+    const partners = container.querySelector('[data-id="public.partners"] .table-node');
     expect(orders).toHaveAttribute("data-change", "modified");
-    expect(container.querySelector('[data-id="public.partners"] .table-node')).toHaveAttribute("data-change", "added");
+    expect(partners).toHaveAttribute("data-change", "added");
+    expect(orders?.querySelector("header")).toHaveAttribute("title", "Modified");
+    expect(partners?.querySelector("header")).toHaveAttribute("title", "Added");
+    expect(container.querySelector(".table-node > header > .comparison-badge")).not.toBeInTheDocument();
     expect(container.querySelector('[data-id="public.audit"]')).not.toBeInTheDocument();
     fireEvent.click(orders!.querySelector("header strong")!);
     expect(inspect).toHaveBeenCalledWith(diagramAfter.schemas[0].tables[1], undefined);

@@ -21,7 +21,6 @@
 .preflight-coverage details { border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); padding: var(--ds-space-3); background: var(--ds-surface); }
 .preflight-coverage summary span { margin-left: var(--ds-space-3); color: var(--ds-secondary); }
 .preflight-coverage details > :not(summary) { margin-top: var(--ds-space-3); }
-.preflight-detail { padding: var(--ds-space-4); display: grid; gap: var(--ds-space-4); }
 .preflight-detail article { display: grid; gap: var(--ds-space-4); min-width: 0; }
 .preflight-detail article header { display: grid; gap: var(--ds-space-2); }
 .preflight-detail h3 { margin: 0 0 var(--ds-space-2); font-size: inherit; overflow-wrap: anywhere; }

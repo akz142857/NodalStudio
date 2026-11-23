@@ -5,7 +5,7 @@ import { preflightText } from "../preflight/preflight-text";
 import "./schema-preflight.css";
 import { translateUiLabel } from "../i18n/business-labels";
 import { useI18n } from "../i18n";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useState } from "react";
 import type { DatabaseSnapshot, TableDefinition } from "../platform";
 import { runSchemaPreflight, type PreflightFinding, type PreflightOutcome, type PreflightReport } from "../preflight/schema-preflight";
 import { findingReview, loadPreflightReviews, reviewEvidence, savePreflightReviews, type PreflightReviews } from "../preflight/preflight-reviews";
@@ -13,16 +13,18 @@ import { OperationFeedback } from "./OperationFeedback";
 
 const outcomeLabels: Record<PreflightOutcome, string> = { design: "Design suggestion", suspected: "Suspected issue", insufficient: "Information gap", style: "Style hint" };
 interface Run { snapshot: DatabaseSnapshot; names: boolean; revision: number; report?: PreflightReport; error?: string; duration: number }
-export function SchemaPreflightPanel({ snapshot, onClose, onLocate, active = true, detailHost }: {
+export function SchemaPreflightPanel({ snapshot, onClose, onLocate, active = true, detailHost, onShowDetail }: {
   active?: boolean;
   detailHost?: HTMLElement | null;
   snapshot: DatabaseSnapshot;
   onClose: () => void;
   onLocate: (key: TableDefinition["key"]) => void;
+  onShowDetail?: () => void;
 }) {
   const { t: bt } = useI18n();
   const [tab, setTab] = useState<"findings" | "coverage">("findings");
   const [selectedId, setSelectedId] = useState<string>();
+  const detailId = useId();
   const [names, setNames] = useState(false);
   const [revision, setRevision] = useState(0);
   const [run, setRun] = useState<Run>();
@@ -74,10 +76,17 @@ export function SchemaPreflightPanel({ snapshot, onClose, onLocate, active = tru
   };
 
   const selected = visible.find(finding => finding.id === selectedId) ?? visible[0];
-  const detail = <div className="preflight-detail ds-surface" hidden={!active}>
-    <h2>{bt("preflight.detail")}</h2>
+  const detailKey = tab === "findings" ? selected?.id : undefined;
+  useLayoutEffect(() => {
+    const inspector = detailHost?.closest<HTMLElement>(".inspector");
+    if (active && inspector) inspector.scrollTop = 0;
+  }, [active, detailHost, detailKey, tab]);
+  const detail = <section id={detailId} className="preflight-detail ds-surface inspector-surface inspector-view" aria-label={bt("preflight.detail")} hidden={!active}>
+    <header className="inspector-header"><h2 className="inspector-title">{bt("preflight.detail")}</h2></header>
+    <div className="inspector-body">
     {tab === "findings" && selected ? <Finding key={selected.id} finding={selected} reason={findingReview(selected, reviews)?.reason} onReview={reason => updateReview(selected, reason)} onLocate={onLocate} /> : <p>{tab === "coverage" ? bt("business.checksUseCapturedMetadataOnlyFindingsDoNotGuarantee") : bt("preflight.select")}</p>}
-  </div>;
+    </div>
+  </section>;
   return <section className="schema-preflight ds-surface" hidden={!active} aria-label={bt("business.structurePreflight")}>
     <header className="preflight-header"><div><h2>{bt("business.structurePreflight")}</h2><p>{snapshot.database.name} · {report?.dialect ?? snapshot.database.databaseType} {snapshot.database.version}</p><p>{bt("preflight.scope")}</p></div>
       <div><Button onClick={onClose}>{bt("preflight.back")}</Button><Button disabled={!current} onClick={() => setRevision(value => value + 1)}>{bt("business.runChecksAgain")}</Button></div></header>
@@ -101,7 +110,7 @@ export function SchemaPreflightPanel({ snapshot, onClose, onLocate, active = tru
         </div>
         <p>{bt("preflight.counts",{count:report.findings.length-ignoredCount,ignored:ignoredCount})} · {visible.length} {bt("business.matching")}</p>
         <div className="preflight-scroll">
-          {visible.length ? <div className="preflight-findings">{visible.slice(0,limit).map(finding => <Button className="preflight-finding-row" key={finding.id} aria-pressed={selected?.id === finding.id} onClick={() => setSelectedId(finding.id)}><span>{translateUiLabel(outcomeLabels[finding.outcome],bt)}{findingReview(finding,reviews) ? ` · ${bt("business.ignored")}` : ""}</span><strong>{finding.objectKey.schema}.{finding.objectKey.name}</strong><span>{preflightText(finding.message,bt)}</span></Button>)}</div> : <div className="ds-empty-state"><p>{!report.findings.length ? bt("preflight.empty") : ignoredCount === report.findings.length && !showIgnored && !query && !ruleFilter && !outcomeFilter ? bt("preflight.allIgnored") : bt("business.noFindingsMatchTheCurrentFilters")}</p><Button onClick={() => setTab("coverage")}>{bt("preflight.coverage")}</Button></div>}
+          {visible.length ? <div className="preflight-findings">{visible.slice(0,limit).map(finding => <Button className="preflight-finding-row" key={finding.id} aria-controls={detailId} aria-pressed={selected?.id === finding.id} onClick={() => { setSelectedId(finding.id); onShowDetail?.(); }}><span>{translateUiLabel(outcomeLabels[finding.outcome],bt)}{findingReview(finding,reviews) ? ` · ${bt("business.ignored")}` : ""}</span><strong>{finding.objectKey.schema}.{finding.objectKey.name}</strong><span>{preflightText(finding.message,bt)}</span></Button>)}</div> : <div className="ds-empty-state"><p>{!report.findings.length ? bt("preflight.empty") : ignoredCount === report.findings.length && !showIgnored && !query && !ruleFilter && !outcomeFilter ? bt("preflight.allIgnored") : bt("business.noFindingsMatchTheCurrentFilters")}</p><Button onClick={() => setTab("coverage")}>{bt("preflight.coverage")}</Button></div>}
           {visible.length > limit ? <Button onClick={() => setLimit(value => value+100)}>{bt("business.load100MoreFindings")}</Button> : null}
         </div>
       </div>

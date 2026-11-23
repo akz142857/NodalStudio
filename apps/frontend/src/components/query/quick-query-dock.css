@@ -136,17 +136,6 @@
   background: var(--ds-field);
 }
 
-.quick-query-editor:has(> textarea:focus-visible) {
-  border-color: color-mix(in srgb, var(--ds-border) 50%, var(--ds-secondary));
-}
-
-@media (prefers-contrast: more), (forced-colors: active) {
-  .quick-query-editor:has(> textarea:focus-visible) {
-    outline: 2px solid var(--ds-text);
-    outline-offset: -2px;
-  }
-}
-
 .quick-query-editor textarea {
   flex: 1;
   align-self: stretch;
@@ -160,14 +149,12 @@
   tab-size: 2;
 }
 
-.quick-query-editor textarea:focus-visible { outline: none; }
 .quick-query-editor-actions {
   display: flex;
   flex: none;
   justify-content: flex-end;
   padding: var(--ds-space-1) var(--ds-space-2);
 }
-.quick-query-editor-actions button:focus-visible { outline-offset: 1px; }
 
 .quick-query-panel > p {
   margin: var(--ds-space-2) 0 0;

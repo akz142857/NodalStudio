@@ -32,7 +32,7 @@ describe("App structure preflight integration", () => {
 
   it("checks the entire loaded snapshot independent of diagram search and comparison ghosts, locating a table returns to Model", async () => {
     await mount();
-    fireEvent.change(screen.getByPlaceholderText("Table, field, schema…"), { target: { value: "no-tables-match" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Search schema" }), { target: { value: "no-tables-match" } });
     fireEvent.click(screen.getByRole("button", { name: "Structure preflight" }));
     const panel = screen.getByRole("region", { name: "Structure preflight" });
     await waitFor(() => expect(within(panel).getByRole("status")).toHaveTextContent("3 tables"));
@@ -40,7 +40,7 @@ describe("App structure preflight integration", () => {
     expect(panel).not.toHaveTextContent("public.audit");
     fireEvent.click(screen.getByRole("button", { name: "Locate table" }));
     expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByPlaceholderText("Table, field, schema…")).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Search schema" })).toHaveValue("");
     expect(screen.getByTestId("preflight-canvas")).toHaveTextContent("Canvas query: none · Selected: orders");
     expect(screen.queryByRole("region", { name: "Structure preflight" })).not.toBeInTheDocument();
   });

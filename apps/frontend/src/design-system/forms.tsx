@@ -1,7 +1,7 @@
 import "./forms.css";
 import { Button } from "./Button";
 import { useI18n } from "../i18n";
-import { useId, type ReactNode } from "react";
+import { useId, useState, type CSSProperties, type ReactNode } from "react";
 
 type ManagedSetting = { source: string; reason: string };
 
@@ -27,17 +27,34 @@ export function ToggleRow({ label, description, checked, managed, onChange }: { 
 }
 
 export function SelectRow({ label, value, options, onChange, disabled }: { label: string; value: string; disabled?: boolean; options: readonly (readonly [string, string])[]; onChange: (value: string) => void }) {
-  return <label className="setting-row"><span><strong>{label}</strong></span><select disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)}>{options.map(([optionValue, text]) => <option key={optionValue} value={optionValue}>{text}</option>)}</select></label>;
+  return <label className="setting-row setting-select"><span><strong>{label}</strong></span><select className="ds-select" disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)}>{options.map(([optionValue, text]) => <option key={optionValue} value={optionValue}>{text}</option>)}</select></label>;
 }
 
 export function RangeRow({ label, value, min, max, unit, onChange }: { label: string; value: number; min: number; max: number; unit: string; onChange: (value: number) => void }) {
   const id = useId();
   const { formatNumber } = useI18n();
-  return <label className="setting-row setting-range"><span><strong>{label}</strong></span><span className="setting-range-control"><input id={id} aria-label={label} type="range" value={value} min={min} max={max} onChange={(event) => onChange(Number(event.target.value))} /><output htmlFor={id}>{formatNumber(value)}{unit}</output></span></label>;
+  const percent = Math.min(100, Math.max(0, (value - min) / (max - min || 1) * 100));
+  return <label className="setting-row setting-range"><span><strong>{label}</strong></span><span className="setting-range-control"><input id={id} aria-label={label} type="range" value={value} min={min} max={max} style={{ "--setting-range-progress": `${percent}%` } as CSSProperties} onChange={(event) => onChange(Number(event.target.value))} /><output htmlFor={id}>{formatNumber(value)}{unit}</output></span></label>;
 }
 
 export function NumberRow({ label, value, min, max, unit, onChange }: { label: string; value: number; min: number; max: number; unit?: string; onChange: (value: number) => void }) {
-  return <label className="setting-row setting-number"><span><strong>{label}</strong>{unit ? <small>{unit}</small> : null}</span><input aria-label={label} type="number" value={value} min={min} max={max} onChange={(event) => onChange(Number(event.target.value))} /></label>;
+  const unitId = useId();
+  const [draft, setDraft] = useState<string>();
+  return <label className="setting-row setting-number">
+    <span><strong>{label}</strong>{unit ? <small id={unitId}>{unit}</small> : null}</span>
+    <input aria-label={label} aria-describedby={unit ? unitId : undefined} type="number" value={draft ?? value} min={min} max={max}
+      onChange={(event) => setDraft(event.currentTarget.value)} onBlur={(event) => {
+        const next = event.currentTarget.valueAsNumber;
+        if (draft !== undefined && event.currentTarget.validity.valid && Number.isFinite(next) && next !== value) onChange(next);
+        setDraft(undefined);
+      }} onKeyDown={(event) => {
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) event.currentTarget.blur();
+        if (event.key === "Escape" && draft !== undefined) {
+          event.stopPropagation();
+          setDraft(undefined);
+        }
+      }} />
+  </label>;
 }
 
 export function TextRow({ label, value, placeholder, readOnly, onChange }: { label: string; value: string; placeholder?: string; readOnly?: boolean; onChange: (value: string) => void }) {

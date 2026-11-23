@@ -33,11 +33,13 @@ export function QueryRunControls(props: Actions) {
     return () => document.removeEventListener("pointerdown", outside);
   }, [open]);
   function perform(action: () => void) { setOpen(false); trigger.current?.focus(); action(); }
-  return <div className="query-execution-controls" ref={root} onBlur={(event) => { if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setOpen(false); }} onKeyDown={(event) => {
+  return <div className="query-execution-controls" role="group" aria-label={bt("business.queryExecution")} ref={root}
+    data-executing={props.executing || undefined} data-unavailable={props.disabled && !props.executing || undefined}
+    onBlur={(event) => { if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setOpen(false); }} onKeyDown={(event) => {
     if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus(); }
   }}>
     {props.executing ? <button type="button" className="query-cancel" title={bt("business.stopDetail", { value0: queryKeys.stop })} onClick={props.onStop}><ActionIcon name="stop" />{bt("business.stop")} <kbd>{queryKeys.stop}</kbd></button> : <button type="button" className="query-run" disabled={props.disabled} title={bt("business.runSelectionOrEditorSQLCtrlEnterAlsoSupported", { value0: queryKeys.run })} onClick={props.onRun}><ActionIcon name="play" />{bt("business.run")} <kbd>{queryKeys.run}</kbd></button>}
-    <button ref={trigger} type="button" className="query-execution-disclosure" aria-label={bt("business.queryExecutionOptions")} aria-haspopup="menu" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); } }}><ActionIcon name="chevronUp" /></button>
+    <button ref={trigger} type="button" className="query-execution-disclosure" aria-label={bt("business.queryExecutionOptions")} aria-haspopup="menu" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); } }}><ActionIcon name="chevronDown" /></button>
     {open ? <div ref={menu} id={id} role="menu" aria-label={bt("business.queryExecution")} className="query-execution-menu" onKeyDown={queryMenuKeys}><QueryExecutionItems {...props} onRun={() => perform(props.onRun)} onRunCurrent={() => perform(props.onRunCurrent)} onStop={() => perform(props.onStop)} /></div> : null}
   </div>;
 }

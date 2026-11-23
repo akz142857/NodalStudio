@@ -18,7 +18,6 @@
 .connection-ssh-toggle span { display: grid; gap: 3px; }
 .connection-ssh-toggle strong { font-size: 12px; font-weight: 500; }
 .connection-ssh-toggle small { color: var(--ds-secondary); font-size: 11px; }
-.connection-security-options :focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
 .connection-panel .connection-file-field button { color: var(--ds-text); background: var(--ds-control); border: 1px solid var(--ds-border); border-radius: 7px; }
 .connection-panel .connection-file-field button:hover:not(:disabled) { background: var(--ds-hover); }
 /* A content-sized sheet with one scroll area and a persistent action row. */
@@ -39,8 +38,6 @@ section.connection-dialog {
 .connection-dialog > .connection-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0; }
 .connection-dialog .connection-panel label { display: grid; gap: 6px; color: var(--ds-secondary); font-size: 12px; font-weight: 500; }
 .connection-dialog .connection-panel input, .connection-dialog .connection-panel select { height: 32px; border-radius: 6px; font-size: 13px; font-weight: 400; }
-.connection-dialog .connection-panel input:focus, .connection-dialog .connection-panel select:focus { border-color: var(--ds-accent); }
-.connection-dialog :focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
 .connection-dialog .connection-panel button { min-height: 30px; padding: 5px 12px; border: 1px solid var(--ds-border); border-radius: 6px; color: var(--ds-text); background: var(--ds-control); font-size: 12px; font-weight: 500; line-height: 1.4; cursor: pointer; }
 .connection-dialog .connection-panel button:hover:not(:disabled) { background: var(--ds-hover); }
 .connection-dialog .connection-panel button:disabled { cursor: default; }

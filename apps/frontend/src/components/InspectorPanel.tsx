@@ -52,7 +52,7 @@ interface InspectorPanelProps {
   historyPreview?: boolean;
   onOpenQuery?: (table: TableDefinition) => void;
   onOpenSettings: (category: "ai" | "cloud" | "git") => void;
-  onSelectSnapshot: (snapshot: DatabaseSnapshot) => void;
+  onSelectSnapshot: (snapshot: DatabaseSnapshot, latest: boolean) => void;
   onCompareSnapshots: (snapshot: DatabaseSnapshot, changeSet: SchemaChangeSet) => void;
   onReviewChanges?: () => void;
 }
@@ -135,10 +135,6 @@ export function InspectorPanel({
     }
   }
   const inspectorView = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const scrollArea = inspectorView.current?.closest<HTMLElement>(".inspector");
-    if (modelChangeRequest && scrollArea) scrollArea.scrollTop = 0;
-  }, [modelChangeRequest]);
   const [evidenceRequestId, setEvidenceRequestId] = useState<string>();
   const handleAiTaskChange = useCallback((requestId: string | undefined) => {
     setEvidenceRequestId(requestId);
@@ -147,6 +143,12 @@ export function InspectorPanel({
   const evidenceScope = JSON.stringify([snapshot?.sourceId, snapshot?.id, snapshot?.fingerprint, selectedTable?.key, historicalSelection, settings.source?.sourceId, settings.source?.ai, settings.app.privacy.offlineMode, semantics.domainGroups, semantics.logicalRelationships, semantics.knowledge]);
   const focusedEvidence = evidenceSelection?.scope === evidenceScope && evidenceSelection.requestId === evidenceRequestId ? evidenceSelection.evidence : undefined;
   const evidenceTable = focusedEvidence && snapshot?.schemas.flatMap((schema) => schema.tables).find((table) => table.key.schema === focusedEvidence.tableKey.schema && table.key.name === focusedEvidence.tableKey.name);
+  const scrollTarget = JSON.stringify([snapshot?.sourceId, segment, segment === "history" ? null : selectedTable?.key]);
+  const locatingStructure = segment === "structure" && Boolean(columnFocus || focusedEvidence);
+  useLayoutEffect(() => {
+    const scrollArea = inspectorView.current?.closest<HTMLElement>(".inspector");
+    if (scrollArea && !locatingStructure) scrollArea.scrollTop = 0;
+  }, [scrollTarget, modelChangeRequest, locatingStructure]);
 
   // The Database title opens schema history without changing the selected object.
   useEffect(() => {
@@ -158,10 +160,12 @@ export function InspectorPanel({
   const aiEnabled = Boolean(settings.source?.ai.enabled) && !(settings.app.privacy.offlineMode && settings.source?.ai.provider !== "offline");
   const aiProviderLabel =
     settings.source?.ai.provider === "openAiCompatible" ? bt("business.remote") : bt("business.offline");
+  const headerTable = segment === "history" ? undefined : segment === "structure" && evidenceTable ? evidenceTable : selectedTable;
+  const readOnly = Boolean(historyPreview) || runtime?.kind !== "desktop";
 
   if (!snapshot) {
     return (
-      <div className="ds-surface inspector-view inspector-empty">
+      <div className="ds-surface inspector-surface inspector-view inspector-empty">
         <h2>{bt("business.inspector")}</h2>
         <p>{bt("business.connectADataSourceToInspectItsModel")}</p>
       </div>
@@ -169,11 +173,11 @@ export function InspectorPanel({
   }
 
   return (
-    <div className="ds-surface inspector-view" ref={inspectorView}>
+    <div className="ds-surface inspector-surface inspector-view" ref={inspectorView}>
       <header className="inspector-header">
-        <span className="inspector-context">{selectedTable ? bt("business.tableDetail", { value0: (segment === "structure" && evidenceTable ? evidenceTable : selectedTable).key.schema }) : bt("business.database")}</span>
-        <h2 className="inspector-title">{segment === "structure" && evidenceTable ? `${evidenceTable.key.schema}.${evidenceTable.key.name}` : selectedTable ? selectedTable.key.name : snapshot.database.name}</h2>
-        {historicalSelection ? <p className="historical-selection-note">{bt("business.deletedTableBeforeSnapshot")}</p> : null}
+        <span className="inspector-context">{headerTable ? bt("business.tableDetail", { value0: headerTable.key.schema }) : bt("business.database")}</span>
+        <h2 className="inspector-title">{headerTable?.key.name ?? snapshot.database.name}</h2>
+        {historicalSelection && headerTable ? <p className="historical-selection-note">{bt("business.deletedTableBeforeSnapshot")}</p> : null}
         <div className="inspector-segments">
           <Segmented
             label={bt("business.inspectorSection")}
@@ -197,7 +201,7 @@ export function InspectorPanel({
               <pre>{focusedEvidence.detail}</pre>
               <button type="button" onClick={() => setSegment("ai")}>{bt("business.backToAIExplanation")}</button>
             </section> : null}
-            <TableStructure onOpenObject={onOpenObject} snapshot={snapshot} table={evidenceTable || selectedTable} columnFocus={focusedEvidence ? undefined : columnFocus} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection ? undefined : onOpenQuery} />
+            <TableStructure onOpenObject={onOpenObject} snapshot={snapshot} table={evidenceTable || selectedTable} columnFocus={focusedEvidence ? undefined : columnFocus} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection || historyPreview ? undefined : onOpenQuery} />
           </>
         ) : (
           <dl className="snapshot-summary">
@@ -227,14 +231,16 @@ export function InspectorPanel({
               table={selectedTable}
               sourceId={snapshot.sourceId}
               annotation={annotation}
+              readOnly={readOnly}
               onSaveAnnotation={onSaveAnnotation}
             />
           ) : null}
-          <KnowledgeReview platform={platform} snapshot={snapshot} semantics={semantics} table={selectedTable} desktop={runtime?.kind === "desktop"} onRefresh={onRefreshSemantics} />
+          {historyPreview ? <p>{bt("businessSupport.knowledgeReviewRequiresTheLatestLoadedSnapshot")}</p> :
+            <KnowledgeReview platform={platform} snapshot={snapshot} semantics={semantics} table={selectedTable} desktop={runtime?.kind === "desktop"} onRefresh={onRefreshSemantics} />}
           <KnowledgePanel
             sourceId={snapshot.sourceId}
             snapshotId={snapshot.id}
-            readOnly={historyPreview}
+            readOnly={readOnly}
             selectedTable={selectedTable}
             semantics={semantics}
             platform={platform}
@@ -277,7 +283,7 @@ export function InspectorPanel({
         </>
       ) : null}
 
-      {selectedTable && !historicalSelection ? <div hidden={segment !== "ai"}>
+      {selectedTable && !historicalSelection && !historyPreview ? <div hidden={segment !== "ai"}>
         <TableAiAssistant
           key={evidenceScope}
           platform={platform} snapshot={snapshot} table={selectedTable} settings={settings} active={segment === "ai"}
@@ -291,8 +297,9 @@ export function InspectorPanel({
           }}
         />
       </div> : null}
-      {segment === "ai" && (!selectedTable || historicalSelection) ? (
-        historicalSelection ? <p>{bt("business.reviewThisDeletedTableSBeforePropertiesInThe")}</p> : changeSet ? (
+      {segment === "ai" && (!selectedTable || historicalSelection || historyPreview) ? (
+        historicalSelection ? <p>{bt("business.reviewThisDeletedTableSBeforePropertiesInThe")}</p>
+          : selectedTable && historyPreview ? <p>{bt("inspector.latestForTableAi")}</p> : changeSet ? (
           <AiAssistant
             ai={settings.source?.ai}
             platform={platform}

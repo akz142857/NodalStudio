@@ -3,6 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import type { AppSettings, NodalStudioPlatform, RuntimeInfo, UpdateStatus } from "../../platform";
 import { assertUpdateCanRestart } from "../../platform/update-guard";
+import { Button } from "../../design-system/Button";
+import { ActionIcon } from "../ActionIcon";
 import { SettingsGroup, ToggleRow, TextRow, SelectRow } from "./SettingsControls";
 import "./updates.css";
 import { PurchasePanel } from "./PurchasePanel";
@@ -41,7 +43,7 @@ function AppStoreUpdatePanel({ platform, version }: { platform: NodalStudioPlatf
     <p className="update-help">{t("updates.appStoreManaged")}</p>
     {error ? <p className="update-error" role="alert">{t("updates.appStoreOpenFailed")}</p> : null}
     <div className="setting-action-row update-actions">
-      <button type="button" onClick={() => void openStore()}>{t("updates.openAppStore")}</button>
+      <Button onClick={() => void openStore()}>{t("updates.openAppStore")}</Button>
     </div>
   </SettingsGroup>;
 }
@@ -115,7 +117,7 @@ function DirectUpdatePanel({ platform, runtime, app, managed, onSave }: {
   return <>
     <SettingsGroup title={t("updates.updates")}>
       <div className="update-summary" aria-live="polite" aria-atomic="true">
-        <span className="update-symbol" aria-hidden="true">↻</span>
+        <span className="update-symbol" aria-hidden="true"><ActionIcon name="refresh" /></span>
         <div><h3>{t(labels[phase])}</h3><p>{t("updates.installedVersion", { version: status?.currentVersion ?? runtime?.version ?? "—", available: status?.availableVersion ? t("updates.available", { value0: status.availableVersion }) : "" })}</p></div>
         {status?.canInstall ? <span className="update-verified">{t("updates.signatureVerified")}</span> : null}
       </div>
@@ -126,10 +128,10 @@ function DirectUpdatePanel({ platform, runtime, app, managed, onSave }: {
       {phase === "downloading" || phase === "verifying" ? <div className="update-progress"><progress aria-label={t("updates.updateDownload")} max={100} value={phase === "verifying" ? undefined : progress} /><span>{phase === "verifying" ? t("updates.checkingTheSignatureAndApplicationIdentity") : status?.totalBytes ? t("updates.download.progress", { downloaded: megabytes(status.downloadedBytes), total: megabytes(status.totalBytes) }) : t("updates.download.amount", { downloaded: megabytes(status?.downloadedBytes ?? 0) })}</span></div> : null}
       {error || status?.error ? <p className="update-error" role="alert">{error || status?.error}</p> : null}
       <div className="setting-action-row update-actions">
-        {status?.canInstall ? <button type="button" className="update-primary" disabled={busy || !desktop || !status.configured} onClick={install}>{t("updates.installAndRestart")}</button> : status?.canDownload ? <button type="button" className="update-primary" disabled={busy || blocked} onClick={() => void run(() => platform.downloadUpdate())}>{t("updates.downloadUpdate")}</button> : null}
-        <button type="button" disabled={busy || blocked} onClick={() => void run(() => platform.checkForUpdates())}>{t("updates.checkForUpdates")}</button>
-        {desktop && status?.source === "GitHub Releases" ? <button type="button" disabled={busy || blocked} onClick={() => void run(() => platform.openUpdateReleases())}>{status.manualOnly && status.availableVersion ? t("updates.getUpdateOnGitHub") : t("updates.viewGitHubReleases")}</button> : null}
-        {phase === "downloading" ? <button type="button" onClick={() => void platform.cancelUpdateDownload().catch((e: unknown) => setError(reason(e)))}>{t("updates.cancelDownload")}</button> : null}
+        {status?.canInstall ? <Button variant="primary" disabled={busy || !desktop || !status.configured} onClick={install}>{t("updates.installAndRestart")}</Button> : status?.canDownload ? <Button variant="primary" disabled={busy || blocked} onClick={() => void run(() => platform.downloadUpdate())}>{t("updates.downloadUpdate")}</Button> : null}
+        <Button disabled={busy || blocked} onClick={() => void run(() => platform.checkForUpdates())}>{t("updates.checkForUpdates")}</Button>
+        {desktop && status?.source === "GitHub Releases" ? <Button disabled={busy || blocked} onClick={() => void run(() => platform.openUpdateReleases())}>{status.manualOnly && status.availableVersion ? t("updates.getUpdateOnGitHub") : t("updates.viewGitHubReleases")}</Button> : null}
+        {phase === "downloading" ? <Button onClick={() => void platform.cancelUpdateDownload().catch((e: unknown) => setError(reason(e)))}>{t("updates.cancelDownload")}</Button> : null}
       </div>
       {status?.checkedAt ? <p className="update-help">{t("updates.lastChecked")}{" "}{formatDate(status.checkedAt, app.general.dateTimeFormat)}</p> : null}
       <ToggleRow label={t("updates.automaticallyCheckForUpdates")} description={t("updates.checkWhenTheAppStartsDownloadsAndInstallation")} checked={app.updates.automaticChecks} managed={managed} onChange={(automaticChecks) => void onSave({ ...app, updates: { ...app.updates, automaticChecks } })} />

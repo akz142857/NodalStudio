@@ -8,6 +8,7 @@ import { UpdatePanel } from "./settings/UpdatePanel";
 import { useUpdateBlocker } from "../platform/update-guard";
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
+import { formatCommandShortcut, WORKSPACE_SHORTCUTS } from "./command-shortcuts";
 import { SettingsSection, SettingsGroup, ToggleRow, SelectRow, RangeRow, NumberRow, TextRow, SecretRow } from "./settings/SettingsControls";
 import "./settings/settings.css";
 import { CapabilitiesMatrix } from "./CapabilitiesMatrix";
@@ -110,7 +111,10 @@ function SettingsContent({
 
   const isMas = runtime?.distribution === "macAppStore";
   const commandLabels: Record<string, string> = { openSettings: t("settings.command.openSettings"), focusSearch: t("settings.command.focusSearch"), refreshSchema: t("settings.command.refreshSchema"), toggleLeftSidebar: t("settings.command.toggleLeftSidebar"), toggleRightInspector: t("settings.command.toggleRightInspector"), fitCanvas: t("settings.command.fitCanvas"), focusSelectedTable: t("settings.command.focusSelectedTable"), relayoutCanvas: t("settings.command.relayoutCanvas"), largeModelVirtualization: t("settings.command.largeModelVirtualization"), relationshipInferenceV2: t("settings.command.relationshipInferenceV2"), environmentDrift: t("settings.command.environmentDrift"), migrationProvenance: t("settings.command.migrationProvenance"), codeLineage: t("settings.command.codeLineage") };
-  const commandLabel = (key: string) => commandLabels[key] ?? humanize(key);
+  const commandLabel = (key: string) => {
+    const workspace = WORKSPACE_SHORTCUTS.find(([label]) => label === key);
+    return workspace ? t(workspace[0]) : commandLabels[key] ?? humanize(key);
+  };
   const contentRef = useRef<HTMLElement>(null);
   const [category, setCategory] = useState<SettingsCategory>(initialCategory);
   const [query, setQuery] = useState("");
@@ -147,9 +151,10 @@ function SettingsContent({
   const filteredCategories = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const available = categories.filter(([id]) => !isMas || id !== "cloud");
-    return normalized
-      ? available.filter((item) => `${item[1]} ${item[2]} ${t(categoryMessages[item[0]])} ${categoryAliases[item[0]]}`.toLowerCase().includes(normalized))
-      : available;
+    return available.filter(([id, name, keywords]) => {
+      const searchable = `${name} ${keywords} ${t(categoryMessages[id])} ${categoryAliases[id]}`.toLowerCase();
+      return normalized.split(/\s+/).every((term) => searchable.includes(term));
+    });
   }, [query, t, isMas]);
   const visibleCategory = filteredCategories.some(([id]) => id === category)
     ? category
@@ -162,13 +167,16 @@ function SettingsContent({
   useUpdateBlocker(t("settings.waitForSettingsToFinishSaving"), saveState === "saving");
   const shortcutConflicts = useMemo(() => {
     const byBinding = new Map<string, string[]>();
+    if (runtime?.kind === "desktop") {
+      for (const [label, binding] of WORKSPACE_SHORTCUTS) byBinding.set(binding.toLowerCase(), [label]);
+    }
     for (const [command, binding] of Object.entries(settings.app.shortcuts.bindings)) {
       const normalized = binding.trim().toLowerCase();
       if (!normalized) continue;
       byBinding.set(normalized, [...(byBinding.get(normalized) ?? []), command]);
     }
     return new Map([...byBinding].filter(([, commands]) => commands.length > 1));
-  }, [settings.app.shortcuts.bindings]);
+  }, [runtime?.kind, settings.app.shortcuts.bindings]);
 
   async function saveApp(next: AppSettings) {
     setSaveError(undefined);
@@ -196,6 +204,8 @@ function SettingsContent({
 
   function chooseCategory(next: SettingsCategory) {
     setCategory(next);
+    setOperationError("");
+    setOperationMessage("");
     window.history.replaceState(null, "", `#/settings/${next}`);
   }
 
@@ -224,21 +234,28 @@ function SettingsContent({
     }
   }
   const cloud = cloudDraft ?? source?.cloud;
+  const cloudDirty = JSON.stringify(cloud) !== JSON.stringify(source?.cloud);
   const historySettings = source?.storage ?? app.history;
+  const refreshIntervals: [string, string][] = [["0",t("settings.off")],["30",t("settings.30Seconds")],["60",t("settings.1Minute")],["300",t("settings.5Minutes")],["900",t("settings.15Minutes")]];
+  if (source && !refreshIntervals.some(([value]) => Number(value) === source.refresh.intervalSeconds)) {
+    refreshIntervals.push([String(source.refresh.intervalSeconds), t("settings.customRefresh")]);
+  }
   const isManaged = (path: string) => settings.managed.find((item) => item.path === path || path.startsWith(`${item.path}.`));
 
   // Reloading app preferences can return a new source object with unchanged settings.
   // Only actual source/configuration changes may replace unsaved provider drafts.
   const savedAi = JSON.stringify(settings.source?.ai);
   const savedCloud = JSON.stringify(settings.source?.cloud);
-  const syncProviderDrafts = useEffectEvent(() => {
-    setAiDraft(settings.source?.ai);
-    setCloudDraft(settings.source?.cloud);
-  });
+  const syncAiDraft = useEffectEvent(() => setAiDraft(settings.source?.ai));
+  const syncCloudDraft = useEffectEvent(() => setCloudDraft(settings.source?.cloud));
   useEffect(() => {
-    const timer = window.setTimeout(() => syncProviderDrafts(), 0);
+    const timer = window.setTimeout(() => syncAiDraft(), 0);
     return () => window.clearTimeout(timer);
-  }, [settings.source?.sourceId, savedAi, savedCloud]);
+  }, [settings.source?.sourceId, savedAi]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => syncCloudDraft(), 0);
+    return () => window.clearTimeout(timer);
+  }, [settings.source?.sourceId, savedCloud]);
 
   function saveHistory(patch: Partial<DataSourceSettings["storage"]>) {
     if (source) {
@@ -283,6 +300,11 @@ function SettingsContent({
 
   function updateShortcut(command: string, binding: string) {
     const normalized = binding.trim().toLowerCase();
+    const workspace = runtime?.kind === "desktop" && WORKSPACE_SHORTCUTS.find(([, key]) => key.toLowerCase() === normalized);
+    if (workspace) {
+      setOperationError(t("settings.isAlreadyAssignedTo", { value0: binding, value1: t(workspace[0]) }));
+      return;
+    }
     const duplicate = Object.entries(app.shortcuts.bindings).find(
       ([otherCommand, otherBinding]) =>
         otherCommand !== command && normalized && otherBinding.trim().toLowerCase() === normalized,
@@ -301,6 +323,9 @@ function SettingsContent({
       <header className="settings-header">
         <Button variant="ghost" className="settings-back" onClick={onClose}>{t("settings.back")}</Button>
         <h1>{t("settings.settings")}</h1>
+        <div className="settings-save-state" role="status">
+          {saveState === "saving" ? t("settings.saving") : saveState === "saved" ? t("settings.savedLocally") : null}
+        </div>
         <label className="settings-search">
           <span className="settings-visually-hidden">{t("settings.searchSettings")}</span>
           <ActionIcon name="search" />
@@ -312,14 +337,11 @@ function SettingsContent({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <div className="settings-save-state" data-state={saveState} role={saveState === "error" ? "alert" : "status"} aria-live="polite">
-          {saveState === "saving" ? t("settings.saving") : saveState === "saved" ? t("settings.savedLocally") : saveState === "error" ? `${t("settings.saveFailed")}${saveError ? ` · ${saveError}` : ""}` : runtime?.label}
-        </div>
       </header>
 
       <div className="settings-layout">
         <nav className="settings-navigation" aria-label={t("settings.settingsCategories")}>
-          <label className="settings-category-picker">{t("settings.category")}<select value={visibleCategory ?? ""} onChange={(event) => chooseCategory(event.target.value as SettingsCategory)} disabled={!filteredCategories.length}>
+          <label className="settings-category-picker">{t("settings.category")}<select className="ds-select" value={visibleCategory ?? ""} onChange={(event) => chooseCategory(event.target.value as SettingsCategory)} disabled={!filteredCategories.length}>
               {!filteredCategories.length ? <option value="">{t("settings.noResults")}</option> : null}
               {filteredCategories.map(([id]) => <option key={id} value={id}>{t(categoryMessages[id])}</option>)}
             </select>
@@ -352,6 +374,7 @@ function SettingsContent({
         <div className="settings-detail-pane">
         <main className="settings-content" ref={contentRef} tabIndex={-1}>
           {!filteredCategories.length ? <div className="settings-no-results"><ActionIcon name="search" /><h2>{t("settings.noSettingsFound")}</h2><p>{t("settings.tryAnotherSearchTerm")}</p><Button type="button" onClick={() => setQuery("")}>{t("settings.clearSearch")}</Button></div> : null}
+          {saveState === "error" ? <p className="settings-operation-error" role="alert">{t("settings.saveFailed")}{saveError ? ` · ${saveError}` : null}</p> : null}
           {operationError ? <p className="settings-operation-error" role="alert">{t("settings.operationFailed")} <span>{operationError}</span></p> : null}
           {operationMessage ? <p className="settings-operation-message" role="status">{operationMessage}</p> : null}
           {visibleCategory === "general" ? (
@@ -437,11 +460,14 @@ function SettingsContent({
               <SelectRow label={t("settings.defaultSSLMode")} value={app.connectionDefaults.sslMode} onChange={(sslMode) => void saveApp({ ...app, connectionDefaults: { ...app.connectionDefaults, sslMode: sslMode as AppSettings["connectionDefaults"]["sslMode"] } })} options={[['disable',t("settings.disable")],['prefer',t("settings.prefer")],['require',t("settings.require")],['verifyCa',t("settings.verifyCA")],['verifyFull',t("settings.verifyFull")]]} />
               </SettingsGroup>
               <SettingsGroup title={t("settings.savedConnections")}>
-              <div className="data-source-settings-list">{dataSources.length === 0 ? <p className="settings-empty-inline">{t("settings.noSavedConnectionsAddADataSourceFrom")}</p> : null}{dataSources.map((profile) => <article key={profile.id}><div><strong>{profile.displayName}</strong><span>{profile.databaseType === "sqlite" ? "SQLite" : profile.databaseType === "mySql" ? "MySQL" : "PostgreSQL"} · {profile.databaseType === "sqlite" ? profile.sqlite?.path ?? t("sqlite.unbound") : `${profile.host}:${profile.port}/${profile.database} · SSL ${profile.sslMode}`}</span></div><div><Button type="button" onClick={() => void runOperation(async () => { const displayName = window.prompt(t("settings.renameDataSource"), profile.displayName)?.trim(); if (!displayName || displayName === profile.displayName) return; await platform.renameDataSource(profile.id, displayName); await onDataSourcesChanged(); setOperationMessage(t("settings.dataSourceRenamed")); })}>{t("settings.rename")}</Button><Button type="button" onClick={() => void runOperation(async () => { const copy = await platform.duplicateDataSource(profile.id); await onDataSourcesChanged(); setOperationMessage(t("settings.createdWithoutCredentialsSelectItInTheConnection", { value0: copy.displayName })); })}>{t("settings.duplicateParameters")}</Button><Button type="button" disabled={profile.databaseType === "sqlite"} onClick={() => void runOperation(async () => { if (!window.confirm(t("settings.forgetTheSavedDatabaseAndSSHPasswordsFor", { value0: profile.displayName }))) return; await platform.clearCredentials(profile.id, { database: true, ai: false, cloud: false }); setOperationMessage(t("settings.databaseAndSSHCredentialsRemovedFromSystemCredential")); })}>{t("settings.forgetPassword")}</Button><Button type="button" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "history")) return; const count = await platform.deleteSourceData(profile.id, { deleteConnection: false, deleteHistory: true, deleteSemantics: false, removeDatabaseCredential: false }); await onReload(); setOperationMessage(t("settings.deletedHistoryRecords", { value0: count })); })}>{t("settings.deleteHistory")}</Button><Button type="button" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "semantics")) return; const count = await platform.deleteSourceData(profile.id, { deleteConnection: false, deleteHistory: false, deleteSemantics: true, removeDatabaseCredential: false }); await onReload(); setOperationMessage(t("settings.deletedSemanticRecords", { value0: count })); })}>{t("settings.deleteSemantics")}</Button><Button type="button" variant="danger" className="danger-setting-action" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "connection")) return; await platform.deleteSourceData(profile.id, { deleteConnection: true, deleteHistory: false, deleteSemantics: false, removeDatabaseCredential: true }); await onDataSourcesChanged(); await onReload(); setOperationMessage(t("settings.dataSourceConnectionRemoved")); })}>{t("settings.removeConnection")}</Button></div></article>)}</div>
+              <div className="data-source-settings-list">{dataSources.length === 0 ? <p className="settings-empty-inline">{t("settings.noSavedConnectionsAddADataSourceFrom")}</p> : null}{dataSources.map((profile) => <article key={profile.id}><div><header><strong>{profile.displayName}</strong>{activeSourceId === profile.id ? <small>{t("settings.activeConnection")}</small> : null}</header><span>{profile.databaseType === "sqlite" ? "SQLite" : profile.databaseType === "mySql" ? "MySQL" : "PostgreSQL"} · {profile.databaseType === "sqlite" ? profile.sqlite?.path ?? t("sqlite.unbound") : `${profile.host}:${profile.port}/${profile.database} · SSL ${profile.sslMode}`}</span></div>
+                <div className="setting-action-row"><Button type="button" onClick={() => void runOperation(async () => { const displayName = window.prompt(t("settings.renameDataSource"), profile.displayName)?.trim(); if (!displayName || displayName === profile.displayName) return; await platform.renameDataSource(profile.id, displayName); await onDataSourcesChanged(); setOperationMessage(t("settings.dataSourceRenamed")); })}>{t("settings.rename")}</Button><Button type="button" onClick={() => void runOperation(async () => { const copy = await platform.duplicateDataSource(profile.id); await onDataSourcesChanged(); setOperationMessage(t("settings.createdWithoutCredentialsSelectItInTheConnection", { value0: copy.displayName })); })}>{t("settings.duplicateParameters")}</Button></div>
+                <details className="settings-disclosure"><summary>{t("settings.connectionMaintenance")}</summary><div className="setting-action-row"><Button type="button" variant="danger" disabled={profile.databaseType === "sqlite"} onClick={() => void runOperation(async () => { if (!window.confirm(t("settings.forgetTheSavedDatabaseAndSSHPasswordsFor", { value0: profile.displayName }))) return; await platform.clearCredentials(profile.id, { database: true, ai: false, cloud: false }); setOperationMessage(t("settings.databaseAndSSHCredentialsRemovedFromSystemCredential")); })}>{t("settings.forgetPassword")}</Button><Button type="button" variant="danger" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "history")) return; const count = await platform.deleteSourceData(profile.id, { deleteConnection: false, deleteHistory: true, deleteSemantics: false, removeDatabaseCredential: false }); await onReload(); setOperationMessage(t("settings.deletedHistoryRecords", { value0: count })); })}>{t("settings.deleteHistory")}</Button><Button type="button" variant="danger" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "semantics")) return; const count = await platform.deleteSourceData(profile.id, { deleteConnection: false, deleteHistory: false, deleteSemantics: true, removeDatabaseCredential: false }); await onReload(); setOperationMessage(t("settings.deletedSemanticRecords", { value0: count })); })}>{t("settings.deleteSemantics")}</Button><Button type="button" variant="danger" className="danger-setting-action" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "connection")) return; await platform.deleteSourceData(profile.id, { deleteConnection: true, deleteHistory: false, deleteSemantics: false, removeDatabaseCredential: true }); await onDataSourcesChanged(); await onReload(); setOperationMessage(t("settings.dataSourceConnectionRemoved")); })}>{t("settings.removeConnection")}</Button></div></details>
+              </article>)}</div>
               </SettingsGroup>
               {source ? <>
               <SettingsGroup title={t("settings.refreshNotifications")}>
-                <SelectRow label={t("settings.automaticRefresh")} value={String(source.refresh.intervalSeconds)} onChange={(value) => void saveSource({ ...source, refresh: { ...source.refresh, intervalSeconds: Number(value) } })} options={[["0",t("settings.off")],["30",t("settings.30Seconds")],["60",t("settings.1Minute")],["300",t("settings.5Minutes")],["900",t("settings.15Minutes")]]} />
+                <SelectRow label={t("settings.automaticRefresh")} value={String(source.refresh.intervalSeconds)} onChange={(value) => void saveSource({ ...source, refresh: { ...source.refresh, intervalSeconds: Number(value) } })} options={refreshIntervals} />
                 <NumberRow label={t("settings.customRefreshInterval")} value={source.refresh.intervalSeconds} min={0} max={86400} unit={t("settings.seconds0Disables")} onChange={(intervalSeconds) => void saveSource({ ...source, refresh: { ...source.refresh, intervalSeconds } })} />
                 <ToggleRow label={t("settings.pauseRefreshInBackground")} checked={source.refresh.pauseInBackground} onChange={(pauseInBackground) => void saveSource({ ...source, refresh: { ...source.refresh, pauseInBackground } })} />
                 <SelectRow label={t("settings.schemaChangeNotificationsForThisSource")} value={source.refresh.changeNotifications} onChange={(changeNotifications) => void saveSource({ ...source, refresh: { ...source.refresh, changeNotifications: changeNotifications as DataSourceSettings["refresh"]["changeNotifications"] } })} options={[['all',t("settings.allChanges")],['highRisk',t("settings.highRiskOnly")],['off',t("settings.off")]]} />
@@ -464,12 +490,15 @@ function SettingsContent({
               {historySettings.retention !== "forever" ? <NumberRow label={historySettings.retention === "days" ? t("settings.daysToKeep") : t("settings.snapshotsToKeep")} value={historySettings.retentionValue} min={1} max={3650} onChange={(retentionValue) => saveHistory({ retentionValue })} /> : null}
               <ToggleRow label={t("settings.preserveHighRiskChanges")} checked={historySettings.preserveHighRisk} onChange={(preserveHighRisk) => saveHistory({ preserveHighRisk })} />
               </SettingsGroup>
-              <SettingsGroup title={t("settings.storageBackup")}>
+              <SettingsGroup title={t("settings.diskUsage")}>
               <NumberRow label={t("settings.storageWarning")} value={app.history.storageWarningMegabytes} min={128} max={102400} unit="MB" onChange={(storageWarningMegabytes) => void saveApp({ ...app, history: { ...app.history, storageWarningMegabytes } })} />
+              <div className="setting-action-row"><Button type="button" onClick={() => void runOperation(async () => setStorageUsage(await platform.getStorageUsage()))}>{t("settings.viewStorageUsage")}</Button><Button type="button" onClick={() => void runOperation(async () => { const cleared = await platform.clearRegenerableCache(); setOperationMessage(cleared ? t("settings.clearedCacheRecords", { value0: cleared }) : t("settings.noRegenerableCacheIsCurrentlyStored")); })}>{t("settings.clearCache")}</Button><Button type="button" onClick={() => void runOperation(async () => { if (!window.confirm(t("settings.clearSavedCanvasLayoutsSnapshotsAndSemanticsWill"))) return; await platform.clearLayouts(activeSourceId); setStorageUsage(await platform.getStorageUsage()); })}>{t("settings.clearLayouts")}</Button><Button type="button" onClick={() => void runOperation(async () => { const info = await platform.getDiagnosticInfo(); setDiagnosticInfo(info); setOperationMessage(t("settings.localDatabaseDirectory", { value0: info.dataDirectory })); })}>{t("settings.showLocalDatabaseLocation")}</Button></div>
+              {storageUsage ? <StorageUsageCard usage={storageUsage} /> : null}
+              </SettingsGroup>
+              <SettingsGroup title={t("settings.portableBackups")}>
               <TextRow readOnly={isMas} label={t("settings.portableBackupPath")} value={backupPath} placeholder="/absolute/path/model.nodalmodel" onChange={setBackupPath} />
               <div className="setting-action-row"><Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("saveBackup"); if (path) setBackupPath(path); })}>{t("submission.saveLocation")}</Button><Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("openBackup"); if (path) setBackupPath(path); })}>{t("submission.openFile")}</Button></div>
-              <div className="setting-action-row"><Button type="button" onClick={() => void runOperation(async () => setStorageUsage(await platform.getStorageUsage()))}>{t("settings.viewStorageUsage")}</Button><Button type="button" disabled={!activeSourceId || !backupPath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const receipt = await platform.exportPortableBackup(activeSourceId, backupPath); setOperationMessage(t("settings.backedUpSnapshotsAndAnnotations", { value0: receipt.snapshots, value1: receipt.annotations })); })}>{t("settings.exportBackup")}</Button><Button type="button" disabled={!backupPath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { const preview = await platform.previewPortableBackup(backupPath); const identity = [preview.sourceLabel, preview.databaseName, preview.databaseType].filter(Boolean).join(" · "); const accepted = window.confirm(t("settings.importBackupFormatVExportedSnapshotsAnnotationsViews", { value0: identity || preview.sourceId, value1: preview.formatVersion, value2: formatDate(preview.exportedAt, locale, app.general.dateTimeFormat), value3: preview.snapshots, value4: preview.annotations, value5: preview.savedViews, value6: preview.willUpdateExistingSource ? t("settings.backup.updateSource") : t("settings.backup.createSource"), value7: preview.conflictStrategy })); if (!accepted) return; const receipt = await platform.importPortableBackup(backupPath); await Promise.all([onDataSourcesChanged(), onReload()]); setOperationMessage(t("settings.restoredSnapshotsAndAnnotations", { value0: receipt.snapshots, value1: receipt.annotations })); })}>{t("settings.previewImport")}</Button><Button type="button" onClick={() => void runOperation(async () => { const cleared = await platform.clearRegenerableCache(); setOperationMessage(cleared ? t("settings.clearedCacheRecords", { value0: cleared }) : t("settings.noRegenerableCacheIsCurrentlyStored")); })}>{t("settings.clearCache")}</Button><Button type="button" onClick={() => void runOperation(async () => { if (!window.confirm(t("settings.clearSavedCanvasLayoutsSnapshotsAndSemanticsWill"))) return; await platform.clearLayouts(activeSourceId); setStorageUsage(await platform.getStorageUsage()); })}>{t("settings.clearLayouts")}</Button><Button type="button" onClick={() => void runOperation(async () => { const info = await platform.getDiagnosticInfo(); setDiagnosticInfo(info); setOperationMessage(t("settings.localDatabaseDirectory", { value0: info.dataDirectory })); })}>{t("settings.showLocalDatabaseLocation")}</Button></div>
-              {storageUsage ? <StorageUsageCard usage={storageUsage} /> : null}
+              <div className="setting-action-row"><Button type="button" disabled={!activeSourceId || !backupPath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const receipt = await platform.exportPortableBackup(activeSourceId, backupPath); setOperationMessage(t("settings.backedUpSnapshotsAndAnnotations", { value0: receipt.snapshots, value1: receipt.annotations })); })}>{t("settings.exportBackup")}</Button><Button type="button" disabled={!backupPath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { const preview = await platform.previewPortableBackup(backupPath); const identity = [preview.sourceLabel, preview.databaseName, preview.databaseType].filter(Boolean).join(" · "); const accepted = window.confirm(t("settings.importBackupFormatVExportedSnapshotsAnnotationsViews", { value0: identity || preview.sourceId, value1: preview.formatVersion, value2: formatDate(preview.exportedAt, locale, app.general.dateTimeFormat), value3: preview.snapshots, value4: preview.annotations, value5: preview.savedViews, value6: preview.willUpdateExistingSource ? t("settings.backup.updateSource") : t("settings.backup.createSource"), value7: preview.conflictStrategy })); if (!accepted) return; const receipt = await platform.importPortableBackup(backupPath); await Promise.all([onDataSourcesChanged(), onReload()]); setOperationMessage(t("settings.restoredSnapshotsAndAnnotations", { value0: receipt.snapshots, value1: receipt.annotations })); })}>{t("settings.previewImport")}</Button></div>
               </SettingsGroup>
             </SettingsSection>
           ) : null}
@@ -481,7 +510,7 @@ function SettingsContent({
               {source ? <>
               <SettingsGroup title={t("settings.repository")}>
                 <TextRow readOnly={isMas} label={t("settings.repositoryPath")} value={source.git.repositoryPath} placeholder="/path/to/repository" onChange={(repositoryPath) => void saveSource({ ...source, git: { ...source.git, repositoryPath } })} />
-                <Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("repository"); if (path) await saveSource({ ...source, git: { ...source.git, repositoryPath: path } }); })}>{t("submission.chooseFolder")}</Button>
+                <div className="setting-action-row"><Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("repository"); if (path) await saveSource({ ...source, git: { ...source.git, repositoryPath: path } }); })}>{t("submission.chooseFolder")}</Button></div>
                 <ToggleRow label={t("settings.commitReminder")} checked={source.git.commitReminders} onChange={(commitReminders) => void saveSource({ ...source, git: { ...source.git, commitReminders } })} />
                 <div className="setting-action-row"><Button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; setMergeStatus(await platform.checkMergeDriver(activeSourceId, source.git.repositoryPath)); })}>{t(isMas ? "submission.checkGit" : "settings.checkRepositoryMergeDriver")}</Button><Button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const preview = await platform.previewGitExport(activeSourceId, source.git.repositoryPath); if (!window.confirm(t("settings.exportGitWorkspaceAddedModifiedRemovedUnchangedManaged", { value0: preview.addedFiles, value1: preview.modifiedFiles, value2: preview.removedFiles, value3: preview.unchangedFiles, value4: preview.schemaFingerprint }))) return; const receipt = await platform.exportGitWorkspace(activeSourceId, source.git.repositoryPath); setOperationMessage(t("settings.exportedManagedFilesRemovedStaleFiles", { value0: receipt.writtenFiles, value1: receipt.removedStaleFiles })); })}>{t("settings.previewExport")}</Button><Button type="button" disabled={!activeSourceId || !source.git.repositoryPath} onClick={() => void runOperation(async () => { if (!activeSourceId) return; const preview = await platform.previewGitImport(activeSourceId, source.git.repositoryPath); if (!window.confirm(t("settings.importReviewedSemanticsAnnotationsDomainsViewsProvenanceRecords", { value0: preview.annotations, value1: preview.domainGroups, value2: preview.savedViews, value3: preview.provenance, value4: preview.lineageLinks, value5: preview.logicalRelationships, value6: preview.relationshipConflicts.length, value7: preview.relationshipConflicts.length ? `\n${preview.relationshipConflicts.join("\n")}` : "", value8: preview.fingerprintMatches ? t("settings.git.fingerprintMatches") : t("settings.git.fingerprintWarning"), value9: preview.workspaceFingerprint }))) return; const receipt = await platform.importGitWorkspace(activeSourceId, source.git.repositoryPath); await onReload(); setOperationMessage(t("settings.importedAnnotationsViewsAndLogicalRelationships", { value0: receipt.importedAnnotations, value1: receipt.importedSavedViews, value2: receipt.importedLogicalRelationships })); })}>{t("settings.previewImport")}</Button></div>
               </SettingsGroup>
@@ -547,7 +576,6 @@ function SettingsContent({
                 <ToggleRow label={t("settings.syncPersonalLayouts")} description={t("settings.personalCoordinatesAreExcludedUnlessExplicitlyEnabled")} checked={cloud.syncPersonalLayouts} onChange={(syncPersonalLayouts) => setCloudDraft({ ...cloud, syncPersonalLayouts })} />
                 <SelectRow label={t("settings.conflictStrategy")} value={cloud.conflictStrategy} onChange={(conflictStrategy) => setCloudDraft({ ...cloud, conflictStrategy: conflictStrategy as DataSourceSettings["cloud"]["conflictStrategy"] })} options={[['ask',t("settings.alwaysAsk")],['keepLocal',t("settings.keepLocal")],['keepRemote',t("settings.keepRemote")]]} />
               </SettingsGroup>
-                <div className="setting-action-row"><Button type="button" variant="primary" onClick={() => void saveSource({ ...source, cloud: { ...cloud, enabled: source.cloud.enabled, credentialConfigured: source.cloud.credentialConfigured, baseVersion: source.cloud.baseVersion, lastSuccessAt: source.cloud.lastSuccessAt } })}>{t("settings.saveCloudConfiguration")}</Button><Button type="button" onClick={() => setCloudDraft(source.cloud)}>{t("settings.cancelDraft")}</Button></div>
                 <div className="setting-action-row"><Button type="button" onClick={() => void runOperation(async () => { if (!activeSourceId) return; setSyncDiagnostics(await platform.listSyncDiagnostics(activeSourceId)); })}>{t("settings.inspectOfflineQueue")}</Button><Button type="button" disabled={!activeSourceId || !source.cloud.enabled || app.privacy.offlineMode} onClick={() => void runOperation(async () => { if (!activeSourceId) return; await platform.syncProject({ sourceId: activeSourceId, projectId: source.cloud.projectId, apiUrl: source.cloud.endpoint, accessToken: "", baseVersion: source.cloud.baseVersion }); await onReload(); setSyncDiagnostics(await platform.listSyncDiagnostics(activeSourceId)); setOperationMessage(t("settings.metadataPublished")); })}>{t("settings.publishNow")}</Button><Button type="button" disabled={syncDiagnostics.length === 0} onClick={() => void runOperation(async () => { await navigator.clipboard.writeText(JSON.stringify(syncDiagnostics, null, 2)); setOperationMessage(t("settings.redactedQueueDiagnosticsCopied")); })}>{t("settings.copyDiagnostics")}</Button><Button type="button" disabled={!activeSourceId || !source.cloud.projectId || app.privacy.offlineMode} onClick={() => void runOperation(async () => { if (!activeSourceId) return; setCloudAudit(await platform.listCloudAudit(activeSourceId)); })}>{t("settings.viewAudit")}</Button></div>
                 {source.cloud.lastSuccessAt ? <p className="setting-inline-note">{t("settings.lastSuccessfulSync")}{" "}{formatSettingsDate(source.cloud.lastSuccessAt, app.general.dateTimeFormat, locale)}</p> : null}
                 {syncDiagnostics.length ? <div className="sync-diagnostics">{syncDiagnostics.map((item) => <div key={item.id}><span>{item.eventKind}</span><b>{item.state} · {item.attempts} {t("settings.attempts")}</b></div>)}</div> : null}
@@ -562,8 +590,12 @@ function SettingsContent({
 
           {visibleCategory === "privacy" ? (
             <SettingsSection title={t("settings.privacySecurity")} description={t("settings.aSingleViewOfEveryExternalCapabilityAnd")}>
-              <Button onClick={() => setPrivacyOpen(!privacyOpen)}>{t("submission.privacyPolicy")}</Button>
-              {privacyOpen ? <PrivacyPolicy isMas={isMas} /> : null}
+              <div className="settings-disclosure settings-policy-disclosure">
+                <Button variant="ghost" aria-expanded={privacyOpen} onClick={() => setPrivacyOpen((open) => !open)}>
+                  {t("submission.privacyPolicy")}<ActionIcon name={privacyOpen ? "chevronUp" : "chevronDown"} />
+                </Button>
+                {privacyOpen ? <PrivacyPolicy isMas={isMas} embedded /> : null}
+              </div>
               <SettingsGroup title={t("settings.networkDiagnostics")}>
               <ToggleRow label={t("settings.completelyOffline")} description={t("settings.blocksAICloudUpdateChecksAndDiagnosticsDatabase")} checked={app.privacy.offlineMode} managed={isManaged("privacy.offlineMode")} onChange={(offlineMode) => void saveApp({ ...app, privacy: { ...app.privacy, offlineMode } })} />
               <p className="setting-inline-note">{t("submission.diagnosticsNote")}{isMas ? ` ${t("submission.storeNetwork")}` : ""}</p>
@@ -596,9 +628,21 @@ function SettingsContent({
 
           {visibleCategory === "shortcuts" ? (
             <SettingsSection title={t("settings.keyboardShortcuts")} description={t("settings.searchableCommandsWithConflictSafeBindings")}>
+              {runtime?.kind === "desktop" ? <SettingsGroup title={t("settings.workspaceShortcuts")}>
+                {WORKSPACE_SHORTCUTS.map(([label, binding]) => <div className="setting-row setting-static settings-workspace-shortcut" key={label}>
+                  <span>{t(label)}</span><kbd>{formatCommandShortcut(binding)}</kbd>
+                </div>)}
+              </SettingsGroup> : null}
               <SettingsGroup title={t("settings.commandBindings")}>
               <TextRow label={t("settings.filterCommands")} value={shortcutQuery} placeholder={t("settings.searchCommands")} onChange={setShortcutQuery} />
-              <div className="shortcut-list">{Object.entries(app.shortcuts.bindings).filter(([command]) => `${commandLabel(command)} ${humanize(command)}`.toLowerCase().includes(shortcutQuery.trim().toLowerCase())).map(([command, binding]) => { const conflict = shortcutConflicts.get(binding.trim().toLowerCase()); return <label key={command}><span>{commandLabel(command)}{conflict ? <small>{t("settings.shortcut.conflict", { commands: conflict.filter((item) => item !== command).map(commandLabel).join(", ") })}</small> : null}</span><input aria-invalid={Boolean(conflict)} value={binding} onChange={(event) => updateShortcut(command, event.target.value)} /></label>; })}</div>
+              <div className="shortcut-list">{Object.entries(app.shortcuts.bindings)
+                .filter(([command]) => `${commandLabel(command)} ${humanize(command)}`.toLowerCase().includes(shortcutQuery.trim().toLowerCase()))
+                .map(([command, binding]) => {
+                  const conflict = shortcutConflicts.get(binding.trim().toLowerCase());
+                  return <label className="setting-row" key={command}><span>{commandLabel(command)}{conflict ? <small>{t("settings.shortcut.conflict", { commands: conflict.filter((item) => item !== command).map(commandLabel).join(", ") })}</small> : null}</span>
+                    <input type="text" aria-label={commandLabel(command)} aria-invalid={Boolean(conflict)} value={binding} onChange={(event) => updateShortcut(command, event.target.value)} />
+                  </label>;
+                })}</div>
               </SettingsGroup>
               <Button type="button" className="secondary-setting-action" onClick={() => void saveApp({ ...app, shortcuts: defaultAppSettings().shortcuts })}>{t("settings.resetShortcuts")}</Button>
             </SettingsSection>
@@ -640,20 +684,33 @@ function SettingsContent({
               <div className="setting-action-row"><Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("saveSettings"); if (path) setSettingsFilePath(path); })}>{t("submission.saveLocation")}</Button><Button onClick={() => void runOperation(async () => { const path = await platform.pickWorkspacePath("openSettings"); if (path) setSettingsFilePath(path); })}>{t("submission.openFile")}</Button></div>
               <div className="setting-action-row"><Button type="button" disabled={!settingsFilePath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { const receipt = await platform.exportSettingsFile(settingsFilePath); setOperationMessage(t("settings.exportedNonSensitiveSettingsForSources", { value0: receipt.sourceSettings })); })}>{t("settings.exportSettings")}</Button><Button type="button" disabled={!settingsFilePath || runtime?.kind === "web"} onClick={() => void runOperation(async () => { const preview = await platform.previewSettingsFile(settingsFilePath); if (!window.confirm(t("settings.importSettingsFormatVExportedTheAppSettings", { value0: preview.formatVersion, value1: formatDate(preview.exportedAt, locale, app.general.dateTimeFormat), value2: preview.sourceSettings }))) return; const receipt = await platform.importSettingsFile(settingsFilePath); await onReload(); setOperationMessage(t("settings.importedSettingsForSources", { value0: receipt.sourceSettings })); })}>{t("settings.previewImport")}</Button></div>
               </SettingsGroup>
-              <div className="settings-danger-zone"><h3>{t("settings.dangerZone")}</h3><p>{t("settings.resettingSettingsDoesNotDeleteSnapshotsSemanticsOr")}</p><Button type="button" onClick={() => void onResetApp()}>{t("settings.resetAllSettings")}</Button>{source ? <Button type="button" onClick={() => void onResetSource()}>{t("settings.resetActiveSourceSettings")}</Button> : null}<Button type="button" variant="danger" className="danger-setting-action" disabled={runtime?.kind === "web"} onClick={() => void runOperation(async () => { const confirmation = window.prompt(t("settings.factoryResetDeletesAllLocalConnectionsSnapshotsSemantics")); if (confirmation !== "DELETE LOCAL DATA") return; await platform.factoryReset(confirmation); await onFactoryReset(); })}>{t("settings.factoryReset")}</Button></div>
+              <div className="settings-danger-zone"><h3>{t("settings.dangerZone")}</h3><p>{t("settings.resettingSettingsDoesNotDeleteSnapshotsSemanticsOr")}</p><div className="setting-action-row"><Button type="button" onClick={() => void onResetApp()}>{t("settings.resetAllSettings")}</Button>{source ? <Button type="button" onClick={() => void onResetSource()}>{t("settings.resetActiveSourceSettings")}</Button> : null}<Button type="button" variant="danger" className="danger-setting-action" disabled={runtime?.kind === "web"} onClick={() => void runOperation(async () => { const confirmation = window.prompt(t("settings.factoryResetDeletesAllLocalConnectionsSnapshotsSemantics")); if (confirmation !== "DELETE LOCAL DATA") return; await platform.factoryReset(confirmation); await onFactoryReset(); })}>{t("settings.factoryReset")}</Button></div></div>
             </SettingsSection>
           ) : null}
         </main>
-      {source && ai && (visibleCategory === "ai" || aiDirty) ? <footer className="settings-ai-save-bar" aria-label={t("settings.saveAIConfiguration")}>
-        <span aria-live="polite">{t(saveState === "saving" ? "settings.ai.savingDraft" : aiDirty ? "settings.ai.unsavedDraft" : "settings.ai.noDraft")}</span>
-        <Button type="button" disabled={!aiDirty || saveState === "saving"} onClick={() => { setAiDraft(source.ai); setAiSecret(""); setSaveError(undefined); setSaveState("idle"); }}>{t("settings.cancelDraft")}</Button>
-        <Button type="button" variant="primary" disabled={!aiDirty || saveState === "saving"} onClick={() => void saveAiConfiguration()}>{t("settings.saveAIConfiguration")}</Button>
-      </footer> : null}
+      {source && cloud && visibleCategory === "cloud" ? <SettingsSaveBar label={t("settings.saveCloudConfiguration")}
+        description={cloudDirty ? t("settings.unsavedCloudChanges") : ""} disabled={!cloudDirty || saveState === "saving"}
+        onCancel={() => { setCloudDraft(source.cloud); setSaveError(undefined); setSaveState("idle"); }}
+        onSave={() => void saveSource({ ...source, cloud: { ...cloud, enabled: source.cloud.enabled, credentialConfigured: source.cloud.credentialConfigured, baseVersion: source.cloud.baseVersion, lastSuccessAt: source.cloud.lastSuccessAt } })} />
+      : source && ai && (visibleCategory === "ai" || aiDirty) ? <SettingsSaveBar label={t("settings.saveAIConfiguration")}
+        description={t(saveState === "saving" ? "settings.ai.savingDraft" : aiDirty ? "settings.ai.unsavedDraft" : "settings.ai.noDraft")}
+        disabled={!aiDirty || saveState === "saving"}
+        onCancel={() => { setAiDraft(source.ai); setAiSecret(""); setSaveError(undefined); setSaveState("idle"); }}
+        onSave={() => void saveAiConfiguration()} /> : null}
         </div>
       </div>
     </section>
     </ModalSurface>
   );
+}
+
+function SettingsSaveBar({ label, description, disabled, onCancel, onSave }: { label: string; description: string; disabled: boolean; onCancel: () => void; onSave: () => void }) {
+  const { t } = useI18n();
+  return <footer className="settings-save-bar" aria-label={label}><div>
+    <span aria-live="polite">{description}</span>
+    <Button disabled={disabled} onClick={onCancel}>{t("settings.cancelDraft")}</Button>
+    <Button variant="primary" disabled={disabled} onClick={onSave}>{label}</Button>
+  </div></footer>;
 }
 
 function StatusCard({ status, label }: { status: string; label: string }) { return <div className="settings-status-card"><strong>{status}</strong><span>{label}</span></div>; }

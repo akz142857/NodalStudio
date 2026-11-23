@@ -314,12 +314,12 @@ export function SqliteTableWorkspace({ platform, target, binding, activeTable, p
 
   const rowLabel = (row: EditorRow) => t(row.original ? "tableData.row" : "tableData.newRow", { value0: row.number });
   const rowInspector = showRowPanel && active && columns && (pendingView || !table.isError) && (
-    <section id={rowPanelId} className="table-data-fields" aria-label={t(editing ? "tableData.editor" : "tableData.rowDetails")}>
+    <section id={rowPanelId} className="table-data-fields inspector-surface" aria-label={t(editing ? "tableData.editor" : "tableData.rowDetails")}>
       <header>
         <h3>{rowLabel(active)}</h3>
         {editing && activeDraft?.kind === "update" && <button type="button" disabled={saving} onClick={() => changeDraft(active.id)}>{t("tableData.discardRow")}</button>}
       </header>
-      <div className="table-data-field-list">
+      <div className="table-data-field-list" key={active.id}>
         {editing && active.original && !active.original.identity && <p>{t("tableData.rowReadOnly")}</p>}
         {columns.map((column, index) => {
           const cell = rowFields(activeDraft)?.get(index) ?? active.original?.cells[index];

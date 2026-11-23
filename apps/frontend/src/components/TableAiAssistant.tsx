@@ -1,6 +1,7 @@
 import { useI18n } from "../i18n";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { KnowledgeEditor } from "./KnowledgeReview";
+import { SearchSelect } from "./SearchSelect";
 import type { DatabaseSnapshot, DomainGroup, EffectiveSettings, NodalStudioPlatform, TableAiEvidence, TableAiPreview, TableAiResult, TableDefinition } from "../platform";
 
 interface Props {
@@ -40,7 +41,6 @@ function TableSession({ platform, snapshot, table, settings, domains, desktop, a
   const completedId = useRef<string | undefined>(undefined);
   const busy = useRef(false);
   const resultPanel = useRef<HTMLDivElement>(null);
-  const fieldControl = useRef<HTMLSelectElement>(null);
   const options = useRef<HTMLDetailsElement>(null);
   const availableDomains = domains.filter(domain => domain.sourceId === snapshot.sourceId && domain.tableKeys.some(key => key.schema === table.key.schema && key.name === table.key.name));
 
@@ -151,13 +151,25 @@ function TableSession({ platform, snapshot, table, settings, domains, desktop, a
         {answer.summary && onKnowledgeSaved ? <KnowledgeEditor platform={platform} input={{ snapshotId: snapshot.id, target: table.key, requestId: completed.result.requestId, interpretationIndex: null }} sourceId={snapshot.sourceId} label={t("Draft a table description", "整理成表说明")} chinese={chinese} onSaved={onKnowledgeSaved} /> : null}
       </div> : null}
       <div className="ai-composer">
-        <div className="ai-compact-suggestions">{questions.map((text, index) => <button key={text} type="button" onClick={() => { if (index === 2) { if (options.current) options.current.open = true; fieldControl.current?.focus(); } editQuestion(text); }}>{text}</button>)}</div>
+        <div className="ai-compact-suggestions">{questions.map((text, index) => <button key={text} type="button" onClick={() => {
+          if (index === 2 && options.current) {
+            options.current.open = true;
+            options.current.querySelector<HTMLInputElement>('[role="combobox"]')?.focus();
+          }
+          editQuestion(text);
+        }}>{text}</button>)}</div>
         <label className="ai-control">{completed ? t("Ask another question about this table", "继续提问 · 当前表") : t("Question", "问题")}<textarea rows={2} maxLength={2000} value={question} placeholder={t("What would you like to understand?", "想了解这张表的什么？")} onChange={event => editQuestion(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void run(); } }} /></label>
         <details ref={options} className="ai-scope-options"><summary>{scopeLabels[ai?.contextScope ?? "currentTable"]}{focusColumn ? ` · ${focusColumn}` : ""}</summary>
-          <label className="ai-control">{t("Focus field", "关注字段")}<select ref={fieldControl} value={focusColumn} onChange={event => { invalidate(); setFocusColumn(event.target.value); }}><option value="">{t("Whole table", "整张表")}</option>{table.columns.map(column => <option key={column.name} value={column.name}>{column.name}</option>)}</select></label>
+          <SearchSelect label={t("Focus field", "关注字段")} value={focusColumn}
+            searchPlaceholder={t("Search fields…", "搜索字段…")}
+            options={[{ value: "", label: t("Whole table", "整张表") }, ...table.columns.map(column => ({ value: column.name, label: column.name, detail: column.formattedType }))]}
+            onChange={(column) => { invalidate(); setFocusColumn(column); }} />
           <button type="button" onClick={onOpenSettings}>{t("Change allowed scope in Settings", "在设置中调整允许范围")}</button>
         </details>
-        {ai?.contextScope === "domain" ? <label className="ai-control">{t("Business domain", "业务域")}<select value={domainId} onChange={event => { invalidate(); setDomainId(event.target.value); }}><option value="">{t("Choose one domain…", "选择一个业务域…")}</option>{availableDomains.map(domain => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label> : null}
+        {ai?.contextScope === "domain" ? <SearchSelect label={t("Business domain", "业务域")} value={domainId}
+          placeholder={t("Choose one domain…", "选择一个业务域…")}
+          options={availableDomains.map(domain => ({ value: domain.id, label: domain.name }))}
+          onChange={(domain) => { invalidate(); setDomainId(domain); }} /> : null}
         {preview ? <p className="ai-send-summary">{remote ? t(`Send to ${destination}: ${preview.context.tables.length} table(s), your question`, `将向 ${destination} 发送 ${preview.context.tables.length} 张表的结构和你的问题`) : t("Local analysis only; no network request", "仅本地分析，不发送网络请求")}{remote ? ` · ${t("no rows or credentials", "不含业务行或凭据")}` : ""}{remote && ai?.includeComments ? t(" · includes comments", " · 含注释") : ""}{remote && preview.context.evidence.some(e => e.kind === "teamStatement") ? t(" · includes confirmed team statements", " · 含本机已确认团队说明") : ""}</p> : null}
         <div className="ai-actions"><button type="button" className="ds-primary" disabled={phase !== "ready" || !preview} onClick={() => void run()}>{remote ? t("Send and answer", "发送并回答") : t("Show local structure", "查看本地结构")}</button>
           {phase === "preparing" || phase === "ready" || phase === "running" ? <button type="button" onClick={() => invalidate("cancelled")}>{t("Cancel", "取消")}</button> : null}

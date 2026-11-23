@@ -85,6 +85,21 @@ describe("InspectorPanel", () => {
     expect(screen.queryByRole("heading", { name: "Columns" })).not.toBeInTheDocument();
   });
 
+  it("keeps the historical table inspectable without editing live semantics or querying live rows", () => {
+    const onSaveAnnotation = vi.fn();
+    renderPanel({ selectedTable: table, historyPreview: true, onOpenQuery: vi.fn(), onSaveAnnotation,
+      runtime: { kind: "desktop", label: "Desktop", version: "test" } });
+    expect(screen.queryByRole("button", { name: "Preview rows in Query" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Semantics" }));
+    const description = screen.getByLabelText("Description");
+    expect(description).toHaveAttribute("readonly");
+    expect(screen.queryByRole("button", { name: "Save knowledge" })).not.toBeInTheDocument();
+    fireEvent.submit(description.closest("form")!);
+    expect(onSaveAnnotation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    expect(screen.getByRole("heading", { name: snapshot.database.name })).toBeVisible();
+  });
+
   it("explains what the AI segment needs rather than going blank", () => {
     renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "AI" }));

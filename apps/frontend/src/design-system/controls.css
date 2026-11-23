@@ -54,10 +54,6 @@
 }
 .ds-surface :where(button):hover:not(:disabled) { background: var(--ds-hover); }
 .ds-surface :where(button):active:not(:disabled) { background: var(--ds-selected-control); }
-.ds-surface :where(button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: var(--ds-focus-ring);
-  outline-offset: 2px;
-}
 .ds-surface :where(button, input, select, textarea):disabled { opacity: .5; cursor: default; }
 .ds-surface .ds-primary { border-color: var(--ds-accent-fill); color: var(--ds-on-accent); background: var(--ds-accent-fill); }
 .ds-surface .ds-primary:hover:not(:disabled) { border-color: var(--ds-accent-hover); background: var(--ds-accent-hover); }
@@ -123,8 +119,72 @@ select.ds-select {
   line-height: var(--ds-leading);
   text-overflow: ellipsis;
 }
-select.ds-select:focus-visible { outline: var(--ds-focus-ring); outline-offset: 2px; }
 select.ds-select:disabled { opacity: .5; cursor: default; }
 @media (forced-colors: active) {
   select.ds-select { appearance: auto; background-image: none; }
+}
+
+/* Keyboard focus is shared by the shell and by dialogs in the top layer. */
+:where(a[href], button, input, select, textarea, summary, [tabindex], [contenteditable="true"]):focus-visible {
+  outline: var(--ds-focus-ring);
+  outline-offset: var(--ds-focus-offset);
+}
+
+/* Field focus follows the control edge so scroll containers cannot clip the ring. */
+:where(
+  textarea,
+  input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"], [type="image"])
+):focus,
+:where(select, [contenteditable="true"]):focus-visible {
+  outline: var(--ds-focus-ring);
+  outline-offset: var(--ds-focus-inset);
+}
+
+:where(input, select, textarea)[aria-invalid="true"]:focus {
+  outline-color: var(--ds-danger);
+}
+
+/* Composite editors draw one ring around the field, including its accessories. */
+:is(.query-composer, .quick-query-editor):has(> textarea:focus) {
+  outline: var(--ds-focus-ring);
+  outline-offset: var(--ds-focus-inset);
+}
+
+:is(.query-composer, .quick-query-editor) > textarea:focus,
+.query-sql-editor .cm-content:focus {
+  outline: none;
+}
+
+/* A focused row gets a fill and a leading marker. Selection uses its own tint. */
+:is(
+  button[role="menuitem"],
+  button[role="menuitemradio"],
+  button[role="menuitemcheckbox"],
+  button[role="option"],
+  .tree-row,
+  .model-view-navigation button,
+  .review-list button,
+  .ontology-workspace .ontology-list .ontology-definition-row,
+  .data-source-menu-actions > button
+):focus-visible,
+:is(.command-results, .global-search-results, .relationship-target-picker, .relationship-search-results) [role="option"][aria-selected="true"] {
+  outline: var(--ds-list-focus-outline);
+  outline-offset: var(--ds-focus-inset);
+  color: var(--ds-list-focus-text);
+  background: var(--ds-list-focus);
+  box-shadow: inset 3px 0 var(--ds-focus-color);
+}
+
+:is(.query-page .query-result-table, .table-data-preview-result .query-result-table, .query-result-table, .table-data-grid) tbody tr:focus-visible {
+  outline: var(--ds-list-focus-outline);
+  outline-offset: var(--ds-focus-inset);
+}
+
+:is(.query-page .query-result-table, .table-data-preview-result .query-result-table, .query-result-table, .table-data-grid) tbody tr:focus-visible > :is(td, th) {
+  color: var(--ds-list-focus-text);
+  background: var(--ds-list-focus);
+}
+
+:is(.query-page .query-result-table, .table-data-preview-result .query-result-table, .query-result-table, .table-data-grid) tbody tr:focus-visible > :first-child {
+  box-shadow: inset 3px 0 var(--ds-focus-color);
 }

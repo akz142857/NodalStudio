@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 
+const documentOutline = <path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10A1.5 1.5 0 0 0 18.5 19V8.5Zm0 0v5h5" />;
+const sidebarOutline = <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />;
+
 const paths = {
   map: <><rect x="3" y="3" width="18" height="18" rx="2" /><rect x="6" y="7" width="8" height="6" rx="1" /><path d="M17 6h1m-1 4h1M6 17h3m4 0h5" /></>,
   table: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 9v12" /></>,
-  list: <><path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1" /></>,
+  list: <path d="M8.5 6.5h11M8.5 12h11M8.5 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" />,
   function: <path d="M15 4h-2a3 3 0 0 0-3 2.6L8 17.4A3 3 0 0 1 5 20H3M5 10h10m0 5 6 6m0-6-6 6" />,
   procedure: <><rect x="3" y="3" width="12" height="6" rx="1.5" /><path d="M9 9v6a3 3 0 0 0 3 3h2" /><path d="m16 13 6 5-6 5Z" /></>,
   trigger: <path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z" />,
@@ -32,14 +35,16 @@ const paths = {
   firstPage: <path d="M5 5v14m11-13-6 6 6 6" />,
   lastPage: <path d="M19 5v14M8 6l6 6-6 6" />,
   question: <><path d="M21 11a8 8 0 0 1-8 8H8l-5 3V11a9 9 0 0 1 18 0Z" /><path d="M9.5 8a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5M12 15h.01" /></>,
-  import: <><path d="M12 3v12m-4-4 4 4 4-4" /><path d="M5 14v6h14v-6" /></>,
-  preflight: <><path d="M14 3H6v18h12V7l-4-4Z" /><path d="M14 3v4h4m-9 7 2 2 4-5" /></>,
-  report: <><path d="M14 3H5v18h14V8l-5-5Z" /><path d="M14 3v5h5M8 12h8m-8 4h5" /></>,
-  viewer: <><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M8 21h8m-4-3v3m-2-13-3 3 3 3m4-6 3 3-3 3" /></>,
-  refresh: <><path d="M20 10a8 8 0 0 0-14-5L3 8m0-5v5h5M4 14a8 8 0 0 0 14 5l3-3m0 5v-5h-5" /></>,
-  settings: <g transform="translate(1 0)"><path d="m9 3-.6 2.3-2 .9-2.2-.6-2 3.4 1.6 1.7v2.6L2.2 15l2 3.4 2.2-.6 2 .9L9 21h4l.6-2.3 2-.9 2.2.6 2-3.4-1.6-1.7v-2.6L19.8 9l-2-3.4-2.2.6-2-.9L13 3H9Z" /><circle cx="11" cy="12" r="3" /></g>,
-  command: <path d="M9 7V5a2 2 0 1 0-2 2h10a2 2 0 1 0-2-2v14a2 2 0 1 0 2-2H7a2 2 0 1 0 2 2V7Z" />,
-  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 13h4" /></>,
+  import: <path d="M12 3.5v11m-3.5-3.5 3.5 3.5 3.5-3.5M4.5 13.5V18a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4.5" />,
+  preflight: <>{documentOutline}<path d="m8.75 13.25 2.25 2.25 4.25-4.25" /></>,
+  report: <>{documentOutline}<path d="M9 12.5h6M9 16h4.5" /></>,
+  viewer: <><rect x="3.5" y="4.5" width="17" height="13" rx="2" /><path d="M8.5 20.5h7M12 17.5v3m-2-12-2.5 2.5 2.5 2.5m4-5 2.5 2.5-2.5 2.5" /></>,
+  refresh: <path d="M20.25 10a8.5 8.5 0 0 0-14.5-4L3.5 8.5m0-4.5v4.5H8m-4.25 5.5a8.5 8.5 0 0 0 14.5 4l2.25-2.5m0 4.5v-4.5H16" />,
+  settings: <><path d="m10 3.5-.65 2.2-1.9 1.1-2.25-.6-2 3.5 1.6 1.6v1.4l-1.6 1.6 2 3.5 2.25-.6 1.9 1.1.65 2.2h4l.65-2.2 1.9-1.1 2.25.6 2-3.5-1.6-1.6v-1.4l1.6-1.6-2-3.5-2.25.6-1.9-1.1-.65-2.2Z" /><circle cx="12" cy="12" r="2.8" /></>,
+  command: <path d="M8.5 8.5v-2a2 2 0 1 0-2 2h11a2 2 0 1 0-2-2v11a2 2 0 1 0 2-2h-11a2 2 0 1 0 2 2Z" />,
+  bell: <path d="M18 9.5a6 6 0 0 0-12 0c0 4.5-1.7 6-2.5 7.5h17c-.8-1.5-2.5-3-2.5-7.5Zm-8.25 10.25a2.5 2.5 0 0 0 4.5 0" />,
+  sidebarLeft: <>{sidebarOutline}<path d="M9 4.5v15" /></>,
+  sidebarRight: <>{sidebarOutline}<path d="M15 4.5v15" /></>,
   search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></>,
   appearance: <><circle cx="12" cy="12" r="8" /><path d="M12 4v16" /><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none" /></>,
   canvas: <><rect x="3" y="3" width="7" height="8" rx="1.5" /><rect x="14" y="13" width="7" height="8" rx="1.5" /><path d="M6.5 11v6H14M6 6h1m10 10h1" /></>,

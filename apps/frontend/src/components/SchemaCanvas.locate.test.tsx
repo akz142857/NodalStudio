@@ -1,7 +1,6 @@
 import { canvasToolButton } from "../test/canvas-tools";
 import { BusinessExplorer } from "./BusinessExplorer";
 import { discoverySettings } from "../test/discovery-fixture";
-import { objectId } from "../graph/business-discovery";
 import type { NodalStudioPlatform } from "../platform";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -106,7 +105,10 @@ describe("SchemaCanvas requested navigation", () => {
     const platform = { listSnapshots: vi.fn().mockResolvedValue([{ id: reportSnapshot.id }]) } as unknown as NodalStudioPlatform;
     const view = render(<BusinessExplorer snapshot={reportSnapshot} semantics={reportSemantics} settings={discoverySettings()} platform={platform} desktop onClose={vi.fn()} onLocate={vi.fn()} onExplain={vi.fn()} onOpenSettings={vi.fn()} />);
     const root = reportSnapshot.schemas[0].tables[0];
-    fireEvent.change(screen.getByLabelText("Explicit root table"), { target: { value: objectId(root.key) } });
+    const rootInput = screen.getByRole("combobox", { name: "Explicit root table" });
+    const rootLabel = `${root.key.schema}.${root.key.name}`;
+    fireEvent.focus(rootInput);
+    fireEvent.click(screen.getByRole("option", { name: rootLabel }));
     fireEvent.change(screen.getByLabelText("Local graph depth"), { target: { value: "2" } });
     await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
     fireEvent.click(view.container.querySelector('.react-flow__node[data-id="archive.orders"]')!);
@@ -115,7 +117,7 @@ describe("SchemaCanvas requested navigation", () => {
     await screen.findByRole("button", { name: "Show all relations" });
     expect(view.container.querySelector('.react-flow__node[data-id="archive.orders"]')).not.toBeNull();
     expect(view.container.querySelector('.react-flow__node[data-id="public.customers"]')).toBeNull();
-    expect(screen.getByLabelText("Explicit root table")).toHaveValue(objectId(root.key));
+    expect(rootInput).toHaveValue(rootLabel);
   });
 
 });

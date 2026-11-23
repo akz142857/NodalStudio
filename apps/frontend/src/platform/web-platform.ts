@@ -113,6 +113,11 @@ function downloadFile(blob: Blob, fileName: string): Promise<FileExportReceipt> 
 }
 
 export class WebPlatform implements NodalStudioPlatform {
+  listOntology(): Promise<never> { return Promise.reject(new Error("Ontology requires a connected desktop source.")); }
+  confirmOntology(): Promise<never> { return Promise.reject(new Error("Ontology requires a connected desktop source.")); }
+  saveOntologySample(): Promise<never> { return Promise.reject(new Error("Ontology requires a connected desktop source.")); }
+  verifyOntologyReview(): Promise<never> { return Promise.reject(new Error("Ontology review requires a connected desktop source.")); }
+  draftOntologyLastMonth(): Promise<never> { return Promise.reject(new Error("Ontology requires a connected desktop source.")); }
   exportDatabaseFile(): Promise<never> { return Promise.reject(new Error("Database file export requires the desktop app.")); }
   cancelDatabaseExport(): Promise<boolean> { return Promise.resolve(false); }
   previewRelationshipBatch(): Promise<import("./relationship-batches").ReviewPreview> { return Promise.reject(new Error("Batch review requires the desktop app.")); }

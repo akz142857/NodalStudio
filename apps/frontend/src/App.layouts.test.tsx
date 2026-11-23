@@ -10,7 +10,7 @@ import type { InspectorPanel } from "./components/InspectorPanel";
 import type { SchemaCanvasProps } from "./components/SchemaCanvas";
 import { App } from "./App";
 
-vi.mock("./components/InspectorPanel", () => ({ InspectorPanel: (props: ComponentProps<typeof InspectorPanel>) => <button onClick={() => props.onSelectSnapshot({ ...reportSnapshot, id: "older-snapshot" })}>Open historical model</button> }));
+vi.mock("./components/InspectorPanel", () => ({ InspectorPanel: (props: ComponentProps<typeof InspectorPanel>) => <button onClick={() => props.onSelectSnapshot({ ...reportSnapshot, id: "older-snapshot" }, false)}>Open historical model</button> }));
 
 const positions = { "public.orders": { x: 100, y: 200, width: 280, height: 300 } };
 vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot }: { onSnapshot: (result: CaptureSnapshotResult) => void }) => <button onClick={() => onSnapshot({ snapshot: reportSnapshot, changeSet: null, stored: true })}>Capture layout source</button> }));

@@ -45,6 +45,9 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
   const referencedColumns = new Set(data.referencedForeignKeyColumns ?? []);
   const uniqueColumns = new Set(data.table.indexes.filter((index) => index.unique).flatMap((index) => index.columns));
   const indexedColumns = new Set(data.table.indexes.flatMap((index) => index.columns));
+  const tableChange = data.modelChangeStatus ?? data.changeStatus;
+  const changeDescription = tableChange === "deleted" ? bt("business.deletedTableBeforeSnapshot")
+    : tableChange ? bt(`modelChanges.${tableChange}`) : undefined;
 
   // Set on every node while a relationship connection is in flight, so a drop can
   // land on a column that has no relationship yet.
@@ -140,10 +143,11 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
       <article
         ref={tableNodeRef}
         className="table-node"
+        aria-label={changeDescription ? `${data.schema}.${data.table.key.name} · ${changeDescription}` : undefined}
         data-overview={compact || undefined}
         data-selected={selected || undefined}
         data-inspector-focused={data.inspectorFocused || undefined}
-        data-change={data.modelChangeStatus ?? data.changeStatus}
+        data-change={tableChange}
         data-core={data.isCore || undefined}
         data-pinned={data.layoutPinned || undefined}
         data-relationship-highlighted={data.relationshipHighlighted || undefined}
@@ -152,13 +156,13 @@ function TableNodeComponent({ id, data, selected, width, height, exportIndexesEx
         style={data.domainColor ? ({ "--domain-color": data.domainColor } as CSSProperties) : undefined}
       >
       {!exportReplica && !settings.fieldLevelEdges ? <><Port passive={passivePorts} nodeId={id} id="table-target-left" type="target" position={Position.Left} isConnectable={false} /><Port passive={passivePorts} nodeId={id} id="table-target-right" type="target" position={Position.Right} isConnectable={false} /><Port passive={passivePorts} nodeId={id} id="table-source-left" type="source" position={Position.Left} isConnectable={false} /><Port passive={passivePorts} nodeId={id} id="table-source-right" type="source" position={Position.Right} isConnectable={false} /></> : null}
-      <header>
+      <header title={changeDescription}>
         {settings.showSchema ? <span>{data.schema}</span> : null}
         <strong>{data.isCore ? "★ " : ""}{data.table.key.name}</strong>
         {data.layoutPinned ? <span className="table-pin-badge" title={bt("business.positionFixedUnlockToMoveOrResize")} aria-label={bt("business.tablePositionFixed")}>{bt("business.fixed")}</span> : null}
-        {data.modelChangeStatus ? <em className="comparison-badge" data-change={data.modelChangeStatus}>
-          {changeMarker(data.modelChangeStatus)} {bt(`modelChanges.${data.modelChangeStatus}`)}
-        </em> : data.changeStatus ? <em className="comparison-badge" data-change={data.changeStatus} title={data.changeStatus === "deleted" ? bt("business.deletedTableBeforeSnapshot") : bt("business.comparedBeforeAfter")}>{changeMarker(data.changeStatus)} {data.changeStatus}</em> : null}
+        {tableChange === "deleted" ? <em className="comparison-badge" data-change="deleted">
+          {changeMarker(tableChange)} {bt("modelChanges.deleted")}
+        </em> : null}
         {data.onOpenQuery ? <div className="table-node-actions nodrag nopan">
           <button type="button" aria-label={bt("business.query", { value0: data.table.key.name })} aria-expanded={actionsOpen} onClick={(event) => { event.stopPropagation(); setActionsOpen((value) => !value); }}>•••</button>
           {actionsOpen ? <div role="menu"><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>{bt("business.previewRows")}</button><button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); data.onOpenQuery?.(data.table); }}>{bt("business.openInQuery")}</button></div> : null}

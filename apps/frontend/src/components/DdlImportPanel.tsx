@@ -63,6 +63,9 @@ export function DdlImportPanel({ canvasSettings, runtimeKind, onClose, onReturn 
   }, [preview, bt]);
   const tables = preview?.schemas.flatMap((schema) => schema.tables) ?? [];
   const graphCollision = new Set(tables.map((table) => `${table.key.schema}.${table.key.name}`)).size !== tables.length;
+  const tableLocations = selected && preview ? preview.locations.filter((location) =>
+    location.schema === selected.key.schema && location.table === selected.key.name) : [];
+  const tableLocation = tableLocations.find((location) => !location.columnName);
   const jump = (start: number, end: number) => {
     const target = editor.current; if (!target) return;
     target.focus(); target.setSelectionRange(start, end);
@@ -118,11 +121,20 @@ export function DdlImportPanel({ canvasSettings, runtimeKind, onClose, onReturn 
             {tables.length > tableLimit ? <Button onClick={() => setTableLimit(value => value + 50)}>{bt("business.show50MoreTables")}</Button> : null}
           </section> : null}
         </div>
-        <aside className="ddl-model-inspector inspector-view">
-          {selected ? <><h2>{selected.key.schema}.{selected.key.name}</h2><Button onClick={() => { const location = preview.locations.find(value => value.schema === selected.key.schema && value.table === selected.key.name && !value.columnName); if(location) editSource(location.start, location.end); }}>{bt("business.showTableSource")}</Button><TableStructure table={selected} onShowColumnSource={name => {
-              const location = preview.locations.find(value => value.schema === selected.key.schema && value.table === selected.key.name && value.columnName === name);
-              if (location) editSource(location.start, location.end);
-            }} /></> : <p>{bt("ddl.selectTable")}</p>}
+        <aside key={JSON.stringify(selected?.key)} className="ddl-model-inspector ds-surface inspector-surface inspector-view" aria-label={bt("business.inspector")}>
+          <header className="inspector-header">
+            {selected ? <span className="inspector-context">{bt("business.tableDetail", { value0: selected.key.schema })}</span> : null}
+            <h2 className="inspector-title">{selected?.key.name ?? bt("business.inspector")}</h2>
+          </header>
+          <div className="inspector-body">
+            {selected ? <>
+              {tableLocation ? <div className="inspector-actions"><Button onClick={() => editSource(tableLocation.start, tableLocation.end)}>{bt("business.showTableSource")}</Button></div> : null}
+              <TableStructure table={selected} onShowColumnSource={name => {
+                const location = tableLocations.find(value => value.columnName === name);
+                if (location) editSource(location.start, location.end);
+              }} />
+            </> : <p>{bt("ddl.selectTable")}</p>}
+          </div>
         </aside>
       </div>
       <details className="ddl-diagnostics" open={tables.length ? undefined : true}>

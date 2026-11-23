@@ -1,13 +1,14 @@
 /* Model relationship surfaces use the same semantic tokens as Settings/Inspector. */
-.ds-surface.relationship-inspector { position: fixed; z-index: 70; display: grid; gap: var(--ds-space-3); width: 360px; max-width: calc(var(--ds-viewport-width) - 24px); max-height: calc(var(--ds-viewport-height) - 24px); overflow: auto; padding: var(--ds-space-4); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: 0 12px 38px #0003; font-size: var(--ds-text-control); overflow-wrap: anywhere; }
+.ds-surface.relationship-inspector { position: fixed; z-index: 70; display: grid; gap: var(--ds-space-3); width: 360px; max-width: calc(var(--ds-viewport-width) - 24px); max-height: calc(var(--ds-viewport-height) - 24px); overflow: auto; padding: var(--ds-space-4); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: var(--ds-shadow); }
 .relationship-inspector > header { display: flex; align-items: start; justify-content: space-between; gap: var(--ds-space-3); }
 .relationship-inspector-drag-handle { cursor: grab; touch-action: none; user-select: none; border-radius: var(--ds-radius-control); }
 .relationship-inspector-drag-handle[data-dragging="true"] { cursor: grabbing; }
-.relationship-inspector-drag-handle:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 4px; }
+.relationship-inspector-drag-handle:focus-visible { outline-offset: var(--ds-focus-inset); }
 .relationship-inspector-drag-handle > button { cursor: pointer; }
 .relationship-inspector > header > div { min-width: 0; display: grid; gap: var(--ds-space-1); }
 .relationship-inspector h2, .relationship-delete-dialog h2 { margin: 0; font-size: var(--ds-text-heading); font-weight: var(--ds-weight-emphasis); }
-.relationship-inspector > header > button { display: grid; place-items: center; flex: 0 0 28px; width: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--ds-secondary); font-size: 20px; line-height: 1; }
+.relationship-inspector > header > button { display: grid; place-items: center; flex: 0 0 var(--ds-control-height); width: var(--ds-control-height); padding: 0; border-color: transparent; background: transparent; color: var(--ds-secondary); }
+.relationship-inspector > header > button svg { width: 16px; height: 16px; }
 .relationship-kind { display: flex; align-items: center; gap: var(--ds-space-2); color: var(--ds-secondary); font-size: var(--ds-text-caption); }
 .relationship-kind::before { content: ""; width: 20px; border-top: 2px solid currentColor; }
 .relationship-kind[data-kind="logical"]::before { border-top-style: dashed; color: var(--ds-logical); }

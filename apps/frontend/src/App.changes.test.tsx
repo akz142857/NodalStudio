@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CaptureSnapshotResult, DatabaseSnapshot, SchemaChangeSet, SemanticBundle } from "./platform";
 import { getPlatform } from "./platform";
+import type { ChangeReviewWorkspace } from "./platform/change-review-types";
+import type { ConfirmedDefinition } from "./platform/ontology-types";
 import { App } from "./App";
 import { ModelTableChangeDetails } from "./components/ModelTableChanges";
 import type { SchemaCanvasProps } from "./components/SchemaCanvas";
@@ -29,6 +31,13 @@ vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot 
   <>
     <button type="button" onClick={() => onSnapshot({ snapshot: fixture.after, changeSet: fixture.changeSet, stored: true })}>Capture fixture</button>
     <button type="button" onClick={() => onSnapshot({ snapshot: fixture.after, changeSet: null, stored: false })}>Open stored fixture</button>
+    <button type="button" onClick={() => onSnapshot({ snapshot: { ...fixture.after, database: { ...fixture.after.database, databaseType: "mySql", version: "5.7.44-log" } }, changeSet: null, stored: false })}>
+      Open legacy MySQL fixture
+    </button>
+    {(["mySql", "sqlite"] as const).map((databaseType) => <button key={databaseType} type="button"
+      onClick={() => onSnapshot({ snapshot: { ...fixture.after, database: { ...fixture.after.database, databaseType } }, changeSet: null, stored: false })}>
+      Open {databaseType} fixture
+    </button>)}
   </> }));
 vi.mock("./components/SchemaCanvas", () => ({
   SchemaCanvas: ({ snapshot, changeSet, modelTableChanges, onSelectTable }: SchemaCanvasProps) => <>
@@ -41,6 +50,30 @@ vi.mock("./components/SchemaCanvas", () => ({
 
 describe("App schema changes", () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it.each(["mySql", "sqlite"])("opens Ontology from the %s model", async (databaseType) => {
+    const platform = getPlatform();
+    vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "desktop", label: "Desktop runtime", version: "test" });
+    const listOntology = vi.spyOn(platform, "listOntology").mockResolvedValue([]);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);
+    await screen.findByText("Desktop runtime");
+    fireEvent.click(screen.getByRole("button", { name: `Open ${databaseType} fixture` }));
+    fireEvent.click(screen.getByRole("button", { name: "Ontology" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "New Definition" })).toBeEnabled());
+    expect(listOntology).toHaveBeenCalledWith({ sourceId: fixture.after.sourceId, snapshotId: fixture.after.id });
+  });
+
+  it("shows the minimum supported MySQL version in Ontology", async () => {
+    const platform = getPlatform();
+    vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "desktop", label: "Desktop runtime", version: "test" });
+    const listOntology = vi.spyOn(platform, "listOntology").mockResolvedValue([]);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);
+    await screen.findByText("Desktop runtime");
+    fireEvent.click(screen.getByRole("button", { name: "Open legacy MySQL fixture" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ontology" }));
+    expect(screen.getByText("Ontology requires MySQL 8.0 or later.")).toBeVisible();
+    expect(listOntology).not.toHaveBeenCalled();
+  });
 
   it("exports the loaded snapshot independently of Diagram filters and waits for its saved semantics", async () => {
     const platform = getPlatform();
@@ -55,7 +88,7 @@ describe("App schema changes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Capture fixture" }));
     expect(screen.getByRole("button", { name: "Export structure document" })).toBeDisabled();
     await act(() => Promise.resolve(finish(semantics)));
-    fireEvent.change(screen.getByPlaceholderText("Table, field, schema…"), { target: { value: "non-matching-filter" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Search schema" }), { target: { value: "non-matching-filter" } });
     fireEvent.click(screen.getByRole("button", { name: "Export structure document" }));
     await waitFor(() => expect(save).toHaveBeenCalledOnce());
     const input = save.mock.calls[0][0];
@@ -111,6 +144,75 @@ describe("App schema changes", () => {
     expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("loads the new ontology revision immediately after closing its review on the same snapshot", async () => {
+    const platform = getPlatform();
+    const { id: snapshotId, sourceId, capturedAt } = fixture.after;
+    const table = fixture.after.schemas[0].tables[0].key;
+    const sample = { month: "2026-09", expectedOrderIds: ["7"] };
+    const original: ConfirmedDefinition = {
+      id: "paid-orders", revision: 1, confirmedSnapshotId: "before", sample,
+      definition: {
+        name: "Paid orders", timeZone: "UTC", order: { name: "Order", table, idColumn: "id" },
+        payment: { name: "Payment", table, orderIdColumn: "id", statusColumn: "status", successValue: "paid", paidAtColumn: "paid_at" },
+      },
+      impacts: [{ field: { role: "paymentTime", table, column: "paid_at" }, reason: "missingColumn" }],
+    };
+    const definition = { ...original.definition, payment: { ...original.definition.payment, paidAtColumn: "completed_at" } };
+    const review: ChangeReviewWorkspace = {
+      sourceId, roundId: "round", baseline: "before", target: snapshotId, baselineAt: capturedAt, targetAt: capturedAt,
+      revision: "open", initialized: true, completed: false, identityChanged: false, coverage: "observedMetadataOnly",
+      pendingCount: 1, impactCount: 1, structureCount: 0, total: 1, nextCursor: null, events: [],
+      items: [{
+        key: `ontology:${original.id}`, kind: "ontology", title: original.definition.name, object: null,
+        reason: "ontologyBindingChanged", evidence: "evidence", status: "open", note: "", actions: ["confirmOntology"],
+        before: { definition: original.definition },
+        after: { definitionId: original.id, snapshotId, impacts: original.impacts, sample, verification: {
+          id: "verified", snapshotId, checkedAt: capturedAt, definition, basis: "Verified payment event timestamp",
+          month: sample.month, expectedOrderIds: ["7"], actualOrderIds: ["7"], missingOrderIds: [], unexpectedOrderIds: [], passed: true,
+        } },
+      }],
+    };
+    vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "desktop", label: "Desktop runtime", version: "test" });
+    const lists = vi.spyOn(platform, "listOntology").mockResolvedValueOnce([original])
+      .mockResolvedValue([{ ...original, revision: 2, confirmedSnapshotId: snapshotId, definition, impacts: [] }]);
+    const loadReview = vi.spyOn(platform, "getChangeReview").mockResolvedValue(review);
+    const capture = vi.spyOn(platform, "capturePostgresSnapshot").mockResolvedValue({ snapshot: fixture.after, stored: false, changeSet: null });
+    const close = vi.spyOn(platform, "applyChangeReview").mockResolvedValue({ ...review, items: [], pendingCount: 0, impactCount: 0, total: 0, revision: "closed" });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    const { container } = render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
+
+    await screen.findByText("Desktop runtime");
+    fireEvent.click(screen.getByRole("button", { name: "Capture fixture" }));
+    fireEvent.click(screen.getByRole("button", { name: "Query" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use a business definition" }));
+    expect(screen.getByRole("dialog", { name: "Use a business definition" })).toHaveTextContent("paid_at");
+    expect(screen.queryByRole("button", { name: "Preview SQL" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View Change Review" }));
+    await screen.findByRole("button", { name: "Confirm Binding and Close Item" });
+    loadReview.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh database" }));
+    await waitFor(() => expect(loadReview).toHaveBeenCalledWith(sourceId, expect.objectContaining({ itemKey: `ontology:${original.id}` })));
+    expect(capture).toHaveBeenCalledWith(sourceId, "manual");
+    const confirm = await screen.findByRole("button", { name: "Confirm Binding and Close Item" });
+    const dialog = container.querySelector<HTMLDialogElement>(".review-dialog")!;
+    dialog.showModal = () => { dialog.open = true; };
+    dialog.close = () => { dialog.open = false; };
+    fireEvent.click(confirm);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm decision" }));
+    await screen.findByText("Ontology review closed. Query generation is available.");
+    expect(close).toHaveBeenCalledWith(expect.objectContaining({ action: "confirmOntology", text: "verified" }), expect.anything());
+
+    fireEvent.click(screen.getByRole("button", { name: "Query" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use a business definition" }));
+    expect(screen.getByRole("dialog", { name: "Use a business definition" })).toHaveTextContent(/Confirmed · Revision 2/);
+    expect(screen.getByRole("button", { name: "Preview SQL" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ontology" }));
+    expect(await screen.findByText("completed_at", { selector: "code" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Generate SQL" })).toBeEnabled();
+    expect(lists).toHaveBeenCalledTimes(2);
+  });
+
   it("puts SQLite column changes first and keeps the old and new DDL behind a disclosure", async () => {
     const platform = getPlatform();
     const sourceTable = fixture.after.schemas[0].tables[0];
@@ -156,7 +258,7 @@ describe("App schema changes", () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);
     await screen.findByText("Desktop runtime");
     fireEvent.click(screen.getByRole("button", { name: "Capture fixture" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review understanding" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
     fireEvent.click(screen.getByRole("button", { name: "History comparison" }));
     expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("region", { name: "Schema comparison" })).toBeVisible();

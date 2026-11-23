@@ -2,6 +2,7 @@ import { normalizeQueryError, queryErrorMessages } from "../../i18n/query-errors
 import { useI18n } from "../../i18n";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import type { CaptureSnapshotResult, DatabaseSnapshot, QueryExecutionResult, QueryHistoryEntry, NodalStudioPlatform } from "../../platform";
+import { matchingOntologyDefinitions, type ConfirmedDefinition, type DefinitionRevision, type OntologyQueryDraft } from "../../platform/ontology-types";
 import { ddlEngineNames, schemaDdlTargetKey, type SchemaDdlInput, type SchemaDdlReceipt, type SchemaDdlTarget } from "../../platform/schema-ddl";
 import { QueryRunControls } from "./QueryRunControls";
 import { queryKeys } from "./query-shortcuts";
@@ -17,8 +18,20 @@ import { resolveCapability } from "../../platform/capabilities";
 import { SchemaDdlDialog } from "./SchemaDdlDialog";
 import type { SavedQuery, SaveQueryOutcome } from "./saved-queries";
 import { ModalSurface } from "../../design-system/ModalSurface";
+import { QueryOntologySheet } from "./QueryOntologySheet";
 
-export interface OpenQueryRequest { id: number; sql: string; sourceId?: string; kind?: "saved" | "new"; savedQuery?: SavedQuery }
+export interface OpenQueryRequest {
+  id: number;
+  sql: string;
+  sourceId?: string;
+  kind?: "saved" | "new" | "ontology";
+  savedQuery?: SavedQuery;
+  ontology?: { draft: OntologyQueryDraft; target: DefinitionRevision };
+}
+
+function resetQueryOutput(session: QuerySession, sourceId: string, message: string): QuerySession {
+  return { ...session, outputSourceId: sourceId, result: undefined, outcome: undefined, message, activeTab: "message" };
+}
 
 interface QueryPageProps {
   platform: NodalStudioPlatform;
@@ -31,24 +44,44 @@ interface QueryPageProps {
   selectedTable?: TableDefinition;
   draftSeed?: QueryDraftSeed;
   onOpenAiSettings?: () => void;
+  ontology?: { entries: ConfirmedDefinition[]; loading: boolean; reload: () => void; review: (id: string) => void };
   ddlTarget?: SchemaDdlTarget;
   onSchemaDdlCommitted?: (target: SchemaDdlTarget, capture?: CaptureSnapshotResult) => void;
   onSaveQuery?: (name: string, sql: string, id?: string) => SaveQueryOutcome;
 }
 
-export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onConsumeOpenRequest, settings, semantics, selectedTable, draftSeed, onOpenAiSettings, ddlTarget, onSchemaDdlCommitted, onSaveQuery }: QueryPageProps) {
+export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onConsumeOpenRequest, settings, semantics, selectedTable, draftSeed, onOpenAiSettings, ontology, ddlTarget, onSchemaDdlCommitted, onSaveQuery }: QueryPageProps) {
   const { t: bt } = useI18n();
-  const [draftRequested, setDrafting] = useState(Boolean(snapshot?.database.databaseType !== "sqlite" && draftSeed && draftSeed.sourceId === snapshot?.sourceId && draftSeed.snapshotId === snapshot?.id));
+  const seedId = snapshot?.database.databaseType !== "sqlite" && draftSeed?.sourceId === snapshot?.sourceId && draftSeed?.snapshotId === snapshot?.id
+    ? draftSeed?.id : undefined;
+  const [draftRequested, setDrafting] = useState(seedId !== undefined);
+  const [previousSeedId, setPreviousSeedId] = useState(seedId);
+  if (previousSeedId !== seedId) {
+    setPreviousSeedId(seedId);
+    if (seedId !== undefined) setDrafting(true);
+  }
   const draftBinding = JSON.stringify([settings?.source, settings?.app.privacy, semantics?.logicalRelationships, semantics?.domainGroups, semantics?.knowledge]);
   const [generatedRequest, setGeneratedRequest] = useState<{ sourceId: string; snapshotId: string; sql: string; binding: string }>();
   const [appliedDraft, setAppliedDraft] = useState<{ sourceId: string; snapshotId: string; previous: string; sql: string }>();
   const [draftExecution, setDraftExecution] = useState<{ sourceId: string; snapshotId: string; sql: string; result: QueryExecutionResult }>();
+  const [ontologyChoice, setOntologyChoice] = useState<{ scopeKey: string; matches?: string[] }>();
+  const ontologyScopeKey = ontology && snapshot ? JSON.stringify([snapshot.sourceId, snapshot.id]) : undefined;
+  const choice = ontologyChoice?.scopeKey === ontologyScopeKey ? ontologyChoice : undefined;
+  const activeOntologyScope = useRef(ontologyScopeKey);
+  useLayoutEffect(() => {
+    activeOntologyScope.current = ontologyScopeKey;
+    return () => { activeOntologyScope.current = undefined; };
+  }, [ontologyScopeKey]);
   const editorTabRef = useRef<HTMLButtonElement>(null);
   const draftTabRef = useRef<HTMLButtonElement>(null);
   const editorId = useId();
   const pendingGenerated = generatedRequest?.sourceId === snapshot?.sourceId && generatedRequest?.snapshotId === snapshot?.id && generatedRequest?.binding === draftBinding ? generatedRequest : undefined;
-  const currentOpen = openRequest && (!openRequest.sourceId || openRequest.sourceId === snapshot?.sourceId) ? openRequest : undefined;
+  const currentOpen = openRequest && (!openRequest.sourceId || openRequest.sourceId === snapshot?.sourceId)
+    && (!openRequest.ontology || (ontology && openRequest.ontology.draft.snapshotId === snapshot?.id)) ? openRequest : undefined;
   const pendingOpen = pendingGenerated ?? currentOpen;
+  const ontologyRequest = pendingGenerated ? undefined : currentOpen?.ontology;
+  const choiceEntries = (ontology?.entries ?? []).filter((entry) =>
+    ontologyRequest ? entry.id === ontologyRequest.target.id : !choice?.matches || choice.matches.includes(entry.id));
   const closeOpen = () => { if (pendingGenerated) setGeneratedRequest(undefined); else onConsumeOpenRequest?.(); };
   const outputId = useId();
   const outputRef = useRef<HTMLElement>(null);
@@ -59,7 +92,14 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   const canDraft = snapshot?.database.databaseType !== "sqlite" && desktopReady && Boolean(settings && semantics);
   const drafting = canDraft && draftRequested;
   const sessionKey = "query-workspace";
-  const [session, setSession] = useState<QuerySession>(() => loadQuerySession(sessionKey));
+  const sourceChangedMessage = bt("business.dataSourceChangedTheSQLDraftWasPreservedRun");
+  const [session, setSession] = useState<QuerySession>(() => {
+    const saved = loadQuerySession(sessionKey);
+    if (saved.outputSourceId === sourceId) return saved;
+    return saved.outputSourceId || saved.result || saved.outcome
+      ? resetQueryOutput(saved, sourceId, sourceChangedMessage)
+      : { ...saved, outputSourceId: sourceId };
+  });
   const [savedQuery, setSavedQuery] = useState<SavedQuery>();
   const [saveName, setSaveName] = useState<string>();
   const [saveFeedback, setSaveFeedback] = useState<"saved" | "nameTaken" | "storageError">();
@@ -89,11 +129,11 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
 
   if (previousSourceId.current !== sourceId) {
     previousSourceId.current = sourceId;
-    setDrafting(false);
+    setDrafting(seedId !== undefined);
     setSavedQuery(undefined);
     setSaveName(undefined);
     setSaveFeedback(undefined);
-    setSession((current) => ({ ...current, result: undefined, outcome: undefined, message: bt("business.dataSourceChangedTheSQLDraftWasPreservedRun"), activeTab: "message" }));
+    setSession((current) => resetQueryOutput(current, sourceId, sourceChangedMessage));
   }
   useEffect(() => { saveQuerySession(sessionKey, session); }, [session]);
   useEffect(() => {
@@ -115,7 +155,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   }, [platform, sourceId]);
 
   async function run(sqlText: string) {
-    if (!snapshot || !desktopReady || executing || activeQuery.current || ddlInFlight.current || activeDdlPreview || drafting || pendingOpen) return;
+    if (!snapshot || !desktopReady || executing || activeQuery.current || ddlInFlight.current || activeDdlPreview || drafting || pendingOpen || choice) return;
     if (!sqlText.trim()) {
       setSession((current) => ({ ...current, message: bt("business.enterOneReadOnlySELECTStatementBeforeRunningThe"), activeTab: "message", outputCollapsed: false }));
       editorRef.current?.focus();
@@ -205,9 +245,9 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     });
   }
   function showEditor() { setDrafting(false); setFocusOutput(false); }
-  function loadRequestedQuery(sql: string, append: boolean) {
-    const namedRequest = !pendingGenerated && (currentOpen?.kind === "saved" || currentOpen?.kind === "new");
-    setSavedQuery(append || pendingGenerated ? undefined : currentOpen?.savedQuery);
+  function loadRequestedQuery(sql: string, append: boolean, fromOntology = false) {
+    const namedRequest = fromOntology || (!pendingGenerated && Boolean(currentOpen?.kind));
+    setSavedQuery(append || pendingGenerated || fromOntology ? undefined : currentOpen?.savedQuery);
     setSaveName(undefined);
     setSaveFeedback(undefined);
     if (namedRequest) setDraftExecution(undefined);
@@ -221,6 +261,13 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     }));
     closeOpen();
     requestAnimationFrame(() => editorRef.current?.focus());
+  }
+  function openMatchingOntology(question: string) {
+    if (!ontologyScopeKey || !ontology || executing || applyingDdl || pendingOpen) return false;
+    const matches = matchingOntologyDefinitions(ontology.entries, question);
+    if (!matches.length) return false;
+    setOntologyChoice({ scopeKey: ontologyScopeKey, matches: matches.map((entry) => entry.id) });
+    return true;
   }
   function saveCurrentQuery(event: React.FormEvent) {
     event.preventDefault();
@@ -304,7 +351,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
         <span className="query-readonly" title={bt("business.queriesRunInAReadOnlyTransaction")}><ActionIcon name="shield" />{bt("business.readOnly")}</span>
         <label className="query-limit">{bt("business.rowLimit")}<select value={[100, 500, 1000].includes(session.rowLimit) ? session.rowLimit : "custom"} onChange={(event) => setSession((current) => ({ ...current, rowLimit: event.target.value === "custom" ? 5000 : Number(event.target.value) }))}><option value={100}>100</option><option value={500}>500</option><option value={1000}>1,000</option><option value="custom">{bt("business.custom")}</option></select></label>
         {![100, 500, 1000].includes(session.rowLimit) ? <label className="query-custom-limit"><input aria-label={bt("business.customRowLimit")} type="number" min={1} max={5000} value={session.rowLimit} onChange={(event) => setSession((current) => ({ ...current, rowLimit: Math.min(5000, Math.max(1, Number(event.target.value) || 1)) }))} /></label> : null}
-        <QueryRunControls executing={executing} disabled={!desktopReady || drafting || Boolean(pendingOpen) || applyingDdl} onRun={() => void run(editorRef.current?.getExecutableSql() ?? "")} onRunCurrent={() => void run(editorRef.current?.getCurrentStatementSql() ?? "")} onStop={stopQuery} />
+        <QueryRunControls executing={executing} disabled={!desktopReady || drafting || Boolean(pendingOpen || choice) || applyingDdl} onRun={() => void run(editorRef.current?.getExecutableSql() ?? "")} onRunCurrent={() => void run(editorRef.current?.getCurrentStatementSql() ?? "")} onStop={stopQuery} />
       </div>
     </header>
     {!desktopReady ? <div className="query-runtime-notice">{runtimeKind === "web" ? bt("business.queryIsAvailableOnlyInTheDesktopAppThe") : capability.scope}</div> : null}
@@ -323,6 +370,8 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
         {canDraft ? <button ref={draftTabRef} type="button" role="tab" id={`${editorId}-draft`} aria-controls={`${editorId}-draft-panel`} aria-selected={drafting} tabIndex={drafting ? 0 : -1} onClick={() => { setDrafting(true); setFocusOutput(false); }}><ActionIcon name="ai" />{bt("business.draftQuery")}</button> : null}
       </div>
       <span>{drafting ? bt("business.generateADraftThenReviewItInSQLEditor") : bt("business.runASelectionOrUseForTheCurrentStatement", { value0: queryKeys.current })}</span>
+      {ontologyScopeKey && ontology?.entries.length ? <button type="button" className="query-ddl-trigger"
+        disabled={executing || applyingDdl || Boolean(pendingOpen)} onClick={() => setOntologyChoice({ scopeKey: ontologyScopeKey })}>{bt("ontology.useDefinition")}</button> : null}
       {onSaveQuery && !drafting && <button type="button" className="query-ddl-trigger" disabled={!session.draft.trim() || Boolean(pendingOpen)}
         onClick={() => { setSaveName(savedQuery?.name ?? ""); setSaveFeedback(undefined); }}>{bt(savedQuery ? "savedQueries.update" : "savedQueries.save")}</button>}
       {ddlEngine && !drafting && <button type="button" className="query-ddl-trigger" disabled={executing || applyingDdl || Boolean(pendingOpen)}
@@ -331,7 +380,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     {!drafting && saveFeedback === "saved" && <div className="query-draft-notice" role="status">{bt("savedQueries.saved")}</div>}
     <div className="query-input-pane">
       <div className="query-editor-pane" role="tabpanel" id={`${editorId}-sql-panel`} aria-labelledby={`${editorId}-sql`} hidden={drafting}><SqlEditor ref={editorRef} value={session.draft} snapshot={snapshot} onChange={(draft) => setSession((current) => ({ ...current, draft }))} onRun={(sqlText) => void run(sqlText)} executing={executing} disabled={!desktopReady || Boolean(pendingOpen) || applyingDdl} ddlEngine={ddlEngine} onStop={stopQuery} /></div>
-      {canDraft && snapshot && settings && semantics ? <div className="query-draft-pane" role="tabpanel" id={`${editorId}-draft-panel`} aria-labelledby={`${editorId}-draft`} hidden={!drafting}><QueryDraftPanel platform={platform} snapshot={snapshot} settings={settings} semantics={semantics} seed={draftSeed} initialTable={selectedTable} execution={draftExecution?.sourceId === sourceId && draftExecution.snapshotId === snapshot.id ? draftExecution : undefined} onOpenSettings={() => onOpenAiSettings?.()} onUseSql={(sql) => setGeneratedRequest({ sourceId, snapshotId: snapshot.id, sql, binding: draftBinding })} /></div> : null}
+      {canDraft && snapshot && settings && semantics ? <div className="query-draft-pane" role="tabpanel" id={`${editorId}-draft-panel`} aria-labelledby={`${editorId}-draft`} hidden={!drafting}><QueryDraftPanel platform={platform} snapshot={snapshot} settings={settings} semantics={semantics} seed={draftSeed} initialTable={selectedTable} execution={draftExecution?.sourceId === sourceId && draftExecution.snapshotId === snapshot.id ? draftExecution : undefined} onOpenSettings={() => onOpenAiSettings?.()} onResolveOntology={openMatchingOntology} ontologyLoading={ontology?.loading} onUseSql={(sql) => setGeneratedRequest({ sourceId, snapshotId: snapshot.id, sql, binding: draftBinding })} /></div> : null}
     </div>
     <div className="query-result-resizer" hidden={drafting} role="separator" aria-label={bt("business.resizeQueryResults")} aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={650} aria-valuenow={session.resultHeight} tabIndex={0} onMouseDown={beginResultResize} onKeyDown={(event) => {
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
@@ -356,6 +405,17 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     </section>
 
     {activeDdlPreview && <SchemaDdlDialog request={activeDdlPreview} onCancel={() => setDdlPreview(undefined)} onConfirm={() => void applyDdl(activeDdlPreview)} />}
+    {(choice || ontologyRequest) && ontology && snapshot && <QueryOntologySheet key={ontologyRequest ? `request:${currentOpen?.id}` : ontologyScopeKey}
+      platform={platform} entries={choiceEntries} loading={ontology.loading}
+      initialPreview={ontologyRequest ? { id: ontologyRequest.target.id, draft: ontologyRequest.draft } : undefined}
+      scope={{ sourceId: snapshot.sourceId, snapshotId: snapshot.id }}
+      onDismiss={() => { setOntologyChoice(undefined); if (ontologyRequest) closeOpen(); }} onReload={ontology.reload}
+      onReview={(id) => { setOntologyChoice(undefined); if (ontologyRequest) closeOpen(); ontology.review(id); }}
+      onUse={(draft) => {
+        if (activeOntologyScope.current !== ontologyScopeKey) return;
+        setOntologyChoice(undefined);
+        loadRequestedQuery(draft.sql, false, true);
+      }} />}
     {saveName !== undefined && onSaveQuery && !pendingOpen ? <ModalSurface label={bt("savedQueries.save")} onDismiss={closeSaveQuery}><div className="query-dialog-backdrop" role="presentation"><form className="query-dialog ds-surface" onSubmit={saveCurrentQuery}>
       <h3>{bt(savedQuery ? "savedQueries.update" : "savedQueries.save")}</h3>
       <label className="saved-query-name">{bt("savedQueries.name")}<input data-modal-focus value={saveName} maxLength={120} onChange={(event) => { setSaveName(event.target.value); setSaveFeedback(undefined); }} /></label>
@@ -363,7 +423,8 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
       <div><button className="ds-primary" type="submit" disabled={!saveName.trim()}>{bt("savedQueries.saveAction")}</button>
         <button type="button" onClick={closeSaveQuery}>{bt("business.cancel")}</button></div>
     </form></div></ModalSurface> : null}
-    {pendingOpen ? <ModalSurface label={currentOpen?.kind && !pendingGenerated ? openTitle : bt("business.openGeneratedQuery")} onDismiss={closeOpen}><div className="query-dialog-backdrop" role="presentation"><section className="query-dialog ds-surface"><h3>{openTitle}</h3><p>{openMessage}</p>{pendingGenerated ? <pre aria-label={bt("business.sQLToInsert")}>{pendingGenerated.sql}</pre> : null}<div><button type="button" className="ds-primary" onClick={() => {
+    {pendingOpen && !ontologyRequest ? <ModalSurface label={currentOpen?.kind && !pendingGenerated ? openTitle : bt("business.openGeneratedQuery")} onDismiss={closeOpen}><div className="query-dialog-backdrop" role="presentation"><section className="query-dialog ds-surface"><h3>{openTitle}</h3><p>{openMessage}</p>{pendingGenerated ? <pre aria-label={bt("business.sQLToInsert")}>{pendingGenerated.sql}</pre> : null}
+      <div><button type="button" className="ds-primary" onClick={() => {
       if (pendingGenerated) { setAppliedDraft({ ...pendingGenerated, previous: session.draft }); setDrafting(false); }
       loadRequestedQuery(pendingOpen.sql, false);
     }}>{bt(currentOpen?.kind && !pendingGenerated ? "savedQueries.openAction" : "business.replace")}</button>{session.draft.trim() && !pendingGenerated && !currentOpen?.kind ? <button type="button" onClick={() => loadRequestedQuery(pendingOpen.sql, true)}>{bt("business.append")}</button> : null}<button type="button" data-modal-focus onClick={closeOpen}>{bt("business.cancel")}</button></div></section></div></ModalSurface> : null}

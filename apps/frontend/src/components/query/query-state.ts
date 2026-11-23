@@ -6,6 +6,7 @@ export type QueryTab = "results" | "message" | "history";
 export interface QuerySession {
   draft: string;
   previousDraft?: { sql: string; rowLimit: number };
+  outputSourceId?: string;
   result?: QueryExecutionResult;
   message: string;
   activeTab: QueryTab;

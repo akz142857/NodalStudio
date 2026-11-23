@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap } from "@codemirror/commands";
@@ -75,11 +75,21 @@ export function DefinitionReader({ value, wrap, dialect }: { value: string; wrap
 
 export function ObjectDocumentProperties({ object }: { object: DocumentObject }) {
   const { t } = useI18n();
+  const panel = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const scroller = panel.current?.closest(".inspector");
+    if (scroller) scroller.scrollTop = 0;
+  }, [object.key]);
   const program = "arguments" in object ? object : undefined;
   const kind = objectKind(object, t);
   const enabled = program?.enabled;
   const status = enabled === "O" ? t("objects.enabledO") : enabled === "D" ? t("objects.enabledD") : enabled === "R" ? t("objects.enabledR") : enabled === "A" || enabled === "enabled" ? t("objects.enabledA") : enabled;
-  return <section className="object-properties-panel" aria-label={t("document.properties")}>
+  return <section ref={panel} className="ds-surface inspector-surface inspector-view object-properties-panel" aria-label={t("document.properties")}>
+      <header className="inspector-header">
+        <span className="inspector-context">{t("document.properties")}</span>
+        <h2 className="inspector-title">{object.key.name}</h2>
+      </header>
+      <div className="inspector-body">
         <dl className="object-document-properties">
           <div><dt>{t("document.type")}</dt><dd>{kind}</dd></div>
           <div><dt>{t("document.name")}</dt><dd>{object.key.schema}.{object.key.name}</dd></div>
@@ -94,6 +104,7 @@ export function ObjectDocumentProperties({ object }: { object: DocumentObject })
         </dl>
         {"comment" in object && object.comment ? <p>{object.comment}</p> : null}
         {"materialized" in object ? <SchemaIndexDetails indexes={object.indexes ?? []} /> : null}
+      </div>
   </section>;
 }
 

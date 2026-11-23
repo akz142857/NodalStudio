@@ -71,7 +71,10 @@ describe("read-only DDL panel", () => {
   it("switches the explicit dialect/default namespace and invalidates old previews", async () => {
     mount(); fireEvent.change(screen.getByLabelText("SQL DDL text"), { target: { value: "CREATE TABLE t(id int);" } }); fireEvent.click(screen.getByRole("button", { name: "Preview DDL" })); await finish();
     fireEvent.click(screen.getByRole("button", {name:"Edit DDL"})); fireEvent.change(screen.getByLabelText("DDL dialect"), { target: { value: "mySql" } }); expect(screen.getByLabelText("Default namespace")).toHaveValue("imported"); expect(screen.queryByText(/Session ID/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Preview DDL" })); await finish(); expect(screen.getByRole("heading", { name: "imported.t" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Preview DDL" })); await finish();
+    const inspector = within(screen.getByRole("complementary", { name: "Inspector" }));
+    expect(inspector.getByText("imported · Table")).toBeVisible();
+    expect(inspector.getByRole("heading", { name: "t" })).toBeVisible();
   });
   it("retains input, selection and the mounted canvas when returning and reopening", async () => {
     const onReturn = vi.fn(); const onClose = vi.fn();
@@ -86,7 +89,9 @@ describe("read-only DDL panel", () => {
     view.rerender(<DdlImportPanel {...props} active={false} />);
     expect(canvas).toBeInTheDocument();
     view.rerender(<DdlImportPanel {...props} active />);
-    expect(screen.getByRole("heading", {name:"public.b"})).toBeVisible();
+    const inspector = within(screen.getByRole("complementary", { name: "Inspector" }));
+    expect(inspector.getByText("public · Table")).toBeVisible();
+    expect(inspector.getByRole("heading", { name: "b" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", {name:"Diagram preview"})); expect(screen.getByText(/DDL canvas/)).toBe(canvas);
     fireEvent.click(screen.getByRole("button", {name:"Close temporary model"}));
     expect(screen.getByRole("dialog", {name:"Discard this temporary model?"})).toBeVisible();

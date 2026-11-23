@@ -132,7 +132,29 @@ describe("SettingsPage", () => {
     });
 
     expect(screen.getByText(/already assigned to Open Settings/)).toBeVisible();
+    expect(screen.getByRole("group", { name: "Workspace navigation" })).toHaveTextContent("Open Query");
+    fireEvent.change(screen.getByRole("textbox", { name: "Refresh Schema" }), { target: { value: "Mod+4" } });
+    expect(screen.getByText(/already assigned to Open Query/)).toBeVisible();
     expect(onUpdateApp).not.toHaveBeenCalled();
+  });
+
+  it("shows a saved custom refresh interval and commits only valid numeric edits", async () => {
+    const settings = defaultEffectiveSettings("source");
+    if (!settings.source) throw new Error("Expected a source fixture");
+    settings.source.refresh.intervalSeconds = 75;
+    const onUpdateSource = vi.fn<(value: DataSourceSettings) => Promise<void>>().mockResolvedValue(undefined);
+    render(<SettingsPage {...baseProps} settings={settings} initialCategory="data-sources" onUpdateSource={onUpdateSource} />);
+    expect(screen.getByRole("option", { name: "Custom interval", selected: true })).toBeVisible();
+    const field = screen.getByRole("spinbutton", { name: "Custom refresh interval" });
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.blur(field);
+    expect(field).toHaveValue(75);
+    expect(onUpdateSource).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: "120" } });
+    expect(onUpdateSource).not.toHaveBeenCalled();
+    fireEvent.blur(field);
+    await waitFor(() => expect(onUpdateSource).toHaveBeenCalledOnce());
+    expect(onUpdateSource.mock.calls[0][0].refresh.intervalSeconds).toBe(120);
   });
 });
 

@@ -247,3 +247,4 @@ mod tests {
 }
 
 pub mod knowledge;
+pub mod ontology;

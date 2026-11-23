@@ -38,7 +38,7 @@ export function KnowledgePanel({
   const [error, setError] = useState<string>();
 
   async function createGroup() {
-    if (!selectedTable || !groupName.trim()) return;
+    if (readOnly || pending || !selectedTable || !groupName.trim()) return;
     setPending(true);
     setError(undefined);
     try {
@@ -62,7 +62,7 @@ export function KnowledgePanel({
   }
 
   async function createView() {
-    if (readOnly || !selectedTable || !viewName.trim()) return;
+    if (readOnly || pending || !selectedTable || !viewName.trim()) return;
     setPending(true);
     setError(undefined);
     try {
@@ -132,7 +132,7 @@ export function KnowledgePanel({
         </div>
       ) : null}
 
-      <div className="semantic-create">
+      {readOnly ? <p>{bt("inspector.readOnlySemantics")}</p> : <div className="semantic-create">
         <p>
           {selectedTable
             ? bt("businessSupport.useAsTheSelectedRoot", { value0: selectedTable.key.name })
@@ -169,7 +169,7 @@ export function KnowledgePanel({
             placeholder={bt("businessSupport.savedRelationshipView")}
             disabled={!selectedTable || pending}
           /></label>
-          <label>{bt("businessSupport.depth")}<select
+          <label>{bt("businessSupport.depth")}<select className="ds-select"
             aria-label={bt("businessSupport.relationshipDepth")}
             value={depth}
             onChange={(event) => setDepth(Number(event.target.value))}
@@ -187,12 +187,12 @@ export function KnowledgePanel({
           >
             {bt("businessSupport.saveView")}</button>
         </div>
-      </div>
+      </div>}
       {semantics.orphanedAnnotations.length > 0 ? (
         <p className="semantic-warning">
           {semantics.orphanedAnnotations.length} {bt("businessSupport.annotationsReferenceRemovedObjectsAndRemainPreserved")}</p>
       ) : null}
-      {error ? <p className="error-message">{error}</p> : null}
+      {error ? <p className="error-message" role="alert">{error}</p> : null}
     </section>
   );
 }

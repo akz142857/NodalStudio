@@ -4,6 +4,7 @@ export interface SegmentedOption<T extends string> {
   disabled?: boolean;
   /** Native tooltip, typically the reason a segment is disabled. */
   title?: string;
+  ariaKeyShortcuts?: string;
 }
 
 interface SegmentedProps<T extends string> {
@@ -46,6 +47,7 @@ export function Segmented<T extends string>({
           disabled={option.disabled}
           tabIndex={option.value === focusValue ? 0 : -1}
           title={option.title}
+          aria-keyshortcuts={option.ariaKeyShortcuts}
           onClick={() => onChange(option.value)}
           onKeyDown={(event) => {
             const { key } = event;

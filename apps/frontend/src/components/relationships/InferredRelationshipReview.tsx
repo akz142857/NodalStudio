@@ -239,7 +239,7 @@ export function InferredRelationshipReview({ snapshot, tab, candidates, allCandi
         </button></div>)}
         {!rows.length ? <div className="relationship-manager-empty"><strong>{hasFilters ? bt("business.noMatchingCandidates") : tab === "ignored" ? bt("business.noIgnoredCandidates") : bt("business.reviewQueueComplete")}</strong><p>{tab === "ignored" ? bt("business.ignoredCandidatesAndFieldRulesAppearHere") : bt("business.adjustTheSearchOrScopeToReviewOtherSuggestions")}</p>{hasFilters ? <button type="button" onClick={() => navigate(() => { changeFilters(() => { setQuery(""); setFilter("all"); setScope("all"); }); })}>{bt("business.clearFilters")}</button> : null}</div> : null}
       </nav>
-      <div ref={detailRef} className="relationship-manager-detail">
+      <div ref={detailRef} className="relationship-manager-detail inspector-surface">
         {batchApi && history ? <RelationshipBatchHistory api={batchApi} sourceId={snapshot.sourceId} onBack={leaveBatch} onUndone={undone} onStateChange={setFormState} />
           : batchApi && batchRequest ? <RelationshipBatchPanel api={batchApi} request={batchRequest} candidates={allCandidates} onDone={batchDone} onBack={() => navigate(leaveBatch)} onReview={(key) => navigate(() => { leaveBatch(); setSelectedKey(key); })} onStateChange={setFormState} />
           : selected && tab === "inferred" && selected.candidate ? <CandidateConfirmation key={`${snapshot.id}:${selected.key}:${draftRevision}`} candidate={selected.candidate} snapshot={snapshot} onValidate={onValidate} onSave={onSave} onStateChange={setFormState} disabled={busy}

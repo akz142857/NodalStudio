@@ -1,5 +1,6 @@
 import { useI18n } from "../i18n";
 import { useEffect, useRef, type KeyboardEvent } from "react";
+import { ActionIcon } from "./ActionIcon";
 
 export type SidebarSide = "left" | "right";
 
@@ -48,10 +49,7 @@ export function HeaderSidebarToggle({
       title={t(expanded ? "navigation.sidebar.hide" : "navigation.sidebar.show", { panel: panelName })}
       onClick={onToggle}
     >
-      <svg aria-hidden="true" viewBox="0 0 20 20">
-        <rect x="2.5" y="3.5" width="15" height="13" rx="2.5" />
-        <path d={side === "left" ? "M7 4v12" : "M13 4v12"} />
-      </svg>
+      <ActionIcon name={side === "left" ? "sidebarLeft" : "sidebarRight"} />
     </button>
   );
 }

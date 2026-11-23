@@ -19,6 +19,9 @@ describe("TableNode", () => {
     const node = graph.nodes.find((item) => item.id === "public.orders")!;
     const props = { ...node, dragging: false, zIndex: 0, isConnectable: false, positionAbsoluteX: 0, positionAbsoluteY: 0 } as NodeProps<TableNodeType>;
     const { container } = render(<ReactFlowProvider><CanvasSettingsProvider value={{ ...defaultAppSettings().canvas, maxInitialColumns: 1 }}><TableNode {...props} /></CanvasSettingsProvider></ReactFlowProvider>);
+    expect(screen.getByRole("article", { name: "public.orders · Modified" })).toHaveAttribute("data-change", "modified");
+    expect(container.querySelector(".table-node > header > .comparison-badge")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Modified")).toBeVisible();
     expect(container.querySelector('[data-column-name="legacy_note"]')).toHaveAttribute("data-change", "deleted");
     expect(container.querySelector('[data-column-name="priority"]')).toHaveAttribute("data-change", "added");
     expect(container.querySelector('[data-column-name="user_id"]')).toHaveAttribute("data-change", "modified");
@@ -35,6 +38,8 @@ describe("TableNode", () => {
     const props = { ...node, dragging: false, zIndex: 0, isConnectable: false, positionAbsoluteX: 0, positionAbsoluteY: 0 } as NodeProps<TableNodeType>;
     const { container } = render(<ReactFlowProvider><TableNode {...props} /></ReactFlowProvider>);
     expect(screen.getByTitle("Deleted table · Before snapshot")).toBeVisible();
+    expect(screen.getByRole("article", { name: "public.audit · Deleted table · Before snapshot" })).toHaveAttribute("data-change", "deleted");
+    expect(container.querySelector(".table-node > header > .comparison-badge")).toHaveTextContent("Removed");
     expect(container.querySelectorAll('.table-column[data-change="deleted"]')).toHaveLength(2);
     expect(container.querySelector('[data-handleid="source:order_id:right"]')).toBeInTheDocument();
   });
@@ -208,6 +213,8 @@ describe("TableNode", () => {
     // The change-status border must survive: domain colour lives on its own channels.
     expect(node?.style.borderTopColor).toBe("");
     expect(node).toHaveAttribute("data-change", "added");
+    expect(screen.getByTitle("Added")).toBeVisible();
+    expect(node?.querySelector("header > .comparison-badge")).not.toBeInTheDocument();
   });
 });
 
@@ -273,7 +280,8 @@ it("collapses unreadable fields in overview, keeps relation anchors and restores
   expect(container.querySelector(".table-node")).toHaveAttribute("data-overview", "true");
   expect(container.querySelectorAll(".table-column")).toHaveLength(0);
   expect(screen.getByText(/Zoom in for details/)).toHaveTextContent(/changed/);
-  expect(screen.getByText(/~ modified/)).toBeInTheDocument();
+  expect(screen.getByRole("article", { name: "public.orders · Modified" })).toHaveAttribute("data-change", "modified");
+  expect(container.querySelector(".table-node > header > .comparison-badge")).not.toBeInTheDocument();
   const handle = container.querySelector<HTMLElement>('[data-handleid="source:user_id:right"]');
   expect(handle).toBeInTheDocument();
   const anchor = handle?.parentElement?.style.top;

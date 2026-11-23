@@ -135,20 +135,16 @@ async fn persist_capture(
     capture: Result<DatabaseSnapshot, String>,
 ) -> Result<CaptureSnapshotResult, String> {
     let capture = capture?;
-    if !state
+    let profile = state
         .store
         .get_data_source(input.source_id)
         .await
         .map_err(safe_store_error)?
-        .is_some_and(|profile| matches_target(input, &profile))
-    {
-        return Err(
-            "The selected database connection changed after the statement completed.".into(),
-        );
-    }
+        .filter(|profile| matches_target(input, profile))
+        .ok_or("The selected database connection changed after the statement completed.")?;
     state
         .store
-        .save_captured_snapshot(&capture)
+        .save_captured_snapshot_for(&profile, &capture)
         .await
         .map_err(safe_store_error)
 }

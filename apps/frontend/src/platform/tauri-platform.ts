@@ -63,6 +63,11 @@ import type {
 } from "./settings-types";
 
 export class TauriPlatform implements NodalStudioPlatform {
+  listOntology(scope: import("./ontology-types").OntologyScope): Promise<import("./ontology-types").ConfirmedDefinition[]> { return invoke("list_ontology", { scope }); }
+  confirmOntology(input: import("./ontology-types").ConfirmOntologyInput): Promise<import("./ontology-types").ConfirmedDefinition> { return invoke("confirm_ontology", { input }); }
+  saveOntologySample(input: import("./ontology-types").SaveOntologySampleInput): Promise<import("./ontology-types").ConfirmedDefinition> { return invoke("save_ontology_sample", { input }); }
+  verifyOntologyReview(input: import("./ontology-types").VerifyOntologyReviewInput, query?: import("./change-review-types").ChangeReviewQuery): Promise<import("./change-review-types").ChangeReviewWorkspace> { return invoke("verify_ontology_review", { input, query }); }
+  draftOntologyLastMonth(input: import("./ontology-types").DraftOntologyInput): Promise<import("./ontology-types").OntologyQueryDraft> { return invoke("draft_ontology_last_month", { input }); }
   exportDatabaseFile(input: DatabaseExportRequest, receive: (progress: DatabaseExportProgress) => void): Promise<DatabaseExportReceipt | null> {
     const onProgress = new Channel<DatabaseExportProgress>();
     onProgress.onmessage = receive;

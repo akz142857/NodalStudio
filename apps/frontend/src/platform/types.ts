@@ -572,6 +572,11 @@ export interface QueryHistoryEntry {
 export interface QueryExportInput { locale?: "en" | "zh-CN"; result: QueryExecutionResult; format: "csv" | "json" | "xlsx"; selectedRows: number[] | null; protectFormulas: boolean }
 
 export interface NodalStudioPlatform {
+  listOntology(scope: import("./ontology-types").OntologyScope): Promise<import("./ontology-types").ConfirmedDefinition[]>;
+  confirmOntology(input: import("./ontology-types").ConfirmOntologyInput): Promise<import("./ontology-types").ConfirmedDefinition>;
+  saveOntologySample(input: import("./ontology-types").SaveOntologySampleInput): Promise<import("./ontology-types").ConfirmedDefinition>;
+  verifyOntologyReview(input: import("./ontology-types").VerifyOntologyReviewInput, query?: import("./change-review-types").ChangeReviewQuery): Promise<import("./change-review-types").ChangeReviewWorkspace>;
+  draftOntologyLastMonth(input: import("./ontology-types").DraftOntologyInput): Promise<import("./ontology-types").OntologyQueryDraft>;
   exportQueryResult(input: QueryExportInput): Promise<string | null>;
   exportDatabaseFile(input: import("./database-export").DatabaseExportRequest, onProgress: (progress: import("./database-export").DatabaseExportProgress) => void): Promise<import("./database-export").DatabaseExportReceipt | null>;
   cancelDatabaseExport(jobId: string): Promise<boolean>;

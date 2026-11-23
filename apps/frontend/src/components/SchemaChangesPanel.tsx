@@ -57,7 +57,7 @@ function OperationDetail({ operation, before, after }: { operation: SchemaOperat
   const replacement = Boolean(beforeProperties && afterProperties && /^(add|drop)/.test(operation.operationType));
 
   return (
-    <article className="diff-detail" aria-label={bt("business.changeDetails")}>
+    <article className="diff-detail inspector-surface" aria-label={bt("business.changeDetails")}>
       <header>
         <div className="diff-detail-heading">
           <h3>{translateUiLabel(changeLabel(operation.operationType), bt)}</h3>
@@ -86,7 +86,7 @@ function OperationDetail({ operation, before, after }: { operation: SchemaOperat
         </p>
       ) : null}
       {visibleRows.length ? (
-        <table className="diff-properties" aria-label={bt("business.beforeAndAfterProperties")}>
+        <div className="diff-property-table"><table className="diff-properties" aria-label={bt("business.beforeAndAfterProperties")}>
           <thead><tr><th scope="col">{bt("business.property")}</th><th scope="col">{bt("business.beforeDetail")}</th><th scope="col">{bt("business.after")}</th></tr></thead>
           <tbody>{visibleRows.map(({ key, changed }) => (
             <tr key={key} data-changed={changed}>
@@ -95,7 +95,7 @@ function OperationDetail({ operation, before, after }: { operation: SchemaOperat
               <td><pre>{afterProperties ? propertyValue(afterProperties[key], bt, key) : detailStatus(bt, after, operation, "after")}</pre></td>
             </tr>
           ))}</tbody>
-        </table>
+        </table></div>
       ) : (
         <p className="diff-empty">{keys.length ? bt("business.noChangedPropertiesShowUnchangedPropertiesToInspectThe") : bt("business.propertyDetailsAreUnavailableTheOperationSummariesRemainAvailable")}</p>
       )}
@@ -167,7 +167,7 @@ export function SchemaChangesPanel({ changeSet, currentSnapshot, platform, runti
             <button type="button" disabled={activePage + 1 === pageCount} onClick={() => goToPage(activePage + 1)}>{bt("business.next")}</button>
           </nav> : null}
         </div>
-        {selected ? <OperationDetail key={selected.index} operation={selected.operation} before={before} after={after} /> : null}
+        {selected ? <OperationDetail key={`${changeSet.id}:${selected.index}`} operation={selected.operation} before={before} after={after} /> : null}
       </div>
     </section>
   );

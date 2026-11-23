@@ -25,7 +25,7 @@ export function CapabilitiesMatrix({ runtime, database }: { runtime?: RuntimeInf
     <div className="capabilities-toolbar">
       <div className="capabilities-filters">
         <label>{t("capabilities.searchCapabilities")}<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-        <label>{t("capabilities.status")}<select value={status} onChange={(event) => setStatus(event.target.value as CapabilityStatus | "")}><option value="">{t("capabilities.allStatuses")}</option>{Object.entries(capabilityStatusMessages).map(([value, key]) => <option key={value} value={value}>{t(key)}</option>)}</select></label>
+        <label>{t("capabilities.status")}<select className="ds-select" value={status} onChange={(event) => setStatus(event.target.value as CapabilityStatus | "")}><option value="">{t("capabilities.allStatuses")}</option>{Object.entries(capabilityStatusMessages).map(([value, key]) => <option key={value} value={value}>{t(key)}</option>)}</select></label>
       </div>
       <p className="capabilities-results" role="status">{definitions.length} {t("capabilities.of")}{" "}{capabilityDefinitions.length} {t("capabilities.capabilitiesStatusFilterMatchesAnyOfTheFour")}</p>
     </div>

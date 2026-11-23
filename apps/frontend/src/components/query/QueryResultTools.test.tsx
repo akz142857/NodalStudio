@@ -18,11 +18,14 @@ describe("query result tools",()=>{
   it("profiles all pages, supports column details and resets for a new result",async()=>{
     const {rerender}=render(<QueryResultGrid result={result}/>);
     fireEvent.click(screen.getByRole("button",{name:"Profile"}));
-    const trigger = await screen.findByRole("button",{name:"Profile amount"}); trigger.focus(); fireEvent.click(trigger);
+    const trigger = await screen.findByRole("button", { name: "Profile amount" });
+    fireEvent.click(trigger);
     const details=screen.getByRole("complementary",{name:"Profile of amount"});
     expect(details).toHaveTextContent("205 returned rows");expect(details).toHaveTextContent("102");expect(details).toHaveTextContent("not the full dataset");
-    fireEvent.click(screen.getByRole("button",{name:"Close column profile"}));
-    expect(screen.getByRole("button",{name:"Profile amount"})).toHaveFocus();
+    const close = screen.getByRole("button", { name: "Close column profile" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: "Escape" });
+    expect(trigger).toHaveFocus();
     rerender(<QueryResultGrid result={{...result,queryId:"new",rows:[],rowCount:0}}/>);
     expect(screen.queryByRole("button",{name:"Profile amount"})).toBeNull();
     expect(screen.getByRole("button",{name:"Profile"})).toHaveAttribute("aria-pressed","false");

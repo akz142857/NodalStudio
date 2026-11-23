@@ -1,8 +1,11 @@
 import { EditorView } from "@codemirror/view";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DatabaseSnapshot, QueryExecutionResult, NodalStudioPlatform } from "../../platform";
-import { clearQuerySessions } from "./query-state";
+import type { ConfirmedDefinition, OntologyQueryDraft } from "../../platform/ontology-types";
+import { discoverySettings } from "../../test/discovery-fixture";
+import { reportSemantics, reportSnapshot } from "../../test/schema-report-fixture";
+import { clearQuerySessions, loadQuerySession, saveQuerySession } from "./query-state";
 import { QueryPage } from "./QueryPage";
 
 const snapshot: DatabaseSnapshot = {
@@ -26,6 +29,88 @@ const result: QueryExecutionResult = {
 
 describe("QueryPage", () => {
   beforeEach(() => clearQuerySessions());
+  it("uses confirmed paid-order SQL for a matching question and preserves the editable draft", async () => {
+    const [orders, payments] = reportSnapshot.schemas[0].tables;
+    const entry: ConfirmedDefinition = {
+      id: "paid", revision: 2, confirmedSnapshotId: reportSnapshot.id, impacts: [],
+      definition: {
+        name: "已付款订单", timeZone: "Asia/Singapore",
+        order: { name: "Order", table: orders.key, idColumn: "id" },
+        payment: { name: "Payment", table: payments.key, orderIdColumn: "order_id", statusColumn: "status", successValue: "paid", paidAtColumn: "completed_at" },
+      },
+    };
+    const draft: OntologyQueryDraft = {
+      sourceId: reportSnapshot.sourceId, snapshotId: reportSnapshot.id, revision: entry.revision,
+      definitionName: entry.definition.name, timeZone: entry.definition.timeZone,
+      startsAt: "2026-10-01T00:00:00+08:00", endsBefore: "2026-11-01T00:00:00+08:00",
+      sql: "SELECT order_id FROM payments WHERE completed_at IS NOT NULL;",
+    };
+    const draftOntologyLastMonth = vi.fn<NodalStudioPlatform["draftOntologyLastMonth"]>().mockResolvedValue(draft);
+    const prepareDiscovery = vi.fn();
+    const executeReadonlyQuery = vi.fn();
+    const platform = {
+      listQueryHistory: vi.fn().mockResolvedValue([]),
+      listSnapshots: vi.fn().mockResolvedValue([{ id: reportSnapshot.id }]),
+      draftOntologyLastMonth, prepareDiscovery, executeReadonlyQuery,
+    } as unknown as NodalStudioPlatform;
+    saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 7;" });
+    const { container } = render(<QueryPage snapshot={reportSnapshot} platform={platform} runtimeKind="desktop"
+      settings={discoverySettings()} semantics={reportSemantics}
+      ontology={{ entries: [entry], loading: false, review: vi.fn(), reload: vi.fn() }} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Draft query" }));
+    fireEvent.change(screen.getByLabelText("Question"), { target: { value: "列出上月已付款订单。" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create SQL draft" }));
+    const sheet = screen.getByRole("dialog", { name: "Use a business definition" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Preview SQL" }));
+    expect(await within(sheet).findByText(draft.sql)).toBeVisible();
+    expect(draftOntologyLastMonth).toHaveBeenCalledWith({
+      scope: { sourceId: draft.sourceId, snapshotId: draft.snapshotId }, target: { id: entry.id, revision: entry.revision },
+    });
+    draftOntologyLastMonth.mockRejectedValueOnce(new Error("Review the updated definition before generating SQL."));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Open in SQL Editor" }));
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent("Review the updated definition");
+    expect(loadQuerySession("query-workspace").draft).toBe("SELECT 7;");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Preview SQL" }));
+    await within(sheet).findByText(draft.sql);
+    fireEvent.click(within(sheet).getByRole("button", { name: "Open in SQL Editor" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(EditorView.findFromDOM(container.querySelector<HTMLElement>(".cm-editor")!)?.state.doc.toString()).toBe(draft.sql);
+    expect(loadQuerySession("query-workspace").previousDraft?.sql).toBe("SELECT 7;");
+    expect(draftOntologyLastMonth).toHaveBeenCalledTimes(4);
+    expect(prepareDiscovery).not.toHaveBeenCalled();
+    expect(executeReadonlyQuery).not.toHaveBeenCalled();
+  });
+  it("revalidates a preview opened from Ontology and asks for confirmation when the month has changed", async () => {
+    const [order, payment] = reportSnapshot.schemas[0].tables;
+    const entry: ConfirmedDefinition = {
+      id: "paid", revision: 1, confirmedSnapshotId: reportSnapshot.id, impacts: [],
+      definition: { name: "Paid orders", timeZone: "UTC", order: { name: "Order", table: order.key, idColumn: "id" },
+        payment: { name: "Payment", table: payment.key, orderIdColumn: "order_id", statusColumn: "status", successValue: "paid", paidAtColumn: "paid_at" } },
+    };
+    const original: OntologyQueryDraft = {
+      sourceId: reportSnapshot.sourceId, snapshotId: reportSnapshot.id, revision: 1, definitionName: "Paid orders", timeZone: "UTC",
+      startsAt: "2026-10-01T00:00:00Z", endsBefore: "2026-11-01T00:00:00Z", sql: "SELECT 'October';",
+    };
+    const updated = { ...original, startsAt: original.endsBefore, endsBefore: "2026-12-01T00:00:00Z", sql: "SELECT 'November';" };
+    const draftOntologyLastMonth = vi.fn<NodalStudioPlatform["draftOntologyLastMonth"]>().mockResolvedValue(updated);
+    const onConsumeOpenRequest = vi.fn();
+    const api = { listQueryHistory: vi.fn().mockResolvedValue([]), draftOntologyLastMonth } as unknown as NodalStudioPlatform;
+    const target = { id: entry.id, revision: entry.revision };
+    saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 7;" });
+    render(<QueryPage snapshot={reportSnapshot} platform={api} runtimeKind="desktop" onConsumeOpenRequest={onConsumeOpenRequest}
+      openRequest={{ id: 1, kind: "ontology", sourceId: original.sourceId, sql: original.sql, ontology: { target, draft: original } }}
+      ontology={{ entries: [entry], loading: false, review: vi.fn(), reload: vi.fn() }} />);
+    const sheet = screen.getByRole("dialog", { name: "Use a business definition" });
+    expect(within(sheet).getByText(original.sql)).toBeVisible();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Open in SQL Editor" }));
+    expect(await within(sheet).findByText(updated.sql)).toBeVisible();
+    expect(draftOntologyLastMonth).toHaveBeenCalledWith({ scope: { sourceId: original.sourceId, snapshotId: original.snapshotId }, target });
+    expect(onConsumeOpenRequest).not.toHaveBeenCalled();
+    expect(loadQuerySession("query-workspace").draft).toBe("SELECT 7;");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Open in SQL Editor" }));
+    await waitFor(() => expect(onConsumeOpenRequest).toHaveBeenCalledOnce());
+    expect(loadQuerySession("query-workspace").draft).toBe(updated.sql);
+  });
   it.each([false, true])("runs MySQL cursor statements and discards a late result after changing sources (return to original: %s)", async (returnToOriginal) => {
     let finish!: (value: QueryExecutionResult) => void;
     const executeReadonlyQuery = vi.fn<NodalStudioPlatform["executeReadonlyQuery"]>().mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
@@ -45,6 +130,19 @@ describe("QueryPage", () => {
     await act(async () => { finish(result); await Promise.resolve(); });
     expect(screen.queryByRole("region", { name: "Query results" })).not.toBeInTheDocument();
     expect(screen.getByText(/Data source changed/)).toBeVisible();
+  });
+  it("keeps the draft and suppresses the previous data source output on remount", async () => {
+    const sessionKey = "query-workspace";
+    saveQuerySession(sessionKey, { ...loadQuerySession(sessionKey), outputSourceId: snapshot.sourceId,
+      draft: "SELECT 42;", message: "Output from the previous connection", result, outcome: "succeeded", rowLimit: 500 });
+    const api = { listQueryHistory: vi.fn().mockResolvedValue([]) } as unknown as NodalStudioPlatform;
+    const nextSnapshot = { ...snapshot, sourceId: "other-source" };
+    const { container } = render(<QueryPage platform={api} snapshot={nextSnapshot} runtimeKind="desktop" />);
+    expect(await screen.findByText(/Data source changed/)).toBeVisible();
+    expect(screen.queryByText("Output from the previous connection")).not.toBeInTheDocument();
+    expect(loadQuerySession(sessionKey)).toMatchObject({ outputSourceId: nextSnapshot.sourceId, draft: "SELECT 42;", rowLimit: 500 });
+    expect(loadQuerySession(sessionKey).result).toBeUndefined();
+    expect(EditorView.findFromDOM(container.querySelector<HTMLElement>(".cm-editor")!)?.state.doc.toString()).toBe("SELECT 42;");
   });
   it("runs editor SQL and resizes the output with the global pointer stream", async () => {
     let finishQuery!: (value: QueryExecutionResult) => void;

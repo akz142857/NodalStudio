@@ -57,6 +57,11 @@ function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"])
     cancelDatabaseExport: vi.fn(),
     getChangeReview: vi.fn(),
     applyChangeReview: vi.fn(),
+    listOntology: vi.fn(),
+    confirmOntology: vi.fn(),
+    saveOntologySample: vi.fn(),
+    verifyOntologyReview: vi.fn(),
+    draftOntologyLastMonth: vi.fn(),
     prepareKnowledgeDraft: vi.fn(),
     confirmKnowledgeDraft: vi.fn(),
     cancelKnowledgeDraft: vi.fn(),
@@ -180,7 +185,7 @@ describe("HistoryPanel", () => {
       />,
     );
 
-    expect(await screen.findByText("Latest captured")).toBeVisible();
+    expect(await screen.findByRole("button", { name: /Latest captured/ })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Compare versions" }));
 
     await waitFor(() => expect(onCompare).toHaveBeenCalledWith(snapshot, changeSet));
@@ -198,7 +203,7 @@ describe("HistoryPanel", () => {
     const latest = screen.getByRole("button",{name:/Latest captured/});
     expect(latest).not.toHaveAttribute("aria-current");
     fireEvent.click(latest);
-    await waitFor(()=>expect(onSelect).toHaveBeenCalledWith(snapshot));
+    await waitFor(()=>expect(onSelect).toHaveBeenCalledWith(snapshot, true));
   });
   it("compares in the chosen direction even when the target is older", async () => {
     const compareSnapshots = vi.fn().mockResolvedValue(changeSet);
@@ -208,8 +213,8 @@ describe("HistoryPanel", () => {
     render(<HistoryPanel sourceId="source" revision="after" platform={platform} onSelect={vi.fn()} onCompare={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Swap direction" }));
-    expect(screen.getByLabelText("Before (baseline)")).toHaveValue("after");
-    expect(screen.getByLabelText("After (target)")).toHaveValue("before");
+    expect(screen.getByRole<HTMLInputElement>("combobox", { name: "Before (baseline)" }).value).toContain(summaries[0].fingerprint.slice(0, 8));
+    expect(screen.getByRole<HTMLInputElement>("combobox", { name: "After (target)" }).value).toContain(summaries[1].fingerprint.slice(0, 8));
     fireEvent.click(screen.getByRole("button", { name: "Compare versions" }));
     await waitFor(() => expect(compareSnapshots).toHaveBeenCalledWith("after", "before"));
     expect(getSnapshot).toHaveBeenCalledWith("before");
@@ -219,9 +224,22 @@ describe("HistoryPanel", () => {
     const compareSnapshots = vi.fn().mockResolvedValue(changeSet);
     render(<HistoryPanel sourceId="source" revision="after" platform={platformMock(compareSnapshots)} onSelect={vi.fn()} onCompare={vi.fn()} />);
     await screen.findByRole("button", { name: "Swap direction" });
-    fireEvent.change(screen.getByLabelText("Before (baseline)"), { target: { value: "after" } });
+    const before = screen.getByRole("combobox", { name: "Before (baseline)" });
+    fireEvent.focus(before);
+    fireEvent.change(before, { target: { value: summaries[0].fingerprint.slice(0, 8) } });
+    fireEvent.keyDown(before, { key: "Enter" });
     expect(screen.getByRole("button", { name: "Compare versions" })).toBeDisabled();
+    expect(screen.getByText("Choose two different snapshots to compare.")).toBeVisible();
     expect(compareSnapshots).not.toHaveBeenCalled();
+  });
+
+  it("reports a load failure and retries without treating it as an empty database", async () => {
+    const platform = platformMock(vi.fn());
+    platform.listSnapshots = vi.fn().mockRejectedValueOnce(new Error("Snapshot storage unavailable")).mockResolvedValue(summaries);
+    render(<HistoryPanel sourceId="source" revision="after" platform={platform} onSelect={vi.fn()} onCompare={vi.fn()} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Snapshot storage unavailable");
+    fireEvent.click(screen.getByRole("button", { name: "Retry loading history" }));
+    expect(await screen.findByRole("button", { name: "Compare versions" })).toBeEnabled();
   });
 
   it("ignores a comparison that finishes after the history has changed", async () => {

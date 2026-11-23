@@ -14,4 +14,4 @@ export interface ChangeReviewRequest {
   sourceId: string; revision: string; preparedAt: string; operationId: string; action: string; itemKey: string | null; itemKeys?: string[]; text: string | null;
 }
 
-export interface ChangeReviewQuery { view?: string; search?: string; cursor?: string | null; limit?: number }
+export interface ChangeReviewQuery { view?: string; search?: string; itemKey?: string; cursor?: string | null; limit?: number }

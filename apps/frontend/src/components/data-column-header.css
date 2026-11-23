@@ -25,7 +25,7 @@
 }
 
 .data-column-heading > .data-column-name:is(:hover, :active):not(:disabled) { background: transparent; color: var(--ds-accent); }
-.data-column-heading > .data-column-name:focus-visible { outline-offset: -1px; }
+.data-column-heading > .data-column-name:focus-visible { outline-offset: var(--ds-focus-inset); }
 
 .data-column-actions {
   display: flex;
@@ -81,7 +81,8 @@
   touch-action: none;
 }
 
-.data-column-resizer:is(:hover, :focus-visible, [data-resizing]) { box-shadow: inset -2px 0 var(--ds-accent); outline: none; }
+.data-column-resizer:is(:hover, [data-resizing]) { box-shadow: inset -2px 0 var(--ds-accent); }
+.data-column-resizer:focus-visible { outline-offset: var(--ds-focus-inset); }
 
 .data-column-comment {
   position: fixed;

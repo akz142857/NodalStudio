@@ -1,10 +1,11 @@
 import { useI18n, useEventTranslator } from "../i18n";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DatabaseSnapshot, DiscoveryOperation, EffectiveSettings, NodalStudioPlatform, SemanticBundle, TableDefinition } from "../platform";
 import { discoverTables, findKnownPath, knownRelationships, neighborhood, objectId, objectLabel } from "../graph/business-discovery";
 import type { QueryDraftSeed } from "./query/QueryDraftPanel";
 import { DiscoveryAssistant } from "./DiscoveryAssistant";
 import { SchemaCanvas } from "./SchemaCanvas";
+import { SearchSelect } from "./SearchSelect";
 import "./business-explorer.css";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
   platform: NodalStudioPlatform;
   desktop: boolean;
   initialTable?: TableDefinition;
+  initialQuestion?: string;
   sourceLabel?: string;
   onClose: () => void;
   onLocate: (table: TableDefinition) => void;
@@ -25,10 +27,15 @@ export function BusinessExplorer(props: Props) {
   // Changing the model, effective policy or semantic bindings destroys every old task and focus.
   return <ExplorerSession key={JSON.stringify([props.snapshot, props.semantics.domainGroups, props.semantics.logicalRelationships, props.settings.source, props.settings.app.privacy, props.desktop, props.semantics.knowledge])} {...props} />;
 }
-function ExplorerSession({ snapshot, semantics, settings, platform, desktop, initialTable, sourceLabel, onClose, onLocate, onExplain, onOpenSettings, onDraftQuery }: Props) {
+function ExplorerSession({ snapshot, semantics, settings, platform, desktop, initialTable, initialQuestion = "", sourceLabel, onClose, onLocate, onExplain, onOpenSettings, onDraftQuery }: Props) {
   const { t: bt } = useI18n();
   const eventBt = useEventTranslator(bt);
-  const [question, setQuestion] = useState(""); const [searched, setSearched] = useState(false);
+  const contextual = Boolean(initialTable && initialQuestion);
+  const backButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (contextual) backButton.current?.focus({ preventScroll: true });
+  }, [contextual]);
+  const [question, setQuestion] = useState(initialQuestion); const [searched, setSearched] = useState(Boolean(initialQuestion));
   const [terms, setTerms] = useState<string[]>([]); const [limit, setLimit] = useState(5);
   const [localDomain, setLocalDomain] = useState(""); const [aiDomain, setAiDomain] = useState("");
   const [rootId, setRootId] = useState(initialTable ? objectId(initialTable.key) : "");
@@ -46,6 +53,9 @@ function ExplorerSession({ snapshot, semantics, settings, platform, desktop, ini
   }, [desktop, platform, snapshot.id, snapshot.sourceId, eventBt]);
   const domains = semantics.domainGroups.filter((group) => group.sourceId === snapshot.sourceId);
   const tables = snapshot.schemas.flatMap((schema) => schema.tables);
+  const tableOptions = useMemo(() => snapshot.schemas.flatMap((schema) => schema.tables.map((table) => ({
+    value: objectId(table.key), label: objectLabel(table.key), searchName: table.key.name,
+  }))), [snapshot]);
   const root = tables.find((table) => objectId(table.key) === rootId);
   const target = tables.find((table) => objectId(table.key) === targetId);
   const candidates = useMemo(() => discoverTables(snapshot, searched ? question : "", semantics.domainGroups, !!settings.source?.ai.includeComments, localDomain, terms, settings.source?.ai.includeConfirmedSemantics ? semantics.knowledge : []), [snapshot, searched, question, semantics.domainGroups, settings.source?.ai.includeComments, localDomain, terms, settings.source?.ai.includeConfirmedSemantics, semantics.knowledge]);
@@ -70,10 +80,19 @@ function ExplorerSession({ snapshot, semantics, settings, platform, desktop, ini
   const allowed = settings.source?.ai.contextScope;
   const needsScope = operation !== "expand" && (allowed === "currentTable" || (allowed === "oneHop" && !root) || (allowed === "domain" && !aiDomain));
   const draftQuery = (table: TableDefinition, withPath = false) => onDraftQuery?.({ sourceId: snapshot.sourceId, snapshotId: snapshot.id, question, root: table.key, tables: withPath && path ? path.tables : [table.key], domainId: aiDomain || null });
-  return <section className="business-explorer" aria-label={bt("business.businessTableDiscovery")}>
-    <header className="discovery-header"><div><p className="eyebrow">{bt("business.uNDERSTANDADATABASE")}</p><h2>{bt("business.findTablesByBusinessQuestion")}</h2></div><button type="button" onClick={onClose}>{bt("business.backToPreviousView")}</button></header>
-    <div className="discovery-workspace">
-      <div className="discovery-search-pane">
+  return <section className="business-explorer ds-surface" aria-label={bt(contextual ? "navigation.showRelatedTables" : "business.businessTableDiscovery")}
+    onKeyDown={(event) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
+      event.preventDefault();
+      onClose();
+    }}>
+    <header className="discovery-header"><div>
+      <h2>{bt(contextual ? "navigation.showRelatedTables" : "business.findTablesByBusinessQuestion")}</h2>
+      {contextual && root ? <p>{objectLabel(root.key)} · {sourceLabel ?? snapshot.database.name}</p> : null}
+    </div><button ref={backButton} type="button" onClick={onClose}>{bt("business.backToPreviousView")}</button></header>
+    <div className="discovery-workspace" data-contextual={contextual || undefined}>
+      <details className="discovery-search-pane" open={!contextual || undefined}>
+        <summary hidden={!contextual}>{bt("navigation.advancedTableDiscovery")}</summary>
         <p>{sourceLabel ?? snapshot.database.name} {bt("business.snapshot")} {snapshot.fingerprint.slice(0, 12)}</p>
         <p className="ai-policy">{bt("business.searchTheEntireLoadedSnapshotIndependentOfCanvasFilters")}</p>
         <form onSubmit={(event) => { event.preventDefault(); setSearched(true); setTerms([]); setLimit(5); }}>
@@ -102,18 +121,23 @@ function ExplorerSession({ snapshot, semantics, settings, platform, desktop, ini
           {canStep && !needsScope ? <DiscoveryAssistant platform={platform} snapshot={snapshot} settings={settings} input={input} binding={JSON.stringify([localDomain, terms, depth, rootId, targetId, semantics.domainGroups, semantics.logicalRelationships, semantics.knowledge])} available={desktop && latest} onApplyTerms={(next) => { setTerms(next); setSearched(true); setLimit(5); }} onLocate={onLocate} onOpenSettings={onOpenSettings} /> : null}
           {candidates.length > 100 && operation === "rank" ? <p>{bt("business.onlyTheFirst100LocalCandidatesAreSubmittedFor")}</p> : null}
         </section>
-      </div>
+      </details>
       <div className="discovery-map-pane">
         <div className="discovery-map-controls">
-          <label className="ai-control">{bt("business.explicitRootTable")}<select value={rootId} onChange={(event) => { setRootId(event.target.value); setLocalSelection(tables.find((t) => objectId(t.key) === event.target.value)); setTargetId(""); setDepth(1); }}><option value="">{bt("business.selectARoot")}</option>{tables.map((table) => <option key={objectId(table.key)} value={objectId(table.key)}>{objectLabel(table.key)}</option>)}</select></label>
+          <SearchSelect label={bt("business.explicitRootTable")} value={rootId} placeholder={bt("business.selectARoot")}
+            searchPlaceholder={bt("ontology.searchTable")} options={tableOptions}
+            onChange={(id) => { const table = tables.find((item) => objectId(item.key) === id); if (table) selectRoot(table); }} />
           <label className="ai-control">{bt("business.localGraphDepth")}<select value={depth} onChange={(event) => setDepth(Number(event.target.value))}><option value={1}>{bt("business.oneHop")}</option><option value={2}>{bt("business.twoHops")}</option></select></label>
-          <label className="ai-control">{bt("business.pathDestination")}<select value={targetId} onChange={(event) => setTargetId(event.target.value)} disabled={!root}><option value="">{bt("business.selectADestination")}</option>{tables.filter((table) => objectId(table.key) !== rootId).map((table) => <option key={objectId(table.key)} value={objectId(table.key)}>{objectLabel(table.key)}</option>)}</select></label>
+          <SearchSelect label={bt("business.pathDestination")} value={targetId} disabled={!root}
+            placeholder={bt("business.selectADestination")} searchPlaceholder={bt("ontology.searchTable")}
+            options={tableOptions.filter((option) => option.value !== rootId)} onChange={setTargetId} />
           <p className="ai-policy">{bt("business.temporaryLocalViewFullModelLayoutAndSelectionAre")}</p>
         </div>
         {local ? <div className="discovery-local-canvas"><SchemaCanvas key={JSON.stringify([rootId, depth, targetId])} snapshot={local.snapshot} query="" selectedTable={localSelection && local.snapshot.schemas.some((s) => s.tables.includes(localSelection)) ? localSelection : undefined} onSelectTable={setLocalSelection} semantics={localSemantics} platform={platform} runtimeKind={desktop ? "desktop" : "web"} canvasSettings={settings.app.canvas} temporaryViewKind="discovery" temporaryViewLabel={bt("businessExtra.discoveryTemporaryView")} /></div> : <div className="discovery-map-empty"><h3>{bt("business.aSmallMapAroundYourQuestion")}</h3><p>{bt("business.expandACandidateSRelationshipsToInspectOneOr")}</p></div>}
         {local && local.omitted > 0 ? <p>{local.omitted} {bt("business.neighborhoodTablesOmittedFromThe100TableLocalView")}</p> : null}
         <section className="discovery-path" aria-label={bt("business.knownRelationshipPath")}>
-          <h3>{bt("business.knownStructuralPath")}</h3>{onDraftQuery && root ? <button type="button" disabled={!question.trim()} onClick={() => draftQuery(root, true)}>{bt("business.draftQueryWithThisContext")}</button> : null}
+          <h3>{bt("business.knownStructuralPath")}</h3>{target ? <button type="button" onClick={() => setTargetId("")}>{bt("navigation.clearPathDestination")}</button> : null}
+          {onDraftQuery && root ? <button type="button" disabled={!question.trim() || Boolean(target && !path)} onClick={() => draftQuery(root, true)}>{bt("business.draftQueryWithThisContext")}</button> : null}
           {target && root && !path ? <p>{bt("business.noKnownRelationshipPathInTheCurrent")} {depth}{bt("business.hopRangeThisDoesNotProveTheTablesAre")}</p> : null}
           {path ? <><p>{path.tables.map(objectLabel).join(" ↔ ")}</p><ol>{path.relationships.map((edge) => <li key={edge.id}><strong>{edge.kind === "physical" ? bt("business.physicalFK") : bt("business.confirmedLogicalRelationshipModelOnly")}</strong><ol>{edge.sourceColumns.map((column, i) => <li key={i}>{objectLabel(edge.source)}.{column} → {objectLabel(edge.target)}.{edge.targetColumns[i]}</li>)}</ol></li>)}</ol><p>{bt("business.arrowsShowReferenceDirectionNotBusinessExecutionOrderCardinality")}</p></> : <p>{bt("business.selectARootAndDestinationToComputeAPath")}</p>}
           {graph.gaps.length ? <details><summary>{bt("business.snapshotInformationGaps")}{graph.gaps.length})</summary><ul>{graph.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul></details> : null}

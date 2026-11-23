@@ -249,14 +249,20 @@ fn notes_match(basis: &KnowledgeBasis, states: &[KnowledgeState]) -> bool {
     })
 }
 pub(super) async fn identity_in(tx: &mut Transaction<'_, Sqlite>, source: Uuid) -> Result<String> {
+    Ok(source_identity(profile_in(tx, source).await?.as_ref()))
+}
+
+pub(super) async fn profile_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    source: Uuid,
+) -> Result<Option<schema_model::DataSourceProfile>> {
     let row = sqlx::query("SELECT payload_json FROM data_sources WHERE id=?")
         .bind(source.to_string())
         .fetch_optional(&mut **tx)
         .await?;
-    let profile: Option<schema_model::DataSourceProfile> = row
-        .map(|r| serde_json::from_str(r.get("payload_json")))
-        .transpose()?;
-    Ok(source_identity(profile.as_ref()))
+    row.map(|r| serde_json::from_str(r.get("payload_json")))
+        .transpose()
+        .map_err(Into::into)
 }
 pub(super) async fn snapshot_in(
     tx: &mut Transaction<'_, Sqlite>,
