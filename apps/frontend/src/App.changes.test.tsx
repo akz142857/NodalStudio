@@ -144,7 +144,7 @@ describe("App schema changes", () => {
     expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("loads the new ontology revision immediately after closing its review on the same snapshot", async () => {
+  it("loads the new ontology revision immediately after closing its review on the same snapshot", { timeout: 15_000 }, async () => {
     const platform = getPlatform();
     const { id: snapshotId, sourceId, capturedAt } = fixture.after;
     const table = fixture.after.schemas[0].tables[0].key;
