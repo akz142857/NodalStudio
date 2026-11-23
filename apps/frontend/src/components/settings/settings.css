@@ -7,7 +7,7 @@
 .settings-page :is(h3, h4) { font-size: var(--ds-text-body); }
 .settings-page p { color: var(--ds-secondary); }
 .settings-page small { font-size: var(--ds-text-caption); }
-.settings-page svg { flex: 0 0 auto; width: 17px; height: 17px; }
+.settings-page svg { flex: 0 0 auto; width: var(--ds-icon-size); height: var(--ds-icon-size); }
 .settings-header { display: flex; flex: 0 0 auto; align-items: center; gap: var(--ds-space-3); min-height: 54px; padding: var(--ds-space-2) var(--ds-space-5); border-bottom: 1px solid var(--ds-separator); background: var(--ds-sidebar); }
 .settings-header .settings-back { background: transparent; border-color: transparent; }
 .settings-search { position: relative; width: min(280px, 30vw); margin-left: auto; }
@@ -23,8 +23,8 @@
 .settings-navigation-group { display: grid; gap: 2px; }
 .settings-navigation-group > p { padding: 0 var(--ds-space-2) var(--ds-space-1); color: var(--ds-tertiary); font-size: var(--ds-text-caption); font-weight: var(--ds-weight-medium); }
 .settings-navigation-group > button { display: flex; align-items: center; gap: var(--ds-space-2); min-height: 32px; padding: 6px var(--ds-space-2); border-color: transparent; background: transparent; font-size: var(--ds-text-control); font-weight: var(--ds-weight-normal); text-align: left; }
-.settings-navigation-group > button svg { color: var(--ds-secondary); }
-.settings-navigation-group > button[aria-current="page"] { background: var(--ds-selection); color: var(--ds-selection-text); font-weight: var(--ds-weight-medium); }
+.settings-navigation-group > button svg { color: var(--ds-accent); }
+.settings-navigation-group > button[aria-current="page"] { background: var(--ds-selection); color: var(--ds-selection-text); box-shadow: var(--ds-selection-indicator); font-weight: var(--ds-weight-emphasis); }
 .settings-navigation-group > button[aria-current="page"] svg { color: inherit; }
 .settings-navigation footer { display: flex; justify-content: space-between; margin-top: auto; padding: var(--ds-space-3) var(--ds-space-2) 0; color: var(--ds-tertiary); font-size: var(--ds-text-caption); }
 .settings-category-picker { display: none; }

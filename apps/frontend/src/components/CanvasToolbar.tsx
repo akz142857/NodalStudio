@@ -1,6 +1,7 @@
 import { useI18n } from "../i18n";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ActionIcon } from "./ActionIcon";
+import { ControlButton, Controls, useReactFlow, useStore, useStoreApi } from "@xyflow/react";
 import "./canvas-toolbar.css";
 
 export interface CanvasRelationshipFilter {
@@ -11,6 +12,30 @@ export interface CanvasRelationshipFilter {
   checked: boolean;
   onChange: () => void;
 }
+export function CanvasNavigationControls() {
+  const { t } = useI18n();
+  const store = useStoreApi();
+  const { zoomIn, zoomOut, fitView } = useReactFlow();
+  const atMinimum = useStore((state) => state.transform[2] <= state.minZoom);
+  const atMaximum = useStore((state) => state.transform[2] >= state.maxZoom);
+  const interactive = useStore((state) => state.nodesDraggable || state.nodesConnectable || state.elementsSelectable);
+  const labels = {
+    zoomIn: t("businessExtra.zoomIn"),
+    zoomOut: t("businessExtra.zoomOut"),
+    fit: t("businessExtra.fitView"),
+    interactivity: t("businessExtra.toggleInteractivity"),
+  };
+  return <Controls aria-label={t("businessExtra.zoomControls")} orientation="horizontal" showZoom={false} showFitView={false} showInteractive={false}>
+    <ControlButton className="react-flow__controls-zoomin" aria-label={labels.zoomIn} title={labels.zoomIn} disabled={atMaximum} onClick={() => void zoomIn()}><ActionIcon name="add" /></ControlButton>
+    <ControlButton className="react-flow__controls-zoomout" aria-label={labels.zoomOut} title={labels.zoomOut} disabled={atMinimum} onClick={() => void zoomOut()}><ActionIcon name="remove" /></ControlButton>
+    <ControlButton className="react-flow__controls-fitview" aria-label={labels.fit} title={labels.fit} onClick={() => void fitView()}><ActionIcon name="fit" /></ControlButton>
+    <ControlButton className="react-flow__controls-interactive" aria-label={labels.interactivity} title={labels.interactivity} aria-pressed={!interactive}
+      onClick={() => store.setState({ nodesDraggable: !interactive, nodesConnectable: !interactive, elementsSelectable: !interactive })}>
+      <ActionIcon name={interactive ? "unlock" : "lock"} />
+    </ControlButton>
+  </Controls>;
+}
+
 interface CanvasToolbarProps {
   minimapVisible?: boolean;
   onToggleMinimap?: () => void;

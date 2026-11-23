@@ -42,6 +42,8 @@ const paths = {
   refresh: <path d="M20.25 10a8.5 8.5 0 0 0-14.5-4L3.5 8.5m0-4.5v4.5H8m-4.25 5.5a8.5 8.5 0 0 0 14.5 4l2.25-2.5m0 4.5v-4.5H16" />,
   settings: <><path d="m10 3.5-.65 2.2-1.9 1.1-2.25-.6-2 3.5 1.6 1.6v1.4l-1.6 1.6 2 3.5 2.25-.6 1.9 1.1.65 2.2h4l.65-2.2 1.9-1.1 2.25.6 2-3.5-1.6-1.6v-1.4l1.6-1.6-2-3.5-2.25.6-1.9-1.1-.65-2.2Z" /><circle cx="12" cy="12" r="2.8" /></>,
   command: <path d="M8.5 8.5v-2a2 2 0 1 0-2 2h11a2 2 0 1 0-2-2v11a2 2 0 1 0 2-2h-11a2 2 0 1 0 2 2Z" />,
+  lock: <><rect x="6" y="10" width="12" height="11" rx="2" /><path d="M9 10V7a3 3 0 0 1 6 0v3m-3 5v2" /></>,
+  unlock: <><rect x="6" y="10" width="12" height="11" rx="2" /><path d="M9 10V7a3 3 0 0 1 5.8-1m-2.8 9v2" /></>,
   bell: <path d="M18 9.5a6 6 0 0 0-12 0c0 4.5-1.7 6-2.5 7.5h17c-.8-1.5-2.5-3-2.5-7.5Zm-8.25 10.25a2.5 2.5 0 0 0 4.5 0" />,
   sidebarLeft: <>{sidebarOutline}<path d="M9 4.5v15" /></>,
   sidebarRight: <>{sidebarOutline}<path d="M15 4.5v15" /></>,
@@ -63,5 +65,5 @@ const paths = {
 export type ActionIconName = keyof typeof paths;
 
 export function ActionIcon({ name }: { name: ActionIconName }) {
-  return <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+  return <svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }

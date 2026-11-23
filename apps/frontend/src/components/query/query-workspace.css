@@ -39,7 +39,7 @@
 .query-output-tabs { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 7px; background: var(--ds-subtle); }
 .query-output-tabs button { display: flex; align-items: center; gap: 5px; padding: 4px 9px; border: 0; border-radius: 5px; font: inherit; font-size: var(--ds-text-control); font-weight: 500; color: var(--ds-secondary); background: transparent; white-space: nowrap; }
 .query-output-tabs button:hover { color: var(--ds-text); }
-.query-output-tabs button[aria-selected="true"] { color: var(--ds-text); background: var(--ds-selected-control); box-shadow: var(--ds-shadow); }
+.query-output-tabs button[aria-selected="true"] { color: var(--ds-text); background: var(--ds-selected-control); box-shadow: var(--ds-selection-underline), var(--ds-shadow); }
 .query-tab-count { font-size: 10px; font-variant-numeric: tabular-nums; opacity: .8; }
 .query-result-summary { margin-left: auto; color: var(--ds-secondary); font-size: var(--ds-text-caption); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .query-pane-actions { display: flex; gap: 2px; }
@@ -94,7 +94,7 @@
 .query-input-pane > [hidden] { display: none; }
 .query-input-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 7px; background: var(--ds-subtle); }
 .query-input-tabs button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 0; border-radius: 5px; font: inherit; font-size: var(--ds-text-control); font-weight: 500; background: transparent; color: var(--ds-secondary); white-space: nowrap; }
-.query-input-tabs button[aria-selected="true"] { color: var(--ds-text); background: var(--ds-selected-control); box-shadow: var(--ds-shadow); }
+.query-input-tabs button[aria-selected="true"] { color: var(--ds-text); background: var(--ds-selected-control); box-shadow: var(--ds-selection-underline), var(--ds-shadow); }
 .query-input-tabs button:hover { color: var(--ds-text); }
 .query-input-tabs svg { width: 14px; height: 14px; }
 .query-editor-heading { padding-block: 6px; border-bottom: 1px solid var(--ds-separator); }
@@ -131,6 +131,10 @@
 
 .query-page .query-toolbar .query-execution-controls > button:is(:hover, [aria-expanded="true"]):not(:disabled) {
   background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.query-page .query-toolbar .query-execution-controls:not([data-executing], [data-unavailable]) > button:is(:hover, [aria-expanded="true"]):not(:disabled) {
+  background: var(--ds-accent-hover);
 }
 
 .query-page .query-toolbar .query-execution-controls > button:focus-visible {

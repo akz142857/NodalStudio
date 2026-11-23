@@ -81,6 +81,8 @@ mod query_export;
 mod relationship_batches;
 mod schema_report;
 mod storage_errors;
+#[cfg(target_os = "macos")]
+mod system_appearance;
 mod table_ddl;
 mod table_row_counts;
 mod table_understanding;
@@ -765,6 +767,17 @@ fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
         },
         version: app.package_info().version.to_string(),
     }
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn get_system_accent(app: tauri::AppHandle) -> Option<[[f64; 3]; 2]> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let _ = sender.send(system_appearance::accent_colors());
+    })
+    .ok()?;
+    receiver.await.ok().flatten()
 }
 
 #[tauri::command]
@@ -5381,6 +5394,8 @@ pub fn run() {
                 database_export::export_database_file,
                 database_export::cancel_database_export,
                 get_runtime_info,
+                #[cfg(target_os = "macos")]
+                get_system_accent,
                 purchase::get_purchase_status,
                 purchase::restore_app_purchase,
                 purchase::open_app_store,

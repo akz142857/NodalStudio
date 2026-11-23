@@ -226,10 +226,9 @@ textarea {
 .topbar :is(.icon-button, .header-sidebar-toggle):is(:hover, :active, :focus-visible) { background: transparent; }
 .topbar :is(.icon-button, .header-sidebar-toggle) > svg {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: var(--ds-icon-size);
+  height: var(--ds-icon-size);
   flex: none;
-  stroke-width: 1.75;
 }
 .runtime-actions .icon-button::before { inset: 2px; border-radius: 999px; }
 .workspace-tools { position: relative; }
@@ -258,6 +257,7 @@ textarea {
 }
 .workspace-tools-panel .review-entry .icon-button-menu-label { display: block; }
 .runtime-actions .icon-button:is([aria-pressed="true"], [aria-expanded="true"])::before { background: var(--ds-selection); }
+.runtime-actions .icon-button:is([aria-pressed="true"], [aria-expanded="true"]) > svg { color: var(--ds-selection-text); }
 .workspace-tools-toggle, .icon-button-menu-label { display: none; }
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and (color: color-mix(in srgb, white 50%, black)) {
@@ -284,7 +284,7 @@ textarea {
   cursor: pointer;
   transition: color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
-.icon-button svg { display: block; width: 18px; height: 18px; }
+.icon-button svg { display: block; width: var(--ds-icon-size); height: var(--ds-icon-size); }
 .icon-button::before { position: absolute; z-index: -1; inset: 6px; border-radius: 8px; background: transparent; content: ""; transition: background-color 120ms ease; }
 .icon-button:hover:not(:disabled) { color: var(--ds-text); }
 .icon-button:hover:not(:disabled)::before { background: var(--ds-hover); }
@@ -1481,6 +1481,8 @@ textarea {
 .tree-row-object[aria-current="true"] {
   color: var(--ds-selection-text);
   background: var(--ds-selection);
+  box-shadow: var(--ds-selection-indicator);
+  font-weight: var(--ds-weight-emphasis);
 }
 
 .tree-label {
@@ -2029,6 +2031,8 @@ textarea {
 .query-result-table tbody tr { cursor: default; }
 .query-result-table tbody tr:hover td, .query-result-table tbody tr:hover th { background: var(--ds-hover); }
 .query-result-table tbody tr[data-selected]:not(:focus-visible) > :is(td, th) { color: var(--ds-selection-text); background: var(--ds-selection); }
+.query-result-table tbody tr[data-selected] > :first-child,
+.table-data-grid tbody tr[data-selected] > :first-child { box-shadow: var(--ds-selection-indicator); }
 .is-resizing-query-column, .is-resizing-query-column * { cursor: col-resize !important; user-select: none !important; }
 .query-result-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 5px 10px; border-top: 1px solid var(--ds-border); color: var(--ds-tertiary); background: var(--ds-sidebar); font-size: 10px; }
 .query-result-pagination span { margin-right: auto; }
@@ -2172,14 +2176,14 @@ textarea {
 .column-name b {
   padding: 1px 3px;
   border-radius: 3px;
-  color: var(--ds-positive);
-  background: var(--ds-positive-soft);
+  color: var(--ds-secondary);
+  background: var(--ds-subtle);
   font-size: 7px;
 }
 
 .column-name .fk-badge {
-  color: var(--ds-accent);
-  background: var(--ds-selection);
+  color: var(--ds-syntax-keyword);
+  background: var(--ds-accent-soft);
 }
 
 .column-name .inferred-fk-badge {
@@ -2973,9 +2977,9 @@ textarea {
   white-space: nowrap;
 }
 .topbar > .segmented button.active {
-  color: var(--ds-text);
-  background: color-mix(in srgb, var(--ds-text) 15%, var(--ds-field));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ds-text) 14%, transparent), 0 1px 3px #0002;
+  color: var(--ds-selection-text);
+  background: var(--ds-selection);
+  box-shadow: var(--ds-selection-underline);
 }
 .topbar > .segmented button:not(.active):not(:disabled):is(:hover, :focus-visible) { color: var(--ds-text); background: var(--ds-hover); }
 .segmented button:focus-visible { outline-offset: var(--ds-focus-inset); }

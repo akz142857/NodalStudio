@@ -49,6 +49,11 @@ plist = "1.10.0"
 tauri-plugin-dialog = "2"
 zip = { version = "4.6.1", default-features = false }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSAppearance", "NSColor", "NSColorSpace"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
+
 [lints]
 workspace = true
 

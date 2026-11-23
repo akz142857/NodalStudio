@@ -36,6 +36,11 @@
   --ds-focus-ring: var(--ds-focus-width) solid var(--ds-focus-color);
   --ds-focus-offset: 2px;
   --ds-focus-inset: calc(-1 * var(--ds-focus-width));
+  --ds-icon-size: 16px;
+  --ds-selection-marker-width: 3px;
+  --ds-selection-marker: var(--ds-accent);
+  --ds-selection-indicator: inset var(--ds-selection-marker-width) 0 var(--ds-selection-marker);
+  --ds-selection-underline: inset 0 -2px var(--ds-selection-marker);
   --ds-list-focus-outline: none;
   --ds-glass-fill: var(--ds-sidebar);
   --ds-glass-edge: var(--ds-border);
@@ -65,8 +70,16 @@
   --ds-accent-fill: #0870e8;
   --ds-on-accent: #fff;
   --ds-accent-hover: #0065d8;
+  --ds-accent-fill-strong: #0053b3;
+  --ds-accent-hover-strong: #004797;
   --ds-selection: #263c58;
   --ds-selection-text: #dceaff;
+  --ds-selection-strong: #23446e;
+  --ds-selection-strong-text: #f0f6ff;
+  --ds-chart-mark: #8e949f;
+  --ds-chart-highlight: #efa28a;
+  --ds-chart-mark-strong: #b3b6c0;
+  --ds-chart-highlight-strong: #ffc0a9;
   --ds-selected-control: #40444e;
   --ds-logical: #b89aff;
   --ds-positive: #8bdca0;
@@ -120,6 +133,12 @@
   --ds-list-focus-text: #102e52;
   --ds-selection: #dce9fa;
   --ds-selection-text: #124e96;
+  --ds-selection-strong: #c9e1ff;
+  --ds-selection-strong-text: #102e52;
+  --ds-chart-mark: #707580;
+  --ds-chart-highlight: #a34a32;
+  --ds-chart-mark-strong: #555965;
+  --ds-chart-highlight-strong: #7b3423;
   --ds-selected-control: #fff;
   --ds-logical: #7c3aed;
   --ds-positive: #24713c;
@@ -173,6 +192,12 @@
     --ds-list-focus-text: #102e52;
     --ds-selection: #dce9fa;
     --ds-selection-text: #124e96;
+    --ds-selection-strong: #c9e1ff;
+    --ds-selection-strong-text: #102e52;
+    --ds-chart-mark: #707580;
+    --ds-chart-highlight: #a34a32;
+    --ds-chart-mark-strong: #555965;
+    --ds-chart-highlight-strong: #7b3423;
     --ds-selected-control: #fff;
     --ds-logical: #7c3aed;
     --ds-positive: #24713c;
@@ -226,9 +251,25 @@
 :root[data-reduce-motion="true"] { --ds-motion-fast: 0ms; }
 @media (prefers-reduced-motion: reduce) { :root { --ds-motion-fast: 0ms; } }
 @media (prefers-contrast: more) {
-  :root { --ds-focus-width: 3px; --ds-list-focus-outline: var(--ds-focus-ring); }
-  :root[data-theme], :root:not([data-theme]) { --ds-border: var(--ds-secondary); --ds-separator: var(--ds-tertiary); }
+  :root {
+    --ds-focus-width: 3px;
+    --ds-list-focus-outline: var(--ds-focus-ring);
+    --ds-selection-marker-width: 4px;
+    --ds-selection-marker: var(--ds-selection-text);
+    --ds-selection-underline: inset 0 -3px var(--ds-selection-marker);
+  }
+  :root[data-theme], :root:not([data-theme]) {
+    --ds-border: var(--ds-secondary);
+    --ds-separator: var(--ds-tertiary);
+    --ds-selection: var(--ds-selection-strong);
+    --ds-selection-text: var(--ds-selection-strong-text);
+    --ds-accent-fill: var(--ds-accent-fill-strong);
+    --ds-accent-hover: var(--ds-accent-hover-strong);
+    --ds-chart-mark: var(--ds-chart-mark-strong);
+    --ds-chart-highlight: var(--ds-chart-highlight-strong);
+  }
 }
 @media (forced-colors: active) {
   :root { --ds-focus-color: Highlight; --ds-list-focus-outline: var(--ds-focus-ring); }
+  :root[data-theme], :root:not([data-theme]) { --ds-chart-mark: CanvasText; --ds-chart-highlight: CanvasText; }
 }

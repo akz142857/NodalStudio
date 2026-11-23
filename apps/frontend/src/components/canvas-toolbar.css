@@ -15,13 +15,14 @@
 .canvas-command-dock button:active:not(:disabled) { background: var(--ds-selected-control); }
 .canvas-command-dock button[aria-expanded="true"] { background: var(--ds-selection); color: var(--ds-selection-text); }
 .canvas-command-dock button:disabled { opacity: .4; cursor: default; }
-.canvas-command-dock svg { flex: none; width: 16px; height: 16px; }
+.canvas-command-dock svg { flex: none; width: var(--ds-icon-size); height: var(--ds-icon-size); }
 .canvas-command-dock .canvas-command-restore { background: var(--ds-surface); border: 1px solid var(--ds-border); padding: 7px 10px; }
 .canvas-command-count { padding: 0 8px; color: var(--ds-secondary); white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
 .canvas-command-navigation { border-left: 1px solid var(--ds-separator); padding-left: 4px; }
 .canvas-command-navigation .react-flow__controls { position: static; display: flex; flex-direction: row; margin: 0; padding: 0; box-shadow: none; border: 0; border-radius: 0; background: transparent; transform: none; }
-.canvas-command-navigation .react-flow__controls-button { width: 32px; height: 32px; border: 0; padding: 8px; box-sizing: border-box; background: transparent; fill: currentColor; }
-.canvas-command-navigation .react-flow__controls-button svg { max-width: 16px; max-height: 16px; }
+.canvas-command-navigation .react-flow__controls-button { width: 32px; height: 32px; border: 0; padding: 8px; box-sizing: border-box; background: transparent; }
+.canvas-command-navigation .react-flow__controls-button svg { max-width: var(--ds-icon-size); max-height: var(--ds-icon-size); fill: none; }
+.canvas-command-navigation .react-flow__controls-button[aria-pressed="true"] { color: var(--ds-selection-text); background: var(--ds-selection); }
 .canvas-command-popover { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: 320px; max-width: 100%; max-height: var(--canvas-tools-height, 440px); overflow-y: auto; overscroll-behavior: contain; pointer-events: auto; padding: 8px; border: 1px solid var(--ds-border); border-radius: 12px; background: var(--ds-surface); box-shadow: 0 8px 32px #0003; }
 .canvas-command-popover header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 5px 6px; border-bottom: 1px solid var(--ds-separator); margin-bottom: 4px; }
 .canvas-command-popover header strong { font-weight: 500; }

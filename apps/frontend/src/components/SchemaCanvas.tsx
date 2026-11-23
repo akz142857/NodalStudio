@@ -3,7 +3,6 @@ import { useI18n, useEventTranslator } from "../i18n";
 import { useResolvedTheme } from "../design-system/theme";
 import {
   Background,
-  Controls,
   ReactFlow,
   ReactFlowProvider,
   PanOnScrollMode,
@@ -71,7 +70,7 @@ import {
 } from "../graph/schema-graph";
 import { TableNode } from "./TableNode";
 import { useFieldRowConnection } from "./use-field-row-connection";
-import { CanvasToolbar } from "./CanvasToolbar";
+import { CanvasNavigationControls, CanvasToolbar } from "./CanvasToolbar";
 import { DiagramMiniMap } from "./DiagramMiniMap";
 import { relationshipEndpointFromHandle, sameRelationshipEndpoint } from "../graph/relationship-interaction";
 import { presentEdgesDuringDrag, prioritiseMovingEdges } from "../graph/drag-edge-presentation";
@@ -931,7 +930,7 @@ function SchemaCanvasInner({
         navigationControls={<div inert={exportRendering} onClickCapture={(event) => {
           guardExportInput(event, exportRendering);
           if (!exportRendering && event.target instanceof Element && event.target.closest(".react-flow__controls-zoomin, .react-flow__controls-zoomout, .react-flow__controls-fitview")) viewportGestureScope.current = layoutScope;
-        }}><Controls aria-label={bt("businessExtra.zoomControls")} orientation="horizontal" /></div>}
+        }}><CanvasNavigationControls /></div>}
         tableCount={nodes.length}
         comparisonLabel={changeSet ? beforeSnapshot ? bt("business.beforeAfter") : bt("business.after") : undefined}
         disabled={exportRendering}

@@ -41,6 +41,7 @@ function ResultChart({ presentation, mode }: { presentation: Extract<ResultPrese
         {mode === "bar" ? <rect className="query-chart-bar" x={x(point, i) - Math.min(44, step * .7) / 2} y={Math.min(y(point.value), y(0))} width={Math.min(44, step * .7)} height={Math.max(1, Math.abs(y(point.value) - y(0)))} rx={3} /> : <circle className="query-chart-dot" cx={x(point, i)} cy={y(point.value)} r={i === shown ? 5 : 3.5} />}
         <rect fill="transparent" x={x(point, i) - Math.min(22, step / 2)} y={top} width={Math.min(44, step)} height={height} />
       </g>)}
+      {mode === "bar" ? <circle className="query-chart-active-marker" cx={x(active, shown)} cy={Math.min(y(active.value), y(0)) - 7} r={2.5} aria-hidden="true" pointerEvents="none" /> : null}
       {labelIndices.map((i) => <text key={i} className="query-chart-label" x={x(points[i], i)} y={H - 12} textAnchor="middle">{points[i].label.length > 16 ? `${points[i].label.slice(0, 14)}…` : points[i].label}</text>)}
     </svg>
   </div>;

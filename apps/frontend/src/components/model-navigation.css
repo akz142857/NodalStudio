@@ -58,7 +58,7 @@
 .model-navigation .tree-row-main { min-width: 0; }
 .model-navigation .tree-row-schema { font-weight: 400; color: var(--ds-secondary); }
 .model-navigation .tree-row-type { color: var(--ds-secondary); }
-.model-navigation :is(.tree-row-type, .tree-row-schema) > svg:not(.tree-twisty) { width: 15px; height: 15px; flex: none; }
+.model-navigation :is(.tree-row-type, .tree-row-schema) > svg:not(.tree-twisty) { width: var(--ds-icon-size); height: var(--ds-icon-size); flex: none; color: var(--ds-accent); }
 .model-navigation .tree-node-type { margin-left: 10px; }
 .model-navigation .tree-row-object { margin-left: 22px; }
 .model-navigation .tree-row small { padding-right: 3px; font-size: 10px; }
@@ -85,7 +85,7 @@
 .model-view-navigation button svg { width: 15px; height: 15px; flex: none; }
 .model-view-navigation button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-view-navigation button:hover:not(:disabled) { background: var(--ds-hover); }
-.model-view-navigation button[aria-current] { background: var(--ds-selection); color: var(--ds-selection-text); }
+.model-view-navigation button[aria-current] { background: var(--ds-selection); color: var(--ds-selection-text); box-shadow: var(--ds-selection-indicator); font-weight: var(--ds-weight-emphasis); }
 .model-view-navigation button:disabled { opacity: .45; cursor: default; }
 .model-view-navigation p { margin: 5px 7px; font-size: 10px; color: var(--ds-secondary); }
 

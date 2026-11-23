@@ -32,6 +32,7 @@ import { EmptyState } from "./design-system/EmptyState";
 import { DatabaseExportDialog, type DatabaseExportTarget } from "./components/DatabaseExportDialog";
 import { SchemaReportExportAction } from "./components/SchemaReportExportAction";
 import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
+import { useSystemAccent } from "./design-system/system-accent";
 import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
 import { formatCommandShortcut, usesAppleKeyboard, WORKSPACE_SHORTCUTS } from "./components/command-shortcuts";
@@ -103,6 +104,7 @@ const emptySemantics: SemanticBundle = {
 };
 
 export function App() {
+  useSystemAccent();
   const queryClient = useQueryClient();
   const [snapshot, setSnapshot] = useState<DatabaseSnapshot>();
   const [historyPreview, setHistoryPreview] = useState(false);

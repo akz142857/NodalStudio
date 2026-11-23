@@ -1,10 +1,10 @@
-.query-result-artifact { --chart-highlight: #dd8466; min-width: 0; border: 1px solid var(--ds-border); border-radius: 18px; overflow: hidden; background: var(--ds-surface); color: var(--ds-text); }
+.query-result-artifact { min-width: 0; border: 1px solid var(--ds-border); border-radius: 18px; overflow: hidden; background: var(--ds-surface); color: var(--ds-text); }
 .query-artifact-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px 4px; color: var(--ds-secondary); font-size: 11px; }
 .query-artifact-toolbar > span, .query-artifact-controls { display: flex; align-items: center; gap: 7px; }
 .query-artifact-toolbar svg { width: 14px; height: 14px; }
 .query-artifact-switch { display: flex; padding: 2px; border-radius: 7px; background: var(--ds-field); }
 .query-result-artifact .query-artifact-switch button { padding: 3px 9px; border: 0; border-radius: 5px; background: transparent; color: var(--ds-secondary); font: inherit; cursor: pointer; }
-.query-result-artifact .query-artifact-switch button[aria-pressed="true"] { color: var(--ds-text); background: var(--ds-control); }
+.query-result-artifact .query-artifact-switch button[aria-pressed="true"] { color: var(--ds-text); background: var(--ds-control); box-shadow: var(--ds-selection-underline); }
 .query-artifact-controls select { max-width: 80px; border: 1px solid var(--ds-separator); border-radius: 6px; background: var(--ds-surface); color: var(--ds-secondary); padding: 4px; font: inherit; }
 .query-artifact-body { padding: 8px 18px 12px; }
 .query-artifact-chart { max-width: 640px; margin: auto; }
@@ -15,13 +15,14 @@
 .query-chart-grid { stroke: var(--ds-separator); stroke-dasharray: 3 5; stroke-width: 1; }
 .query-chart-baseline { stroke: var(--ds-border); stroke-width: 1; }
 .query-chart-label { fill: var(--ds-secondary); font: 11px var(--ds-font-ui); }
-.query-chart-line { stroke: var(--ds-secondary); stroke-width: 2; stroke-linecap: round; }
-.query-chart-bar, .query-chart-dot { fill: var(--ds-secondary); opacity: .4; }
-.query-chart-point[data-active] .query-chart-bar, .query-chart-point[data-active] .query-chart-dot { fill: var(--chart-highlight); opacity: 1; }
+.query-chart-line { stroke: var(--ds-chart-mark); stroke-width: 2; stroke-linecap: round; }
+.query-chart-bar, .query-chart-dot { fill: var(--ds-chart-mark); }
+.query-chart-point[data-active] :is(.query-chart-bar, .query-chart-dot) { fill: var(--ds-chart-highlight); }
+.query-chart-active-marker { fill: var(--ds-chart-highlight); }
 .query-chart-point { cursor: pointer; outline: none; }
 .query-chart-point:focus-visible .query-chart-bar, .query-chart-point:focus-visible .query-chart-dot { stroke: var(--ds-focus-color); stroke-width: var(--ds-focus-width); }
 .query-artifact-note, .query-artifact-limit { font-size: 10px; line-height: 1.5; margin: 8px 0 0; color: var(--ds-secondary); }
-.query-result-artifact .query-artifact-limit { color: var(--ds-text); border-left: 2px solid var(--chart-highlight); padding-left: 8px; }
+.query-result-artifact .query-artifact-limit { color: var(--ds-text); border-left: 2px solid var(--ds-chart-highlight); padding-left: 8px; }
 .query-artifact-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--ds-separator); padding: 16px 20px; background: var(--ds-field); }
 .query-artifact-footer > div { min-width: 0; }
 .query-artifact-footer h4 { margin: 0; font-size: 17px; line-height: 1.4; letter-spacing: -.02em; overflow-wrap: anywhere; }
