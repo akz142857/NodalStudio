@@ -7,6 +7,8 @@ import { ConnectionManager } from "./ConnectionManager";
 import { SchemaObjectMenu } from "./SchemaObjectMenu";
 import { DataSourcePicker } from "./DataSourcePicker";
 import { ConnectionSourceContext } from "./connection-source-context";
+import { ActionIcon } from "./ActionIcon";
+import { Button } from "../design-system/Button";
 import { ModalSurface } from "../design-system/ModalSurface";
 import "./model-navigation.css";
 import type {
@@ -46,6 +48,8 @@ const initialForm: SaveDataSourceInput = {
   databaseType: "postgreSql",
   sslMode: "disable",
 };
+
+class MissingSchemaSnapshotError extends Error {}
 
 function newConnectionForm(
   databaseType: SaveDataSourceInput["databaseType"],
@@ -98,11 +102,20 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   const [error, setError] = useState<string>();
   const openContext = useMemo(() => ({ sourceId: activeSourceId }), [activeSourceId]);
   const [menu, setMenu] = useState<{ x: number; y: number; trigger: HTMLElement; context: typeof openContext }>();
-  const [openError, setOpenError] = useState<{ context: typeof openContext; profile: DataSourceProfile; message: string }>();
+  const [openError, setOpenError] = useState<{
+    context: typeof openContext;
+    profile: DataSourceProfile;
+    message: string;
+    missingSnapshot: boolean;
+  }>();
   const [pending, setPending] = useState(false);
   const [connectionTab, setConnectionTab] = useState<"general" | "tls" | "ssh">("general");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<DataSourceProfile>();
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    profile: DataSourceProfile;
+    resolve: (confirmed: boolean) => void;
+  }>();
   const requiresLiveVerification = editingProfile
     ? connectionDetailsDiffer(editingProfile, form) || Boolean(form.sshPassword) || Boolean(form.password)
     : false;
@@ -239,6 +252,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
         ...current.filter((item) => item.id !== profile.id),
       ]);
       onSnapshot(result.capture);
+      setOpenError((current) => current?.profile.id === profile.id ? undefined : current);
       setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "" }));
       setEditingProfile(profile);
       setDialogOpen(false);
@@ -258,13 +272,14 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     const snapshots = await platform.listSnapshots(profile.id);
     const latest = snapshots[0];
     if (!latest) {
-      throw new Error(bt("business.thisDataSourceHasNoSavedSchemaSnapshotEdit"));
+      throw new MissingSchemaSnapshotError(bt("business.missingSchemaSnapshot", { value0: bt("business.verifyRefresh") }));
     }
     const snapshot = await platform.getSnapshot(latest.id);
     onSnapshot({ snapshot, stored: false, changeSet: null });
   }
 
   async function handleExistingOpen(profile: DataSourceProfile) {
+    if (!enabled || pending) return;
     onSourceOpenStart?.();
     setPending(true);
     setError(undefined);
@@ -272,7 +287,12 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     try {
       await openSavedSnapshot(profile);
     } catch (reason) {
-      setOpenError({ context: openContext, profile, message: connectionFailure(reason).message });
+      setOpenError({
+        context: openContext,
+        profile,
+        message: connectionFailure(reason).message,
+        missingSnapshot: reason instanceof MissingSchemaSnapshotError,
+      });
     } finally {
       setPending(false);
     }
@@ -303,37 +323,41 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     setError(undefined);
   }
 
-  async function deleteEditingSource() {
-    if (!editingProfile) return;
-    const confirmed = window.confirm(
-      bt("business.deleteThisPermanentlyRemovesItsLocalSnapshotsSemanticsSettings", { value0: editingProfile.displayName }),
-    );
-    if (!confirmed) return;
+  async function deleteSource(profile: DataSourceProfile) {
+    if (!enabled || pending || deleteConfirmation) return false;
+    const confirmed = await new Promise<boolean>((resolve) => setDeleteConfirmation({ profile, resolve }));
+    if (!confirmed) return false;
     setPending(true);
     setError(undefined);
     try {
-      await platform.clearCredentials(editingProfile.id, { database: editingProfile.databaseType !== "sqlite", ai: true, cloud: true });
-      await platform.deleteSourceData(editingProfile.id, {
+      await platform.clearCredentials(profile.id, { database: profile.databaseType !== "sqlite", ai: true, cloud: true });
+      await platform.deleteSourceData(profile.id, {
         deleteConnection: true,
         deleteHistory: true,
         deleteSemantics: true,
         removeDatabaseCredential: false,
       });
-      const remaining = profiles.filter((profile) => profile.id !== editingProfile.id);
-      setProfiles(remaining);
-      setDialogOpen(false);
-      setEditingProfile(undefined);
-      onSourceDeleted?.(editingProfile.id);
-      // Removing the current source should keep the workspace useful. Opening
-      // the next saved model uses local snapshots and needs no live connection.
-      if (editingProfile.id === activeSourceId && remaining[0]) {
-        await openSavedSnapshot(remaining[0]);
+      setProfiles((current) => current.filter((item) => item.id !== profile.id));
+      setOpenError((current) => current?.profile.id === profile.id ? undefined : current);
+      if (profile.id === editingProfile?.id) {
+        setDialogOpen(false);
+        setEditingProfile(undefined);
       }
-    } catch (reason) {
-      setError(connectionFailure(reason).message);
+      onSourceDeleted?.(profile.id);
+      const nextProfile = profiles.find((item) => item.id !== profile.id);
+      if (profile.id === activeSourceId && nextProfile) {
+        // Loading the next model is separate from the completed deletion.
+        await openSavedSnapshot(nextProfile).catch((reason: unknown) => setError(connectionFailure(reason).message));
+      }
+      return true;
     } finally {
       setPending(false);
     }
+  }
+
+  function finishDeleteConfirmation(confirmed: boolean) {
+    setDeleteConfirmation(undefined);
+    deleteConfirmation?.resolve(confirmed);
   }
 
   const activeProfile = profiles.find((profile) => profile.id === activeSourceId);
@@ -378,9 +402,20 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
           onSelect={(profile) => { void handleExistingOpen(profile); }}
           onEdit={openEditDialog} onManage={() => setManagerOpen(true)} onContextMenu={openConnectionMenu} />
       </div> : null}
-      {visibleOpenError ? <div className="connection-status error-message" role="alert">
-        <p>{bt("business.couldNotOpen")} {visibleOpenError.profile.database}. {visibleOpenError.message}</p>
-        <button type="button" disabled={pending} onClick={() => { void handleExistingOpen(visibleOpenError.profile); }}>{bt("business.retryOpeningDatabase")}</button>
+      {visibleOpenError ? <div className="ds-surface connection-open-error">
+        <ActionIcon name="warning" />
+        <div className="connection-open-error-content">
+          <div role="alert">
+            <strong>{bt("business.couldNotOpenDatabase", { value0: visibleOpenError.profile.database })}</strong>
+            <p>{visibleOpenError.message}</p>
+          </div>
+          <Button size="small" disabled={!enabled || pending} onClick={() => {
+            if (visibleOpenError.missingSnapshot) openEditDialog(visibleOpenError.profile);
+            else void handleExistingOpen(visibleOpenError.profile);
+          }}>
+            {bt(visibleOpenError.missingSnapshot ? "business.editConnection" : "business.retryOpeningDatabase")}
+          </Button>
+        </div>
       </div> : null}
       {visibleMenu ? <SchemaObjectMenu x={visibleMenu.x} y={visibleMenu.y}
         name={menuProfile?.database ?? bt("business.databases")}
@@ -392,10 +427,11 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
           setMenu(undefined);
           if (restoreFocus) (visibleMenu.trigger.isConnected ? visibleMenu.trigger : navigation.current)?.focus();
         }} /> : null}
-      {managerOpen ? <ConnectionManager profiles={profiles} activeSourceId={activeSourceId} onClose={() => setManagerOpen(false)}
+      {managerOpen ? <ConnectionManager profiles={profiles} activeSourceId={activeSourceId} pending={pending} onClose={() => setManagerOpen(false)}
         onCreate={() => { setManagerOpen(false); openCreateDialog(); }}
         onEdit={(profile) => { setManagerOpen(false); openEditDialog(profile); }}
-        onOpen={(profile) => { setManagerOpen(false); if (profile.id !== activeSourceId) void handleExistingOpen(profile); }} /> : null}
+        onOpen={(profile) => { setManagerOpen(false); if (profile.id !== activeSourceId) void handleExistingOpen(profile); }}
+        onDelete={deleteSource} /> : null}
       {profiles.length > 0 ? (
         <div className="saved-sources">
           {activeProfile ? <div key={activeProfile.id}><ConnectionSourceContext.Provider value={activeProfile}>{children}</ConnectionSourceContext.Provider></div> : null}
@@ -409,6 +445,19 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
 
       {!enabled ? <p className="connection-note">{bt("business.installTheDesktopAppToConnectADatabase")}</p> : null}
       {error && !dialogOpen ? <p className="error-message connection-status">{error}</p> : null}
+
+      {deleteConfirmation ? <ModalSurface labelledBy="delete-connection-title" describedBy="delete-connection-detail" onDismiss={() => finishDeleteConfirmation(false)}>
+        <div className="connection-confirmation-backdrop">
+          <section className="ds-surface connection-confirmation">
+            <h2 id="delete-connection-title">{bt("business.deleteConnectionConfirmation", { value0: deleteConfirmation.profile.displayName })}</h2>
+            <p id="delete-connection-detail">{bt("business.deleteConnectionImpact")}</p>
+            <footer>
+              <Button data-modal-focus onClick={() => finishDeleteConfirmation(false)}>{bt("business.cancel")}</Button>
+              <Button variant="danger" onClick={() => finishDeleteConfirmation(true)}>{bt("businessMeta.delete")}</Button>
+            </footer>
+          </section>
+        </div>
+      </ModalSurface> : null}
 
       {dialogOpen ? (
         <ModalSurface labelledBy="connection-dialog-title" describedBy="connection-dialog-description" onDismiss={closeDialog}>
@@ -572,7 +621,9 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                   <button type="button" className="secondary-button" onClick={() => void testConnection()} disabled={!enabled || pending}>{testState.status === "testing" ? bt("business.testing") : bt("business.testConnection")}</button>
                 {editingProfile ? (
                   <div className="connection-danger-action">
-                    <button type="button" className="delete-source-button" onClick={() => void deleteEditingSource()} disabled={pending}>{bt("business.deleteDataSource")}</button>
+                    <button type="button" className="delete-source-button" onClick={() => {
+                      void deleteSource(editingProfile).catch((reason: unknown) => setError(connectionFailure(reason).message));
+                    }} disabled={pending}>{bt("business.deleteDataSource")}</button>
                     <span>{bt("business.removesLocalDataOnly")}</span>
                   </div>
                 ) : null}

@@ -5,23 +5,28 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DataSourceProfile } from "../platform";
 import { ActionIcon } from "./ActionIcon";
+import { connectionFailure } from "./connection-test-state";
 
-export function ConnectionManager({ profiles, activeSourceId, onClose, onCreate, onEdit, onOpen }: {
+export function ConnectionManager({ profiles, activeSourceId, pending, onClose, onCreate, onEdit, onOpen, onDelete }: {
   profiles: DataSourceProfile[];
   activeSourceId?: string;
+  pending: boolean;
   onClose: () => void;
   onCreate: () => void;
   onEdit: (profile: DataSourceProfile) => void;
   onOpen: (profile: DataSourceProfile) => void;
+  onDelete: (profile: DataSourceProfile) => Promise<boolean>;
 }) {
   const { t: bt } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
+  const search = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
+  const [deleteError, setDeleteError] = useState<string>();
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     const element = dialog.current;
     element?.showModal();
-    element?.querySelector("input")?.focus();
+    search.current?.focus();
     return () => {
       const active = document.activeElement;
       const restore = !active || active === document.body || element?.contains(active);
@@ -32,26 +37,39 @@ export function ConnectionManager({ profiles, activeSourceId, onClose, onCreate,
   // Remove modal inertness before mounting the existing connection editor,
   // so its initial focus can land on the form rather than the sidebar.
   function leave(action: () => void) { dialog.current?.close(); action(); }
+  function dismiss() { if (!pending) onClose(); }
+
+  async function deleteConnection(profile: DataSourceProfile) {
+    setDeleteError(undefined);
+    try {
+      if (await onDelete(profile)) search.current?.focus();
+    } catch (reason) {
+      setDeleteError(connectionFailure(reason).message);
+    }
+  }
+
   const visible = profiles.filter((profile) => `${profile.displayName} ${profile.database}`.toLowerCase().includes(query.trim().toLowerCase()));
   return createPortal(<dialog ref={dialog} className="ds-surface connection-manager" aria-labelledby="connection-manager-title"
     onContextMenu={(event) => event.stopPropagation()}
     onKeyDown={(event) => {
       event.stopPropagation();
       // WebKit's search input can consume Escape before native dialog cancel.
-      if (event.key === "Escape") { event.preventDefault(); onClose(); }
+      if (event.key === "Escape") { event.preventDefault(); dismiss(); }
     }}
-    onCancel={(event) => { event.preventDefault(); onClose(); }}>
+    onCancel={(event) => { event.preventDefault(); dismiss(); }}>
     <h2 id="connection-manager-title">{bt("business.manageConnectionsDetail")}</h2>
-    <input type="search" aria-label={bt("business.findDatabaseConnections")} placeholder={bt("business.findDatabases")} value={query} onChange={(event) => setQuery(event.target.value)} />
+    <input ref={search} type="search" aria-label={bt("business.findDatabaseConnections")} placeholder={bt("business.findDatabases")} value={query} onChange={(event) => setQuery(event.target.value)} />
     <div className="connection-manager-list">
       {visible.map((profile) => <div className="connection-manager-row" key={profile.id}>
         <ActionIcon name="database" />
         <div><strong title={profile.displayName}>{profile.displayName}</strong><span title={profile.database}>{profile.database}{profile.id === activeSourceId ? bt("business.current") : ""}</span></div>
-        <Button type="button" aria-label={bt("business.edit", { value0: profile.displayName })} onClick={() => leave(() => onEdit(profile))}>{bt("business.editDetail")}</Button>
-        <Button type="button" aria-label={bt("business.open", { value0: profile.displayName })} onClick={() => leave(() => onOpen(profile))}>{bt("business.openDetail")}</Button>
+        <Button variant="danger" disabled={pending} aria-label={bt("business.deleteConnectionNamed", { value0: profile.displayName })} onClick={() => void deleteConnection(profile)}>{bt("business.deleteConnection")}</Button>
+        <Button disabled={pending} aria-label={bt("business.edit", { value0: profile.displayName })} onClick={() => leave(() => onEdit(profile))}>{bt("business.editDetail")}</Button>
+        <Button disabled={pending} aria-label={bt("business.open", { value0: profile.displayName })} onClick={() => leave(() => onOpen(profile))}>{bt("business.openDetail")}</Button>
       </div>)}
       {!visible.length ? <EmptyState compact title={profiles.length ? bt("business.noMatchingConnections") : bt("business.noSavedConnections")} /> : null}
     </div>
-    <footer><Button type="button" onClick={() => leave(onCreate)}>{bt("business.addDatabaseDetail")}</Button><Button type="button" onClick={onClose}>{bt("business.done")}</Button></footer>
+    {deleteError ? <p className="connection-manager-error" role="alert">{deleteError}</p> : null}
+    <footer><Button disabled={pending} onClick={() => leave(onCreate)}>{bt("business.addDatabaseDetail")}</Button><Button disabled={pending} onClick={dismiss}>{bt("business.done")}</Button></footer>
   </dialog>, document.body);
 }

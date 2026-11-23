@@ -33,6 +33,22 @@
 .source-navigation-label > span { color: var(--ds-secondary); font: var(--ds-text-caption)/var(--ds-leading) var(--ds-font-ui); }
 .model-navigation:focus-visible, .source-navigation-heading :focus-visible, .source-navigation-current :focus-visible, .model-view-navigation button:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 1px; }
 .source-navigation-heading button:disabled, .source-navigation-current :disabled { opacity: .45; cursor: default; }
+.connection-open-error {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--ds-space-2);
+  min-width: 0;
+  padding: var(--ds-space-3);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-group);
+  background: var(--ds-surface);
+  overflow-wrap: anywhere;
+}
+.connection-open-error > svg { width: 16px; height: 16px; margin-top: 1px; color: var(--ds-warning); }
+.connection-open-error-content { display: grid; justify-items: start; gap: var(--ds-space-2); }
+.connection-open-error strong { font-size: var(--ds-text-control); font-weight: var(--ds-weight-emphasis); }
+.connection-open-error p { margin: 3px 0 0; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
 .model-navigation .saved-sources, .model-navigation .tree-node { min-width: 0; }
 .model-navigation .saved-sources .schema-tree { margin: 0; padding: 0; }
 .model-navigation .tree-row { box-sizing: border-box; min-width: 0; min-height: var(--tree-row-height); font-size: var(--ds-text-control); gap: 7px; }
@@ -89,9 +105,15 @@
 .connection-manager-row span { margin-top: 4px; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
 .connection-manager-row > button { flex: none; }
 .connection-manager button { appearance: none; min-height: 28px; padding: 5px 10px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); background: var(--ds-control); font: var(--ds-text-control)/var(--ds-leading) var(--ds-font-ui); cursor: pointer; }
-.connection-manager button:hover { background: var(--ds-hover); }
+.connection-manager button:hover:not(:disabled) { background: var(--ds-hover); }
 .connection-manager footer button:last-child { background: var(--ds-accent-fill); color: var(--ds-on-accent); border-color: transparent; }
 .connection-manager footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; }
+.connection-manager-error { margin: var(--ds-space-3) 0 0; color: var(--ds-danger); font-size: var(--ds-text-control); overflow-wrap: anywhere; }
+.connection-confirmation-backdrop { display: grid; min-height: 100%; place-items: center; padding: var(--ds-dialog-padding); background: var(--ds-overlay); }
+.connection-confirmation { width: min(400px, 100%); min-width: 0; padding: var(--ds-dialog-padding); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-dialog); background: var(--ds-surface); box-shadow: var(--ds-shadow-dialog); overflow-wrap: anywhere; }
+.connection-confirmation h2 { margin: 0; font-size: var(--ds-text-heading); }
+.connection-confirmation p { margin: var(--ds-space-2) 0 var(--ds-space-4); color: var(--ds-secondary); }
+.connection-confirmation footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ds-space-2); }
 .schema-object-menu > button:disabled { opacity: .4; cursor: default; }
 .schema-object-menu > hr { height: 1px; margin: 5px 7px; border: 0; background: var(--ds-border); }
 .schema-menu-surface { display: contents; }

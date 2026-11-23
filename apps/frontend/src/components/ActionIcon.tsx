@@ -50,6 +50,7 @@ const paths = {
   cloud: <path d="M6 19a4.5 4.5 0 0 1-1-8.9 7 7 0 0 1 13.5-1.6A5.3 5.3 0 0 1 18 19H6Z" />,
   shield: <><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z" /><path d="m8 12 3 3 5-6" /></>,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10v.5" /></>,
+  warning: <><path d="M10.3 4.8a2 2 0 0 1 3.4 0l7.8 13A2 2 0 0 1 19.8 21H4.2a2 2 0 0 1-1.7-3.2Z" /><path d="M12 9v4m0 4h.01" /></>,
   grid: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
   sliders: <><path d="M4 6h5m6 0h5M4 12h10m6 0h0M4 18h2m6 0h8" /><circle cx="12" cy="6" r="3" /><circle cx="17" cy="12" r="3" /><circle cx="9" cy="18" r="3" /></>,
 } satisfies Record<string, ReactNode>;

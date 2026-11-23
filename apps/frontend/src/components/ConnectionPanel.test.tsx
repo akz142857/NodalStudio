@@ -83,6 +83,11 @@ async function editCurrentConnection() {
   fireEvent.click(screen.getByRole("menuitem", { name: "Edit current connection…" }));
 }
 
+function confirmSourceDeletion(name: string) {
+  const confirmation = screen.getByRole("dialog", { name: `Delete “${name}”?` });
+  fireEvent.click(within(confirmation).getByRole("button", { name: "Delete" }));
+}
+
 it("keeps the PostgreSQL source menu focused on connection actions", async () => {
   const postgres: DataSourceProfile = { ...profile, databaseType: "postgreSql" };
   const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([postgres]) });
@@ -303,7 +308,7 @@ describe("ConnectionPanel", () => {
     await act(async () => { reject(new Error("Fixture local read timed out")); await Promise.resolve(); });
     if (timing === "before") {
       expect(screen.getByRole("alert")).toHaveTextContent("Fixture local read timed out");
-      expect(screen.getByRole("button", { name: "Retry opening database" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Try Again" })).toBeEnabled();
       rerender(panel(profile.id));
     }
     expect(screen.queryByText(/Fixture local read timed out/)).not.toBeInTheDocument();
@@ -317,10 +322,30 @@ describe("ConnectionPanel", () => {
     const { onSnapshot } = renderPanel(platform, null);
     fireEvent.click(await screen.findByRole("button", { name: "Select database" }));
     fireEvent.click(screen.getByRole("menuitemradio"));
-    fireEvent.click(await screen.findByRole("button", { name: "Retry opening database" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Try Again" }));
     await waitFor(() => expect(onSnapshot).toHaveBeenCalledOnce());
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(capturePostgresSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("opens the connection editor to create a missing schema snapshot", async () => {
+    const verifyAndRefreshDataSource = vi.fn().mockResolvedValue({ profile, connection: connectionResult, capture: captureResult });
+    const platform = platformMock({ listSnapshots: vi.fn().mockResolvedValue([]), verifyAndRefreshDataSource });
+    const { onSnapshot } = renderPanel(platform, null);
+    fireEvent.click(await screen.findByRole("button", { name: "Select database" }));
+    fireEvent.click(screen.getByRole("menuitemradio"));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn’t Open “flow”");
+    expect(alert).toHaveTextContent("Use Verify & refresh in the connection editor to save the first schema snapshot.");
+    expect(screen.queryByRole("button", { name: "Try Again" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Connection…" }));
+    const editor = screen.getByRole("dialog", { name: "Edit Flow" });
+    fireEvent.click(within(editor).getByRole("button", { name: "Verify & refresh" }));
+
+    await waitFor(() => expect(onSnapshot).toHaveBeenCalledExactlyOnceWith(captureResult));
+    expect(verifyAndRefreshDataSource).toHaveBeenCalledWith(expect.objectContaining({ id: profile.id }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("opens the saved snapshot without reconnecting to the database", async () => {
@@ -434,10 +459,10 @@ describe("ConnectionPanel", () => {
     const listSnapshots = vi.fn();
     const platform = platformMock({ clearCredentials, deleteSourceData, listSnapshots });
     const { onSnapshot, onSourceDeleted } = renderWorkspace(platform);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-
     await editCurrentConnection();
     fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
+    expect(deleteSourceData).not.toHaveBeenCalled();
+    confirmSourceDeletion("Flow");
 
     await waitFor(() => expect(deleteSourceData).toHaveBeenCalledWith(profile.id, {
       deleteConnection: true,
@@ -459,9 +484,9 @@ describe("ConnectionPanel", () => {
     const listSnapshots = vi.fn().mockResolvedValue([{ id: "remaining-snapshot" }]), capturePostgresSnapshot = vi.fn();
     const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, remaining]), getSnapshot: vi.fn().mockResolvedValue(snapshot), listSnapshots, capturePostgresSnapshot });
     const { onSnapshot, onSourceDeleted } = renderWorkspace(platform);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     await editCurrentConnection();
     fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
+    confirmSourceDeletion("Flow");
     expect(await screen.findByRole("button", { name: "Data source: warehouse" })).toBeVisible();
     expect(screen.getByText("Model for source-2")).toBeVisible();
     expect(onSourceDeleted).toHaveBeenCalledExactlyOnceWith(profile.id);
@@ -481,9 +506,9 @@ describe("ConnectionPanel", () => {
       getSnapshot: vi.fn().mockResolvedValue({ ...captureResult.snapshot, sourceId: remaining.id }),
     });
     renderWorkspace(platform);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     await editCurrentConnection();
     fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
+    confirmSourceDeletion("Flow");
     expect(await screen.findByText("Local snapshot unavailable")).toBeVisible();
     expect(screen.queryByText("Model for source-1")).not.toBeInTheDocument();
     const trigger = screen.getByRole("button", { name: "Select database" });
@@ -502,15 +527,41 @@ describe("ConnectionPanel", () => {
     try {
       const other = { ...profile, id: "other", database: "warehouse", displayName: "Other" };
       const listSnapshots = vi.fn();
-      const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listSnapshots });
+      const clearCredentials = vi.fn().mockResolvedValue(undefined);
+      const deleteSourceData = vi.fn().mockRejectedValueOnce(new Error("Local storage unavailable")).mockResolvedValue(1);
+      const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listSnapshots, clearCredentials, deleteSourceData });
       const { onSnapshot, onSourceDeleted } = renderWorkspace(platform);
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       await screen.findByRole("button", { name: "Data source: flow" });
       fireEvent.contextMenu(screen.getByRole("region", { name: "Data sources" }));
       fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
-      fireEvent.click(screen.getByRole("button", { name: "Edit Other" }));
-      fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
+      const manager = screen.getByRole("dialog", { name: "Manage connections" });
+      const search = within(manager).getByRole("searchbox");
+      fireEvent.change(search, { target: { value: "other" } });
+      const remove = within(manager).getByRole("button", { name: "Delete Other…" });
+      fireEvent.click(remove);
+      const confirmation = screen.getByRole("dialog", { name: "Delete “Other”?" });
+      const cancel = within(confirmation).getByRole("button", { name: "Cancel" });
+      expect(cancel).toHaveFocus();
+      expect(clearCredentials).not.toHaveBeenCalled();
+      expect(deleteSourceData).not.toHaveBeenCalled();
+      fireEvent.click(cancel);
+      expect(confirmation).not.toBeInTheDocument();
+      expect(remove).toBeEnabled();
+
+      fireEvent.click(remove);
+      confirmSourceDeletion("Other");
+      expect(await within(manager).findByRole("alert")).toHaveTextContent("Local storage unavailable");
+      expect(onSourceDeleted).not.toHaveBeenCalled();
+      expect(remove).toBeEnabled();
+
+      fireEvent.click(remove);
+      confirmSourceDeletion("Other");
       await waitFor(() => expect(onSourceDeleted).toHaveBeenCalledExactlyOnceWith(other.id));
+      expect(within(manager).queryByRole("alert")).not.toBeInTheDocument();
+      expect(within(manager).queryByRole("button", { name: "Delete Other…" })).not.toBeInTheDocument();
+      expect(search).toHaveValue("other");
+      expect(search).toHaveFocus();
+      fireEvent.click(within(manager).getByRole("button", { name: "Done" }));
       expect(screen.getByRole("button", { name: "Data source: flow" })).toBeVisible();
       expect(screen.getByText("Model for source-1")).toBeVisible();
       expect(onSnapshot).not.toHaveBeenCalled();
@@ -701,13 +752,13 @@ it("blocks saving or changing the connection while a SQLite file picker is pendi
 
 
 it("deletes a SQLite source without requesting a database credential operation", async () => {
-  vi.spyOn(window, "confirm").mockReturnValue(true);
   const clearCredentials = vi.fn().mockResolvedValue(undefined);
   const sqliteProfile = { ...profile, databaseType: "sqlite" as const, sqlite: { path: "/tmp/source.db" } };
   renderPanel(platformMock({ listDataSources: vi.fn().mockResolvedValue([sqliteProfile]), clearCredentials }));
   await editCurrentConnection();
   expect(screen.getByText("Open the saved SQLite file read-only and refresh its schema snapshot.")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
+  confirmSourceDeletion("Flow");
   await waitFor(() => expect(clearCredentials).toHaveBeenCalledWith(profile.id, { database: false, ai: true, cloud: true }));
 });
 
