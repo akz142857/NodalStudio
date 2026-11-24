@@ -7,6 +7,7 @@ import { PrivacyPolicy } from "./settings/PrivacyPolicy";
 import { UpdatePanel } from "./settings/UpdatePanel";
 import { ConnectionFolderSettings } from "./settings/ConnectionFolderSettings";
 import type { ConnectionFolderStatus } from "../platform/types";
+import type { ConnectionSyncErrorMessage } from "./connection-sync-messages";
 import { useUpdateBlocker } from "../platform/update-guard";
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
@@ -59,7 +60,7 @@ export type SettingsCategory = (typeof categories)[number][0];
 const categoryIcons: Record<SettingsCategory, ActionIconName> = {
   general: "settings", appearance: "appearance", canvas: "canvas", "data-sources": "database",
   history: "history", git: "git", ai: "ai", cloud: "cloud", privacy: "shield",
-  notifications: "bell", shortcuts: "command", updates: "info", capabilities: "grid", advanced: "sliders",
+  notifications: "bell", shortcuts: "keyboard", updates: "info", capabilities: "grid", advanced: "sliders",
 };
 const categoryMessages = {"general":"settings.category.general","appearance":"settings.category.appearance","canvas":"settings.category.canvas","data-sources":"settings.category.data-sources","history":"settings.category.history","git":"settings.category.git","ai":"settings.category.ai","cloud":"settings.category.cloud","privacy":"settings.category.privacy","notifications":"settings.category.notifications","shortcuts":"settings.category.shortcuts","updates":"settings.category.updates","capabilities":"settings.category.capabilities","advanced":"settings.category.advanced"} as const;
 const categoryAliases: Record<SettingsCategory, string> = {"general":"语言 主题 启动 日期 时间 language theme startup date time","appearance":"密度 字体 侧栏 详情 动效 对比度","canvas":"字段 外键 索引 关系 布局 注释","data-sources":"数据库 刷新 超时 连接","history":"快照 保留 备份 缓存 磁盘","git":"仓库 合并 冲突 指纹","ai":"提供方 模型 上下文 隐私 解释 回复 偏好 附加 指令 语言 详略 术语","cloud":"个人 连接 目录 团队 项目 同步 离线 队列 冲突","privacy":"诊断 令牌 密钥 凭据 日志 安全","notifications":"结构 变更 冲突 警告 免打扰","shortcuts":"键盘 命令 聚焦 刷新 侧栏","updates":"版本 更新 通道 许可证 日志","capabilities":"支持 范围 矩阵 查询 图 导出 预检 限制","advanced":"性能 实验 重置 恢复"};
@@ -77,6 +78,8 @@ type SettingsPageProps = {
   activeDatabase?: DatabaseInfo;
   connectionFolderStatus?: ConnectionFolderStatus;
   onConnectionFolderStatus?: (status: ConnectionFolderStatus) => void;
+  connectionFolderMergeError?: ConnectionSyncErrorMessage;
+  onConnectionFolderMergeError?: (error: ConnectionSyncErrorMessage | undefined) => void;
   initialCategory?: SettingsCategory;
   onClose: () => void;
   onUpdateApp: (settings: AppSettings) => Promise<void>;
@@ -102,6 +105,8 @@ function SettingsContent({
   activeDatabase,
   connectionFolderStatus,
   onConnectionFolderStatus,
+  connectionFolderMergeError,
+  onConnectionFolderMergeError,
   initialCategory = "general",
   onClose,
   onUpdateApp,
@@ -555,6 +560,7 @@ function SettingsContent({
 
           {visibleCategory === "cloud" && runtime?.kind === "desktop" ? (
             <ConnectionFolderSettings platform={platform} status={connectionFolderStatus} offline={app.privacy.offlineMode}
+              mergeError={connectionFolderMergeError} onMergeError={onConnectionFolderMergeError}
               onStatus={(status) => onConnectionFolderStatus?.(status)} onDataSourcesChanged={onDataSourcesChanged} />
           ) : null}
 

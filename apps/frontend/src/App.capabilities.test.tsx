@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { getPlatform } from "./platform";
 import type { CaptureSnapshotResult } from "./platform";
+import type { ConnectionFolderStatus } from "./platform/types";
 import { reportSnapshot } from "./test/schema-report-fixture";
 import type { SchemaCanvasProps } from "./components/SchemaCanvas";
 vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot }: { onSnapshot: (result: CaptureSnapshotResult) => void }) => <>
@@ -15,9 +16,17 @@ async function mount(kind: "desktop" | "web") {
   const platform = getPlatform();
   vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind, label: `${kind} capability test`, version: "test" });
   vi.spyOn(platform, "loadSharedBundle").mockResolvedValue(null);
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
   await screen.findByText(`${kind} capability test`);
+  return client;
 }
+
+const folderStatus: ConnectionFolderStatus = {
+  folder: "/sync/fixture", library: "test-library", provider: "iCloud", paused: false,
+  queued: 0, pending: 0, pendingId: null, lastCheck: null, lastWrite: null, problem: null,
+};
+
 describe("App capability integration", () => {
   beforeEach(() => { localStorage.clear(); window.history.replaceState(null, "", "/"); });
   afterEach(() => vi.restoreAllMocks());
@@ -26,6 +35,68 @@ describe("App capability integration", () => {
     const navigation = within(screen.getByRole("group", { name: "View mode" }));
     expect(navigation.getByRole("button", { name: "Model" })).toHaveAttribute("aria-pressed", "true");
     expect(navigation.queryByRole("button", { name: "Changes" })).not.toBeInTheDocument();
+  });
+  it("opens Cloud Sync directly from the desktop toolbar without a data source", async () => {
+    await mount("desktop");
+    const tools = within(screen.getByRole("group", { name: "Application tools" }));
+    expect(tools.queryByRole("button", { name: "Open command palette" })).not.toBeInTheDocument();
+    fireEvent.click(tools.getByRole("button", { name: "Open Cloud Sync" }));
+    const settings = within(await screen.findByRole("dialog", { name: "Settings" }));
+    expect(settings.getByRole("button", { name: "Cloud Sync" })).toHaveAttribute("aria-current", "page");
+    expect(settings.getByRole("heading", { name: "Personal Connection Sync" })).toBeVisible();
+    expect(window.location.hash).toBe("#/settings/cloud");
+  });
+  it("updates the Cloud Sync badge as the folder status changes and removes it when healthy", async () => {
+    vi.spyOn(getPlatform(), "getConnectionFolderStatus").mockResolvedValue({ ...folderStatus, folder: null, library: null, provider: null });
+    const client = await mount("desktop");
+    const button = screen.getByRole("button", { name: "Open Cloud Sync" });
+    await waitFor(() => expect(button).toHaveAccessibleDescription("Sync is off"));
+    expect(button.querySelector(".connection-folder-badge")).toHaveTextContent("−");
+
+    const states = [
+      { details: { problem: "cannotWrite", pending: 1 }, description: "Sync failed", tone: "danger" },
+      { details: { problem: "folderWaiting" }, description: "Waiting for the sync files to become available on this device.", tone: "neutral" },
+      { details: { paused: true }, description: "Paused", tone: "neutral" },
+      { details: { pending: 1 }, description: "Connection updates available", tone: "accent" },
+    ];
+    for (const { details, description, tone } of states) {
+      act(() => { client.setQueryData(["connection-folder-status"], { ...folderStatus, ...details }); });
+      await waitFor(() => expect(button).toHaveAccessibleDescription(description));
+      expect(button.querySelector(".connection-folder-badge")).toHaveAttribute("data-tone", tone);
+    }
+    act(() => { client.setQueryData(["connection-folder-status"], folderStatus); });
+    await waitFor(() => expect(button.querySelector(".connection-folder-badge")).not.toBeInTheDocument());
+  });
+  it("surfaces a connection merge failure after leaving Settings and clears it on retry", async () => {
+    const platform = getPlatform();
+    vi.spyOn(platform, "getConnectionFolderStatus").mockResolvedValue({ ...folderStatus, pending: 1, pendingId: "pending" });
+    vi.spyOn(platform, "previewConnectionFolderUpdates").mockResolvedValue({
+      token: "reviewed", outgoing: 0, createsLibrary: false, deferredIncoming: false,
+      rows: [{ action: "add", existing: null, connection: {
+        displayName: "Fixture", databaseType: "postgreSql", host: "local.example", port: 5432,
+        database: "fixture", username: "reader", sslMode: "verifyFull", ssh: null,
+      } }],
+    });
+    vi.spyOn(platform, "applyConnectionFolderUpdates").mockRejectedValueOnce("stalePreview").mockResolvedValueOnce(folderStatus);
+    await mount("desktop");
+
+    const button = screen.getByRole("button", { name: "Open Cloud Sync" });
+    fireEvent.click(button);
+    fireEvent.click(await screen.findByRole("button", { name: "Preview Updates" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm Merge" }));
+    const changed = "The file or saved connections changed. Preview the merge again.";
+    expect(await screen.findByRole("alert")).toHaveTextContent(changed);
+    const settings = within(screen.getByRole("dialog", { name: "Settings" }));
+    fireEvent.click(settings.getByRole("button", { name: "← Back" }));
+    expect(button).toHaveAttribute("aria-description", "Merge failed");
+    expect(button.querySelector(".connection-folder-badge")).toHaveAttribute("data-tone", "danger");
+
+    fireEvent.click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent(changed);
+    fireEvent.click(screen.getByRole("button", { name: "Preview Updates" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm Merge" }));
+    expect(await screen.findByText("Reviewed connection updates were merged.")).toBeVisible();
+    expect(button.querySelector(".connection-folder-badge")).not.toBeInTheDocument();
   });
   it.each([
     { platform: "MacIntel", modifier: "metaKey", shortcut: "Meta", hint: "⌘2" },
@@ -55,7 +126,7 @@ describe("App capability integration", () => {
     expect(ontology).toHaveAttribute("aria-pressed", "true");
     expect(fireEvent.keyDown(document.body, { key: "1", [modifier]: true })).toBe(false);
     expect(model).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "Open command palette" }));
+    fireEvent.keyDown(document.body, { key: "P", [modifier]: true, shiftKey: true });
     const option = screen.getByRole("option", { name: "Open Ontology" });
     expect(option).toHaveTextContent(hint);
     fireEvent.click(option);
@@ -63,6 +134,7 @@ describe("App capability integration", () => {
   });
   it("leaves the browser’s numbered tab shortcut available in the web viewer", async () => {
     await mount("web");
+    expect(screen.queryByRole("button", { name: "Open Cloud Sync" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Load PostgreSQL fixture" }));
     const navigation = within(screen.getByRole("group", { name: "View mode" }));
     const database = navigation.getByRole("button", { name: "Database" });
@@ -98,7 +170,7 @@ describe("App capability integration", () => {
   });
   it("opens the matrix from the command palette and supplies the loaded MySQL context", async () => {
     await mount("desktop"); fireEvent.click(screen.getByRole("button", { name: "Load MySQL fixture" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open command palette" }));
+    fireEvent.keyDown(document.body, { key: "P", ctrlKey: true, shiftKey: true });
     fireEvent.click(screen.getByRole("option", { name: /Open capability matrix/ }));
     const settings = await screen.findByRole("dialog", { name: "Settings" });
     expect(within(settings).getByRole("columnheader", { name: "Desktop · MySQL Current" })).toHaveAttribute("data-current", "true");

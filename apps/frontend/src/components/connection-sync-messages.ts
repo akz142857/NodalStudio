@@ -19,7 +19,9 @@ const syncErrors = {
   paused: "connectionFolder.paused",
 } as const;
 
-export function connectionSyncError(reason: unknown) {
+export type ConnectionSyncErrorMessage = (typeof syncErrors)[keyof typeof syncErrors];
+
+export function connectionSyncError(reason: unknown): ConnectionSyncErrorMessage {
   return typeof reason === "string" && Object.hasOwn(syncErrors, reason)
     ? syncErrors[reason as keyof typeof syncErrors]
     : syncErrors.unavailable;

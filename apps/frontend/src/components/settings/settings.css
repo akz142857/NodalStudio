@@ -161,8 +161,25 @@
 .settings-save-bar button:nth-child(2) { margin-inline-start: auto; }
 .settings-danger-zone { border-color: color-mix(in srgb, var(--ds-danger) 35%, var(--ds-separator)); }
 
-.connection-folder-path { max-width: 65%; overflow-wrap: anywhere; text-align: end; }
-.connection-folder-form label > input { min-width: 0; }
-.connection-folder-preview h3 { margin: var(--ds-space-3) 0 var(--ds-space-2); font-size: var(--ds-text-control); }
-.connection-folder-preview .connection-sync-preview { padding-inline: var(--ds-space-3); }
+.connection-folder-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ds-space-2) var(--ds-space-4); padding: var(--ds-space-3) var(--ds-space-4); }
+.connection-folder-state { display: inline-flex; align-items: center; gap: var(--ds-space-2); }
+.connection-folder-state[data-tone="positive"] svg { color: var(--ds-positive); }
+.connection-folder-state[data-tone="warning"] svg { color: var(--ds-warning); }
+.connection-folder-counts, .connection-folder-times { color: var(--ds-secondary); font-size: var(--ds-text-control); }
+.connection-folder-times { margin: 0; border-top: 1px solid var(--ds-separator); }
+.connection-folder-times dd { margin: 0; text-align: end; }
+.connection-folder-location.setting-row { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.connection-folder-path { overflow-wrap: anywhere; text-align: end; }
+.connection-folder-form > .setting-inline-note { padding: var(--ds-space-2) var(--ds-space-4); }
+.connection-folder-passphrases { display: grid; gap: var(--ds-space-4); padding: var(--ds-space-3) var(--ds-space-4) var(--ds-space-5); }
+.connection-folder-field, .connection-folder-field > label { display: grid; gap: var(--ds-space-2); min-width: 0; }
+.connection-folder-field { max-width: 28rem; }
+.connection-folder-field input { width: 100%; min-width: 0; }
+.connection-folder-actions { justify-content: flex-end; border-top: 1px solid var(--ds-separator); padding: var(--ds-space-3) var(--ds-space-4); }
+.connection-folder-preview { display: grid; gap: var(--ds-space-2); padding: var(--ds-space-3) var(--ds-space-4); }
+.connection-folder-privacy { display: flex; align-items: flex-start; gap: var(--ds-space-2); padding-inline: var(--ds-space-1); }
+@container settings-content (max-width: 500px) {
+  .connection-folder-location.setting-row { grid-template-columns: minmax(0, 1fr); }
+  .connection-folder-path, .connection-folder-times dd { text-align: start; }
+}
 .settings-section .settings-operation-error { color: var(--ds-danger); overflow-wrap: anywhere; }

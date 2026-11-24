@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defaultEffectiveSettings, type AppSettings, type DataSourceSettings, type NodalStudioPlatform } from "../platform";
 import { SettingsPage } from "./SettingsPage";
@@ -127,6 +127,8 @@ describe("SettingsPage", () => {
       />,
     );
 
+    const shortcuts = screen.getByRole("button", { name: "Keyboard Shortcuts" });
+    expect(shortcuts.querySelector('svg[aria-hidden="true"] > rect')).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "Refresh Schema" }), {
       target: { value: "Mod+," },
     });
@@ -230,9 +232,13 @@ describe("personal connection sync", () => {
     expect(pickWorkspacePath).toHaveBeenCalledTimes(1);
     expect(inspectConnectionFolder).toHaveBeenCalledWith(folder);
     const previewButton = screen.getByRole("button", { name: "Preview Setup" });
-    fireEvent.change(screen.getByLabelText("File passphrase"), { target: { value: passphrase } });
+    const field = screen.getByLabelText("Sync passphrase");
+    const confirmation = screen.getByLabelText("Confirm sync passphrase");
+    expect(field).toHaveAccessibleDescription("At least 12 characters. Use the same passphrase to unlock this library on another device.");
+    fireEvent.change(field, { target: { value: passphrase } });
     expect(previewButton).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Confirm file passphrase"), { target: { value: passphrase } });
+    fireEvent.change(confirmation, { target: { value: passphrase } });
+    expect(previewButton).toBeEnabled();
     fireEvent.click(previewButton);
     await screen.findByText("Updates to review 0 · Connections to write " + outgoing);
     expect(enableConnectionFolder).not.toHaveBeenCalled();
@@ -261,13 +267,13 @@ describe("personal connection sync", () => {
     render(<SettingsPage {...baseProps} platform={platform} settings={defaultEffectiveSettings()} initialCategory="cloud" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose Sync Folder…" }));
-    fireEvent.change(await screen.findByLabelText("File passphrase"), { target: { value: passphrase } });
-    fireEvent.change(screen.getByLabelText("Confirm file passphrase"), { target: { value: passphrase } });
+    fireEvent.change(await screen.findByLabelText("Sync passphrase"), { target: { value: passphrase } });
+    fireEvent.change(screen.getByLabelText("Confirm sync passphrase"), { target: { value: passphrase } });
     fireEvent.click(screen.getByRole("button", { name: "Preview Setup" }));
     fireEvent.click(await screen.findByRole("button", { name: "Check Folder Again" }));
-    const field = await screen.findByLabelText("File passphrase");
+    const field = await screen.findByLabelText("Sync passphrase");
     expect(field).toHaveValue("");
-    expect(screen.queryByLabelText("Confirm file passphrase")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Confirm sync passphrase")).not.toBeInTheDocument();
     expect(pickWorkspacePath).toHaveBeenCalledTimes(1);
     expect(inspectConnectionFolder.mock.calls).toEqual([[folder], [folder]]);
     fireEvent.change(field, { target: { value: passphrase } });
@@ -287,8 +293,8 @@ describe("personal connection sync", () => {
     render(<SettingsPage {...baseProps} platform={platform} settings={defaultEffectiveSettings()} initialCategory="cloud" />);
     fireEvent.click(screen.getByRole("button", { name: "Choose Sync Folder…" }));
     await screen.findByText("This folder has an encrypted connection library. Enter its passphrase to preview the merge.");
-    expect(screen.queryByLabelText("Confirm file passphrase")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("File passphrase"), { target: { value: passphrase } });
+    expect(screen.queryByLabelText("Confirm sync passphrase")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Sync passphrase"), { target: { value: passphrase } });
     fireEvent.click(screen.getByRole("button", { name: "Preview Setup" }));
     await screen.findByText("Keep both versions");
     expect(screen.getByText("reader@device-a.example:5432")).toBeVisible();
@@ -305,7 +311,12 @@ describe("personal connection sync", () => {
     const platform = { previewConnectionFolderUpdates, applyConnectionFolderUpdates } as unknown as NodalStudioPlatform;
     render(<SettingsPage {...baseProps} platform={platform} settings={defaultEffectiveSettings()} initialCategory="cloud"
       connectionFolderStatus={{ ...status, pending: 1, pendingId: "pending" }} onDataSourcesChanged={onDataSourcesChanged} />);
-    fireEvent.click(screen.getByRole("button", { name: "Preview Updates" }));
+    const syncStatus = within(screen.getByRole("group", { name: "Sync status" }));
+    expect(syncStatus.getByRole("status")).toHaveTextContent("Waiting to review 1");
+    const syncFolder = within(screen.getByRole("group", { name: "Sync folder" }));
+    expect(syncFolder.getByRole("combobox", { name: "File provider" })).toHaveValue("googleDrive");
+    expect(syncFolder.getByText(folder)).toBeVisible();
+    fireEvent.click(syncStatus.getByRole("button", { name: "Preview Updates" }));
     await screen.findByText("Keep both versions");
     expect(applyConnectionFolderUpdates).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Confirm Merge" }));

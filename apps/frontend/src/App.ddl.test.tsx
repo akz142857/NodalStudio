@@ -32,6 +32,8 @@ describe("DDL preview workspace isolation", () => {
   it("provides a read-only preview command before loading any database", async () => {
     const platform = getPlatform(); vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "web", label: "Web fixture", version: "test" }); vi.spyOn(platform, "loadSharedBundle").mockResolvedValue(null);
     render(<QueryClientProvider client={new QueryClient()}><App /></QueryClientProvider>); await screen.findByText("Web fixture");
-    fireEvent.click(screen.getByRole("button", { name: "Open command palette" })); fireEvent.click(screen.getByRole("option", { name: "Open read-only DDL preview" })); expect(await screen.findByRole("region", { name: "Read-only DDL import preview" })).toBeVisible();
+    fireEvent.keyDown(document.body, { key: "P", ctrlKey: true, shiftKey: true });
+    fireEvent.click(screen.getByRole("option", { name: "Open read-only DDL preview" }));
+    expect(await screen.findByRole("region", { name: "Read-only DDL import preview" })).toBeVisible();
   });
 });

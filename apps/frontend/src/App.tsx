@@ -16,6 +16,8 @@ import { SchemaPreflightPanel } from "./components/SchemaPreflightPanel";
 import { OperationFeedback } from "./components/OperationFeedback";
 import { ActionIcon } from "./components/ActionIcon";
 import { IconButton } from "./components/IconButton";
+import { ConnectionFolderToolbarButton } from "./components/ConnectionFolderToolbarButton";
+import type { ConnectionSyncErrorMessage } from "./components/connection-sync-messages";
 import { useOperation } from "./components/use-operation";
 import { currentCapabilityTarget, resolveCapability } from "./platform/capabilities";
 import { SchemaCanvas, type CanvasLocateRequest } from "./components/SchemaCanvas";
@@ -248,6 +250,7 @@ export function App() {
     refetchInterval: 5_000,
     retry: false,
   });
+  const [connectionFolderMergeError, setConnectionFolderMergeError] = useState<ConnectionSyncErrorMessage>();
   const notifiedConnectionFolder = useRef<string | null>(null);
   const notices = connectionFolder.data?.pendingId
     ? savedNotices
@@ -1421,10 +1424,15 @@ export function App() {
                 openSettings();
               }}
             />
-            <IconButton icon="command" label={t("navigation.openCommandPalette")} description={t("navigation.commandPaletteP", { value0: formatCommandShortcut(COMMAND_PALETTE_SHORTCUT) })} aria-haspopup="dialog" onClick={(event) => {
-              event.currentTarget.focus({ preventScroll: true });
-              openCommandPalette();
-            }} />
+            {runtime.data?.kind === "desktop" ? (
+              <ConnectionFolderToolbarButton
+                status={connectionFolder.data}
+                statusFailed={connectionFolder.isError}
+                mergeFailed={Boolean(connectionFolderMergeError)}
+                offline={settings.app.privacy.offlineMode}
+                onOpen={() => openSettings("cloud")}
+              />
+            ) : null}
             <IconButton icon="bell" label={t("navigation.openNotifications")} description={notices.length ? t("navigation.notifications", { value0: notices.length }) : t("navigation.noNotifications")} className="notification-button" aria-expanded={noticesOpen} onClick={() => setNoticesOpen((value) => !value)}>{notices.length ? <b aria-hidden="true">{notices.length > 99 ? "99+" : notices.length}</b> : null}</IconButton>
           </div>
           {noticesOpen ? <section className="notification-popover" aria-label={t("settings.notifications")}><header><strong>{t("settings.notifications")}</strong><button type="button" onClick={() => setNotices([])}>{t("navigation.clear")}</button></header>{notices.length ? notices.map((notice) => <article key={notice.id}><strong>{notice.title}</strong><p>{notice.message}</p><small>{i18n.formatDate(notice.createdAt, "local", { timeStyle: "medium" })}</small>{notice.settingsCategory ? <button type="button" className="notification-update-action" onClick={() => openSettings(notice.settingsCategory)}>{t("navigation.viewUpdate")}</button> : null}</article>) : <p>{t("navigation.noNotificationsDetail")}</p>}</section> : null}
@@ -1797,6 +1805,8 @@ export function App() {
           runtime={runtime.data}
           connectionFolderStatus={connectionFolder.data}
           onConnectionFolderStatus={(status) => { queryClient.setQueryData(["connection-folder-status"], status); }}
+          connectionFolderMergeError={connectionFolderMergeError}
+          onConnectionFolderMergeError={setConnectionFolderMergeError}
           dataSources={dataSources}
           activeSourceId={snapshot?.sourceId}
           activeDatabase={snapshot?.database}
