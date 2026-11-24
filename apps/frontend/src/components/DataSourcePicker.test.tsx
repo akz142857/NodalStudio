@@ -19,12 +19,20 @@ function setup() {
 describe("DataSourcePicker", () => {
   it("keeps connection actions in the popup footer and supports keyboard activation without switching sources", () => {
     const onSelect = vi.fn(), onEdit = vi.fn(), onManage = vi.fn();
-    render(<DataSourcePicker profiles={[first, second]} activeProfile={first} disabled={false} onSelect={onSelect} onEdit={onEdit} onManage={onManage} />);
+    const profiles = [first, ...Array.from({ length: 24 }, (_, index) => ({ ...second, id: `source-${index}` }))];
+    render(<DataSourcePicker profiles={profiles} activeProfile={first} disabled={false} onSelect={onSelect} onEdit={onEdit} onManage={onManage} />);
     const trigger = screen.getByRole("button", { name: "Data source: midigi_db" });
     expect(screen.queryByText("Edit current connection…")).not.toBeInTheDocument();
     fireEvent.click(trigger);
-    fireEvent.keyDown(screen.getAllByRole("menuitemradio")[0], { key: "End" });
-    const manage = screen.getByRole("menuitem", { name: "Manage connections…" });
+    const menu = within(screen.getByRole("menu", { name: "Switch database" }));
+    const list = menu.getByRole("group", { name: "Data sources" });
+    const actions = within(menu.getByRole("group", { name: "Connection actions" }));
+    const sourceOptions = within(list);
+    expect(sourceOptions.getAllByRole("menuitemradio")).toHaveLength(profiles.length);
+    expect(sourceOptions.queryByRole("menuitem")).not.toBeInTheDocument();
+    fireEvent.scroll(list);
+    fireEvent.keyDown(sourceOptions.getAllByRole("menuitemradio")[0], { key: "End" });
+    const manage = actions.getByRole("menuitem", { name: "Manage connections…" });
     expect(manage).toHaveFocus();
     fireEvent.keyDown(manage, { key: "ArrowUp" });
     const edit = screen.getByRole("menuitem", { name: "Edit current connection…" });

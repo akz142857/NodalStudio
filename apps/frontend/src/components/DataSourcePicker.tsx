@@ -16,6 +16,16 @@ function address(profile: DataSourceProfile) {
   return `${host}:${profile.port}`;
 }
 
+function focusMenuItem(item: HTMLButtonElement | undefined, list: HTMLDivElement | null) {
+  if (!item) return;
+  item.focus({ preventScroll: true });
+  if (!list?.contains(item)) return;
+  const top = item.offsetTop;
+  const bottom = top + item.offsetHeight;
+  if (top < list.scrollTop || item.offsetHeight > list.clientHeight) list.scrollTop = top;
+  else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+}
+
 export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect, onEdit, onManage, onContextMenu }: {
   profiles: DataSourceProfile[];
   activeProfile?: DataSourceProfile;
@@ -83,13 +93,15 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
 }) {
   const { t: bt } = useI18n();
   const root = useRef<HTMLDivElement>(null);
+  const sources = useRef<HTMLDivElement>(null);
   const typeahead = useRef({ text: "", time: 0 });
   useLayoutEffect(() => {
     const menu = root.current;
+    const list = sources.current;
     const anchor = trigger.current;
-    if (!menu || !anchor) return;
+    if (!menu || !list || !anchor) return;
     function position() {
-      if (!menu || !anchor) return;
+      if (!menu || !list || !anchor) return;
       // Portal coordinates, dimensions and viewport bounds share the app's UI zoom.
       const scale = menu.offsetWidth ? menu.getBoundingClientRect().width / menu.offsetWidth || 1 : 1;
       const bounds = anchor.getBoundingClientRect();
@@ -99,7 +111,8 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
       menu.style.left = `${Math.max(8, Math.min(bounds.left / scale, viewportWidth - width - 8))}px`;
       const below = viewportHeight - bounds.bottom / scale - 14;
       const above = bounds.top / scale - 14;
-      const upward = below < Math.min(menu.scrollHeight, 280) && above > below;
+      const fullHeight = menu.offsetHeight + Math.max(0, list.scrollHeight - list.clientHeight);
+      const upward = below < Math.min(fullHeight, 280) && above > below;
       menu.style.maxHeight = `${Math.max(0, Math.min(380, upward ? above : below))}px`;
       menu.style.top = `${upward ? Math.max(8, bounds.top / scale - menu.offsetHeight - 6) : bounds.bottom / scale + 6}px`;
     }
@@ -107,8 +120,7 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
     const items = menu.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"], [role="menuitem"]');
     const selected = menu.querySelector<HTMLButtonElement>('[aria-checked="true"]');
     const first = initialFocus === "last" ? items[items.length - 1] : initialFocus === "selected" ? selected : items[0];
-    (first ?? items[0])?.focus({ preventScroll: true });
-    (first ?? items[0])?.scrollIntoView?.({ block: "nearest" });
+    focusMenuItem(first ?? items[0], list);
     const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(position);
     observer?.observe(anchor);
     observer?.observe(menu);
@@ -145,24 +157,28 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
         event.preventDefault();
         const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
           : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
-        items[next]?.focus();
+        focusMenuItem(items[next], sources.current);
       } else if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         const now = Date.now();
         const text = (now - typeahead.current.time < 700 ? typeahead.current.text : "") + event.key.toLowerCase();
         typeahead.current = { text, time: now };
         const next = profiles.findIndex((profile) => profile.database.toLowerCase().startsWith(text) || profile.displayName.toLowerCase().startsWith(text));
-        items[next]?.focus();
+        focusMenuItem(items[next], sources.current);
       }
     }}>
     <div className="data-source-menu-heading" aria-hidden="true">{bt("business.switchDatabaseDetail")}</div>
-    {profiles.map((profile) => <button key={profile.id} type="button" role="menuitemradio" aria-checked={profile.id === activeSourceId}
-      title={`${profile.database} — ${engine(profile)} · ${profile.displayName} · ${address(profile)}`}
-      onClick={() => onSelect(profile)}>
-      <ActionIcon name="database" />
-      <span className="data-source-menu-label"><strong>{profile.database}</strong><span>{engine(profile)} · {profile.displayName}</span><small>{address(profile)}{profile.connectionSync?.pending ? ` · ${bt("connectionSync.pendingSetup")}` : ""}</small></span>
-      <span className="data-source-menu-check" aria-hidden="true">✓</span>
-    </button>)}
+    <div ref={sources} className="data-source-menu-list" role="group" aria-label={bt("business.dataSources")}>
+      {profiles.map((profile) => <button key={profile.id} type="button" role="menuitemradio" aria-checked={profile.id === activeSourceId}
+        title={`${profile.database} — ${engine(profile)} · ${profile.displayName} · ${address(profile)}`}
+        onClick={() => onSelect(profile)}>
+        <ActionIcon name="database" />
+        <span className="data-source-menu-label"><strong>{profile.database}</strong><span>{engine(profile)} · {profile.displayName}</span>
+          <small>{address(profile)}{profile.connectionSync?.pending ? ` · ${bt("connectionSync.pendingSetup")}` : ""}</small>
+        </span>
+        <span className="data-source-menu-check" aria-hidden="true">✓</span>
+      </button>)}
+    </div>
     {onEdit || onManage ? <div className="data-source-menu-actions" role="group" aria-label={bt("business.connectionActions")}>
       {onEdit ? <button type="button" role="menuitem" onClick={onEdit}><ActionIcon name="settings" />{bt("business.editCurrentConnection")}</button> : null}
       {onManage ? <button type="button" role="menuitem" onClick={onManage}><ActionIcon name="sliders" />{bt("business.manageConnections")}</button> : null}
