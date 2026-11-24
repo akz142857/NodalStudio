@@ -15,6 +15,12 @@ The product and engineering scope is defined in
 [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md). Current implementation evidence is
 tracked in [docs/IMPLEMENTATION_STATUS.md](./docs/IMPLEMENTATION_STATUS.md).
 
+The proposed [cloud subscription and online workspace plan](docs/plans/CLOUD_SUBSCRIPTION_AND_WEB_APP_PLAN.md)
+and its [technical design](docs/plans/CLOUD_TECHNICAL_DESIGN.md) preserve existing
+desktop purchase rights and outline optional browser sharing, comments, hosted AI
+allowances, and metadata sync, gated on a demand-validation step. They are design
+proposals, not statements of shipped features or published pricing.
+
 The desktop AI single-table understanding flow now includes an exact request
 preview, controlled metadata scope, evidence navigation, and cancellation/expiry
 handling. See the [stage-one delivery and review record](./docs/AI_DATABASE_UNDERSTANDING_STAGE_ONE.md)
