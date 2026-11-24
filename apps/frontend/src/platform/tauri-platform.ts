@@ -187,6 +187,22 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke<DataSourceProfile>("save_data_source", { input });
   }
 
+  saveAndMapDataSource(input: SaveDataSourceInput, sourceId: string): Promise<{ profile: DataSourceProfile; capture: CaptureSnapshotResult }> {
+    return invoke("save_and_map_data_source", { input, sourceId });
+  }
+
+  listServerDatabases(sourceId: string): Promise<string[]> {
+    return invoke("list_server_databases", { input: { sourceId } });
+  }
+
+  createServerDatabase(sourceId: string, database: string, serverUpdatedAt: string): Promise<string> {
+    return invoke("create_server_database", { input: { sourceId, database, serverUpdatedAt } });
+  }
+
+  openServerDatabase(sourceId: string, database: string, serverUpdatedAt: string, refresh = false): Promise<{ profile: DataSourceProfile; capture: CaptureSnapshotResult }> {
+    return invoke("open_server_database", { input: { sourceId, database, serverUpdatedAt, refresh } });
+  }
+
   async testPostgresConnection(input: SaveDataSourceInput, options?: ConnectionTestOptions): Promise<ConnectionTestResult> {
     if (options?.signal?.aborted) throw new DOMException("Connection test cancelled", "AbortError");
     const testId = crypto.randomUUID();

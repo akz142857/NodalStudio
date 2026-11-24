@@ -104,6 +104,15 @@ impl PostgresConnectionOptions {
         self
     }
 
+    /// Select a database for options constructed from fields.
+    #[must_use]
+    pub fn with_database(mut self, database: &str) -> Self {
+        if let PostgresConnection::Fields(options) = &mut self.connection {
+            **options = (**options).clone().database(database);
+        }
+        self
+    }
+
     #[must_use]
     pub fn with_connect_timeout(mut self, timeout: Duration) -> Self {
         self.connect_timeout = timeout;
@@ -137,6 +146,35 @@ pub async fn connect(options: &PostgresConnectionOptions) -> Result<PgPool, Post
     let pool_options = PgPoolOptions::new()
         .max_connections(options.max_connections)
         .acquire_timeout(options.connect_timeout);
+    connect_with_pool(options, pool_options).await
+}
+
+/// Connects a bounded pool for short-lived desktop sessions.
+pub async fn connect_reusable(
+    options: &PostgresConnectionOptions,
+) -> Result<PgPool, PostgresAdapterError> {
+    use sqlx::Connection;
+    let pool = PgPoolOptions::new()
+        .max_connections(options.max_connections)
+        .acquire_timeout(options.connect_timeout)
+        .idle_timeout(Duration::from_secs(90))
+        .max_lifetime(Duration::from_secs(120))
+        .test_before_acquire(false)
+        .before_acquire(|connection, metadata| {
+            Box::pin(async move {
+                if metadata.idle_for >= Duration::from_secs(5) {
+                    connection.ping().await?;
+                }
+                Ok(true)
+            })
+        });
+    connect_with_pool(options, pool).await
+}
+
+async fn connect_with_pool(
+    options: &PostgresConnectionOptions,
+    pool_options: PgPoolOptions,
+) -> Result<PgPool, PostgresAdapterError> {
     match &options.connection {
         PostgresConnection::Url(url) => Ok(pool_options.connect(url).await?),
         PostgresConnection::Fields(connect_options) => Ok(pool_options
@@ -151,10 +189,16 @@ pub async fn connect(options: &PostgresConnectionOptions) -> Result<PgPool, Post
 ///
 /// Returns [`PostgresAdapterError::Database`] when the metadata query fails.
 pub async fn test_connection(pool: &PgPool) -> Result<DatabaseInfo, PostgresAdapterError> {
+    read_identity(pool).await
+}
+
+async fn read_identity<'e>(
+    executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+) -> Result<DatabaseInfo, PostgresAdapterError> {
     let row = sqlx::query(
         "SELECT current_database() AS name, current_setting('server_version') AS version",
     )
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await?;
 
     Ok(DatabaseInfo {
@@ -174,24 +218,27 @@ pub async fn inspect_schema(
     pool: &PgPool,
     source_id: Uuid,
 ) -> Result<DatabaseSnapshot, PostgresAdapterError> {
-    let database = test_connection(pool).await?;
-    let mut schemas = load_schemas(pool).await?;
-    load_tables(pool, &mut schemas).await?;
-    load_columns(pool, &mut schemas).await?;
-    load_primary_keys(pool, &mut schemas).await?;
-    load_foreign_keys(pool, &mut schemas).await?;
-    load_views(pool, &mut schemas).await?;
-    load_indexes(pool, &mut schemas).await?;
-    load_constraints(pool, &mut schemas).await?;
-    load_enums(pool, &mut schemas).await?;
-    programs::load(pool, &mut schemas).await?;
+    let mut connection = pool.acquire().await?;
+    let database = read_identity(&mut *connection).await?;
+    let mut schemas = load_schemas(&mut connection).await?;
+    load_tables(&mut connection, &mut schemas).await?;
+    load_columns(&mut connection, &mut schemas).await?;
+    load_primary_keys(&mut connection, &mut schemas).await?;
+    load_foreign_keys(&mut connection, &mut schemas).await?;
+    load_views(&mut connection, &mut schemas).await?;
+    load_indexes(&mut connection, &mut schemas).await?;
+    load_constraints(&mut connection, &mut schemas).await?;
+    load_enums(&mut connection, &mut schemas).await?;
+    programs::load(&mut connection, &mut schemas).await?;
 
     let mut snapshot = DatabaseSnapshot::new(source_id, database, schemas);
     snapshot.canonicalize()?;
     Ok(snapshot)
 }
 
-async fn load_schemas(pool: &PgPool) -> Result<Vec<SchemaDefinition>, PostgresAdapterError> {
+async fn load_schemas(
+    connection: &mut sqlx::PgConnection,
+) -> Result<Vec<SchemaDefinition>, PostgresAdapterError> {
     let rows = sqlx::query(
         r"
         SELECT nspname AS schema_name
@@ -201,7 +248,7 @@ async fn load_schemas(pool: &PgPool) -> Result<Vec<SchemaDefinition>, PostgresAd
         ORDER BY nspname
         ",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
 
     rows.into_iter()
@@ -214,7 +261,7 @@ async fn load_schemas(pool: &PgPool) -> Result<Vec<SchemaDefinition>, PostgresAd
 }
 
 async fn load_tables(
-    pool: &PgPool,
+    connection: &mut sqlx::PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     let rows = sqlx::query(
@@ -235,7 +282,7 @@ async fn load_tables(
         ORDER BY namespace.nspname, relation.relname
         ",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
 
     for row in rows {
@@ -252,7 +299,7 @@ async fn load_tables(
 }
 
 async fn load_columns(
-    pool: &PgPool,
+    connection: &mut sqlx::PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     let rows = sqlx::query(
@@ -286,7 +333,7 @@ async fn load_columns(
         ORDER BY namespace.nspname, relation.relname, attribute.attnum
         ",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
 
     for row in rows {
@@ -312,7 +359,7 @@ async fn load_columns(
 }
 
 async fn load_primary_keys(
-    pool: &PgPool,
+    connection: &mut sqlx::PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     let rows = sqlx::query(
@@ -337,7 +384,7 @@ async fn load_primary_keys(
         ORDER BY namespace.nspname, relation.relname
         ",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
 
     for row in rows {
@@ -353,7 +400,7 @@ async fn load_primary_keys(
 }
 
 async fn load_foreign_keys(
-    pool: &PgPool,
+    connection: &mut sqlx::PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     let rows = sqlx::query(
@@ -404,7 +451,7 @@ async fn load_foreign_keys(
         ORDER BY source_namespace.nspname, source_relation.relname, constraint_row.conname
         ",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
 
     for row in rows {
@@ -432,7 +479,7 @@ async fn load_foreign_keys(
 }
 
 async fn load_indexes(
-    pool: &PgPool,
+    connection: &mut sqlx::PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     let rows = sqlx::query(
@@ -470,7 +517,7 @@ async fn load_indexes(
         ORDER BY namespace.nspname, relation.relname, index_relation.relname
         ",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
 
     for row in rows {
@@ -502,7 +549,7 @@ async fn load_indexes(
 }
 
 async fn load_constraints(
-    pool: &PgPool,
+    connection: &mut sqlx::PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     let rows = sqlx::query(
@@ -522,7 +569,7 @@ async fn load_constraints(
         ORDER BY namespace.nspname, relation.relname, constraint_row.conname
         ",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
 
     for row in rows {
@@ -547,7 +594,7 @@ async fn load_constraints(
 }
 
 async fn load_views(
-    pool: &PgPool,
+    connection: &mut sqlx::PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     let rows = sqlx::query(
@@ -566,7 +613,7 @@ async fn load_views(
         ORDER BY namespace.nspname, relation.relname
         ",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
 
     for row in rows {
@@ -586,7 +633,7 @@ async fn load_views(
 }
 
 async fn load_enums(
-    pool: &PgPool,
+    connection: &mut sqlx::PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     let rows = sqlx::query(
@@ -604,7 +651,7 @@ async fn load_enums(
         ORDER BY namespace.nspname, data_type.typname
         ",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
 
     for row in rows {

@@ -1,14 +1,40 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { ConnectionTestStatus } from "./ConnectionTestStatus";
 import { connectionFailure } from "./connection-test-state";
 import type { SaveDataSourceInput } from "../platform";
 afterEach(cleanup);
-const form = { sslMode: "prefer", security: { ssh: { host: "jump", port: 22, username: "user", authentication: "password" } } } as SaveDataSourceInput;
+const form: SaveDataSourceInput = {
+  displayName: "Fixture", host: "localhost", port: 5432, database: "app", username: "user", password: "fixture",
+  databaseType: "postgreSql", sslMode: "prefer", security: { tls: {}, ssh: { host: "jump", port: 22, username: "user", authentication: "password" } },
+};
+it("shows a continuous SSH-to-server route and reports disabled TLS separately", () => {
+  render(<ConnectionTestStatus form={{ ...form, databaseType: "mySql", database: "", sslMode: "disable" }} state={{ status: "success", result: { database: { name: "", databaseType: "mySql", version: "8.4" }, sslActive: false, serverReadOnly: false } }} />);
+  const route = within(screen.getByRole("list"));
+  const nodes = route.getAllByRole("listitem");
+  expect(nodes).toHaveLength(2);
+  expect(within(nodes[0]).getByRole("group", { name: "SSH status" })).toHaveTextContent("Connected");
+  expect(within(nodes[1]).getByRole("group", { name: "Server status" })).toHaveTextContent("Connected");
+  for (const node of nodes) expect(node).toHaveAttribute("data-tone", "success");
+  expect(route.queryByRole("group", { name: "TLS status" })).not.toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "TLS status" })).toHaveTextContent("TLS Not enabled");
+  expect(screen.getByRole("status")).toHaveTextContent("Server connected");
+});
 it("does not claim TLS passed when Prefer falls back to plaintext", () => {
   render(<ConnectionTestStatus form={form} state={{ status: "success", result: { database: { name: "app", databaseType: "postgreSql", version: "16" }, sslActive: false, serverReadOnly: false } }} />);
   expect(screen.getByRole("status")).toHaveTextContent("Not encrypted");
   expect(screen.getByRole("status")).toHaveTextContent("Choose Require or Verify full");
+  expect(within(screen.getByRole("list")).getByRole("group", { name: "TLS status" })).toHaveTextContent("Not encrypted");
+});
+it("guides the user to TLS when PostgreSQL rejects an unencrypted connection", () => {
+  render(<ConnectionTestStatus form={{ ...form, sslMode: "disable" }} state={{ status: "error", failure: {
+    stage: "tls", code: "unencryptedConnectionRejected", message: "Native fallback", sshConnected: true,
+  } }} />);
+  const result = within(screen.getByRole("alert"));
+  expect(result.getByText("Unencrypted connection rejected")).toBeVisible();
+  expect(result.getByText(/Choose Require or Verify full in the TLS tab/)).toBeVisible();
+  expect(result.getByRole("group", { name: "SSH status" })).toHaveTextContent("Connected");
+  expect(result.getByRole("group", { name: "TLS status" })).toHaveTextContent("Not enabled");
 });
 it("keeps successful SSH visible when database authentication fails", () => {
   render(<ConnectionTestStatus form={form} state={{ status: "error", failure: { stage: "database", message: "Authentication rejected", sshConnected: true } }} />);

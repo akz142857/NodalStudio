@@ -108,6 +108,7 @@ async fn run_case(
     };
     store.save_data_source_settings(&settings).await.unwrap();
     let app = AppState {
+        sessions: Default::default(),
         store,
         ai_limiter: Arc::new(Semaphore::new(840)),
         snapshot_captures: Arc::default(),

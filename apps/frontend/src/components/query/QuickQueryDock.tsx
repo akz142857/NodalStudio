@@ -78,7 +78,7 @@ function resizeAxis(origin: number, size: number, area: number, delta: number, m
 export function QuickQueryDock({ platform, snapshot, relation, reset, onResult }: Props) {
   const key = JSON.stringify(relation.key);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [docked, setDocked] = useState(false);
+  const [docked, setDocked] = useState(true);
   const [layout, setLayout] = useState<{ position: Position; size?: Size }>({ position: bottomCenter });
   const move = useCallback((position: Position) => {
     setLayout((current) => current.position.x === position.x && current.position.y === position.y ? current : { ...current, position });
@@ -112,14 +112,20 @@ function QuickQueryEditor({ platform, sourceId, sql, onChange, onResult, positio
   const drag = useRef<PanelDrag | undefined>(undefined);
   const resize = useRef<ResizeDrag | undefined>(undefined);
   const request = useRef<AbortController | undefined>(undefined);
-  const [expanded, setExpanded] = useState(false);
+  const focusOnExpand = useRef(false);
+  const [expanded, setExpanded] = useState(true);
   const [dragging, setDragging] = useState(false);
   const [dockTarget, setDockTarget] = useState(false);
   const [positionMenu, setPositionMenu] = useState<{ x: number; y: number }>();
   const [output, setOutput] = useState<Output>();
   const busy = output?.kind === "running" || output?.kind === "stopping";
 
-  useEffect(() => { if (expanded) editor.current?.focus(); }, [expanded]);
+  useEffect(() => {
+    if (expanded && focusOnExpand.current) {
+      focusOnExpand.current = false;
+      editor.current?.focus();
+    }
+  }, [expanded]);
   useLayoutEffect(() => () => {
     request.current?.abort();
     request.current = undefined;
@@ -255,10 +261,13 @@ function QuickQueryEditor({ platform, sourceId, sql, onChange, onResult, positio
         onPointerDown={startDrag} onPointerMove={movePanel} onPointerUp={(event) => endDrag(event, true)}
         onPointerCancel={(event) => endDrag(event, false)} onLostPointerCapture={(event) => endDrag(event, false)}>
         <button ref={toggle} type="button" className="ds-button quick-query-toggle" data-variant="ghost"
-          aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded(!expanded)}>
+          aria-expanded={expanded} aria-controls={panelId} onClick={() => {
+            focusOnExpand.current = !expanded;
+            setExpanded(!expanded);
+          }}>
           <ActionIcon name="viewer" />
           {t("tableData.quickQuery")}
-          <ActionIcon name={expanded ? "chevronDown" : "chevronUp"} />
+          <ActionIcon name={docked !== expanded ? "chevronDown" : "chevronUp"} />
         </button>
         <span className="quick-query-grip" aria-hidden="true" />
         {expanded && <span id={`${panelId}-mode`} className="quick-query-mode">{t("business.readOnly")}</span>}

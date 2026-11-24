@@ -2595,6 +2595,7 @@ mod tests {
     fn profile(source_id: Uuid) -> DataSourceProfile {
         let now = Utc::now();
         DataSourceProfile {
+            server_source_id: None,
             connection_sync: None,
             sqlite: None,
             id: source_id,
@@ -2830,6 +2831,7 @@ mod tests {
         let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
         let now = Utc::now();
         let profile = DataSourceProfile {
+            server_source_id: None,
             connection_sync: None,
             sqlite: None,
             id: Uuid::new_v4(),

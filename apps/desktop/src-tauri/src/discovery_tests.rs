@@ -104,6 +104,7 @@ async fn fixture_for_dialect(
     };
     (
         AppState {
+            sessions: Default::default(),
             store,
             ai_limiter: Arc::new(Semaphore::new(840)),
             snapshot_captures: Arc::default(),

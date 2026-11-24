@@ -6,6 +6,7 @@ import { tableRowCountKey, type TableRowCountRequest, type TableRowCountTarget }
 export interface TableRowCounts {
   values: ReadonlyMap<string, { count: string; exact: boolean }>;
   request: (target: TableRowCountTarget) => void;
+  recordPreview: (target: TableRowCountTarget, count: number) => void;
   busy: boolean;
   pending?: string;
   failed?: string;
@@ -16,6 +17,16 @@ export function useTableRowCounts(platform: NodalStudioPlatform, profile: DataSo
   const revision = profile?.updatedAt;
   const scope = JSON.stringify([sourceId, revision]);
   const [exact, setExact] = useState(() => new Map<string, ReadonlyMap<string, string>>());
+  const recordExact = useCallback((scope: string, target: TableRowCountTarget, count: string) => {
+    const key = tableRowCountKey(target);
+    setExact((previous) => {
+      const counts = previous.get(scope);
+      return counts?.get(key) === count ? previous : new Map(previous).set(scope, new Map(counts).set(key, count));
+    });
+  }, []);
+  const recordPreview = useCallback((target: TableRowCountTarget, count: number) => {
+    recordExact(scope, target, String(count));
+  }, [recordExact, scope]);
   const estimates = useQuery({
     queryKey: ["table-row-estimates", sourceId, revision],
     queryFn: () => platform.readTableRowCounts({ sourceId: profile!.id, connectionRevision: profile!.updatedAt }),
@@ -31,10 +42,7 @@ export function useTableRowCounts(platform: NodalStudioPlatform, profile: DataSo
       if (!value) throw new Error("The database did not return a row count.");
       return value;
     },
-    onSuccess: (value, input) => {
-      const key = JSON.stringify([input.sourceId, input.connectionRevision]);
-      setExact((previous) => new Map(previous).set(key, new Map(previous.get(key)).set(tableRowCountKey(value), value.count)));
-    },
+    onSuccess: (value, input) => recordExact(JSON.stringify([input.sourceId, input.connectionRevision]), value, value.count),
   });
   const exactCounts = exact.get(scope);
   const values = useMemo(() => {
@@ -57,5 +65,6 @@ export function useTableRowCounts(platform: NodalStudioPlatform, profile: DataSo
     pending,
     failed,
     request,
-  }, [profile, values, isPending, pending, failed, request]);
+    recordPreview,
+  }, [profile, values, isPending, pending, failed, request, recordPreview]);
 }

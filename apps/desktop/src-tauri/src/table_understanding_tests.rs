@@ -49,6 +49,7 @@ async fn fixture(endpoint: &str) -> (AppState, TableInput, DataSourceSettings) {
     };
     (
         AppState {
+            sessions: Default::default(),
             store,
             ai_limiter: Arc::new(Semaphore::new(840)),
             snapshot_captures: Arc::default(),
@@ -731,6 +732,7 @@ async fn prepared_response_is_stale_when_endpoint_changes_even_with_identical_sn
     let prepared = prepare(&app, input.clone()).await.unwrap();
     let source = prepared.preview.source_id;
     let profile = schema_model::DataSourceProfile {
+        server_source_id: None,
         connection_sync: None,
         sqlite: None,
         id: source,

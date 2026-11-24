@@ -41,6 +41,11 @@ pub fn database(error: &sqlx::Error) -> ConnectionFailure {
             "tls",
             "TLS handshake or certificate verification failed. Check the CA certificate, database hostname, and client certificate/key.",
         ),
+        Error::Database(error) if rejected_unencrypted(error.as_ref()) => (
+            "unencryptedConnectionRejected",
+            "tls",
+            "The database rejected the unencrypted connection. Choose Require or Verify full in the TLS tab and test again.",
+        ),
         Error::Database(error) => match error.code().as_deref() {
             Some("28P01" | "28000" | "1045" | "1698") => (
                 "authenticationRejected",
@@ -76,6 +81,22 @@ pub fn database(error: &sqlx::Error) -> ConnectionFailure {
     };
     ConnectionFailure::new(stage, message).with_code(code)
 }
+
+fn rejected_unencrypted(error: &dyn sqlx::error::DatabaseError) -> bool {
+    const ER_SECURE_TRANSPORT_REQUIRED: u16 = 3159;
+    error
+        .try_downcast_ref::<sqlx::mysql::MySqlDatabaseError>()
+        .is_some_and(|error| error.number() == ER_SECURE_TRANSPORT_REQUIRED)
+        || (error.code().as_deref() == Some("28000")
+            && postgres_hba_rejected_unencrypted(error.message()))
+}
+
+fn postgres_hba_rejected_unencrypted(message: &str) -> bool {
+    (message.starts_with("no pg_hba.conf entry for host ")
+        || message.starts_with("pg_hba.conf rejects connection for host "))
+        && (message.ends_with(", no encryption") || message.ends_with(", SSL off"))
+}
+
 pub fn postgres(error: postgres_adapter::PostgresAdapterError) -> ConnectionFailure {
     match error {
         postgres_adapter::PostgresAdapterError::Database(error) => database(&error),
@@ -101,6 +122,23 @@ mod tests {
         assert_eq!(failure.code, Some("tlsHandshake"));
         assert!(!failure.message.contains("private-key-material"));
         assert!(!failure.ssh_connected);
+    }
+    #[test]
+    fn recognizes_plaintext_postgres_access_errors_without_mislabeling_other_rejections() {
+        let no_rule =
+            "no pg_hba.conf entry for host \"192.0.2.1\", user \"fixture\", database \"postgres\"";
+        assert!(postgres_hba_rejected_unencrypted(&format!(
+            "{no_rule}, no encryption"
+        )));
+        assert!(postgres_hba_rejected_unencrypted(&format!(
+            "{no_rule}, SSL off"
+        )));
+        assert!(!postgres_hba_rejected_unencrypted(&format!(
+            "{no_rule}, SSL encryption"
+        )));
+        assert!(!postgres_hba_rejected_unencrypted(
+            "password authentication failed for user \"fixture\""
+        ));
     }
     #[test]
     fn database_timeout_does_not_claim_tls_or_ssh_failed() {

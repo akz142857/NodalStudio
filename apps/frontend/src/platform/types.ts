@@ -179,6 +179,7 @@ export interface SaveDataSourceInput {
 export interface DataSourceProfile {
   sqlite?: SqliteFile | null;
   connectionSync?: { originId: string; pending: boolean };
+  serverSourceId?: string;
   id: string;
   displayName: string;
   host: string;
@@ -661,6 +662,10 @@ export interface NodalStudioPlatform {
   renameDataSource(sourceId: string, displayName: string): Promise<DataSourceProfile>;
   duplicateDataSource(sourceId: string): Promise<DataSourceProfile>;
   saveDataSource(input: SaveDataSourceInput): Promise<DataSourceProfile>;
+  saveAndMapDataSource(input: SaveDataSourceInput, sourceId: string): Promise<{ profile: DataSourceProfile; capture: CaptureSnapshotResult }>;
+  listServerDatabases(sourceId: string): Promise<string[]>;
+  createServerDatabase(sourceId: string, database: string, serverUpdatedAt: string): Promise<string>;
+  openServerDatabase(sourceId: string, database: string, serverUpdatedAt: string, refresh?: boolean): Promise<{ profile: DataSourceProfile; capture: CaptureSnapshotResult }>;
   testPostgresConnection(input: SaveDataSourceInput, options?: ConnectionTestOptions): Promise<ConnectionTestResult>;
   verifyAndRefreshDataSource(input: SaveDataSourceInput): Promise<VerifyAndRefreshDataSourceResult>;
   capturePostgresSnapshot(sourceId: string, trigger?: "manual" | "background"): Promise<CaptureSnapshotResult>;

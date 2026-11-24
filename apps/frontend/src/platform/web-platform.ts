@@ -203,6 +203,22 @@ export class WebPlatform implements NodalStudioPlatform {
     return Promise.reject(new Error("Saving data sources requires the desktop app."));
   }
 
+  saveAndMapDataSource(): Promise<never> {
+    return Promise.reject(new Error("Saving data sources requires the desktop app."));
+  }
+
+  listServerDatabases(): Promise<never> {
+    return Promise.reject(new Error("Server connections require the desktop app."));
+  }
+
+  createServerDatabase(): Promise<never> {
+    return Promise.reject(new Error("Creating databases requires the desktop app."));
+  }
+
+  openServerDatabase(): Promise<never> {
+    return Promise.reject(new Error("Server connections require the desktop app."));
+  }
+
   testPostgresConnection(): Promise<ConnectionTestResult> {
     return Promise.reject(new Error("Database connections require the desktop app."));
   }

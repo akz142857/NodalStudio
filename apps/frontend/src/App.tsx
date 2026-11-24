@@ -1464,7 +1464,7 @@ export function App() {
             enabled={runtime.data?.kind === "desktop"}
             platform={platform}
             sourcesRevision={sourcesRevision}
-            onSnapshot={handleCapture}
+            onSnapshot={(result) => handleCapture(result, mode === "database")}
             onSourceSaved={(profile) => {
               void queryClient.resetQueries({ queryKey: ontologyDefinitionsKey({ sourceId: profile.id }) });
               setOpenQueryRequest((request) => request?.ontology?.draft.sourceId === profile.id ? undefined : request);
@@ -1610,6 +1610,7 @@ export function App() {
             : !databaseObject && activeSqliteEditor && !quickQueryResult ? null : snapshot && previewRelation ? (
               <TableDataPreview key={JSON.stringify([snapshot.sourceId, activeProfile?.updatedAt, previewRelation.key])}
                 platform={platform} snapshot={snapshot} table={previewRelation} connectionRevision={activeProfile?.updatedAt}
+                onCompleteTableRead={countProfile?.databaseType === "postgreSql" ? tableRowCounts?.recordPreview : undefined}
                 onShowDdl={openTableDdl}
                 quickQuery={quickQueryResult ? { ...quickQueryResult, onReturn: () => setQuickQueryView((current) => ({ scope: current.scope, reset: current.reset + 1 })) } : undefined}
                 onShowDefinition={browsableView && (() => openDatabaseObject(browsableView.key, true))} />

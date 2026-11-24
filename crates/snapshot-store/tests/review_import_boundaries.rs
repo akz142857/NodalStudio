@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 fn profile(id: Uuid, host: &str) -> DataSourceProfile {
     DataSourceProfile {
+        server_source_id: None,
         connection_sync: None,
         id,
         display_name: "Existing source".into(),

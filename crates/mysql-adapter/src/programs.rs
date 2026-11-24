@@ -3,23 +3,23 @@ use schema_model::{
     ConstraintDefinition, ConstraintType, ObjectDependency, ObjectKey, ObjectKind,
     ProgramDefinition, SchemaDefinition,
 };
-use sqlx::{MySqlPool, Row};
+use sqlx::{MySqlConnection, Row};
 use std::fmt::Write;
 
 pub async fn load(
-    pool: &MySqlPool,
+    connection: &mut MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    load_routines(pool, schema).await?;
-    load_triggers(pool, schema).await?;
-    load_events(pool, schema).await?;
-    load_dependencies(pool, schema).await?;
-    load_constraints(pool, schema).await?;
+    load_routines(connection, schema).await?;
+    load_triggers(connection, schema).await?;
+    load_events(connection, schema).await?;
+    load_dependencies(connection, schema).await?;
+    load_constraints(connection, schema).await?;
     Ok(())
 }
 
 async fn load_events(
-    pool: &MySqlPool,
+    connection: &mut MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
     let rows = sqlx::query(
@@ -28,7 +28,7 @@ async fn load_events(
          CAST(STARTS AS CHAR) AS starts, CAST(ENDS AS CHAR) AS ends, TIME_ZONE AS time_zone, ON_COMPLETION AS completion \
          FROM information_schema.EVENTS WHERE EVENT_SCHEMA=DATABASE()",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
     for row in rows {
         let mut schedule = if let Some(at) = row.try_get::<Option<String>, _>("execute_at")? {
@@ -75,12 +75,12 @@ async fn load_events(
 }
 
 async fn load_routines(
-    pool: &MySqlPool,
+    connection: &mut MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
     let rows = sqlx::query("SELECT ROUTINE_NAME AS name, ROUTINE_TYPE AS kind, ROUTINE_DEFINITION AS definition, DTD_IDENTIFIER AS result_type, DEFINER AS owner FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE()")
-        .fetch_all(pool).await?;
-    let params = sqlx::query("SELECT SPECIFIC_NAME AS routine_name, ROUTINE_TYPE AS kind, PARAMETER_MODE AS mode, PARAMETER_NAME AS name, DTD_IDENTIFIER AS data_type FROM information_schema.PARAMETERS WHERE SPECIFIC_SCHEMA=DATABASE() AND ORDINAL_POSITION>0 ORDER BY SPECIFIC_NAME,ROUTINE_TYPE,ORDINAL_POSITION").fetch_all(pool).await?;
+        .fetch_all(&mut *connection).await?;
+    let params = sqlx::query("SELECT SPECIFIC_NAME AS routine_name, ROUTINE_TYPE AS kind, PARAMETER_MODE AS mode, PARAMETER_NAME AS name, DTD_IDENTIFIER AS data_type FROM information_schema.PARAMETERS WHERE SPECIFIC_SCHEMA=DATABASE() AND ORDINAL_POSITION>0 ORDER BY SPECIFIC_NAME,ROUTINE_TYPE,ORDINAL_POSITION").fetch_all(&mut *connection).await?;
     let mut parameters: std::collections::BTreeMap<(String, String), Vec<String>> =
         std::collections::BTreeMap::new();
     for p in params {
@@ -124,11 +124,11 @@ async fn load_routines(
 }
 
 async fn load_triggers(
-    pool: &MySqlPool,
+    connection: &mut MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
     let rows = sqlx::query("SELECT TRIGGER_NAME AS name, EVENT_OBJECT_TABLE AS table_name, ACTION_TIMING AS timing, EVENT_MANIPULATION AS event_name, ACTION_STATEMENT AS definition, DEFINER AS owner FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()")
-        .fetch_all(pool).await?;
+        .fetch_all(&mut *connection).await?;
     for row in rows {
         let key = ObjectKey::new(
             ObjectKind::Trigger,
@@ -160,15 +160,15 @@ async fn load_triggers(
 }
 
 async fn load_dependencies(
-    pool: &MySqlPool,
+    connection: &mut MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
     // These catalogs were added in MySQL 8. Older servers still expose
     // routines/triggers; absence is not an error for the entire snapshot.
-    let has_views: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='information_schema' AND TABLE_NAME='VIEW_TABLE_USAGE'").fetch_one(pool).await?;
+    let has_views: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='information_schema' AND TABLE_NAME='VIEW_TABLE_USAGE'").fetch_one(&mut *connection).await?;
     if has_views > 0 {
         let rows = sqlx::query("SELECT VIEW_NAME AS name, TABLE_SCHEMA AS target_schema, TABLE_NAME AS target_name FROM information_schema.VIEW_TABLE_USAGE WHERE VIEW_SCHEMA=DATABASE()")
-        .fetch_all(pool).await?;
+        .fetch_all(&mut *connection).await?;
         for row in rows {
             let target_schema: String = row.try_get("target_schema")?;
             let target_name: String = row.try_get("target_name")?;
@@ -196,13 +196,13 @@ async fn load_dependencies(
 }
 
 async fn load_constraints(
-    pool: &MySqlPool,
+    connection: &mut MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let has_checks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='information_schema' AND TABLE_NAME='CHECK_CONSTRAINTS'").fetch_one(pool).await?;
+    let has_checks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='information_schema' AND TABLE_NAME='CHECK_CONSTRAINTS'").fetch_one(&mut *connection).await?;
     if has_checks > 0 {
         let rows = sqlx::query("SELECT tc.TABLE_NAME AS table_name, tc.CONSTRAINT_NAME AS name, cc.CHECK_CLAUSE AS definition FROM information_schema.TABLE_CONSTRAINTS tc JOIN information_schema.CHECK_CONSTRAINTS cc ON cc.CONSTRAINT_SCHEMA=tc.CONSTRAINT_SCHEMA AND cc.CONSTRAINT_NAME=tc.CONSTRAINT_NAME WHERE tc.CONSTRAINT_SCHEMA=DATABASE() AND tc.CONSTRAINT_TYPE='CHECK'")
-        .fetch_all(pool).await?;
+        .fetch_all(&mut *connection).await?;
         for row in rows {
             let table: String = row.try_get("table_name")?;
             if let Some(table) = schema.tables.iter_mut().find(|t| t.key.name == table) {

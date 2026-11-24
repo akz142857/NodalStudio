@@ -7,7 +7,40 @@
 
 .table-data-host[hidden] { display: none; }
 
-.table-data-preview-result { flex: 1; min-height: 0; min-width: 0; }
+.table-data-preview-result {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.table-data-preview-result > .query-result-frame { flex: 1; min-height: 0; }
+
+.table-data-preview-loading {
+  display: grid;
+  flex: 1;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--ds-secondary);
+  text-align: center;
+}
+
+.table-data-preview-loading > span {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--ds-border);
+  border-top-color: var(--ds-accent);
+  border-radius: 50%;
+  animation: icon-refresh-spin .85s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-data-preview-loading > span { animation: none; }
+}
+
+:root[data-reduce-motion="true"] .table-data-preview-loading > span { animation: none; }
 
 .table-data-workspace {
   display: flex;

@@ -45,13 +45,15 @@ impl MySqlConnectionOptions {
         password: &str,
         ssl_mode: MySqlSslMode,
     ) -> Self {
-        let options = MySqlConnectOptions::new()
+        let mut options = MySqlConnectOptions::new()
             .host(host)
             .port(port)
-            .database(database)
             .username(username)
             .password(password)
             .ssl_mode(ssl_mode);
+        if !database.is_empty() {
+            options = options.database(database);
+        }
         Self {
             connection: MySqlConnection::Fields(Box::new(options)),
             max_connections: 2,
@@ -121,6 +123,35 @@ pub async fn connect(options: &MySqlConnectionOptions) -> Result<MySqlPool, MySq
     let pool = MySqlPoolOptions::new()
         .max_connections(options.max_connections)
         .acquire_timeout(options.connect_timeout);
+    connect_with_pool(options, pool).await
+}
+
+/// Connects a bounded pool for short-lived desktop sessions.
+pub async fn connect_reusable(
+    options: &MySqlConnectionOptions,
+) -> Result<MySqlPool, MySqlAdapterError> {
+    use sqlx::Connection;
+    let pool = MySqlPoolOptions::new()
+        .max_connections(options.max_connections)
+        .acquire_timeout(options.connect_timeout)
+        .idle_timeout(Duration::from_secs(90))
+        .max_lifetime(Duration::from_secs(120))
+        .test_before_acquire(false)
+        .before_acquire(|connection, metadata| {
+            Box::pin(async move {
+                if metadata.idle_for >= Duration::from_secs(5) {
+                    connection.ping().await?;
+                }
+                Ok(true)
+            })
+        });
+    connect_with_pool(options, pool).await
+}
+
+async fn connect_with_pool(
+    options: &MySqlConnectionOptions,
+    pool: MySqlPoolOptions,
+) -> Result<MySqlPool, MySqlAdapterError> {
     match &options.connection {
         MySqlConnection::Url(url) => Ok(pool.connect(url).await?),
         MySqlConnection::Fields(fields) => Ok(pool.connect_with(fields.as_ref().clone()).await?),
@@ -133,8 +164,14 @@ pub async fn connect(options: &MySqlConnectionOptions) -> Result<MySqlPool, MySq
 ///
 /// Returns an error when the metadata query fails.
 pub async fn test_connection(pool: &MySqlPool) -> Result<DatabaseInfo, MySqlAdapterError> {
+    read_identity(pool).await
+}
+
+async fn read_identity<'e>(
+    executor: impl sqlx::Executor<'e, Database = sqlx::MySql>,
+) -> Result<DatabaseInfo, MySqlAdapterError> {
     let row = sqlx::query("SELECT DATABASE() AS name, VERSION() AS version")
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await?;
     Ok(DatabaseInfo {
         name: row.try_get("name")?,
@@ -152,38 +189,39 @@ pub async fn inspect_schema(
     pool: &MySqlPool,
     source_id: Uuid,
 ) -> Result<DatabaseSnapshot, MySqlAdapterError> {
-    let database = test_connection(pool).await?;
+    let mut connection = pool.acquire().await?;
+    let database = read_identity(&mut *connection).await?;
     let schema_name = database.name.clone();
     let mut schema = SchemaDefinition::empty(&schema_name);
-    load_tables(pool, &mut schema)
+    load_tables(&mut connection, &mut schema)
         .await
         .map_err(|error| metadata_error("table", error))?;
-    load_columns(pool, &mut schema)
+    load_columns(&mut connection, &mut schema)
         .await
         .map_err(|error| metadata_error("column", error))?;
-    load_primary_keys(pool, &mut schema)
+    load_primary_keys(&mut connection, &mut schema)
         .await
         .map_err(|error| metadata_error("primary key", error))?;
-    load_foreign_keys(pool, &mut schema)
+    load_foreign_keys(&mut connection, &mut schema)
         .await
         .map_err(|error| metadata_error("foreign key", error))?;
-    load_indexes(pool, &mut schema)
+    load_indexes(&mut connection, &mut schema)
         .await
         .map_err(|error| metadata_error("index", error))?;
-    load_views(pool, &mut schema)
+    load_views(&mut connection, &mut schema)
         .await
         .map_err(|error| metadata_error("view", error))?;
-    programs::load(pool, &mut schema).await?;
+    programs::load(&mut connection, &mut schema).await?;
     let mut snapshot = DatabaseSnapshot::new(source_id, database, vec![schema]);
     snapshot.canonicalize()?;
     Ok(snapshot)
 }
 
 async fn load_tables(
-    pool: &MySqlPool,
+    connection: &mut sqlx::MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let rows = sqlx::query("SELECT TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment FROM information_schema.tables WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME").fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment FROM information_schema.tables WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME").fetch_all(&mut *connection).await?;
     for row in rows {
         schema.tables.push(TableDefinition {
             sqlite: None,
@@ -202,10 +240,10 @@ async fn load_tables(
 }
 
 async fn load_columns(
-    pool: &MySqlPool,
+    connection: &mut sqlx::MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let rows = sqlx::query("SELECT c.TABLE_NAME AS table_name, c.COLUMN_NAME AS column_name, c.ORDINAL_POSITION AS ordinal_position, c.COLUMN_TYPE AS column_type, c.DATA_TYPE AS data_type, c.IS_NULLABLE AS is_nullable, c.COLUMN_DEFAULT AS column_default, c.EXTRA AS extra, c.COLUMN_COMMENT AS column_comment FROM information_schema.columns c JOIN information_schema.tables t ON t.TABLE_SCHEMA=c.TABLE_SCHEMA AND t.TABLE_NAME=c.TABLE_NAME WHERE c.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE='BASE TABLE' ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION").fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT c.TABLE_NAME AS table_name, c.COLUMN_NAME AS column_name, c.ORDINAL_POSITION AS ordinal_position, c.COLUMN_TYPE AS column_type, c.DATA_TYPE AS data_type, c.IS_NULLABLE AS is_nullable, c.COLUMN_DEFAULT AS column_default, c.EXTRA AS extra, c.COLUMN_COMMENT AS column_comment FROM information_schema.columns c JOIN information_schema.tables t ON t.TABLE_SCHEMA=c.TABLE_SCHEMA AND t.TABLE_NAME=c.TABLE_NAME WHERE c.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE='BASE TABLE' ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION").fetch_all(&mut *connection).await?;
     for row in rows {
         let table_name: String = row.try_get("table_name")?;
         let extra: String = row.try_get("extra")?;
@@ -234,10 +272,10 @@ async fn load_columns(
 }
 
 async fn load_primary_keys(
-    pool: &MySqlPool,
+    connection: &mut sqlx::MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let rows = sqlx::query("SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name FROM information_schema.key_column_usage WHERE TABLE_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'PRIMARY' ORDER BY TABLE_NAME, ORDINAL_POSITION").fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name FROM information_schema.key_column_usage WHERE TABLE_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'PRIMARY' ORDER BY TABLE_NAME, ORDINAL_POSITION").fetch_all(&mut *connection).await?;
     let mut grouped: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for row in rows {
         grouped
@@ -255,10 +293,10 @@ async fn load_primary_keys(
 }
 
 async fn load_foreign_keys(
-    pool: &MySqlPool,
+    connection: &mut sqlx::MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let rows = sqlx::query("SELECT k.TABLE_NAME AS table_name, k.CONSTRAINT_NAME AS constraint_name, k.COLUMN_NAME AS column_name, k.REFERENCED_TABLE_SCHEMA AS referenced_table_schema, k.REFERENCED_TABLE_NAME AS referenced_table_name, k.REFERENCED_COLUMN_NAME AS referenced_column_name, r.UPDATE_RULE AS update_rule, r.DELETE_RULE AS delete_rule FROM information_schema.key_column_usage k JOIN information_schema.referential_constraints r ON r.CONSTRAINT_SCHEMA=k.CONSTRAINT_SCHEMA AND r.CONSTRAINT_NAME=k.CONSTRAINT_NAME WHERE k.TABLE_SCHEMA=DATABASE() AND k.REFERENCED_TABLE_NAME IS NOT NULL ORDER BY k.TABLE_NAME,k.CONSTRAINT_NAME,k.ORDINAL_POSITION").fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT k.TABLE_NAME AS table_name, k.CONSTRAINT_NAME AS constraint_name, k.COLUMN_NAME AS column_name, k.REFERENCED_TABLE_SCHEMA AS referenced_table_schema, k.REFERENCED_TABLE_NAME AS referenced_table_name, k.REFERENCED_COLUMN_NAME AS referenced_column_name, r.UPDATE_RULE AS update_rule, r.DELETE_RULE AS delete_rule FROM information_schema.key_column_usage k JOIN information_schema.referential_constraints r ON r.CONSTRAINT_SCHEMA=k.CONSTRAINT_SCHEMA AND r.CONSTRAINT_NAME=k.CONSTRAINT_NAME WHERE k.TABLE_SCHEMA=DATABASE() AND k.REFERENCED_TABLE_NAME IS NOT NULL ORDER BY k.TABLE_NAME,k.CONSTRAINT_NAME,k.ORDINAL_POSITION").fetch_all(&mut *connection).await?;
     let mut grouped: BTreeMap<(String, String), ForeignKeyDefinition> = BTreeMap::new();
     for row in rows {
         let table: String = row.try_get("table_name")?;
@@ -289,16 +327,16 @@ async fn load_foreign_keys(
 }
 
 async fn load_indexes(
-    pool: &MySqlPool,
+    connection: &mut sqlx::MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let expressions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='information_schema' AND TABLE_NAME='STATISTICS' AND COLUMN_NAME='EXPRESSION'").fetch_one(pool).await?;
+    let expressions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='information_schema' AND TABLE_NAME='STATISTICS' AND COLUMN_NAME='EXPRESSION'").fetch_one(&mut *connection).await?;
     let query = if expressions > 0 {
         "SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, INDEX_TYPE AS index_type, CAST(NON_UNIQUE AS SIGNED) AS non_unique, COLUMN_NAME AS column_name, EXPRESSION AS expression, CAST(SUB_PART AS SIGNED) AS prefix_length, COLLATION AS direction FROM information_schema.statistics WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX"
     } else {
         "SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, INDEX_TYPE AS index_type, CAST(NON_UNIQUE AS SIGNED) AS non_unique, COLUMN_NAME AS column_name, NULL AS expression, CAST(SUB_PART AS SIGNED) AS prefix_length, COLLATION AS direction FROM information_schema.statistics WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX"
     };
-    let rows = sqlx::query(query).fetch_all(pool).await?;
+    let rows = sqlx::query(query).fetch_all(&mut *connection).await?;
     let mut grouped: BTreeMap<(String, String), IndexDefinition> = BTreeMap::new();
     for row in rows {
         let table: String = row.try_get("table_name")?;
@@ -365,10 +403,10 @@ async fn load_indexes(
 }
 
 async fn load_views(
-    pool: &MySqlPool,
+    connection: &mut sqlx::MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let rows=sqlx::query("SELECT TABLE_NAME AS table_name, VIEW_DEFINITION AS view_definition FROM information_schema.views WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME").fetch_all(pool).await?;
+    let rows=sqlx::query("SELECT TABLE_NAME AS table_name, VIEW_DEFINITION AS view_definition FROM information_schema.views WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME").fetch_all(&mut *connection).await?;
     for row in rows {
         schema.views.push(ViewDefinition {
             indexes: Vec::new(),

@@ -305,6 +305,7 @@ mod tests {
         );
         snapshot.canonicalize().unwrap();
         let mut profile = DataSourceProfile {
+            server_source_id: None,
             connection_sync: None,
             sqlite: None,
             id: source,
@@ -324,6 +325,7 @@ mod tests {
             .await
             .unwrap();
         let app = AppState {
+            sessions: Default::default(),
             store,
             ai_limiter: Arc::new(tokio::sync::Semaphore::new(840)),
             snapshot_captures: Arc::default(),

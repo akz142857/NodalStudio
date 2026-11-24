@@ -6,6 +6,8 @@ import { ConnectionSecurityFields } from "./ConnectionSecurityFields";
 import { ConnectionManager } from "./ConnectionManager";
 import { SchemaObjectMenu } from "./SchemaObjectMenu";
 import { DataSourcePicker } from "./DataSourcePicker";
+import { DatabaseServerBrowser } from "./DatabaseServerBrowser";
+import { isServerConnection, isServerConnectionForm } from "../platform/database-server";
 import { ConnectionSourceContext } from "./connection-source-context";
 import { ActionIcon } from "./ActionIcon";
 import { Button } from "../design-system/Button";
@@ -61,6 +63,7 @@ function newConnectionForm(
     ...initialForm,
     displayName,
     databaseType,
+    database: databaseType === "mySql" ? "" : initialForm.database,
     port: databaseType === "mySql" ? 3306 : 5432,
     sslMode,
   };
@@ -87,17 +90,18 @@ function connectionDetailsDiffer(
 export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, children, platform, onSnapshot, onSourceSaved, onSourceOpenStart, onSourceDeleted, onRefresh, refreshDisabled, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
   const { t: bt } = useI18n();
   const sslModeDescriptions: Record<SslMode, string> = {
-  disable: bt("business.tLSIsDisabledForThisConnection"),
-  prefer: bt("business.useTLSWhenAvailableThisModeCanFallBack"),
-  require: bt("business.requireEncryptionWithoutVerifyingTheServerIdentity"),
-  verifyCa: bt("business.requireTLSAndVerifyTheCertificateAuthority"),
-  verifyFull: bt("business.requireTLSAndVerifyTheDatabaseServerIdentity"),
-};
+    disable: bt("business.tLSIsDisabledForThisConnection"),
+    prefer: bt("business.useTLSWhenAvailableThisModeCanFallBack"),
+    require: bt("business.requireEncryptionWithoutVerifyingTheServerIdentity"),
+    verifyCa: bt("business.requireTLSAndVerifyTheCertificateAuthority"),
+    verifyFull: bt("business.requireTLSAndVerifyTheDatabaseServerIdentity"),
+  };
   const navigation = useRef<HTMLElement>(null);
   const [managerOpen, setManagerOpen] = useState<"manage" | "import">();
   const [form, setForm] = useState<SaveDataSourceInput>(() => newConnectionForm(defaultDatabaseType, defaultSslMode, bt("business.localDevelopment")));
   const [profiles, setProfiles] = useState<DataSourceProfile[]>([]);
   const testController = useRef<AbortController | null>(null);
+  const newSourceId = useRef<string | undefined>(undefined);
   useEffect(() => () => { testController.current?.abort(); testController.current = null; }, []);
   const [testState, setTestState] = useState<ConnectionTestState>({ status: "idle" });
   const [error, setError] = useState<string>();
@@ -111,13 +115,24 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   }>();
   const [pending, setPending] = useState(false);
   const [connectionTab, setConnectionTab] = useState<"general" | "tls" | "ssh">("general");
+  const dialogBody = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (dialogBody.current) dialogBody.current.scrollTop = 0; }, [connectionTab]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<DataSourceProfile>();
+  const [serverBrowser, setServerBrowser] = useState<DataSourceProfile>();
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     profile: DataSourceProfile;
     resolve: (confirmed: boolean) => void;
   }>();
   const pendingLocalSetup = editingProfile?.connectionSync?.pending === true;
+  const serverForm = isServerConnectionForm(form);
+  const editingServer = editingProfile ? isServerConnection(editingProfile) : false;
+  const databaseOptional = form.databaseType !== "sqlite" && (!editingProfile || editingServer);
+  const invalidScope = serverForm && !databaseOptional;
+  const canRequireTls = form.databaseType !== "sqlite" && (form.sslMode === "disable" || form.sslMode === "prefer");
+  const tlsGuidance = form.sslMode === "disable" ? "connectionTls.disabledGuidance"
+    : form.sslMode === "prefer" ? "connectionTls.preferredGuidance" : "connectionTls.requiredForThisConnection";
+  const unencryptedRejected = testState.status === "error" && testState.failure.code === "unencryptedConnectionRejected";
   const requiresLiveVerification = editingProfile
     ? pendingLocalSetup || connectionDetailsDiffer(editingProfile, form) || Boolean(form.sshPassword || form.sshKeyPassphrase || form.password)
     : false;
@@ -172,20 +187,15 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     finally { setPending(false); }
   }
 
-  async function capture(sourceId: string) {
-    const result = await platform.capturePostgresSnapshot(sourceId);
-    onSnapshot(result);
-  }
-
-  async function testConnection() {
-    if (!enabled || pending || testController.current) return;
+  async function testConnection(input = form) {
+    if (!enabled || pending || invalidScope || testController.current) return;
     const controller = new AbortController();
     testController.current = controller;
     setPending(true);
     setError(undefined);
     setTestState({ status: "testing", progress: { phase: "configuration", sshConnected: false } });
     try {
-      const result = await platform.testPostgresConnection(form, {
+      const result = await platform.testPostgresConnection(input, {
         signal: controller.signal,
         onProgress: (progress) => {
           if (testController.current === controller && !controller.signal.aborted) setTestState({ status: "testing", progress });
@@ -208,6 +218,22 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     }
   }
 
+  function requireTlsAndRetest() {
+    if (!canRequireTls || !enabled || pending || invalidScope || testController.current) return;
+    const encrypted = { ...form, sslMode: "require" as const };
+    setForm(encrypted);
+    void testConnection(encrypted);
+  }
+
+  function handleTlsGuidance() {
+    if (canRequireTls) {
+      updateField("sslMode", "require");
+      return;
+    }
+    setConnectionTab("tls");
+    document.getElementById("connection-tab-tls")?.focus();
+  }
+
   function cancelConnectionTest() {
     const controller = testController.current;
     if (!controller || controller.signal.aborted) return;
@@ -217,16 +243,16 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!enabled || pending) return;
+    if (!enabled || pending || invalidScope) return;
     if ((!editingProfile || requiresLiveVerification) && testState.status !== "success") return;
-    if (editingProfile && requiresLiveVerification) {
+    if (editingProfile && requiresLiveVerification && !serverForm) {
       await verifyAndRefreshEditingSource();
       return;
     }
     setPending(true);
     setError(undefined);
     try {
-      if (editingProfile) {
+      if (editingProfile && !serverForm) {
         const profile = await platform.saveDataSource(form);
         onSourceSaved?.(profile);
         setProfiles((current) => [
@@ -238,21 +264,22 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
         setDialogOpen(false);
         return;
       }
-      await platform.testPostgresConnection(form);
-      const profile = await platform.saveDataSource(form);
+      const sourceId = newSourceId.current ??= crypto.randomUUID();
+      const mapped = serverForm ? undefined : await platform.saveAndMapDataSource(form, sourceId);
+      const profile = mapped?.profile ?? await platform.saveDataSource({ ...form, id: form.id ?? sourceId });
       onSourceSaved?.(profile);
       setProfiles((current) => [
         profile,
         ...current.filter((item) => item.id !== profile.id),
       ]);
-      await capture(profile.id);
+      if (isServerConnection(profile)) setServerBrowser(profile);
+      else if (mapped) onSnapshot(mapped.capture);
       setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "", sshKeyPassphrase: "" }));
       setDialogOpen(false);
     } catch (reason) {
       if (typeof reason === "object" && reason !== null && "stage" in reason) {
         setTestState({ status: "error", failure: connectionFailure(reason) });
       } else {
-        setTestState({ status: "idle" });
         setError(connectionFailure(reason).message);
       }
     } finally {
@@ -305,6 +332,11 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
       openEditDialog(profile);
       return;
     }
+    if (isServerConnection(profile)) {
+      setOpenError(undefined);
+      setServerBrowser(profile);
+      return;
+    }
     onSourceOpenStart?.();
     setPending(true);
     setError(undefined);
@@ -324,6 +356,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   }
 
   function openCreateDialog() {
+    newSourceId.current = undefined;
     setForm(newConnectionForm(defaultDatabaseType, defaultSslMode, bt("business.localDevelopment")));
     setEditingProfile(undefined);
     setError(undefined);
@@ -369,7 +402,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
         setEditingProfile(undefined);
       }
       onSourceDeleted?.(profile.id);
-      const nextProfile = profiles.find((item) => item.id !== profile.id);
+      const nextProfile = profiles.find((item) => item.id !== profile.id && !isServerConnection(item));
       if (profile.id === activeSourceId && nextProfile) {
         // Loading the next model is separate from the completed deletion.
         await openSavedSnapshot(nextProfile).catch((reason: unknown) => setError(connectionFailure(reason).message));
@@ -393,7 +426,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   const visibleOpenError = openError?.context === openContext ? openError : undefined;
 
   function openConnectionMenu(event: MouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>) {
-    if (dialogOpen || managerOpen) return;
+    if (dialogOpen || managerOpen || serverBrowser) return;
     event.preventDefault();
     event.stopPropagation();
     const trigger = event.currentTarget;
@@ -427,6 +460,14 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
           onSelect={(profile) => { void handleExistingOpen(profile); }}
           onEdit={openEditDialog} onManage={() => setManagerOpen("manage")} onContextMenu={openConnectionMenu} />
       </div> : null}
+      {serverBrowser ? <DatabaseServerBrowser key={serverBrowser.id} server={serverBrowser} platform={platform}
+        onOpenStart={onSourceOpenStart} onClose={() => setServerBrowser(undefined)}
+        onOpen={(profile, capture) => {
+          onSourceSaved?.(profile);
+          setProfiles((current) => [profile, ...current.filter((source) => source.id !== profile.id)]);
+          onSnapshot(capture);
+          setServerBrowser(undefined);
+        }} /> : null}
       {visibleOpenError ? <div className="ds-surface connection-open-error">
         <ActionIcon name="warning" />
         <div className="connection-open-error-content">
@@ -509,7 +550,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
             <p id="connection-dialog-description" className="dialog-description">
               {form.databaseType === "sqlite" ? bt("sqlite.readonly") : editingProfile
                 ? bt("business.testConnectionChangesBeforeSavingExistingPasswordsAreReused")
-                : bt("business.addADatabaseVerifyAccessAndCreateItsFirst")}
+                : bt(serverForm ? "serverConnection.connectionDescription" : "business.addADatabaseVerifyAccessAndCreateItsFirst")}
             </p>
             <form className="connection-panel" onSubmit={(event) => void handleSubmit(event)}>
               {form.databaseType !== "sqlite" ? <div className="connection-tabs" role="tablist" aria-label={bt("business.connectionSettings")}>
@@ -523,11 +564,11 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                   document.getElementById(`connection-tab-${tabs[index]}`)?.focus();
                 }}>{label}{tab === 'ssh' && form.security?.ssh ? <span className="connection-tab-dot" aria-label={bt("business.enabled")} /> : null}</button>)}
               </div> : null}
-              <div className="connection-dialog-body">
+              <div className="connection-dialog-body" ref={dialogBody}>
               <div className="connection-tab-panel" role={form.databaseType === "sqlite" ? undefined : "tabpanel"} id="connection-panel-general" aria-labelledby={form.databaseType === "sqlite" ? undefined : "connection-tab-general"} hidden={connectionTab !== "general"}>
               <section className="connection-form-section">
-                <div className="connection-form-grid connection-identity-grid">
-                  <label>
+                <div className={`connection-form-grid connection-identity-grid${form.databaseType === "sqlite" ? "" : " connection-network-grid"}`}>
+                  <label className="connection-name-field">
                     {bt("business.name")}<input data-modal-focus={editingProfile ? true : undefined} value={form.displayName} onChange={(event) => updateField("displayName", event.target.value)} disabled={!enabled || pending} />
                   </label>
                   <label>
@@ -544,12 +585,14 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                           databaseType,
                           sqlite: undefined,
                           port: databaseType === "mySql" ? 3306 : 5432,
+                          database: !editingProfile && databaseType === "mySql" && current.database === initialForm.database
+                            ? "" : current.database,
                           ...(databaseType === "sqlite" || current.databaseType === "sqlite"
                             ? { password: "", sshPassword: "", sshKeyPassphrase: "", security: undefined, sslMode: databaseType === "sqlite" ? "disable" as const : defaultSslMode }
                             : {}),
                         }));
                       }}
-                      disabled={!enabled || pending}
+                      disabled={!enabled || pending || editingServer}
                     >
                       <option value="postgreSql">PostgreSQL</option>
                       <option value="mySql">MySQL</option>
@@ -578,9 +621,15 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                     {bt("business.port")}<input type="number" min={1} max={65535} value={form.port} onChange={(event) => updateField("port", Number(event.target.value))} disabled={!enabled || pending} />
                   </label>
                   <label className="connection-database-field">
-                    {bt("business.database")}<input value={form.database} onChange={(event) => updateField("database", event.target.value)} disabled={!enabled || pending} />
+                    {bt(databaseOptional ? "serverConnection.databaseOptional" : "business.database")}
+                    <input value={form.database} placeholder={databaseOptional ? bt("serverConnection.databasePlaceholder") : undefined}
+                      onChange={(event) => updateField("database", event.target.value)} disabled={!enabled || pending || editingServer} />
                   </label></>}
                 </div>
+                {form.databaseType !== "sqlite" && !(canRequireTls && unencryptedRejected) ? <div className="connection-tls-guidance connection-tls-action">
+                  <p className="connection-field-help" role="status">{bt(tlsGuidance)}</p>
+                  <button type="button" disabled={!enabled || pending} onClick={handleTlsGuidance}>{bt(canRequireTls ? "connectionTls.requireTls" : "connectionTls.settings")}</button>
+                </div> : null}
               </section>
 
               <section hidden={form.databaseType === "sqlite"} className="connection-form-section" aria-labelledby="connection-access-title">
@@ -625,7 +674,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
               <div className="connection-tab-panel" role="tabpanel" id="connection-panel-ssh" aria-labelledby="connection-tab-ssh" hidden={form.databaseType === "sqlite" || connectionTab !== "ssh"}>
                 <ConnectionSecurityFields section="ssh" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={updateSshSecurity} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={hasSavedSshPassword} sshKeyPassphrase={form.sshKeyPassphrase} onSshKeyPassphraseChange={(passphrase) => updateField("sshKeyPassphrase", passphrase)} />
               </div>
-                {editingProfile && !requiresLiveVerification && testState.status === "idle" ? (
+                {editingProfile && !editingServer && !requiresLiveVerification && testState.status === "idle" ? (
                   <div className="connection-live-action">
                     <div>
                       <strong>{bt("business.liveDatabase")}</strong>
@@ -645,15 +694,18 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                     </button>
                   </div>
                 ) : null}
-              <ConnectionTestStatus state={testState} form={form} onCancel={cancelConnectionTest} />
-              {requiresLiveVerification && testState.status === "idle" ? <p className="connection-test-hint">{bt(pendingLocalSetup
-                ? form.databaseType === "sqlite" ? "connectionSync.setupSqlite" : "connectionSync.setupNetwork"
-                : "business.connectionDetailsChangedTestTheConnectionBeforeSaving")}</p> : null}
-              {error ? <p className="error-message" role="alert">{error}</p> : null}
+              </div>
+              <div className="connection-dialog-feedback">
+                <ConnectionTestStatus state={testState} form={form} onCancel={cancelConnectionTest}
+                  onRequireTls={canRequireTls && enabled && !pending && !invalidScope ? requireTlsAndRetest : undefined} />
+                {requiresLiveVerification && testState.status === "idle" ? <p className="connection-test-hint">{bt(pendingLocalSetup
+                  ? form.databaseType === "sqlite" ? "connectionSync.setupSqlite" : "connectionSync.setupNetwork"
+                  : "business.connectionDetailsChangedTestTheConnectionBeforeSaving")}</p> : null}
+                {error ? <p className="error-message" role="alert">{error}</p> : null}
               </div>
               <footer>
                 <div className="connection-footer-leading">
-                  <button type="button" className="secondary-button" onClick={() => void testConnection()} disabled={!enabled || pending}>{testState.status === "testing" ? bt("business.testing") : bt("business.testConnection")}</button>
+                  <button type="button" className="secondary-button" onClick={() => void testConnection()} disabled={!enabled || pending || invalidScope}>{testState.status === "testing" ? bt("business.testing") : bt("business.testConnection")}</button>
                 {editingProfile ? (
                   <div className="connection-danger-action">
                     <button type="button" className="delete-source-button" onClick={() => {
@@ -666,9 +718,11 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                 <div className="connection-footer-actions">
                   <button type="button" className="secondary-button" onClick={closeDialog} disabled={pending}>{bt("business.cancel")}</button>
 
-                  <button type="submit" className="connection-primary-button" disabled={!enabled || pending || ((!editingProfile || requiresLiveVerification) && testState.status !== "success")}>
+                  <button type="submit" className="connection-primary-button" disabled={!enabled || pending || invalidScope || ((!editingProfile || requiresLiveVerification) && testState.status !== "success")}>
 
-                    {pending && testState.status !== "testing" ? (editingProfile ? bt("business.saving") : bt("business.readingSchema")) : editingProfile ? bt("business.saveChanges") : bt("business.saveAndMap")}
+                    {pending && testState.status !== "testing"
+                      ? bt(editingProfile || serverForm ? "business.saving" : "business.readingSchema")
+                      : bt(editingProfile ? "business.saveChanges" : serverForm ? "serverConnection.save" : "business.saveAndMap")}
                   </button>
                 </div>
               </footer>

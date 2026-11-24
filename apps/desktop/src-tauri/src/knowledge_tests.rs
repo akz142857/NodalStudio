@@ -360,6 +360,7 @@ async fn failed_candidate_introspection_does_not_replace_profile_or_invalidate_c
     let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
     let snapshot = model(Uuid::new_v4());
     let original = DataSourceProfile {
+        server_source_id: None,
         connection_sync: None,
         sqlite: None,
         id: snapshot.source_id,
@@ -387,6 +388,7 @@ async fn failed_candidate_introspection_does_not_replace_profile_or_invalidate_c
     settings.refresh.connection_timeout_seconds = 1;
     store.save_data_source_settings(&settings).await.unwrap();
     let state = AppState {
+        sessions: Default::default(),
         store,
         ai_limiter: Arc::new(tokio::sync::Semaphore::new(840)),
         snapshot_captures: Arc::default(),

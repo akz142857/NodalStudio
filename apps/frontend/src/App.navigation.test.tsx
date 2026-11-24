@@ -237,8 +237,8 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     const resultGrid = () => table.getByRole("region", { name: "Query results" });
     fireEvent.scroll(resultGrid(), { target: { scrollLeft: 80, scrollTop: 140 } });
     let dock = within(screen.getByRole("region", { name: "Quick Query" }));
-    expect(dock.queryByRole("textbox")).toBeNull();
-    fireEvent.click(dock.getByRole("button", { name: "Quick Query" }));
+    expect(screen.getByRole("region", { name: "Quick Query" }).parentElement).toHaveAttribute("data-docked");
+    expect(dock.getByRole("button", { name: "Quick Query" })).toHaveAttribute("aria-expanded", "true");
     const editor = dock.getByRole<HTMLTextAreaElement>("textbox", { name: "SQL editor" });
     expect(editor).toHaveValue("SELECT *\nFROM `public`.`orders`\nLIMIT 100;");
     expect(run).toHaveBeenCalledTimes(1);
@@ -258,12 +258,12 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
       fireEvent.click(dock.getByRole("button", { name: "Position Quick Query" }));
       fireEvent.click(screen.getByRole("menuitem", { name }));
     };
-    placeQuickQuery("Dock at Top");
-    expect(screen.getByRole("region", { name: "Quick Query" }).parentElement).toHaveAttribute("data-docked");
-    expect(table.getByRole("cell", { name: "42" })).toBeVisible();
-    expect(editor).toHaveValue(draft);
     placeQuickQuery("Float Quick Query");
     expect(screen.getByRole("region", { name: "Quick Query" }).parentElement).not.toHaveAttribute("data-docked");
+    expect(table.getByRole("cell", { name: "42" })).toBeVisible();
+    expect(editor).toHaveValue(draft);
+    placeQuickQuery("Dock at Top");
+    expect(screen.getByRole("region", { name: "Quick Query" }).parentElement).toHaveAttribute("data-docked");
     expect(table.getByRole("cell", { name: "42" })).toBeVisible();
     fireEvent.scroll(resultGrid(), { target: { scrollLeft: 160, scrollTop: 280 } });
     expect(dock.queryByRole("table")).not.toBeInTheDocument();
@@ -274,6 +274,7 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     expect(screen.getByRole("button", { name: "Database" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.keyDown(editor, { key: "Escape" });
     expect(dock.getByRole("button", { name: "Quick Query" })).toHaveFocus();
+    expect(dock.queryByRole("textbox")).toBeNull();
     expect(table.getByRole("cell", { name: "42" })).toBeVisible();
     fireEvent.click(table.getByRole("button", { name: "Back to data" }));
     expect(await table.findByRole("cell", { name: "7" })).toBeVisible();
@@ -284,12 +285,10 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     fireEvent.change(tree.getByRole("searchbox"), { target: { value: "public.customers" } });
     fireEvent.click(tree.getByRole("button", { name: /^customers/ }));
     dock = within(screen.getByRole("region", { name: "Quick Query" }));
-    fireEvent.click(dock.getByRole("button", { name: "Quick Query" }));
     expect(dock.getByRole("textbox")).toHaveValue("SELECT *\nFROM `public`.`customers`\nLIMIT 100;");
     expect(screen.queryByRole("cell", { name: "42" })).toBeNull();
     pickOrders();
     dock = within(screen.getByRole("region", { name: "Quick Query" }));
-    fireEvent.click(dock.getByRole("button", { name: "Quick Query" }));
     expect(dock.getByRole("textbox")).toHaveValue(draft);
     await within(screen.getByRole("region", { name: "Table data" })).findByRole("cell", { name: "7" });
   });
@@ -404,7 +403,6 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
       expect(clipboard.writeText).toHaveBeenLastCalledWith(`UPDATE "main"."orders" SET "id" = 2, "customer_id" = 'O''Reilly' WHERE "id" = 1;`);
       expect(workspace.getByText("Pending changes: 1")).toBeVisible();
       const dock = within(screen.getByRole("region", { name: "Quick Query" }));
-      fireEvent.click(dock.getByRole("button", { name: "Quick Query" }));
       fireEvent.change(dock.getByRole("textbox"), { target: { value: "SELECT 42 AS answer;" } });
       fireEvent.click(dock.getByRole("button", { name: "Run" }));
       await screen.findByRole("cell", { name: "42" });
@@ -442,6 +440,29 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     fireEvent.change(tree.getByRole("searchbox"), { target: { value: `${schema}.customers` } });
     expect(tree.getByRole("button", { name: "Count rows in customers" })).toHaveTextContent("—");
     expect(readCounts).toHaveBeenCalledTimes(engine === "SQLite" ? 1 : 2);
+  });
+  it.each([
+    { filtered: false, truncated: false, expectedCount: "1" },
+    { filtered: true, truncated: false, expectedCount: "—" },
+    { filtered: false, truncated: true, expectedCount: "—" },
+  ])("uses only complete, unfiltered PostgreSQL previews for sidebar counts ($filtered, $truncated)", async ({ filtered, truncated, expectedCount }) => {
+    const platform = await mount();
+    const sourceId = "ddl-postgreSql";
+    const readCounts = vi.spyOn(platform, "readTableRowCounts").mockResolvedValue([]);
+    vi.spyOn(platform, "executeReadonlyQuery").mockResolvedValue({
+      queryId: "row-count-preview", columns: [{ name: "id", databaseType: "int8" }],
+      rows: [[{ kind: "text", value: "7", truncated: false }]], rowCount: 1, truncated, durationMs: 1, notices: [],
+    });
+    if (filtered) {
+      saveTableFilter(tableFilterKey(sourceId, "public", "orders"), { match: "all", rules: [{ kind: "equals", column: "id", value: "7" }] });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Load PostgreSQL fixture" }));
+    fireEvent.click(screen.getByRole("button", { name: "Database" }));
+    pickOrders();
+    expect(await screen.findByRole("cell", { name: "7" })).toBeVisible();
+    const count = screen.getByRole("button", { name: "Count rows in orders" });
+    expect(count.textContent).toBe(expectedCount);
+    expect(readCounts.mock.calls.map(([input]) => input.target)).toEqual([undefined]);
   });
   it.each(ddlFixtures)("confirms the exact $engine DDL selection and refreshes the model inside Query", async ({ engine, profile, snapshot }) => {
     const showModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
@@ -823,6 +844,11 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     fireEvent.click(screen.getByRole("button", { name: "Database" }));
     const workspace = within(await screen.findByRole("region", { name: "Table data" }));
     expect(workspace.getByRole("heading", { name: "public.orders" })).toBeVisible();
+    const loading = workspace.getByText("Loading table data…");
+    const loadingBody = loading.closest(".table-data-preview-result");
+    expect(loading).toHaveAttribute("role", "status");
+    expect(loadingBody?.nextElementSibling).toContainElement(workspace.getByRole("button", { name: "Next page" }));
+    expect(workspace.queryByRole("button", { name: "Current SQL" })).toBeNull();
     await waitFor(() => expect(query).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       sql: "SELECT *, CONVERT(`id` USING utf8mb4) AS `__nodal_cursor_0`\nFROM `public`.`orders`\nORDER BY `id` ASC\nLIMIT 101;", rowLimit: 101,
     }), expect.any(Function)));
@@ -832,6 +858,7 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     fireEvent.click(tree.getByRole("button", { name: /^customers/ }));
     const customers = within(screen.getByRole("region", { name: "Table data" }));
     expect(customers.getByRole("heading", { name: "public.customers" })).toBeVisible();
+    const pager = customers.getByRole("button", { name: "Next page" });
     expect(query).toHaveBeenCalledTimes(1);
     expect(cancel).not.toHaveBeenCalled();
     registered();
@@ -840,7 +867,10 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
 
     expect(await customers.findByRole("alert")).toHaveTextContent("Fixture connection interrupted");
     fireEvent.click(customers.getByRole("button", { name: "Retry" }));
-    expect(await customers.findByRole("cell", { name: "5678" })).toBeVisible();
+    const cell = await customers.findByRole("cell", { name: "5678" });
+    expect(cell).toBeVisible();
+    expect(cell.closest(".table-data-preview-result")?.nextElementSibling).toContainElement(pager);
+    expect(customers.queryByText("Loading table data…")).toBeNull();
     expect(query.mock.lastCall?.[0].sql).toContain("FROM `public`.`customers`\nORDER BY `id` ASC\nLIMIT 101;");
     expect(screen.getByRole("button", { name: "Database" })).toHaveAttribute("aria-pressed", "true");
   });

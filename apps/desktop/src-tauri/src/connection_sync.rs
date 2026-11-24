@@ -149,6 +149,7 @@ impl SyncEntry {
         let connection = self.connection;
         let now = Utc::now();
         DataSourceProfile {
+            server_source_id: None,
             id: Uuid::new_v4(),
             connection_sync: Some(ConnectionSyncIdentity {
                 origin_id: self.origin_id,
@@ -571,6 +572,7 @@ mod tests {
     fn network() -> DataSourceProfile {
         let now = Utc::now();
         DataSourceProfile {
+            server_source_id: None,
             id: Uuid::new_v4(),
             connection_sync: None,
             display_name: "Production test".into(),

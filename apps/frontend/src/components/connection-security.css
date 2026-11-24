@@ -15,28 +15,29 @@
 .connection-security-content .connection-file-help { margin-top: 6px; }
 .connection-ssh-server-identity { border-top: 1px solid var(--ds-separator); padding-top: 12px; }
 .connection-file-field [role="alert"] { color: var(--ds-danger); margin-top: 6px; }
-.connection-ssh-section .connection-ssh-toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; }
-.connection-ssh-toggle input[type="checkbox"] { appearance: auto; width: 15px; height: 15px; min-height: 0; margin: 0; accent-color: var(--ds-accent); flex: none; }
+.connection-dialog .connection-panel label.connection-ssh-toggle, .connection-ssh-section .connection-ssh-toggle { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; }
+.connection-dialog .connection-ssh-toggle input[type="checkbox"], .connection-ssh-toggle input[type="checkbox"] { appearance: auto; width: 15px; height: 15px; min-height: 0; padding: 0; margin: 0; accent-color: var(--ds-accent); flex: none; }
 .connection-ssh-toggle span { display: grid; gap: 3px; }
 .connection-ssh-toggle strong { font-size: 12px; font-weight: 500; }
 .connection-ssh-toggle small { color: var(--ds-secondary); font-size: 11px; }
 .connection-panel .connection-file-field button { color: var(--ds-text); background: var(--ds-control); border: 1px solid var(--ds-border); border-radius: 7px; }
 .connection-panel .connection-file-field button:hover:not(:disabled) { background: var(--ds-hover); }
-/* A content-sized sheet with one scroll area and a persistent action row. */
+/* Keep the sheet and actions anchored while switching tabs or testing. */
 section.connection-dialog {
-  width: min(620px, calc(var(--ds-viewport-width) - 48px));
-  height: auto;
-  max-height: calc(var(--ds-viewport-height) - 48px);
+  width: min(760px, calc(var(--ds-viewport-width) - 32px));
+  height: min(590px, calc(var(--ds-viewport-height) - 32px));
+  max-height: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 24px;
+  padding: 20px;
   border-radius: 14px;
   background: var(--ds-surface);
+  container: connection-dialog / inline-size;
 }
 .connection-dialog > header { flex: none; align-items: flex-start; }
 .connection-dialog h2 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.35; letter-spacing: -.015em; }
-.connection-dialog > .dialog-description { flex: none; margin: 8px 32px 20px 0; font-size: 12px; color: var(--ds-secondary); line-height: 1.5; }
+.connection-dialog > .dialog-description { flex: none; margin: 5px 32px 14px 0; font-size: 12px; color: var(--ds-secondary); line-height: 1.5; }
 .connection-dialog > .connection-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0; }
 .connection-dialog .connection-panel label { display: grid; gap: 6px; color: var(--ds-secondary); font-size: 12px; font-weight: 500; }
 .connection-dialog .connection-panel input, .connection-dialog .connection-panel select { height: 32px; border-radius: 6px; font-size: 13px; font-weight: 400; }
@@ -46,16 +47,19 @@ section.connection-dialog {
 .connection-dialog .connection-panel .connection-primary-button { border-color: var(--ds-accent-fill); color: var(--ds-on-accent); background: var(--ds-accent-fill); }
 .connection-dialog .connection-panel .connection-primary-button:hover:not(:disabled) { background: var(--ds-accent-hover); }
 .connection-dialog .connection-panel .connection-primary-button:disabled { border-color: var(--ds-border); color: var(--ds-tertiary); background: var(--ds-control); opacity: 1; }
-.connection-tabs { display: flex; gap: 2px; flex: none; align-self: flex-start; padding: 2px; margin-bottom: 20px; border-radius: 7px; background: var(--ds-control); }
+.connection-tabs { display: flex; gap: 2px; flex: none; align-self: flex-start; padding: 2px; margin-bottom: 12px; border-radius: 7px; background: var(--ds-control); }
 .connection-dialog .connection-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 80px; min-height: 28px; padding: 4px 12px; border: 0; background: transparent; color: var(--ds-secondary); }
 .connection-dialog .connection-tabs button[aria-selected="true"] { background: var(--ds-selected-control); color: var(--ds-text); box-shadow: 0 1px 3px #0002, inset 0 0 0 1px var(--ds-border); }
 .connection-tab-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ds-positive); }
-.connection-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px; scrollbar-width: thin; }
+.connection-dialog-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px; scrollbar-width: thin; }
 .connection-tab-panel[hidden], .connection-form-section[hidden] { display: none; }
-.connection-dialog .connection-form-section { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; gap: 12px; }
-.connection-dialog .connection-form-section + .connection-form-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--ds-separator); }
-.connection-dialog .connection-form-grid { gap: 14px 16px; }
+.connection-dialog .connection-form-section { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; gap: 9px; }
+.connection-dialog .connection-form-section + .connection-form-section { margin-top: 13px; padding-top: 10px; border-top: 1px solid var(--ds-separator); }
+.connection-dialog .connection-form-grid { gap: 10px 12px; }
 .connection-dialog .connection-identity-grid { grid-template-columns: minmax(0, 1fr) 160px; }
+.connection-dialog .connection-network-grid { grid-template-columns: minmax(0, 1fr) 90px minmax(0, 1fr); }
+.connection-network-grid .connection-name-field { grid-column: span 2; }
+.connection-network-grid .connection-database-field { grid-column: auto; }
 .connection-dialog .connection-section-heading { margin: 0; }
 .connection-dialog .connection-section-heading strong { font-size: 12px; font-weight: 500; }
 .connection-dialog .connection-keychain-status { padding: 0; border: 0; background: transparent; color: var(--ds-secondary); font-size: 11px; font-weight: 400; }
@@ -63,7 +67,8 @@ section.connection-dialog {
 .connection-tab-panel .connection-security-setting { margin: 0 0 14px; padding: 0; border: 0; }
 .connection-tab-panel .connection-security-options { margin: 0; }
 .connection-dialog .connection-credential-note { padding: 0; background: transparent; font-size: 11px; color: var(--ds-secondary); line-height: 1.5; }
-.connection-security-content .connection-form-grid { grid-template-columns: minmax(0, 1fr) minmax(160px, .55fr); }
+.connection-security-content .connection-ssh-grid { grid-template-columns: minmax(0, 1fr) 90px minmax(0, .7fr) minmax(0, .9fr); }
+.connection-ssh-key-fields { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; gap: 12px; }
 .connection-ssh-password { display: grid; gap: 7px; }
 .connection-ssh-password input { width: 100%; }
 .sqlite-file-fields { grid-column: 1 / -1; display: grid; gap: 6px; min-width: 0; }
@@ -71,6 +76,11 @@ section.connection-dialog {
 .sqlite-file-picker input { flex: 1; min-width: 0; text-overflow: ellipsis; }
 .sqlite-file-picker button { flex: none; }
 .connection-dialog .connection-field-help { margin: 0; color: var(--ds-secondary); font-size: 11px; line-height: 1.5; }
+.connection-tls-action { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.connection-tls-action > p { flex: 1 1 230px; }
+.connection-tls-guidance { padding: 7px 10px; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-field); }
+.connection-test-action { margin-top: 8px; }
+.connection-dialog-feedback .connection-test-action .connection-test-detail { margin: 0; }
 .sqlite-file-access { margin-top: 10px; }
 .sqlite-file-access > summary { width: fit-content; cursor: pointer; color: var(--ds-secondary); font-size: 12px; font-weight: 500; }
 .sqlite-file-access > div { display: grid; gap: 10px; padding-top: 10px; }
@@ -79,40 +89,59 @@ section.connection-dialog {
 .connection-dialog .connection-live-action { margin: 16px 0 0; padding: 12px 0 0; }
 .connection-dialog .connection-live-action strong { font-size: 12px; font-weight: 500; }
 .connection-dialog .connection-live-action span { font-size: 11px; line-height: 1.5; }
-.connection-dialog .connection-panel > footer { flex: none; padding-top: 16px; margin-top: 20px; border-top: 1px solid var(--ds-separator); align-items: flex-end; gap: 12px; }
+.connection-dialog-feedback { flex: none; min-width: 0; max-height: min(45%, 210px); overflow: auto; overscroll-behavior: contain; }
+.connection-dialog .connection-panel > footer { flex: none; flex-direction: row; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--ds-separator); align-items: flex-end; gap: 12px; }
 .connection-dialog footer button { min-width: 0; white-space: nowrap; }
 .connection-footer-leading { display: grid; gap: 12px; justify-items: start; }
 .connection-footer-actions { display: flex; gap: 8px; }
 .connection-dialog .connection-panel .delete-source-button { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--ds-danger); font-size: 11px; }
 .connection-danger-action > span { font-size: 10px; color: var(--ds-secondary); }
-/* Local file feedback needs one message, not a duplicate network checklist. */
-.connection-test-status { padding: 12px; margin-top: 16px; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-field); }
+/* The feedback stays above the action row for every tab. */
+.connection-test-status { padding: 9px 12px; margin-top: 8px; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-field); }
 .connection-test-heading, .connection-test-heading > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.connection-test-heading { justify-content: space-between; min-height: 20px; }
+.connection-test-heading { justify-content: space-between; flex-wrap: wrap; min-height: 20px; }
 .connection-test-heading strong { color: var(--ds-text); font-size: 12px; font-weight: 600; }
+.connection-test-meta { flex-wrap: wrap; }
+.connection-test-disabled { padding: 1px 6px; border: 1px solid var(--ds-border); border-radius: 999px; color: var(--ds-secondary); font-size: 11px; }
+.connection-test-version { color: var(--ds-secondary); font-size: 11px; overflow-wrap: anywhere; }
 .connection-check-icon { width: 16px; height: 16px; flex: none; }
 .connection-test-status [data-tone="success"] { color: var(--ds-positive); }
 .connection-test-status [data-tone="error"] { color: var(--ds-danger); }
 .connection-test-status [data-tone="warning"] { color: var(--ds-warning); }
 .connection-test-status [data-tone="running"] { color: var(--ds-accent); }
 .connection-test-status [data-tone="neutral"] { color: var(--ds-tertiary); }
-.connection-test-checks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
-.connection-test-check { display: flex; align-items: flex-start; gap: 6px; }
-.connection-test-check > div { min-width: 0; display: grid; gap: 3px; }
-.connection-test-check span { color: var(--ds-secondary); font-size: 11px; line-height: 16px; }
-.connection-test-check strong { font-size: 11px; font-weight: 500; line-height: 16px; overflow-wrap: anywhere; }
-.connection-test-detail, .connection-test-hint { color: var(--ds-secondary); font-size: 11px; line-height: 1.5; margin: 8px 0 0; overflow-wrap: anywhere; }
+.connection-test-checks { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; margin: 7px 0 0; padding: 0; list-style: none; }
+.connection-test-check { display: grid; min-width: 0; gap: 3px; text-align: center; }
+.connection-check-track { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; }
+.connection-check-track::before, .connection-check-track::after { content: ""; height: 1px; background: var(--ds-border); }
+.connection-test-check:first-child .connection-check-track::before, .connection-test-check:last-child .connection-check-track::after { visibility: hidden; }
+.connection-test-check[data-tone="success"]:has(+ .connection-test-check[data-tone="success"]) .connection-check-track::after,
+.connection-test-check[data-tone="success"] + .connection-test-check[data-tone="success"] .connection-check-track::before { background: var(--ds-positive); }
+.connection-check-label { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 5px; padding-inline: 4px; overflow-wrap: anywhere; font-size: 11px; line-height: 15px; }
+.connection-check-label span { color: var(--ds-secondary); }
+.connection-check-label strong { font-weight: 600; }
+.connection-dialog-feedback .connection-test-detail, .connection-dialog-feedback .connection-test-hint { color: var(--ds-secondary); font-size: 11px; line-height: 1.45; margin: 6px 0 0; overflow-wrap: anywhere; }
 .connection-test-status[data-compact] .connection-test-detail { margin-left: 24px; }
-.connection-test-progress { height: 3px; overflow: hidden; border-radius: 2px; background: var(--ds-control); margin-top: 10px; }
-.connection-test-progress > span { display: block; width: 35%; height: 100%; background: var(--ds-accent); border-radius: inherit; animation: connection-progress 1.4s ease-in-out infinite; }
 .connection-check-icon.is-spinning { animation: connection-spin 1s linear infinite; }
-@keyframes connection-progress { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .connection-check-icon.is-spinning, .connection-test-progress > span { animation: none; } }
-@media (max-width: 560px) {
-  section.connection-dialog { width: calc(var(--ds-viewport-width) - 24px); max-height: calc(var(--ds-viewport-height) - 24px); padding: 16px; }
-  .connection-dialog .connection-form-grid, .connection-security-content .connection-form-grid { grid-template-columns: minmax(0, 1fr); }
-  .connection-dialog .connection-panel > footer { flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .connection-check-icon.is-spinning { animation: none; } }
+@media (max-height: 700px) {
+  .connection-dialog-backdrop { padding-block: 10px; }
+  section.connection-dialog { height: min(590px, calc(var(--ds-viewport-height) - 20px)); padding-block: 14px; }
+  .connection-dialog > .dialog-description { margin-bottom: 10px; }
+  .connection-tabs { margin-bottom: 9px; }
+  .connection-dialog .connection-panel > footer { margin-top: 8px; padding-top: 8px; }
+}
+@container connection-dialog (max-width: 550px) {
+  .connection-dialog .connection-network-grid, .connection-security-content .connection-ssh-grid { grid-template-columns: minmax(0, 1fr) minmax(90px, .6fr); }
+  .connection-network-grid .connection-name-field { grid-column: auto; }
+  .connection-network-grid .connection-database-field { grid-column: 1 / -1; }
+  .connection-ssh-key-fields { grid-template-columns: minmax(0, 1fr); }
+}
+@container connection-dialog (max-width: 340px) {
+  .connection-dialog .connection-form-grid, .connection-security-content .connection-ssh-grid { grid-template-columns: minmax(0, 1fr); }
+  .connection-dialog .connection-panel > footer { flex-direction: column; align-items: flex-start; }
   .connection-footer-actions { margin-left: auto; }
-  .connection-test-checks { gap: 8px; }
+  .connection-tabs { align-self: stretch; }
+  .connection-dialog .connection-tabs button { min-width: 0; flex: 1; padding-inline: 6px; }
 }

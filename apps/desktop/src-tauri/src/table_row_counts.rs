@@ -8,16 +8,22 @@ use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::{AppState, execute_prepared_network_query, prepare_query_connection, sqlite_source};
+use crate::{AppState, execute_prepared_network_query, prepare_read_session, sqlite_source};
 
 const STATEMENT_TIMEOUT_MS: u64 = 2_500;
 static EXACT_COUNT: Semaphore = Semaphore::const_new(1);
 
+// A new table can have observed inserts before it has planner statistics.
+// A zero in the activity counters alone could also mean the stats were reset.
 const POSTGRES_ESTIMATES: &str = "
-    SELECT CAST(n.nspname AS text), CAST(c.relname AS text), CAST(CAST(c.reltuples AS bigint) AS text)
+    SELECT CAST(n.nspname AS text), CAST(c.relname AS text), CAST(
+        CASE WHEN c.reltuples >= 0 THEN CAST(c.reltuples AS bigint)
+             ELSE pg_catalog.pg_stat_get_live_tuples(c.oid)
+        END AS text)
     FROM pg_catalog.pg_class AS c
     JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
-    WHERE c.relkind = 'r' AND NOT c.relhassubclass AND c.reltuples >= 0
+    WHERE c.relkind = 'r' AND NOT c.relhassubclass
+      AND (c.reltuples >= 0 OR pg_catalog.pg_stat_get_live_tuples(c.oid) > 0)
       AND n.nspname <> 'information_schema' AND LEFT(n.nspname, 3) <> 'pg_'
       AND pg_catalog.has_table_privilege(c.oid, 'SELECT')
       AND NOT pg_catalog.row_security_active(c.oid)";
@@ -100,21 +106,8 @@ async fn counts(input: RowCountInput, state: &AppState) -> Result<Vec<RowCount>,
         sqlite_source::execute_sqlite_readonly(profile, request, token).await?
     } else {
         crate::connection_credentials::require_binding(&profile).map_err(QueryError::Validation)?;
-        let (password, tunnel, timeout) = tokio::time::timeout(
-            Duration::from_secs(6),
-            prepare_query_connection(state, &profile),
-        )
-        .await
-        .map_err(|_| QueryError::Timeout)??;
-        execute_prepared_network_query(
-            &profile,
-            &password,
-            &tunnel,
-            timeout.min(Duration::from_secs(3)),
-            &request,
-            &token,
-        )
-        .await?
+        let session = prepare_read_session(state, &profile, Some(Duration::from_secs(9))).await?;
+        execute_prepared_network_query(&session, &request, &token).await?
     };
     if let Some(table) = input.target {
         let count = result

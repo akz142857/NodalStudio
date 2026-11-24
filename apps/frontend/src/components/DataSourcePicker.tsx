@@ -2,6 +2,7 @@ import { useI18n } from "../i18n";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject, type MouseEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import type { DataSourceProfile } from "../platform";
+import { isServerConnection } from "../platform/database-server";
 import { ActionIcon } from "./ActionIcon";
 
 type InitialFocus = "selected" | "first" | "last";
@@ -170,10 +171,12 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
     <div className="data-source-menu-heading" aria-hidden="true">{bt("business.switchDatabaseDetail")}</div>
     <div ref={sources} className="data-source-menu-list" role="group" aria-label={bt("business.dataSources")}>
       {profiles.map((profile) => <button key={profile.id} type="button" role="menuitemradio" aria-checked={profile.id === activeSourceId}
-        title={`${profile.database} — ${engine(profile)} · ${profile.displayName} · ${address(profile)}`}
+        title={isServerConnection(profile)
+          ? `${profile.displayName} — ${engine(profile)} · ${address(profile)}`
+          : `${profile.database} — ${engine(profile)} · ${profile.displayName} · ${address(profile)}`}
         onClick={() => onSelect(profile)}>
         <ActionIcon name="database" />
-        <span className="data-source-menu-label"><strong>{profile.database}</strong><span>{engine(profile)} · {profile.displayName}</span>
+        <span className="data-source-menu-label"><strong>{profile.database || profile.displayName}</strong><span>{engine(profile)} · {isServerConnection(profile) ? bt("serverConnection.serverConnection") : profile.displayName}</span>
           <small>{address(profile)}{profile.connectionSync?.pending ? ` · ${bt("connectionSync.pendingSetup")}` : ""}</small>
         </span>
         <span className="data-source-menu-check" aria-hidden="true">✓</span>

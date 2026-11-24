@@ -98,6 +98,9 @@ pub struct DataSourceProfile {
     pub sqlite: Option<SqliteFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connection_sync: Option<ConnectionSyncIdentity>,
+    /// Local provenance for a database opened from a saved server connection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_source_id: Option<Uuid>,
     pub id: Uuid,
     pub display_name: String,
     pub host: String,
@@ -111,6 +114,16 @@ pub struct DataSourceProfile {
     pub security: ConnectionSecurity,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+impl DataSourceProfile {
+    #[must_use]
+    pub fn is_server_connection(&self) -> bool {
+        matches!(
+            self.database_type,
+            DatabaseType::MySql | DatabaseType::PostgreSql
+        ) && self.database.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

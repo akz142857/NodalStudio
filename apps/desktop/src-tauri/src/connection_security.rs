@@ -209,7 +209,7 @@ pub fn run_askpass_helper() -> bool {
 pub struct Tunnel {
     _file_access: Vec<crate::file_access::Access>,
     // kill_on_drop also covers cancellation and early error returns.
-    child: Option<tokio::process::Child>,
+    child: Option<std::sync::Mutex<tokio::process::Child>>,
     _askpass: Option<Askpass>,
     directory: Option<tempfile::TempDir>,
     socket: Option<PathBuf>,
@@ -381,14 +381,19 @@ impl Tunnel {
             .map_err(|_| "Unable to start OpenSSH. Install the system SSH client.")?;
         let mut tunnel = Self {
             _file_access: file_access,
-            child: Some(child),
+            child: Some(std::sync::Mutex::new(child)),
             _askpass: askpass,
             directory: Some(directory),
             socket: Some(socket),
         };
         let started = std::time::Instant::now();
         loop {
-            let child = tunnel.child.as_mut().expect("SSH child");
+            let child = tunnel
+                .child
+                .as_mut()
+                .expect("SSH child")
+                .get_mut()
+                .expect("SSH child lock");
             if child
                 .try_wait()
                 .map_err(|_| "Unable to check the SSH connection.")?
@@ -411,6 +416,14 @@ impl Tunnel {
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
+    }
+    pub(super) fn is_live(&self) -> bool {
+        self.child.as_ref().is_none_or(|child| {
+            self.socket.as_ref().is_some_and(|socket| socket.exists())
+                && child
+                    .lock()
+                    .is_ok_and(|mut child| matches!(child.try_wait(), Ok(None)))
+        })
     }
     pub fn postgres_socket(&self) -> Option<&Path> {
         self.directory.as_ref().map(tempfile::TempDir::path)

@@ -68,8 +68,20 @@ export function ConnectionManager({ profiles, activeSourceId, pending, platform,
     }}
     onCancel={(event) => { event.preventDefault(); dismiss(); }}>
     {syncOpen ? <ConnectionSync platform={platform} hasProfiles={profiles.length > 0} startWithImport={startWithImport} busy={syncBusy} onBusyChange={setSyncBusy} onBack={() => setSyncOpen(false)} onImported={onImported} /> : <>
-      <h2 id="connection-manager-title">{bt("business.manageConnectionsDetail")}</h2>
-      <input ref={search} type="search" aria-label={bt("business.findDatabaseConnections")} placeholder={bt("business.findDatabases")} value={query} onChange={(event) => setQuery(event.target.value)} />
+      <header className="connection-manager-heading">
+        <h2 id="connection-manager-title">{bt("business.manageConnectionsDetail")}</h2>
+        <Button variant="ghost" size="small" disabled={pending} onClick={() => setSyncOpen(true)}>{bt("connectionSync.open")}</Button>
+      </header>
+      <div className="connection-manager-tools">
+        <div className="connection-manager-search">
+          <ActionIcon name="search" />
+          <input ref={search} type="search" aria-label={bt("business.findDatabaseConnections")} placeholder={bt("business.findDatabases")} value={query} onChange={(event) => setQuery(event.target.value)} />
+        </div>
+        <Button disabled={pending} onClick={() => leave(onCreate)}>
+          <ActionIcon name="add" />
+          {bt("business.addDatabaseDetail")}
+        </Button>
+      </div>
       <div className="connection-manager-list">
         {visible.map((profile) => {
           const pendingSetup = profile.connectionSync?.pending;
@@ -89,10 +101,8 @@ export function ConnectionManager({ profiles, activeSourceId, pending, platform,
         {!visible.length ? <EmptyState compact title={profiles.length ? bt("business.noMatchingConnections") : bt("business.noSavedConnections")} /> : null}
       </div>
       {deleteError ? <p className="connection-manager-error" role="alert">{deleteError}</p> : null}
-      <footer>
-        <Button disabled={pending} onClick={() => leave(onCreate)}>{bt("business.addDatabaseDetail")}</Button>
-        <Button disabled={pending} onClick={() => setSyncOpen(true)}>{bt("connectionSync.open")}</Button>
-        <Button disabled={pending} onClick={dismiss}>{bt("business.done")}</Button>
+      <footer className="connection-manager-dismiss">
+        <Button disabled={pending} onClick={dismiss}>{bt("business.close")}</Button>
       </footer>
     </>}
   </dialog>, document.body);

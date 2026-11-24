@@ -1305,6 +1305,7 @@ mod tests {
     fn profile() -> DataSourceProfile {
         let now = Utc::now();
         DataSourceProfile {
+            server_source_id: None,
             id: Uuid::new_v4(),
             display_name: "Warehouse".into(),
             host: "private.internal.example".into(),

@@ -4,9 +4,10 @@ import { ModalSurface } from "../design-system/ModalSurface";
 import { useI18n } from "../i18n";
 import { ActionIcon } from "./ActionIcon";
 
-export function TableDataFooter({ actions, statement, children }: {
+export function TableDataFooter({ actions, statement, reserveStatementSpace, children }: {
   actions?: ReactNode;
   statement?: { sql: string; preview?: string; sqlite?: boolean };
+  reserveStatementSpace?: boolean;
   children?: ReactNode;
 }) {
   const { t } = useI18n();
@@ -32,10 +33,11 @@ export function TableDataFooter({ actions, statement, children }: {
 
   return <footer ref={bar} className="table-data-footer" aria-label={t("tableData.footer")}>
     {actions && <div className="table-data-footer-actions" role="group" aria-label={t("tableData.footerActions")}>{actions}</div>}
-    {statement && <Button variant="ghost" className="table-data-footer-sql" aria-label={sqlLabel}
+    {(statement || reserveStatementSpace) && <Button variant="ghost" className="table-data-footer-sql" aria-label={sqlLabel}
+      disabled={!statement} style={statement ? undefined : { visibility: "hidden" }}
       aria-haspopup="dialog" title={sqlLabel} onClick={() => setInspected(statement)}>
       <ActionIcon name="viewer" />
-      <code>{statement.preview ?? statement.sql}</code>
+      <code>{statement?.preview ?? statement?.sql}</code>
     </Button>}
     {children}
     {inspected && <ModalSurface label={sqlLabel} onDismiss={close}>

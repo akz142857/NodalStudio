@@ -60,28 +60,27 @@ export function ConnectionSecurityFields({ security, sslMode, disabled, platform
       </div>
     </details> : null}
     {section !== "tls" ? <section className="connection-ssh-section" aria-label={bt("business.sSHTunnel")}>
-      <label className="connection-ssh-toggle"><input type="checkbox" checked={Boolean(ssh)} disabled={disabled} onChange={(event) => onChange({ ...current, ssh: event.target.checked ? { host: "", port: 22, username: "", authentication: isMas ? "privateKey" : "agent" } : null })} /><span><strong>{bt("business.connectThroughSSH")}</strong><small>{bt("business.reachAPrivateDatabaseThroughAJumpHost")}</small></span></label>
+      <label className="connection-ssh-toggle"><input type="checkbox" checked={Boolean(ssh)} disabled={disabled} onChange={(event) => onChange({ ...current, ssh: event.target.checked ? { host: "", port: 22, username: "", authentication: isMas ? "privateKey" : "agent" } : null })} /><span><strong>{bt("business.connectThroughSSH")}</strong><small>{bt(ssh ? "business.theDatabaseHostAboveIsResolvedFromTheJump" : "business.reachAPrivateDatabaseThroughAJumpHost")}</small></span></label>
       {ssh ? <div className="connection-security-content">
         {isMas ? <p>{bt("submission.masSsh")}</p> : null}
-        <div className="connection-form-grid">
+        <div className="connection-form-grid connection-ssh-grid">
           <label>{bt("business.sSHHost")}<input value={ssh.host} disabled={disabled} placeholder="bastion.example.com" onChange={(event) => updateSsh({ host: event.target.value.trim() })} autoComplete="off" spellCheck={false} /></label>
           <label>{bt("business.sSHPort")}<input type="number" min="1" max="65535" value={ssh.port} disabled={disabled} onChange={(event) => updateSsh({ port: Number(event.target.value) })} /></label>
           <label>{bt("business.sSHUsername")}<input value={ssh.username} disabled={disabled} onChange={(event) => updateSsh({ username: event.target.value.trim() })} autoComplete="off" spellCheck={false} /></label>
           <label>{bt("business.authentication")}<select value={ssh.authentication} disabled={disabled} onChange={(event) => updateSsh({ authentication: event.target.value as "agent" | "privateKey" | "password" })}><option value="agent" disabled={isMas}>{bt("business.sSHAgent")}</option><option value="privateKey">{bt("business.privateKey")}</option><option value="password">{bt("business.password")}</option></select></label>
         </div>
-        {ssh.authentication === "privateKey" ? <>
+        {ssh.authentication === "privateKey" ? <div className="connection-ssh-key-fields">
           <FileField label={bt("business.sSHPrivateKey")} value={ssh.privateKey} disabled={disabled} platform={platform} placeholder={bt("business.chooseAnOpenSSHPrivateKey")} onChange={(privateKey) => updateSsh({ privateKey })} />
           <div className="connection-ssh-password">
             <label>{bt("business.sSHKeyPassphrase")}<input type="password" autoComplete="new-password" value={sshKeyPassphrase ?? ""} disabled={disabled} onChange={(event) => onSshKeyPassphraseChange?.(event.target.value)} /></label>
             <p>{bt("business.sSHKeyPassphraseHelp")}</p>
           </div>
-        </> : null}
+        </div> : null}
         {ssh.authentication === "password" ? <div className="connection-ssh-password"><label>{bt("business.sSHPassword")}<input type="password" autoComplete="new-password" value={sshPassword ?? ""} disabled={disabled} placeholder={hasSavedSshPassword ? bt("business.leaveBlankToKeepSavedPassword") : bt("business.sSHPassword")} onChange={(event) => onSshPasswordChange?.(event.target.value)} /></label><p>{hasSavedSshPassword ? bt("business.savedInTheSystemKeychainLeaveBlankToKeep") : bt("business.savedInTheSystemKeychainAfterVerificationItIs")}</p></div> : null}
         {isMas ? <div className="connection-ssh-server-identity">{knownHostsField}</div> : <details><summary>{bt("business.serverIdentity")}</summary>
           {knownHostsField}
           <p>{bt("business.theSSHServerMustAlreadyBeTrustedInKnown")}</p>
         </details>}
-        <p>{bt("business.theDatabaseHostAboveIsResolvedFromTheJump")}</p>
       </div> : null}
     </section> : null}
   </div>;

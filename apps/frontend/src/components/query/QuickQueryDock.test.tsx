@@ -4,8 +4,14 @@ import { getPlatform } from "../../platform";
 import { diagramAfter } from "../../test/diagram-comparison-fixture";
 import { QuickQueryDock } from "./QuickQueryDock";
 
+function floatPanel() {
+  fireEvent.click(screen.getByRole("button", { name: "Position Quick Query" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Float Quick Query" }));
+}
+
 it("drags within the data area and can return to bottom center from the position menu", () => {
   render(<QuickQueryDock platform={getPlatform()} snapshot={diagramAfter} relation={diagramAfter.schemas[0].tables[0]} reset={0} onResult={vi.fn()} />);
+  floatPanel();
   const panel = screen.getByRole("region", { name: "Quick Query" });
   const grip = panel.querySelector(".quick-query-grip")!;
   const bar = grip.parentElement!;
@@ -39,6 +45,7 @@ it("drags within the data area and can return to bottom center from the position
 
 it("resizes the floating panel at the app scale and retains its size when collapsed", () => {
   render(<QuickQueryDock platform={getPlatform()} snapshot={diagramAfter} relation={diagramAfter.schemas[0].tables[0]} reset={0} onResult={vi.fn()} />);
+  floatPanel();
   const panel = screen.getByRole("region", { name: "Quick Query" });
   const toggle = screen.getByRole("button", { name: "Quick Query" });
   const area = panel.parentElement!.querySelector(".quick-query-bounds")!;
@@ -46,7 +53,6 @@ it("resizes the floating panel at the app scale and retains its size when collap
   vi.spyOn(area, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 100, 800, 600));
   vi.spyOn(panel, "getBoundingClientRect").mockReturnValue(new DOMRect(180, 480, 640, 220));
 
-  fireEvent.click(toggle);
   const editor = screen.getByRole("textbox", { name: "SQL editor" });
   expect(editor.parentElement).toContainElement(screen.getByRole("button", { name: "Run" }));
   expect(editor).toHaveAccessibleDescription("Read only");
@@ -64,6 +70,7 @@ it("resizes the floating panel at the app scale and retains its size when collap
   fireEvent.click(toggle);
   expect(panel.querySelector('.quick-query-resize')).toBeNull();
   fireEvent.click(toggle);
+  expect(screen.getByRole("textbox", { name: "SQL editor" })).toHaveFocus();
   expect(panel).toHaveStyle({ "--quick-query-width": "360px", "--quick-query-height": "300px" });
   fireEvent.click(screen.getByRole("button", { name: "Position Quick Query" }));
   fireEvent.click(screen.getByRole("menuitem", { name: "Reset Size" }));
@@ -71,10 +78,15 @@ it("resizes the floating panel at the app scale and retains its size when collap
   expect(panel.style.getPropertyValue("--quick-query-height")).toBe("");
 });
 
-it("previews top docking, docks on drop, and pulls the same editor back out", () => {
+it("starts docked and preserves the editor when floating, docking by drag, and detaching", () => {
   render(<QuickQueryDock platform={getPlatform()} snapshot={diagramAfter} relation={diagramAfter.schemas[0].tables[0]} reset={0} onResult={vi.fn()} />);
   const panel = screen.getByRole("region", { name: "Quick Query" });
   const layer = panel.parentElement!;
+  expect(layer).toHaveAttribute("data-docked");
+  expect(screen.getByRole("button", { name: "Quick Query" })).toHaveAttribute("aria-expanded", "true");
+  const editor = screen.getByRole("textbox", { name: "SQL editor" });
+  expect(editor).not.toHaveFocus();
+  floatPanel();
   const grip = panel.querySelector(".quick-query-grip")!;
   const bar = grip.parentElement!;
   Object.defineProperty(bar, "setPointerCapture", { value: vi.fn() });
@@ -82,8 +94,6 @@ it("previews top docking, docks on drop, and pulls the same editor back out", ()
   vi.spyOn(panel, "getBoundingClientRect").mockImplementation(() => layer.hasAttribute("data-docked")
     ? new DOMRect(88, 88, 624, 130) : new DOMRect(250, 350, 300, 150));
 
-  fireEvent.click(screen.getByRole("button", { name: "Quick Query" }));
-  const editor = screen.getByRole("textbox", { name: "SQL editor" });
   fireEvent.change(editor, { target: { value: "SELECT 42;" } });
 
   fireEvent.pointerDown(grip, { button: 0, isPrimary: true, pointerId: 1, clientX: 400, clientY: 365 });

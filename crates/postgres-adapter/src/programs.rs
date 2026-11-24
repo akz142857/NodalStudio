@@ -1,19 +1,19 @@
 use crate::{PostgresAdapterError, find_schema_mut};
 use schema_model::{ObjectDependency, ObjectKey, ObjectKind, ProgramDefinition, SchemaDefinition};
-use sqlx::{PgPool, Row};
+use sqlx::{PgConnection, Row};
 
 pub async fn load(
-    pool: &PgPool,
+    connection: &mut PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
-    load_routines(pool, schemas).await?;
-    load_triggers(pool, schemas).await?;
-    load_dependencies(pool, schemas).await?;
+    load_routines(connection, schemas).await?;
+    load_triggers(connection, schemas).await?;
+    load_dependencies(connection, schemas).await?;
     Ok(())
 }
 
 async fn load_routines(
-    pool: &PgPool,
+    connection: &mut PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     let rows = sqlx::query(r"SELECT n.nspname AS schema_name,
@@ -24,7 +24,7 @@ async fn load_routines(
       FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
       JOIN pg_language l ON l.oid=p.prolang
       WHERE p.prokind IN ('f','p') AND n.nspname <> 'information_schema'
-      AND n.nspname NOT LIKE 'pg\_%' ESCAPE '\'").fetch_all(pool).await?;
+      AND n.nspname NOT LIKE 'pg\_%' ESCAPE '\'").fetch_all(&mut *connection).await?;
     for row in rows {
         let schema: String = row.try_get("schema_name")?;
         find_schema_mut(schemas, &schema)?
@@ -52,7 +52,7 @@ async fn load_routines(
 }
 
 async fn load_triggers(
-    pool: &PgPool,
+    connection: &mut PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     let rows = sqlx::query(
@@ -64,7 +64,7 @@ async fn load_triggers(
       WHERE NOT t.tgisinternal AND n.nspname <> 'information_schema'
       AND n.nspname NOT LIKE 'pg\_%' ESCAPE '\'",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await?;
     for row in rows {
         let schema: String = row.try_get("schema_name")?;
@@ -95,7 +95,7 @@ async fn load_triggers(
 }
 
 async fn load_dependencies(
-    pool: &PgPool,
+    connection: &mut PgConnection,
     schemas: &mut [SchemaDefinition],
 ) -> Result<(), PostgresAdapterError> {
     // Only catalog-confirmed edges among supported objects. SQL bodies stored as
@@ -121,7 +121,7 @@ async fn load_dependencies(
       JOIN objects t ON t.classid=d.refclassid AND t.oid=d.refobjid
       WHERE (s.classid,s.oid) <> (t.classid,t.oid)
         AND s.schema_name <> 'information_schema' AND t.schema_name <> 'information_schema'
-        AND s.schema_name NOT LIKE 'pg\_%' ESCAPE '\' AND t.schema_name NOT LIKE 'pg\_%' ESCAPE '\'").fetch_all(pool).await?;
+        AND s.schema_name NOT LIKE 'pg\_%' ESCAPE '\' AND t.schema_name NOT LIKE 'pg\_%' ESCAPE '\'").fetch_all(&mut *connection).await?;
     for row in rows {
         let schema: String = row.try_get("ss")?;
         let kind = |value: String| match value.as_str() {

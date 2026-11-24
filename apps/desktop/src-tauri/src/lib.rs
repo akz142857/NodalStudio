@@ -24,11 +24,11 @@ use git_workspace::{
     read_workspace, render_workspace, write_workspace,
 };
 use mysql_adapter::{
-    MySqlConnectionOptions, connect as connect_mysql, inspect_schema as inspect_mysql_schema,
+    MySqlConnectionOptions, inspect_schema as inspect_mysql_schema,
     test_connection as test_mysql_connection,
 };
 use postgres_adapter::{
-    PostgresConnectionOptions, PostgresSslMode, connect, inspect_schema, test_connection,
+    PostgresConnectionOptions, PostgresSslMode, inspect_schema, test_connection,
 };
 use query_engine::{ExecuteQueryRequest, QueryError, QueryExecutionResult, execute_postgres_query};
 use schema_diff::{SchemaChangeSet, diff_snapshots};
@@ -64,7 +64,10 @@ mod connection_diagnostics;
 mod connection_tests;
 use connection_diagnostics::ConnectionFailure;
 mod connection_security;
+mod connection_sessions;
+use connection_sessions::{ConnectionSessions, DatabasePool};
 mod connection_sync;
+mod database_server;
 mod file_access;
 pub use connection_security::run_askpass_helper;
 mod change_review;
@@ -139,6 +142,7 @@ struct AppState {
     snapshot_captures: Arc<Mutex<HashMap<Uuid, Arc<Semaphore>>>>,
     cloud_operations: Arc<Mutex<HashMap<Uuid, Arc<Semaphore>>>>,
     active_queries: Arc<Mutex<HashMap<Uuid, (Uuid, CancellationToken)>>>,
+    sessions: ConnectionSessions,
 }
 
 async fn acquire_cloud_operation(
@@ -222,6 +226,13 @@ struct SaveDataSourceInput {
 }
 
 impl SaveDataSourceInput {
+    fn is_server_connection(&self) -> bool {
+        matches!(
+            self.database_type,
+            DatabaseType::MySql | DatabaseType::PostgreSql
+        ) && self.database.trim().is_empty()
+    }
+
     fn ssh_secret(&self) -> Option<&str> {
         match self.security.ssh.as_ref()?.authentication {
             schema_model::SshAuthentication::Password => self.ssh_password.as_deref(),
@@ -875,6 +886,73 @@ async fn save_data_source(
     save_data_source_using(input, &state).await
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MappedDataSource {
+    profile: DataSourceProfile,
+    capture: CaptureSnapshotResult,
+}
+
+#[tauri::command]
+async fn save_and_map_data_source(
+    input: SaveDataSourceInput,
+    source_id: Uuid,
+    state: State<'_, AppState>,
+) -> Result<MappedDataSource, String> {
+    let _operation = acquire_cloud_operation(&state, source_id).await?;
+    if input.id.is_some() || input.is_server_connection() {
+        return Err("Choose a new database or SQLite file to map.".into());
+    }
+    validate_connection_profile_input(&input)?;
+    if input.database_type != DatabaseType::Sqlite && input.password.is_empty() {
+        return Err("A database password is required for a new data source.".into());
+    }
+    let now = Utc::now();
+    let profile = data_source_profile_from_input(&input, source_id, now, now);
+    if let Some(saved) = state
+        .store
+        .get_data_source(source_id)
+        .await
+        .map_err(safe_store_error)?
+    {
+        if saved
+            != (DataSourceProfile {
+                created_at: saved.created_at,
+                updated_at: saved.updated_at,
+                ..profile.clone()
+            })
+        {
+            return Err(
+                "This connection was already saved. Open it from the data source list.".into(),
+            );
+        }
+        let snapshot = state
+            .store
+            .latest_snapshot(source_id)
+            .await
+            .map_err(safe_store_error)?
+            .ok_or("The saved connection has no structure snapshot.")?;
+        return Ok(MappedDataSource {
+            profile: saved,
+            capture: CaptureSnapshotResult {
+                snapshot,
+                stored: false,
+                change_set: None,
+            },
+        });
+    }
+    let capture = capture_snapshot_using(
+        CaptureSnapshotInput {
+            source_id,
+            trigger: None,
+        },
+        &state,
+        Some((&profile, &input)),
+    )
+    .await?;
+    Ok(MappedDataSource { profile, capture })
+}
+
 async fn save_data_source_using(
     mut input: SaveDataSourceInput,
     state: &AppState,
@@ -887,6 +965,14 @@ async fn save_data_source_using(
         .get_data_source(id)
         .await
         .map_err(safe_store_error)?;
+    if existing.as_ref().is_some_and(|profile| {
+        profile.is_server_connection() != input.is_server_connection()
+            || (profile.is_server_connection() && profile.database_type != input.database_type)
+    }) {
+        return Err(
+            "Save a separate connection to change between server and database scope.".into(),
+        );
+    }
     if input.database_type == DatabaseType::Sqlite {
         if let Some(previous) = existing.as_ref().filter(|previous| {
             previous.database_type == DatabaseType::Sqlite && previous.sqlite == input.sqlite
@@ -939,6 +1025,7 @@ async fn save_data_source_using(
     let previous = connection_credentials::save(id, &input)?;
     let mut profile = data_source_profile_from_input(&input, id, created_at, now);
     profile.connection_sync = bound_sync_identity(existing.as_ref());
+    profile.server_source_id = database_server::parent_for_edit(&profile, existing.as_ref());
     if let Err(error) = state.store.save_data_source(&profile).await {
         previous.rollback()?;
         return Err(safe_store_error(error));
@@ -978,7 +1065,8 @@ async fn test_postgres_connection(
                         "Unable to prepare the connection test.",
                     )
                 })??;
-            test_database_connection_with_progress(&input, Some(&on_progress)).await
+            test_database_connection_with_progress(&input, Some(&on_progress), &state.sessions)
+                .await
         })
         .await
 }
@@ -1038,15 +1126,17 @@ fn prepare_connection_test(
     Ok(input)
 }
 
+#[cfg(test)]
 async fn test_database_connection(
     input: &SaveDataSourceInput,
 ) -> Result<ConnectionTestResult, ConnectionFailure> {
-    test_database_connection_with_progress(input, None).await
+    test_database_connection_with_progress(input, None, &ConnectionSessions::default()).await
 }
 
 async fn test_database_connection_with_progress(
     input: &SaveDataSourceInput,
     progress: Option<&tauri::ipc::Channel<connection_tests::ConnectionTestProgress>>,
+    sessions: &ConnectionSessions,
 ) -> Result<ConnectionTestResult, ConnectionFailure> {
     if input.database_type == DatabaseType::Sqlite {
         connection_tests::progress(progress, "file", false);
@@ -1064,82 +1154,89 @@ async fn test_database_connection_with_progress(
         });
     }
     connection_tests::progress(progress, "ssh", false);
-    let tunnel = connection_security::Tunnel::open(
-        &input.security,
-        &input.host,
-        input.port,
-        input.database_type,
-        input.ssh_secret(),
-    )
-    .await
-    .map_err(|message| ConnectionFailure::new("ssh", message))?;
+    let now = Utc::now();
+    let profile = data_source_profile_from_input(input, Uuid::nil(), now, now);
     let ssh_connected = input.security.ssh.is_some();
-    connection_tests::progress(progress, "handshake", ssh_connected);
-    match input.database_type {
-        DatabaseType::Sqlite => unreachable!("SQLite handled before network setup"),
-        DatabaseType::PostgreSql => {
-            let options =
-                connection_options_from_input(input).with_socket(tunnel.postgres_socket());
-            let pool = connect(&options).await.map_err(|error| {
-                connection_diagnostics::postgres(error).after_ssh(ssh_connected)
-            })?;
+    let testing = sessions.provisional();
+    let session = testing
+        .open(
+            &profile,
+            &input.password,
+            input.ssh_secret(),
+            Duration::from_secs(15),
+            || connection_tests::progress(progress, "handshake", ssh_connected),
+        )
+        .await?;
+    let result = match &session.pool {
+        DatabasePool::Postgres(pool) => test_postgres_target(input, pool, progress).await,
+        DatabasePool::MySql(pool) => {
             connection_tests::progress(progress, "metadata", ssh_connected);
-            let database = test_connection(&pool).await.map_err(|error| {
-                connection_diagnostics::postgres(error).after_ssh(ssh_connected)
-            })?;
-            let server_read_only = sqlx::query_scalar::<_, String>("SHOW transaction_read_only")
-                .fetch_optional(&pool)
-                .await
-                .ok()
-                .flatten()
-                .map(|value| value == "on");
-            connection_tests::progress(progress, "tls", ssh_connected);
-            let ssl_active = sqlx::query_scalar::<_, bool>(
-                "SELECT COALESCE((SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()), false)",
-            )
-            .fetch_optional(&pool)
-            .await
-            .ok()
-            .flatten();
-            pool.close().await;
-            Ok(ConnectionTestResult {
-                database,
-                ssl_active,
-                server_read_only,
-            })
-        }
-        DatabaseType::MySql => {
-            let options =
-                mysql_connection_options_from_input(input).with_socket(tunnel.mysql_socket());
-            let pool = connect_mysql(&options)
-                .await
-                .map_err(|error| connection_diagnostics::mysql(error).after_ssh(ssh_connected))?;
-            connection_tests::progress(progress, "metadata", ssh_connected);
-            let database = test_mysql_connection(&pool)
-                .await
-                .map_err(|error| connection_diagnostics::mysql(error).after_ssh(ssh_connected))?;
+            let database = if input.is_server_connection() {
+                database_server::test_mysql_server(pool).await
+            } else {
+                test_mysql_connection(pool).await
+            }
+            .map_err(|error| connection_diagnostics::mysql(error).after_ssh(ssh_connected))?;
             let server_read_only = sqlx::query_scalar::<_, i64>("SELECT @@global.read_only")
-                .fetch_optional(&pool)
+                .fetch_optional(pool)
                 .await
                 .ok()
                 .flatten()
                 .map(|value| value != 0);
             connection_tests::progress(progress, "tls", ssh_connected);
             let ssl_active = sqlx::query("SHOW STATUS LIKE 'Ssl_cipher'")
-                .fetch_optional(&pool)
+                .fetch_optional(pool)
                 .await
                 .ok()
                 .flatten()
                 .and_then(|row| row.try_get::<String, _>(1).ok())
                 .map(|cipher| !cipher.is_empty());
-            pool.close().await;
             Ok(ConnectionTestResult {
                 database,
                 ssl_active,
                 server_read_only,
             })
         }
+    };
+    if result.is_ok() {
+        sessions.retain_verified(&testing).await;
     }
+    result
+}
+
+async fn test_postgres_target(
+    input: &SaveDataSourceInput,
+    pool: &sqlx::PgPool,
+    progress: Option<&tauri::ipc::Channel<connection_tests::ConnectionTestProgress>>,
+) -> Result<ConnectionTestResult, ConnectionFailure> {
+    let ssh_connected = input.security.ssh.is_some();
+    let server = input.is_server_connection();
+    connection_tests::progress(progress, "metadata", ssh_connected);
+    let mut database = test_connection(pool)
+        .await
+        .map_err(|error| connection_diagnostics::postgres(error).after_ssh(ssh_connected))?;
+    if server {
+        database.name.clear();
+    }
+    let server_read_only = sqlx::query_scalar::<_, String>("SHOW transaction_read_only")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|value| value == "on");
+    connection_tests::progress(progress, "tls", ssh_connected);
+    let ssl_active = sqlx::query_scalar::<_, bool>(
+        "SELECT COALESCE((SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()), false)",
+    )
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+    Ok(ConnectionTestResult {
+        database,
+        ssl_active,
+        server_read_only,
+    })
 }
 
 fn connection_input_with_resolved_password(
@@ -1168,6 +1265,7 @@ fn data_source_profile_from_input(
     updated_at: chrono::DateTime<Utc>,
 ) -> DataSourceProfile {
     DataSourceProfile {
+        server_source_id: None,
         sqlite: input.sqlite.clone(),
         connection_sync: None,
         id,
@@ -1234,10 +1332,13 @@ async fn verify_and_refresh_data_source(
         .await
         .map_err(safe_store_error)?
         .ok_or_else(|| "The selected data source no longer exists.".to_owned())?;
+    if previous_profile.is_server_connection() || input.is_server_connection() {
+        return Err("Open a database on the server to view its structure.".into());
+    }
     connection_credentials::prepare_imported_binding(&mut input, Some(&previous_profile))?;
     let resolved = connection_input_with_resolved_password(input)?;
     validate_connection_input(&resolved)?;
-    let connection = test_database_connection(&resolved)
+    let connection = test_database_connection_with_progress(&resolved, None, &state.sessions)
         .await
         .map_err(|error| error.to_string())?;
     let mut profile = data_source_profile_from_input(
@@ -1247,6 +1348,7 @@ async fn verify_and_refresh_data_source(
         Utc::now(),
     );
     profile.connection_sync = bound_sync_identity(Some(&previous_profile));
+    profile.server_source_id = database_server::parent_for_edit(&profile, Some(&previous_profile));
 
     let capture = capture_snapshot_using(
         CaptureSnapshotInput {
@@ -1372,6 +1474,9 @@ async fn capture_snapshot_using(
         // macOS may wait for an unlock or authorization dialog here. Keep that
         // synchronous wait off Tokio workers so local storage and settings remain usable.
         connection_credentials::require_binding(&profile)?;
+        if profile.is_server_connection() {
+            return Err("Open a database on the server to view its structure.".into());
+        }
         let source_id = profile.id;
         let password = tokio::task::spawn_blocking(move || {
             credential_entry(source_id)?
@@ -1387,49 +1492,34 @@ async fn capture_snapshot_using(
         Some((_, input)) => input.ssh_secret().map(str::to_owned),
         None => connection_credentials::resolve_ssh(Some(profile.id), &profile.security, None)?,
     };
-    let tunnel = connection_security::Tunnel::open(
-        &profile.security,
-        &profile.host,
-        profile.port,
-        profile.database_type,
-        ssh_secret.as_deref(),
-    )
-    .await?;
-    let snapshot = match profile.database_type {
-        DatabaseType::Sqlite => unreachable!("SQLite captured before network setup"),
-        DatabaseType::PostgreSql => {
-            let options = connection_options_from_profile(&profile, &password)
-                .with_socket(tunnel.postgres_socket())
-                .with_connect_timeout(Duration::from_secs(u64::from(
-                    source_settings.refresh.connection_timeout_seconds,
-                )));
-            let pool = connect(&options).await.map_err(safe_connection_error)?;
-            tokio::time::timeout(
-                Duration::from_secs(u64::from(
-                    source_settings.refresh.introspection_timeout_seconds,
-                )),
-                inspect_schema(&pool, profile.id),
-            )
-            .await
-            .map_err(|_| "PostgreSQL introspection timed out.".to_owned())?
-            .map_err(safe_connection_error)?
+    let session = state
+        .sessions
+        .open(
+            &profile,
+            &password,
+            ssh_secret.as_deref(),
+            Duration::from_secs(u64::from(
+                source_settings.refresh.connection_timeout_seconds,
+            )),
+            || {},
+        )
+        .await
+        .map_err(|failure| failure.message)?;
+    let timeout = Duration::from_secs(u64::from(
+        source_settings.refresh.introspection_timeout_seconds,
+    ));
+    let snapshot = match &session.pool {
+        DatabasePool::Postgres(pool) => {
+            tokio::time::timeout(timeout, inspect_schema(pool, profile.id))
+                .await
+                .map_err(|_| "PostgreSQL introspection timed out.".to_owned())?
+                .map_err(safe_connection_error)?
         }
-        DatabaseType::MySql => {
-            let options = mysql_connection_options_from_profile(&profile, &password)
-                .with_socket(tunnel.mysql_socket())
-                .with_connect_timeout(Duration::from_secs(u64::from(
-                    source_settings.refresh.connection_timeout_seconds,
-                )));
-            let pool = connect_mysql(&options).await.map_err(safe_mysql_error)?;
-            tokio::time::timeout(
-                Duration::from_secs(u64::from(
-                    source_settings.refresh.introspection_timeout_seconds,
-                )),
-                inspect_mysql_schema(&pool, profile.id),
-            )
-            .await
-            .map_err(|_| "MySQL introspection timed out.".to_owned())?
-            .map_err(safe_mysql_error)?
+        DatabasePool::MySql(pool) => {
+            tokio::time::timeout(timeout, inspect_mysql_schema(pool, profile.id))
+                .await
+                .map_err(|_| "MySQL introspection timed out.".to_owned())?
+                .map_err(safe_mysql_error)?
         }
     };
     if let Some((_, resolved)) = verified {
@@ -1536,20 +1626,12 @@ async fn run_network_query(
     let query_id = input.query_id;
     let started = std::time::Instant::now();
     let executed_at = Utc::now().to_rfc3339();
-    let (password, tunnel, connect_timeout) = tokio::select! {
+    let session = tokio::select! {
         biased;
         () = cancellation.cancelled() => return Err(query_command_error(query_id, QueryError::Cancelled)),
-        prepared = prepare_query_connection(state, &profile) => prepared.map_err(|error| query_command_error(query_id, error))?,
+        prepared = prepare_read_session(state, &profile, None) => prepared.map_err(|error| query_command_error(query_id, error))?,
     };
-    let result = execute_prepared_network_query(
-        &profile,
-        &password,
-        &tunnel,
-        connect_timeout,
-        &request,
-        &cancellation,
-    )
-    .await;
+    let result = execute_prepared_network_query(&session, &request, &cancellation).await;
 
     // Generated page SQL includes boundary values read from the table.
     if input.table_browse {
@@ -1586,51 +1668,14 @@ async fn run_network_query(
 }
 
 async fn execute_prepared_network_query(
-    profile: &DataSourceProfile,
-    password: &str,
-    tunnel: &connection_security::Tunnel,
-    connect_timeout: Duration,
+    session: &connection_sessions::Session,
     request: &ExecuteQueryRequest,
     cancellation: &CancellationToken,
 ) -> Result<QueryExecutionResult, QueryError> {
-    match profile.database_type {
-        DatabaseType::Sqlite => unreachable!("SQLite queried before network setup"),
-        DatabaseType::PostgreSql => {
-            let options = connection_options_from_profile(profile, password)
-                .with_socket(tunnel.postgres_socket())
-                .with_connect_timeout(connect_timeout);
-            let connected = tokio::select! {
-                biased;
-                () = cancellation.cancelled() => Err(QueryError::Cancelled),
-                pool = connect(&options) => pool.map_err(|_| QueryError::Connection),
-            };
-            match connected {
-                Ok(pool) => {
-                    let result = execute_postgres_query(&pool, request, cancellation).await;
-                    pool.close().await;
-                    result
-                }
-                Err(error) => Err(error),
-            }
-        }
-        DatabaseType::MySql => {
-            let options = mysql_connection_options_from_profile(profile, password)
-                .with_socket(tunnel.mysql_socket())
-                .with_connect_timeout(connect_timeout);
-            let connected = tokio::select! {
-                biased;
-                () = cancellation.cancelled() => Err(QueryError::Cancelled),
-                pool = connect_mysql(&options) => pool.map_err(|_| QueryError::Connection),
-            };
-            match connected {
-                Ok(pool) => {
-                    let result =
-                        query_engine::execute_mysql_query(&pool, request, cancellation).await;
-                    pool.close().await;
-                    result
-                }
-                Err(error) => Err(error),
-            }
+    match &session.pool {
+        DatabasePool::Postgres(pool) => execute_postgres_query(pool, request, cancellation).await,
+        DatabasePool::MySql(pool) => {
+            query_engine::execute_mysql_query(pool, request, cancellation).await
         }
     }
 }
@@ -1639,6 +1684,25 @@ async fn prepare_query_connection(
     state: &AppState,
     profile: &DataSourceProfile,
 ) -> Result<(String, connection_security::Tunnel, Duration), QueryError> {
+    let (password, ssh_password, timeout) = query_credentials(state, profile).await?;
+    connection_security::validate(&profile.security, profile.ssl_mode)
+        .map_err(QueryError::Validation)?;
+    let tunnel = connection_security::Tunnel::open(
+        &profile.security,
+        &profile.host,
+        profile.port,
+        profile.database_type,
+        ssh_password.as_deref(),
+    )
+    .await
+    .map_err(QueryError::Validation)?;
+    Ok((password, tunnel, timeout))
+}
+
+async fn query_credentials(
+    state: &AppState,
+    profile: &DataSourceProfile,
+) -> Result<(String, Option<String>, Duration), QueryError> {
     let profile_id = profile.id;
     let security = profile.security.clone();
     let (password, ssh_password) = tokio::task::spawn_blocking(move || {
@@ -1656,21 +1720,32 @@ async fn prepare_query_connection(
         .get_data_source_settings(profile.id)
         .await
         .map_err(|_| QueryError::Connection)?;
-    connection_security::validate(&profile.security, profile.ssl_mode)
-        .map_err(QueryError::Validation)?;
-    let tunnel = connection_security::Tunnel::open(
-        &profile.security,
-        &profile.host,
-        profile.port,
-        profile.database_type,
-        ssh_password.as_deref(),
-    )
-    .await
-    .map_err(QueryError::Validation)?;
     let timeout = Duration::from_secs(u64::from(
         source_settings.refresh.connection_timeout_seconds,
     ));
-    Ok((password, tunnel, timeout))
+    Ok((password, ssh_password, timeout))
+}
+
+async fn prepare_read_session(
+    state: &AppState,
+    profile: &DataSourceProfile,
+    limit: Option<Duration>,
+) -> Result<connection_sessions::Session, QueryError> {
+    let (password, ssh_password, timeout) = query_credentials(state, profile).await?;
+    let connect = state
+        .sessions
+        .open(profile, &password, ssh_password.as_deref(), timeout, || {});
+    let session = if let Some(limit) = limit {
+        tokio::time::timeout(limit, connect)
+            .await
+            .map_err(|_| QueryError::Timeout)?
+    } else {
+        connect.await
+    };
+    session.map_err(|error| match error.stage {
+        "configuration" | "ssh" => QueryError::Validation(error.message),
+        _ => QueryError::Connection,
+    })
 }
 
 #[tauri::command]
@@ -2945,6 +3020,7 @@ async fn duplicate_data_source(
     let now = Utc::now();
     let id = Uuid::new_v4();
     let copy = DataSourceProfile {
+        server_source_id: None,
         sqlite: original.sqlite,
         connection_sync: original
             .connection_sync
@@ -5235,10 +5311,9 @@ fn validate_connection_profile_input(input: &SaveDataSourceInput) -> Result<(), 
     }
     if input.display_name.trim().is_empty()
         || input.host.trim().is_empty()
-        || input.database.trim().is_empty()
         || input.username.trim().is_empty()
     {
-        return Err("Name, host, database, and username are required.".into());
+        return Err("Name, host, and username are required.".into());
     }
     if input.port == 0 {
         return Err("Database port must be greater than zero.".into());
@@ -5247,6 +5322,7 @@ fn validate_connection_profile_input(input: &SaveDataSourceInput) -> Result<(), 
     Ok(())
 }
 
+#[cfg(test)]
 fn connection_options_from_input(input: &SaveDataSourceInput) -> PostgresConnectionOptions {
     PostgresConnectionOptions::from_fields(
         input.host.trim(),
@@ -5272,18 +5348,6 @@ fn connection_options_from_profile(
         adapter_ssl_mode(profile.ssl_mode),
     )
     .with_tls(&profile.security.tls)
-}
-
-fn mysql_connection_options_from_input(input: &SaveDataSourceInput) -> MySqlConnectionOptions {
-    MySqlConnectionOptions::from_fields(
-        input.host.trim(),
-        input.port,
-        input.database.trim(),
-        input.username.trim(),
-        &input.password,
-        mysql_ssl_mode(input.ssl_mode),
-    )
-    .with_tls(&input.security.tls)
 }
 
 fn mysql_connection_options_from_profile(
@@ -5416,7 +5480,10 @@ pub fn run() {
             .map_err(std::io::Error::other)?;
             let store =
                 tauri::async_runtime::block_on(LocalSnapshotStore::open_path(database_path))?;
+            let sessions = ConnectionSessions::default();
+            sessions.start_reaper();
             app.manage(AppState {
+                sessions,
                 store,
                 ai_limiter: Arc::new(Semaphore::new(840)),
                 snapshot_captures: Arc::new(Mutex::new(HashMap::new())),
@@ -5461,6 +5528,10 @@ pub fn run() {
                 reveal_app_directory,
                 list_data_sources,
                 save_data_source,
+                save_and_map_data_source,
+                database_server::list_server_databases,
+                database_server::create_server_database,
+                database_server::open_server_database,
                 test_postgres_connection,
                 cancel_connection_test,
                 connection_security::pick_connection_file,

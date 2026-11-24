@@ -494,6 +494,7 @@ mod tests {
     fn profile(path: &Path) -> DataSourceProfile {
         let now = chrono::Utc::now();
         DataSourceProfile {
+            server_source_id: None,
             connection_sync: None,
             id: uuid::Uuid::new_v4(),
             display_name: "Local".into(),
@@ -518,6 +519,7 @@ mod tests {
             .unwrap();
         store.save_data_source(profile).await.unwrap();
         AppState {
+            sessions: Default::default(),
             store,
             ai_limiter: std::sync::Arc::new(tokio::sync::Semaphore::new(840)),
             snapshot_captures: std::sync::Arc::default(),

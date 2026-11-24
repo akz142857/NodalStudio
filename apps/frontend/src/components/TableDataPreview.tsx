@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useId, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useState } from "react";
 import { useI18n } from "../i18n";
 import { normalizeQueryError } from "../i18n/query-errors";
 import type { DatabaseSnapshot, NodalStudioPlatform, QueryExecutionResult, TableDefinition, ViewDefinition } from "../platform/types";
 import type { TableSort } from "../platform/table-data-preferences";
+import type { TableRowCountTarget } from "../platform/table-row-counts";
 import { TABLE_PREVIEW_ROW_LIMIT, tableCountSql, tablePreviewSql } from "./query/query-format";
 import { readTableUniqueKeys, tableOffsetOrder, tablePagePlan, tablePageResult, tablePrimaryKeyApplies, tableUniqueKeysSql, type TableCursor } from "./query/table-page";
 import { executeTableQuery } from "./query/table-query";
@@ -18,13 +19,14 @@ import { useTableSort } from "./use-table-sort";
 import { useTablePagination } from "./use-table-pagination";
 import "./sqlite-table-workspace.css";
 
-export function TableDataPreview({ platform, snapshot, table, onShowDefinition, onShowDdl, connectionRevision, quickQuery }: {
+export function TableDataPreview({ platform, snapshot, table, onShowDefinition, onShowDdl, connectionRevision, onCompleteTableRead, quickQuery }: {
   platform: NodalStudioPlatform;
   snapshot: DatabaseSnapshot;
   table: TableDefinition | ViewDefinition;
   onShowDefinition?: () => void;
   onShowDdl?: () => void;
   connectionRevision?: string;
+  onCompleteTableRead?: (target: TableRowCountTarget, count: number) => void;
   quickQuery?: { result: QueryExecutionResult; sql: string; onReturn: () => void };
 }) {
   const { t } = useI18n();
@@ -118,6 +120,12 @@ export function TableDataPreview({ platform, snapshot, table, onShowDefinition, 
       return confirm(preview.data.page, preview.data.data.rowCount > 0);
     }
   }, [confirm, preview.data, preview.isFetching, preview.isSuccess, showPager]);
+  useEffect(() => {
+    const firstPage = preview.data;
+    if (showPager && !filter && preview.isSuccess && !preview.isFetching && firstPage?.page === 1 && !firstPage.hasMore) {
+      onCompleteTableRead?.({ schema, name }, firstPage.data.rowCount);
+    }
+  }, [filter, name, onCompleteTableRead, preview.data, preview.isFetching, preview.isSuccess, schema, showPager]);
 
   function reload() {
     pagination.reset({ keepScroll: true });
@@ -154,23 +162,27 @@ export function TableDataPreview({ platform, snapshot, table, onShowDefinition, 
         applied={filterSettings} busy={preview.isFetching} failed={preview.isError} onChange={(next) => {
           if (changeFilter(next)) pagination.reset();
         }} />
-      {!quickQuery && preview.isFetching && <p role="status">{t(displayed ? "tableData.updating" : "tableData.loading")}</p>}
+      {!quickQuery && preview.isFetching && displayed && <p role="status">{t("tableData.updating")}</p>}
       {!quickQuery && preview.isError && <div className="table-data-feedback">
         <p role="alert">{t(displayed ? "tableData.updateFailed" : "tableData.loadFailed")} {normalizeQueryError(t, preview.error).message}</p>
         {sort && <button type="button" onClick={() => changeSort()}>{t("tableData.clearSort")}</button>}
       </div>}
-      {displayed && <>
-        {!quickQuery && !preview.isFetching && !preview.isError && displayed.rowCount === 0 &&
-          <p>{t(shownPageNumber > 1 ? "tableData.emptyPage" : filter ? "tableData.noMatches" : "tableData.empty")}</p>}
-        <div className="table-data-preview-result" aria-busy={!quickQuery && preview.isFetching}><QueryResultGrid result={displayed} platform={platform}
+      {displayed && !quickQuery && !preview.isFetching && !preview.isError && displayed.rowCount === 0 &&
+        <p>{t(shownPageNumber > 1 ? "tableData.emptyPage" : filter ? "tableData.noMatches" : "tableData.empty")}</p>}
+      <div className="table-data-preview-result" aria-busy={Boolean(displayed && !quickQuery && preview.isFetching)}>
+        {displayed ? <QueryResultGrid result={displayed} platform={platform}
           scrollRef={showPager ? scrollRef : undefined}
           tableColumnWidths={quickQuery ? undefined : columnWidths} columnComments={quickQuery ? undefined : columnComments}
           statementTable={!quickQuery && pagedTable && pagedTable.table.tableKind !== "foreign"
             ? { table: shownPage?.primaryKeyApplies ? pagedTable.table : { ...pagedTable.table, primaryKey: null }, dialect: pagedTable.dialect } : undefined}
           tablePage={showPager && shownPage ? { rowOffset: (shownPage.page - 1) * shownPage.pageSize } : undefined}
-          columnSort={quickQuery ? undefined : { applied: shownPage?.sort, requested: sort, onChange: changeSort }} /></div>
-      </>}
-      <TableDataFooter statement={sql ? { sql } : undefined}
+          columnSort={quickQuery ? undefined : { applied: shownPage?.sort, requested: sort, onChange: changeSort }} />
+          : preview.isFetching && <div className="table-data-preview-loading" role="status">
+            <span aria-hidden="true" />
+            {t("tableData.loading")}
+          </div>}
+      </div>
+      <TableDataFooter statement={sql ? { sql } : undefined} reserveStatementSpace={showPager}
         actions={!quickQuery && <IconButton icon="refresh" label={t(preview.isError ? "tableData.retry" : "tableData.reload")}
           onClick={preview.isError ? () => void preview.refetch() : reload} disabled={preview.isFetching} />}>
         {showPager && <TableDataPagination page={shownPageNumber} pageSize={pageSize} busy={preview.isFetching}

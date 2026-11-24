@@ -27,33 +27,18 @@ pub async fn execute_mysql_query(
     };
     let mut connection_id: Option<u64> = None;
     let operation = async {
-        connection_id = Some(
-            sqlx::query_scalar("SELECT CONNECTION_ID()")
-                .fetch_one(&mut connection)
-                .await
-                .map_err(|error| map_database_error(&error))?,
-        );
-        // Match the editor/parser's standard MySQL quoting rules on this disposable session.
-        sqlx::query("SET SESSION sql_mode = TRIM(BOTH ',' FROM REPLACE(REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), ',ANSI_QUOTES,', ','), ',NO_BACKSLASH_ESCAPES,', ','))")
-            .execute(&mut connection)
-            .await
-            .map_err(|error| map_database_error(&error))?;
-        sqlx::query(AssertSqlSafe(format!(
-            "SET SESSION max_execution_time = {}",
+        let setup = AssertSqlSafe(format!(
+            "SELECT CONNECTION_ID(); SET SESSION sql_mode = TRIM(BOTH ',' FROM REPLACE(REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), ',ANSI_QUOTES,', ','), ',NO_BACKSLASH_ESCAPES,', ',')), SESSION max_execution_time = {}; START TRANSACTION READ ONLY",
             request.timeout_ms
-        )))
-        .execute(&mut connection)
-        .await
-        .map_err(|error| map_database_error(&error))?;
-        sqlx::raw_sql("START TRANSACTION READ ONLY")
-            .execute(&mut connection)
+        ));
+        let session = sqlx::raw_sql(setup)
+            .fetch_all(&mut connection)
             .await
             .map_err(|error| map_database_error(&error))?;
-        let description = connection
-            .describe(AssertSqlSafe(request.sql.clone()).into_sql_str())
-            .await
-            .map_err(|error| map_database_error(&error))?;
-        let mut columns = query_columns(description.columns());
+        connection_id = session
+            .first()
+            .and_then(|row| row.try_get::<u64, _>(0).ok());
+        let mut columns = Vec::new();
         // Text protocol preserves DECIMAL/BIGINT, fractional dates and wide MySQL TIME values.
         let mut stream = sqlx::raw_sql(AssertSqlSafe(request.sql.clone())).fetch(&mut connection);
         let mut rows = Vec::new();
@@ -74,6 +59,14 @@ pub async fn execute_mysql_query(
                 return Err(QueryError::ResultLimit);
             }
             rows.push(cells);
+        }
+        drop(stream);
+        if rows.is_empty() {
+            let description = connection
+                .describe(AssertSqlSafe(request.sql.clone()).into_sql_str())
+                .await
+                .map_err(|error| map_database_error(&error))?;
+            columns = query_columns(description.columns());
         }
         Ok(QueryExecutionResult {
             query_id: request.query_id,
