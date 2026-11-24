@@ -177,6 +177,7 @@ export interface SaveDataSourceInput {
 
 export interface DataSourceProfile {
   sqlite?: SqliteFile | null;
+  connectionSync?: { originId: string; pending: boolean };
   id: string;
   displayName: string;
   host: string;
@@ -188,6 +189,52 @@ export interface DataSourceProfile {
   security?: ConnectionSecurity;
   createdAt: string;
   updatedAt: string;
+}
+
+export type WorkspacePathKind = "openSettings" | "saveSettings" | "openBackup" | "saveBackup" | "repository" |
+  "openSqlite" | "sqliteDirectory" | "connectionSyncFolder" | "openConnectionSync";
+
+export type PortableConnection = Pick<DataSourceProfile, "displayName" | "databaseType" | "database" | "host" | "port" | "username" | "sslMode"> & {
+  ssh: Pick<NonNullable<ConnectionSecurity["ssh"]>, "host" | "port" | "username" | "authentication"> | null;
+};
+
+export interface ConnectionSyncPreview {
+  token: string;
+  rows: { connection: PortableConnection; action: "add" | "update" | "unchanged" | "conflict"; existing: PortableConnection | null }[];
+}
+
+export interface ConnectionSyncExportReceipt {
+  fileName: string;
+  count: number;
+  skipped: number;
+}
+
+export type ConnectionFolderProvider = "iCloud" | "googleDrive";
+
+export interface ConnectionFolderSetup {
+  folder: string;
+  provider: ConnectionFolderProvider;
+  library: string | null;
+  passphrase: string;
+}
+
+export interface ConnectionFolderPreview extends ConnectionSyncPreview {
+  outgoing: number;
+  createsLibrary: boolean;
+  deferredIncoming: boolean;
+}
+
+export interface ConnectionFolderStatus {
+  folder: string | null;
+  provider: ConnectionFolderProvider | null;
+  library: string | null;
+  paused: boolean;
+  queued: number;
+  pending: number;
+  pendingId: string | null;
+  lastWrite: string | null;
+  lastCheck: string | null;
+  problem: string | null;
 }
 
 export interface CaptureSnapshotResult {
@@ -596,7 +643,18 @@ export interface NodalStudioPlatform {
   getRuntimeInfo(): Promise<RuntimeInfo>;
   getDiagnosticInfo(): Promise<import("./settings-types").DiagnosticInfo>;
   revealAppDirectory(kind: "data" | "logs"): Promise<void>;
-  pickWorkspacePath(kind: "openSettings" | "saveSettings" | "openBackup" | "saveBackup" | "repository" | "openSqlite" | "sqliteDirectory"): Promise<string | null>;
+  pickWorkspacePath(kind: WorkspacePathKind): Promise<string | null>;
+  exportConnectionSync(folder: string, passphrase: string): Promise<ConnectionSyncExportReceipt>;
+  previewConnectionSync(path: string, passphrase: string): Promise<ConnectionSyncPreview>;
+  importConnectionSync(path: string, passphrase: string, token: string): Promise<DataSourceProfile[]>;
+  inspectConnectionFolder(folder: string): Promise<{ libraries: string[] }>;
+  previewConnectionFolderSetup(input: ConnectionFolderSetup): Promise<ConnectionFolderPreview>;
+  enableConnectionFolder(input: ConnectionFolderSetup, token: string): Promise<ConnectionFolderStatus>;
+  getConnectionFolderStatus(): Promise<ConnectionFolderStatus>;
+  checkConnectionFolder(): Promise<ConnectionFolderStatus>;
+  setConnectionFolderPaused(paused: boolean): Promise<ConnectionFolderStatus>;
+  previewConnectionFolderUpdates(): Promise<ConnectionFolderPreview>;
+  applyConnectionFolderUpdates(token: string): Promise<ConnectionFolderStatus>;
   pickConnectionFile(): Promise<string | null>;
   listDataSources(): Promise<DataSourceProfile[]>;
   renameDataSource(sourceId: string, displayName: string): Promise<DataSourceProfile>;

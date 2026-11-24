@@ -7,6 +7,14 @@ pub const SSH_SERVICE: &str = "com.claycosmos.nodalstudio.ssh";
 
 /// Imported network models deliberately have no local connection binding.
 pub fn require_binding(profile: &schema_model::DataSourceProfile) -> Result<(), String> {
+    if profile
+        .connection_sync
+        .is_some_and(|identity| identity.pending)
+    {
+        return Err(
+            "Edit this imported connection and finish its local setup before connecting.".into(),
+        );
+    }
     if profile.host.trim().is_empty() || profile.port == 0 || profile.username.trim().is_empty() {
         return Err("This imported model is offline. Edit the connection and enter its credentials before connecting.".into());
     }

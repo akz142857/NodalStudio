@@ -17,6 +17,12 @@ import type {
   ConnectionTestResult,
   ConnectionTestOptions,
   ConnectionTestProgress,
+  ConnectionSyncExportReceipt,
+  ConnectionSyncPreview,
+  ConnectionFolderPreview,
+  ConnectionFolderSetup,
+  ConnectionFolderStatus,
+  WorkspacePathKind,
   DatabaseSnapshot,
   DomainGroup,
   DriftReport,
@@ -127,7 +133,40 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke<void>("reveal_app_directory", { input: { kind } });
   }
 
-  pickWorkspacePath(kind: "openSettings" | "saveSettings" | "openBackup" | "saveBackup" | "repository" | "openSqlite" | "sqliteDirectory"): Promise<string | null> { return invoke("pick_workspace_path", { kind }); }
+  pickWorkspacePath(kind: WorkspacePathKind): Promise<string | null> { return invoke("pick_workspace_path", { kind }); }
+  exportConnectionSync(folder: string, passphrase: string): Promise<ConnectionSyncExportReceipt> {
+    return invoke("export_connection_sync", { folder, passphrase });
+  }
+  previewConnectionSync(path: string, passphrase: string): Promise<ConnectionSyncPreview> {
+    return invoke("preview_connection_sync", { path, passphrase });
+  }
+  importConnectionSync(path: string, passphrase: string, token: string): Promise<DataSourceProfile[]> {
+    return invoke("import_connection_sync", { path, passphrase, token });
+  }
+  inspectConnectionFolder(folder: string): Promise<{ libraries: string[] }> {
+    return invoke("inspect_connection_folder", { folder });
+  }
+  previewConnectionFolderSetup(input: ConnectionFolderSetup): Promise<ConnectionFolderPreview> {
+    return invoke("preview_connection_folder_setup", { input });
+  }
+  enableConnectionFolder(input: ConnectionFolderSetup, token: string): Promise<ConnectionFolderStatus> {
+    return invoke("enable_connection_folder", { input, token });
+  }
+  getConnectionFolderStatus(): Promise<ConnectionFolderStatus> {
+    return invoke("get_connection_folder_status");
+  }
+  checkConnectionFolder(): Promise<ConnectionFolderStatus> {
+    return invoke("check_connection_folder");
+  }
+  setConnectionFolderPaused(paused: boolean): Promise<ConnectionFolderStatus> {
+    return invoke("set_connection_folder_paused", { paused });
+  }
+  previewConnectionFolderUpdates(): Promise<ConnectionFolderPreview> {
+    return invoke("preview_connection_folder_updates");
+  }
+  applyConnectionFolderUpdates(token: string): Promise<ConnectionFolderStatus> {
+    return invoke("apply_connection_folder_updates", { token });
+  }
   pickConnectionFile(): Promise<string | null> {
     return invoke<string | null>("pick_connection_file");
   }

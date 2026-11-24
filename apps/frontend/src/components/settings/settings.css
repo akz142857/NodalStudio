@@ -160,3 +160,9 @@
 .settings-save-bar span { flex: 1 1 11rem; color: var(--ds-secondary); font-size: var(--ds-text-control); }
 .settings-save-bar button:nth-child(2) { margin-inline-start: auto; }
 .settings-danger-zone { border-color: color-mix(in srgb, var(--ds-danger) 35%, var(--ds-separator)); }
+
+.connection-folder-path { max-width: 65%; overflow-wrap: anywhere; text-align: end; }
+.connection-folder-form label > input { min-width: 0; }
+.connection-folder-preview h3 { margin: var(--ds-space-3) 0 var(--ds-space-2); font-size: var(--ds-text-control); }
+.connection-folder-preview .connection-sync-preview { padding-inline: var(--ds-space-3); }
+.settings-section .settings-operation-error { color: var(--ds-danger); overflow-wrap: anywhere; }

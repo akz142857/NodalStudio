@@ -64,6 +64,7 @@ mod connection_diagnostics;
 mod connection_tests;
 use connection_diagnostics::ConnectionFailure;
 mod connection_security;
+mod connection_sync;
 mod file_access;
 pub use connection_security::run_askpass_helper;
 mod change_review;
@@ -877,12 +878,13 @@ async fn save_data_source_using(
             return Ok(profile);
         }
         validate_connection_profile_input(&input)?;
-        let profile = data_source_profile_from_input(
+        let mut profile = data_source_profile_from_input(
             &input,
             id,
             existing.as_ref().map_or(now, |p| p.created_at),
             now,
         );
+        profile.connection_sync = bound_sync_identity(existing.as_ref());
         capture_snapshot_using(
             CaptureSnapshotInput {
                 source_id: id,
@@ -894,17 +896,21 @@ async fn save_data_source_using(
         .await?;
         return Ok(profile);
     }
+    if existing
+        .as_ref()
+        .is_some_and(|profile| profile.connection_sync.is_some_and(|sync| sync.pending))
+    {
+        return Err("Use Verify & Refresh to finish setting up this imported connection.".into());
+    }
     connection_credentials::prepare_imported_binding(&mut input, existing.as_ref())?;
     validate_connection_profile_input(&input)?;
     if existing.is_none() && input.password.is_empty() {
         return Err("A database password is required for a new data source.".into());
     }
-    let created_at = match existing {
-        Some(existing) => existing.created_at,
-        None => now,
-    };
+    let created_at = existing.as_ref().map_or(now, |profile| profile.created_at);
     let previous = connection_credentials::save(id, &input)?;
-    let profile = data_source_profile_from_input(&input, id, created_at, now);
+    let mut profile = data_source_profile_from_input(&input, id, created_at, now);
+    profile.connection_sync = bound_sync_identity(existing.as_ref());
     if let Err(error) = state.store.save_data_source(&profile).await {
         previous.rollback()?;
         return Err(safe_store_error(error));
@@ -1136,6 +1142,7 @@ fn data_source_profile_from_input(
 ) -> DataSourceProfile {
     DataSourceProfile {
         sqlite: input.sqlite.clone(),
+        connection_sync: None,
         id,
         display_name: input.display_name.trim().to_owned(),
         host: if input.database_type == DatabaseType::Sqlite {
@@ -1174,6 +1181,17 @@ fn data_source_profile_from_input(
     }
 }
 
+fn bound_sync_identity(
+    profile: Option<&DataSourceProfile>,
+) -> Option<schema_model::ConnectionSyncIdentity> {
+    profile
+        .and_then(|profile| profile.connection_sync)
+        .map(|mut identity| {
+            identity.pending = false;
+            identity
+        })
+}
+
 #[tauri::command]
 async fn verify_and_refresh_data_source(
     mut input: SaveDataSourceInput,
@@ -1195,12 +1213,13 @@ async fn verify_and_refresh_data_source(
     let connection = test_database_connection(&resolved)
         .await
         .map_err(|error| error.to_string())?;
-    let profile = data_source_profile_from_input(
+    let mut profile = data_source_profile_from_input(
         &resolved,
         source_id,
         previous_profile.created_at,
         Utc::now(),
     );
+    profile.connection_sync = bound_sync_identity(Some(&previous_profile));
 
     let capture = capture_snapshot_using(
         CaptureSnapshotInput {
@@ -2898,9 +2917,17 @@ async fn duplicate_data_source(
         .map_err(safe_store_error)?
         .ok_or_else(|| "The data source no longer exists.".to_owned())?;
     let now = Utc::now();
+    let id = Uuid::new_v4();
     let copy = DataSourceProfile {
         sqlite: original.sqlite,
-        id: Uuid::new_v4(),
+        connection_sync: original
+            .connection_sync
+            .filter(|identity| identity.pending)
+            .map(|identity| schema_model::ConnectionSyncIdentity {
+                origin_id: id,
+                ..identity
+            }),
+        id,
         display_name: format!("{} copy", original.display_name),
         host: original.host,
         port: original.port,
@@ -2941,10 +2968,13 @@ async fn duplicate_data_source(
 async fn factory_reset(
     input: FactoryResetInput,
     state: State<'_, AppState>,
+    connection_folder: State<'_, connection_sync::folder::FolderRuntime>,
 ) -> Result<u64, String> {
     if input.confirmation != "DELETE LOCAL DATA" {
         return Err("Factory reset requires the exact confirmation phrase.".into());
     }
+    let _connection_sync =
+        connection_sync::folder::prepare_factory_reset(&connection_folder, &state.store).await?;
     let profiles = state
         .store
         .list_data_sources()
@@ -5332,6 +5362,7 @@ pub fn run() {
     builder
         .manage(purchase::PurchaseState::default())
         .manage(connection_tests::ConnectionTests::default())
+        .manage(connection_sync::folder::FolderRuntime::default())
         .manage(updates::UpdateState::default())
         .manage(table_understanding::TableAiState::default())
         .manage(discovery::DiscoveryAiState::default())
@@ -5368,6 +5399,7 @@ pub fn run() {
             });
             app.manage(database_export::Jobs::default());
             purchase::start(app.handle().clone());
+            connection_sync::folder::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -5407,6 +5439,17 @@ pub fn run() {
                 cancel_connection_test,
                 connection_security::pick_connection_file,
                 file_access::pick_workspace_path,
+                connection_sync::export_connection_sync,
+                connection_sync::preview_connection_sync,
+                connection_sync::import_connection_sync,
+                connection_sync::folder::inspect_connection_folder,
+                connection_sync::folder::preview_connection_folder_setup,
+                connection_sync::folder::enable_connection_folder,
+                connection_sync::folder::get_connection_folder_status,
+                connection_sync::folder::check_connection_folder,
+                connection_sync::folder::set_connection_folder_paused,
+                connection_sync::folder::preview_connection_folder_updates,
+                connection_sync::folder::apply_connection_folder_updates,
                 verify_and_refresh_data_source,
                 capture_postgres_snapshot,
                 execute_readonly_query,

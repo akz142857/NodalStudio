@@ -395,6 +395,7 @@ async fn postgres_large_dump_streams_and_cancels() {
 
 fn direct_profile(database: &str, port: u16) -> DataSourceProfile {
     DataSourceProfile {
+        connection_sync: None,
         id: Uuid::new_v4(),
         display_name: database.to_owned(),
         host: "127.0.0.1".into(),

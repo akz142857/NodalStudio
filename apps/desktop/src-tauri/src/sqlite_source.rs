@@ -494,6 +494,7 @@ mod tests {
     fn profile(path: &Path) -> DataSourceProfile {
         let now = chrono::Utc::now();
         DataSourceProfile {
+            connection_sync: None,
             id: uuid::Uuid::new_v4(),
             display_name: "Local".into(),
             host: String::new(),

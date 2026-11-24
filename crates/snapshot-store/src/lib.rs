@@ -460,12 +460,110 @@ impl LocalSnapshotStore {
     ///
     /// Returns an error when `SQLite` access fails or a stored payload is invalid.
     pub async fn list_data_sources(&self) -> Result<Vec<DataSourceProfile>, SnapshotStoreError> {
-        let rows = sqlx::query("SELECT payload_json FROM data_sources ORDER BY display_name")
-            .fetch_all(&self.pool)
+        Self::list_data_sources_using(&self.pool).await
+    }
+
+    async fn list_data_sources_using<'a>(
+        executor: impl sqlx::SqliteExecutor<'a>,
+    ) -> Result<Vec<DataSourceProfile>, SnapshotStoreError> {
+        let rows = sqlx::query("SELECT payload_json FROM data_sources ORDER BY display_name, id")
+            .fetch_all(executor)
             .await?;
         rows.into_iter()
             .map(|row| serde_json::from_str(row.get("payload_json")).map_err(Into::into))
             .collect()
+    }
+
+    /// Insert connection profiles together if the previously previewed state is current.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error on a database failure or a profile ID collision.
+    pub async fn insert_connection_sync_profiles(
+        &self,
+        expected: &[DataSourceProfile],
+        added: &[DataSourceProfile],
+    ) -> Result<bool, SnapshotStoreError> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        if Self::list_data_sources_using(&mut *tx).await? != expected {
+            tx.rollback().await?;
+            return Ok(false);
+        }
+        Self::insert_connection_profiles_in(&mut tx, added).await?;
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    async fn insert_connection_profiles_in(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        added: &[DataSourceProfile],
+    ) -> Result<(), SnapshotStoreError> {
+        for profile in added {
+            sqlx::query("INSERT INTO data_sources (id, display_name, updated_at, payload_json) VALUES (?, ?, ?, ?)")
+                .bind(profile.id.to_string())
+                .bind(&profile.display_name)
+                .bind(profile.updated_at.to_rfc3339())
+                .bind(serde_json::to_string(profile)?)
+                .execute(&mut **tx)
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Reads local-only synchronization state, outside the portable settings document.
+    ///
+    /// # Errors
+    /// Returns an error if the database cannot be read.
+    pub async fn connection_folder_state(&self) -> Result<Option<String>, SnapshotStoreError> {
+        Self::connection_folder_state_using(&self.pool).await
+    }
+
+    async fn connection_folder_state_using<'a>(
+        executor: impl sqlx::SqliteExecutor<'a>,
+    ) -> Result<Option<String>, SnapshotStoreError> {
+        Ok(sqlx::query_scalar(
+            "SELECT payload_json FROM app_settings WHERE settings_key = 'connection-folder'",
+        )
+        .fetch_optional(executor)
+        .await?)
+    }
+
+    /// Commits the sync cursor together with any reviewed local profile changes.
+    ///
+    /// # Errors
+    /// Returns an error if the transaction or serialization fails.
+    pub async fn commit_connection_folder(
+        &self,
+        previous: Option<&str>,
+        next: &str,
+        reviewed: Option<&[DataSourceProfile]>,
+        added: &[DataSourceProfile],
+        updated: &[DataSourceProfile],
+    ) -> Result<bool, SnapshotStoreError> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        if Self::connection_folder_state_using(&mut *tx)
+            .await?
+            .as_deref()
+            != previous
+            || (match reviewed {
+                Some(profiles) => Self::list_data_sources_using(&mut *tx).await? != profiles,
+                None => false,
+            })
+        {
+            tx.rollback().await?;
+            return Ok(false);
+        }
+        Self::insert_connection_profiles_in(&mut tx, added).await?;
+        for profile in updated {
+            Self::save_profile_in(&mut tx, profile).await?;
+            knowledge::states_in(&mut tx, profile.id).await?;
+        }
+        sqlx::query("INSERT INTO app_settings (settings_key, schema_version, payload_json) VALUES ('connection-folder', 1, ?) ON CONFLICT(settings_key) DO UPDATE SET payload_json = excluded.payload_json")
+            .bind(next)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(true)
     }
 
     /// Loads one non-sensitive data-source profile.
@@ -1815,6 +1913,7 @@ impl LocalSnapshotStore {
                 offline.port = 0;
                 offline.username.clear();
                 offline.security = schema_model::ConnectionSecurity::default();
+                offline.connection_sync = None;
                 offline
             };
             profile.sqlite = None;
@@ -2496,6 +2595,7 @@ mod tests {
     fn profile(source_id: Uuid) -> DataSourceProfile {
         let now = Utc::now();
         DataSourceProfile {
+            connection_sync: None,
             sqlite: None,
             id: source_id,
             display_name: "Imported".into(),
@@ -2730,6 +2830,7 @@ mod tests {
         let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
         let now = Utc::now();
         let profile = DataSourceProfile {
+            connection_sync: None,
             sqlite: None,
             id: Uuid::new_v4(),
             display_name: "Local development".into(),

@@ -296,13 +296,7 @@ pub fn reject_reason(invoke: &tauri::ipc::Invoke) -> Option<&'static str> {
     if unavailable_in_mas(invoke.message.command()) {
         return Some("Cloud collaboration is not available in the Mac App Store edition.");
     }
-    let verified = invoke
-        .message
-        .state_ref()
-        .get::<PurchaseState>()
-        .status
-        .lock()
-        .is_ok_and(|s| s.state == PurchasePhase::Verified);
+    let verified = can_use_paid_features(&invoke.message.state_ref().get::<PurchaseState>());
     if command_allowed(invoke.message.command(), verified, true) {
         None
     } else {
@@ -310,6 +304,14 @@ pub fn reject_reason(invoke: &tauri::ipc::Invoke) -> Option<&'static str> {
             "This operation requires a verified Mac App Store purchase. Open Settings → Updates to restore your purchase. Your saved data remains available.",
         )
     }
+}
+
+pub fn can_use_paid_features(state: &PurchaseState) -> bool {
+    !IS_MAS
+        || state
+            .status
+            .lock()
+            .is_ok_and(|s| s.state == PurchasePhase::Verified)
 }
 
 #[cfg(test)]

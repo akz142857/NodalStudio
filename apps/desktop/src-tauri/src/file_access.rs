@@ -7,6 +7,8 @@ use std::{
 use tauri_plugin_dialog::DialogExt;
 
 static SELECTED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
+static SELECTED_SYNC_PATHS: LazyLock<Mutex<HashSet<(SelectionKind, String)>>> =
+    LazyLock::new(Default::default);
 
 pub struct Access {
     #[cfg(feature = "mac-app-store")]
@@ -46,7 +48,7 @@ pub fn remember(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Clone, Copy, serde::Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SelectionKind {
     OpenSettings,
@@ -56,6 +58,20 @@ pub enum SelectionKind {
     Repository,
     OpenSqlite,
     SqliteDirectory,
+    ConnectionSyncFolder,
+    OpenConnectionSync,
+}
+
+pub fn connection_sync_access(path: &Path, kind: SelectionKind) -> Result<Access, String> {
+    if !path.is_absolute()
+        || !SELECTED_SYNC_PATHS
+            .lock()
+            .map_err(|_| "File permissions unavailable")?
+            .contains(&(kind, path.to_string_lossy().into_owned()))
+    {
+        return Err("Choose the connection sync file or folder in the system picker.".into());
+    }
+    access(path)
 }
 
 #[tauri::command]
@@ -89,12 +105,28 @@ pub async fn pick_workspace_path(
                 .add_filter("Nodal model", &["nodalmodel"])
                 .set_file_name("model.nodalmodel")
                 .blocking_save_file(),
+            SelectionKind::ConnectionSyncFolder => picker
+                .set_title("Choose a sync folder / 选择同步文件夹")
+                .blocking_pick_folder(),
+            SelectionKind::OpenConnectionSync => picker
+                .set_title("Choose an encrypted connection file / 选择加密连接文件")
+                .add_filter("Nodal connections", &["nodalconnections"])
+                .blocking_pick_file(),
         };
         result
             .map(|file| {
                 let path = file
                     .into_path()
                     .map_err(|_| "Choose a local file or folder")?;
+                if matches!(
+                    kind,
+                    SelectionKind::ConnectionSyncFolder | SelectionKind::OpenConnectionSync
+                ) {
+                    SELECTED_SYNC_PATHS
+                        .lock()
+                        .map_err(|_| "File permissions unavailable")?
+                        .insert((kind, path.to_string_lossy().into_owned()));
+                }
                 if matches!(
                     kind,
                     SelectionKind::Repository

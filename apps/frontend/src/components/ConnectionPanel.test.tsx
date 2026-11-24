@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CaptureSnapshotResult,
   ConnectionTestResult,
@@ -776,4 +776,73 @@ it("reloads the picker and editor when a backup import removes the SQLite bindin
   await editCurrentConnection();
   expect(screen.getByRole("textbox", { name: "Database file" })).toHaveValue("");
   expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Imported model");
+});
+
+describe("manual connection sync", () => {
+  beforeEach(() => {
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function(this: HTMLDialogElement) { this.open = true; } });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function(this: HTMLDialogElement) { this.open = false; } });
+  });
+  afterEach(() => {
+    cleanup();
+    Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+    Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
+  });
+
+  it("previews and confirms a conflict without opening the new connection", async () => {
+    const file = "/tmp/nodal-connections.nodalconnections";
+    const passphrase = "example sync passphrase";
+    const incoming = { ...profile, host: "remote.example", ssh: null };
+    const added = { ...incoming, id: "separate-local-id", connectionSync: { originId: profile.id, pending: true } };
+    const pickWorkspacePath = vi.fn().mockResolvedValue(file);
+    const previewConnectionSync = vi.fn().mockResolvedValue({
+      token: "preview-token",
+      rows: [{ connection: incoming, action: "conflict", existing: { ...profile, ssh: null } }],
+    });
+    const importConnectionSync = vi.fn().mockResolvedValue([added]);
+    const listSnapshots = vi.fn();
+    const testPostgresConnection = vi.fn();
+    const platform = platformMock({ pickWorkspacePath, previewConnectionSync, importConnectionSync, listSnapshots, testPostgresConnection });
+    renderPanel(platform, null);
+    fireEvent.click(await screen.findByRole("button", { name: "Select database" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connection sync…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(screen.getByRole("button", { name: "Preview Merge" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Choose Encrypted File…" }));
+    await screen.findByText("nodal-connections.nodalconnections");
+    expect(pickWorkspacePath).toHaveBeenCalledWith("openConnectionSync");
+    fireEvent.change(screen.getByLabelText("File passphrase"), { target: { value: passphrase } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview Merge" }));
+    const preview = await screen.findByRole("dialog", { name: "Preview Connection Merge" });
+    expect(within(preview).getByText("Keep both versions")).toBeVisible();
+    expect(within(preview).getByText("root@127.0.0.1:3306")).toBeVisible();
+    expect(within(preview).getByText("root@remote.example:3306")).toBeVisible();
+    expect(previewConnectionSync).toHaveBeenCalledWith(file, passphrase);
+    expect(importConnectionSync).not.toHaveBeenCalled();
+
+    fireEvent.click(within(preview).getByRole("button", { name: "Import Connections" }));
+    const result = await screen.findByRole("dialog", { name: "Connection sync" });
+    expect(within(result).getByRole("status")).toHaveTextContent("Added 1 connection.");
+    expect(screen.getByLabelText("File passphrase")).toHaveValue("");
+    expect(importConnectionSync).toHaveBeenCalledWith(file, passphrase, "preview-token");
+    expect(listSnapshots).not.toHaveBeenCalled();
+    expect(testPostgresConnection).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    const manager = screen.getByRole("dialog", { name: "Manage connections" });
+    const row = within(manager).getByText("Local setup required").closest(".connection-manager-row");
+    expect(within(manager).getAllByText("Flow", { exact: true })).toHaveLength(2);
+    expect(row).toBeInTheDocument();
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Edit Flow" }));
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    expect(screen.getByText("Enter the database password and any SSH credentials or local files this connection requires, then test the connection.")).toBeVisible();
+  });
+
+  it("offers import when no connections are saved", async () => {
+    renderPanel(platformMock({ listDataSources: vi.fn().mockResolvedValue([]) }), null);
+    fireEvent.click(await screen.findByRole("button", { name: "Connection sync…" }));
+    const dialog = screen.getByRole("dialog", { name: "Connection sync" });
+    expect(within(dialog).getByRole("button", { name: "Import" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("button", { name: "Export" })).toBeDisabled();
+  });
 });

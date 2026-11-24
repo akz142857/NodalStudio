@@ -93,7 +93,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   verifyFull: bt("business.requireTLSAndVerifyTheDatabaseServerIdentity"),
 };
   const navigation = useRef<HTMLElement>(null);
-  const [managerOpen, setManagerOpen] = useState(false);
+  const [managerOpen, setManagerOpen] = useState<"manage" | "import">();
   const [form, setForm] = useState<SaveDataSourceInput>(() => newConnectionForm(defaultDatabaseType, defaultSslMode, bt("business.localDevelopment")));
   const [profiles, setProfiles] = useState<DataSourceProfile[]>([]);
   const testController = useRef<AbortController | null>(null);
@@ -116,9 +116,15 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     profile: DataSourceProfile;
     resolve: (confirmed: boolean) => void;
   }>();
+  const pendingLocalSetup = editingProfile?.connectionSync?.pending === true;
   const requiresLiveVerification = editingProfile
-    ? connectionDetailsDiffer(editingProfile, form) || Boolean(form.sshPassword) || Boolean(form.password)
+    ? pendingLocalSetup || connectionDetailsDiffer(editingProfile, form) || Boolean(form.sshPassword) || Boolean(form.password)
     : false;
+
+  const savedSsh = pendingLocalSetup ? undefined : editingProfile?.security?.ssh;
+  const formSsh = form.security?.ssh;
+  const hasSavedSshPassword = savedSsh?.authentication === "password" && formSsh?.host === savedSsh.host
+    && formSsh?.port === savedSsh.port && formSsh?.username === savedSsh.username;
 
   useEffect(() => {
     if (!enabled) return;
@@ -280,6 +286,10 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
 
   async function handleExistingOpen(profile: DataSourceProfile) {
     if (!enabled || pending) return;
+    if (profile.connectionSync?.pending) {
+      openEditDialog(profile);
+      return;
+    }
     onSourceOpenStart?.();
     setPending(true);
     setError(undefined);
@@ -400,7 +410,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
       {profiles.length > 0 ? <div className="source-navigation-current">
         <DataSourcePicker profiles={profiles} activeProfile={activeProfile} disabled={!enabled || pending}
           onSelect={(profile) => { void handleExistingOpen(profile); }}
-          onEdit={openEditDialog} onManage={() => setManagerOpen(true)} onContextMenu={openConnectionMenu} />
+          onEdit={openEditDialog} onManage={() => setManagerOpen("manage")} onContextMenu={openConnectionMenu} />
       </div> : null}
       {visibleOpenError ? <div className="ds-surface connection-open-error">
         <ActionIcon name="warning" />
@@ -421,26 +431,34 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
         name={menuProfile?.database ?? bt("business.databases")}
         actions={[
           { label: bt("business.newConnection"), disabled: !enabled || pending, run: openCreateDialog },
-          { label: bt("business.manageConnections"), disabled: !enabled || pending, run: () => setManagerOpen(true) },
+          { label: bt("business.manageConnections"), disabled: !enabled || pending, run: () => setManagerOpen("manage") },
           { label: bt("business.refreshSchema"), separatorBefore: true, disabled: !activeProfile || !onRefresh || refreshDisabled || pending, run: () => onRefresh?.() },
         ]} onClose={(restoreFocus) => {
           setMenu(undefined);
           if (restoreFocus) (visibleMenu.trigger.isConnected ? visibleMenu.trigger : navigation.current)?.focus();
         }} /> : null}
-      {managerOpen ? <ConnectionManager profiles={profiles} activeSourceId={activeSourceId} pending={pending} onClose={() => setManagerOpen(false)}
-        onCreate={() => { setManagerOpen(false); openCreateDialog(); }}
-        onEdit={(profile) => { setManagerOpen(false); openEditDialog(profile); }}
-        onOpen={(profile) => { setManagerOpen(false); if (profile.id !== activeSourceId) void handleExistingOpen(profile); }}
+      {managerOpen ? <ConnectionManager profiles={profiles} activeSourceId={activeSourceId} pending={pending} platform={platform}
+        startWithImport={managerOpen === "import"} onClose={() => setManagerOpen(undefined)}
+        onCreate={() => { setManagerOpen(undefined); openCreateDialog(); }}
+        onEdit={(profile) => { setManagerOpen(undefined); openEditDialog(profile); }}
+        onOpen={(profile) => { setManagerOpen(undefined); if (profile.id !== activeSourceId) void handleExistingOpen(profile); }}
+        onImported={(added) => {
+          const ids = new Set(added.map(({ id }) => id));
+          setProfiles((current) => [...current.filter(({ id }) => !ids.has(id)), ...added]);
+          for (const profile of added) onSourceSaved?.(profile);
+        }}
         onDelete={deleteSource} /> : null}
       {profiles.length > 0 ? (
         <div className="saved-sources">
           {activeProfile ? <div key={activeProfile.id}><ConnectionSourceContext.Provider value={activeProfile}>{children}</ConnectionSourceContext.Provider></div> : null}
         </div>
-      ) : (
+      ) : (<>
         <button type="button" className="empty-data-source" onClick={openCreateDialog} disabled={!enabled}>
           <strong>{bt("business.noDatabaseConnected")}</strong>
           <span>{bt("business.createAConnectionToMapItsSchema")}</span>
         </button>
+        {enabled ? <Button className="connection-sync-shortcut" onClick={() => setManagerOpen("import")} disabled={pending}>{bt("connectionSync.open")}</Button> : null}
+      </>
       )}
 
       {!enabled ? <p className="connection-note">{bt("business.installTheDesktopAppToConnectADatabase")}</p> : null}
@@ -560,10 +578,10 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                     {bt("business.username")}<input autoComplete="username" value={form.username} onChange={(event) => updateField("username", event.target.value)} disabled={!enabled || pending} />
                   </label>
                   <label>
-                    {bt("business.password")}<input aria-label={bt("business.password")} type="password" autoComplete="current-password" placeholder={editingProfile ? bt("business.optionalKeepCurrentPassword") : bt("business.databasePassword")} value={form.password} onChange={(event) => updateField("password", event.target.value)} disabled={!enabled || pending} />
+                    {bt("business.password")}<input aria-label={bt("business.password")} type="password" autoComplete="current-password" placeholder={editingProfile && !pendingLocalSetup ? bt("business.optionalKeepCurrentPassword") : bt("business.databasePassword")} value={form.password} onChange={(event) => updateField("password", event.target.value)} disabled={!enabled || pending} />
                   </label>
                   <p className="connection-credential-note">
-                    {editingProfile
+                    {editingProfile && !pendingLocalSetup
                       ? bt("business.leaveBlankToKeepThePasswordAlreadyStoredIn")
                       : bt("business.thePasswordIsSavedToTheSystemCredentialStore")}
                   </p>
@@ -587,10 +605,10 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                     </select>
                   </label>
                 </div>
-                <ConnectionSecurityFields section="tls" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={(security) => updateField("security", security)} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={Boolean(editingProfile?.security?.ssh?.authentication === "password" && form.security?.ssh?.host === editingProfile.security.ssh.host && form.security?.ssh?.port === editingProfile.security.ssh.port && form.security?.ssh?.username === editingProfile.security.ssh.username)} />
+                <ConnectionSecurityFields section="tls" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={(security) => updateField("security", security)} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={hasSavedSshPassword} />
               </div>
               <div className="connection-tab-panel" role="tabpanel" id="connection-panel-ssh" aria-labelledby="connection-tab-ssh" hidden={form.databaseType === "sqlite" || connectionTab !== "ssh"}>
-                <ConnectionSecurityFields section="ssh" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={(security) => updateField("security", security)} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={Boolean(editingProfile?.security?.ssh?.authentication === "password" && form.security?.ssh?.host === editingProfile.security.ssh.host && form.security?.ssh?.port === editingProfile.security.ssh.port && form.security?.ssh?.username === editingProfile.security.ssh.username)} />
+                <ConnectionSecurityFields section="ssh" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={(security) => updateField("security", security)} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={hasSavedSshPassword} />
               </div>
                 {editingProfile && !requiresLiveVerification && testState.status === "idle" ? (
                   <div className="connection-live-action">
@@ -613,7 +631,9 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                   </div>
                 ) : null}
               <ConnectionTestStatus state={testState} form={form} onCancel={cancelConnectionTest} />
-              {requiresLiveVerification && testState.status === "idle" ? <p className="connection-test-hint">{bt("business.connectionDetailsChangedTestTheConnectionBeforeSaving")}</p> : null}
+              {requiresLiveVerification && testState.status === "idle" ? <p className="connection-test-hint">{bt(pendingLocalSetup
+                ? form.databaseType === "sqlite" ? "connectionSync.setupSqlite" : "connectionSync.setupNetwork"
+                : "business.connectionDetailsChangedTestTheConnectionBeforeSaving")}</p> : null}
               {error ? <p className="error-message" role="alert">{error}</p> : null}
               </div>
               <footer>

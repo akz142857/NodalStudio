@@ -160,7 +160,7 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
       title={`${profile.database} — ${engine(profile)} · ${profile.displayName} · ${address(profile)}`}
       onClick={() => onSelect(profile)}>
       <ActionIcon name="database" />
-      <span className="data-source-menu-label"><strong>{profile.database}</strong><span>{engine(profile)} · {profile.displayName}</span><small>{address(profile)}</small></span>
+      <span className="data-source-menu-label"><strong>{profile.database}</strong><span>{engine(profile)} · {profile.displayName}</span><small>{address(profile)}{profile.connectionSync?.pending ? ` · ${bt("connectionSync.pendingSetup")}` : ""}</small></span>
       <span className="data-source-menu-check" aria-hidden="true">✓</span>
     </button>)}
     {onEdit || onManage ? <div className="data-source-menu-actions" role="group" aria-label={bt("business.connectionActions")}>

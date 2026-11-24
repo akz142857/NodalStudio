@@ -126,6 +126,17 @@ export class WebPlatform implements NodalStudioPlatform {
   undoRelationshipBatch(): Promise<import("./relationship-batches").ReviewBatch> { return Promise.reject(new Error("Batch review requires the desktop app.")); }
 
   pickWorkspacePath(): Promise<string | null> { return Promise.reject(new Error("File selection requires the desktop app.")); }
+  exportConnectionSync(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
+  previewConnectionSync(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
+  importConnectionSync(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
+  inspectConnectionFolder(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
+  previewConnectionFolderSetup(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
+  enableConnectionFolder(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
+  getConnectionFolderStatus(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
+  checkConnectionFolder(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
+  setConnectionFolderPaused(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
+  previewConnectionFolderUpdates(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
+  applyConnectionFolderUpdates(): Promise<never> { return Promise.reject(new Error("Connection sync requires the desktop app.")); }
   pickConnectionFile(): Promise<string | null> { return Promise.reject(new Error("Local certificate files require the desktop app.")); }
   exportQueryResult(): Promise<string | null> { return Promise.reject(new Error("Query result export requires the desktop app.")); }
   getChangeReview(): Promise<never> { return Promise.reject(new Error("Change review requires a connected desktop source.")); }

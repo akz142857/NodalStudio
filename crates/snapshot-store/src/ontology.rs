@@ -607,6 +607,7 @@ mod tests {
 
     fn fixture_profile(snapshot: &DatabaseSnapshot) -> DataSourceProfile {
         DataSourceProfile {
+            connection_sync: None,
             id: snapshot.source_id,
             display_name: "Sales".into(),
             database_type: DatabaseType::PostgreSql,

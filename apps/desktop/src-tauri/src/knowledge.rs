@@ -305,6 +305,7 @@ mod tests {
         );
         snapshot.canonicalize().unwrap();
         let mut profile = DataSourceProfile {
+            connection_sync: None,
             sqlite: None,
             id: source,
             display_name: "Original".into(),

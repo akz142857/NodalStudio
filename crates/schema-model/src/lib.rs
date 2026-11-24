@@ -96,6 +96,8 @@ pub struct SqliteFile {
 pub struct DataSourceProfile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite: Option<SqliteFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection_sync: Option<ConnectionSyncIdentity>,
     pub id: Uuid,
     pub display_name: String,
     pub host: String,
@@ -109,6 +111,13 @@ pub struct DataSourceProfile {
     pub security: ConnectionSecurity,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionSyncIdentity {
+    pub origin_id: Uuid,
+    pub pending: bool,
 }
 
 /// Local certificate and SSH paths only; key material is never serialized.

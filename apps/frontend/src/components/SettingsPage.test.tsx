@@ -160,13 +160,15 @@ describe("SettingsPage", () => {
 
 describe("Mac App Store submission boundaries", () => {
   const runtime = { ...baseProps.runtime, distribution: "macAppStore" } as const;
-  it("removes cloud navigation and deep links while retaining community cloud", () => {
+  it("shows personal folder sync and keeps team projects limited to community builds", () => {
     const props = { ...baseProps, settings: defaultEffectiveSettings("source"), initialCategory: "cloud" as const };
     const { rerender } = render(<SettingsPage {...props} runtime={runtime} />);
-    expect(screen.queryByRole("button", { name: "Cloud Sync" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cloud Sync" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Personal Connection Sync" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Team Projects" })).not.toBeInTheDocument();
     expect(screen.queryByText("Create cloud account and team")).not.toBeInTheDocument();
     rerender(<SettingsPage {...props} />);
-    expect(screen.getByRole("button", { name: "Cloud Sync" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Team Projects" })).toBeVisible();
   });
   it("offers a readable offline policy and accurate App Store update status", () => {
     render(<SettingsPage {...baseProps} runtime={runtime} settings={defaultEffectiveSettings()} initialCategory="privacy" />);
@@ -201,4 +203,114 @@ it("checks MAS model files without offering an external merge driver installer",
   await waitFor(()=>expect(screen.getByText(/This edition exchanges model files/)).toBeVisible());
   expect(screen.queryByRole("button",{name:"Copy install command"})).not.toBeInTheDocument();
   expect(screen.queryByText("Not installed")).not.toBeInTheDocument();
+});
+
+describe("personal connection sync", () => {
+  const folder = "/sync/fixtures";
+  const library = "1f470925-a398-43aa-87c8-b8cb03bfdd40";
+  const passphrase = "a disposable test passphrase";
+  const status = {
+    folder, library, provider: "googleDrive", paused: false, queued: 0, pending: 0,
+    lastWrite: null, lastCheck: null, pendingId: null, problem: null,
+  } as const;
+
+  it.each([0, 2])("previews a fresh library with %i local connections before enabling it", async (outgoing) => {
+    const pickWorkspacePath = vi.fn().mockResolvedValue(folder);
+    const inspectConnectionFolder = vi.fn().mockResolvedValue({ libraries: [] });
+    const previewConnectionFolderSetup = vi.fn().mockResolvedValue({ token: "ready", rows: [], outgoing, createsLibrary: true });
+    const enableConnectionFolder = vi.fn().mockResolvedValue(status);
+    const onDataSourcesChanged = vi.fn().mockResolvedValue(undefined);
+    const platform = { pickWorkspacePath, inspectConnectionFolder, previewConnectionFolderSetup, enableConnectionFolder } as unknown as NodalStudioPlatform;
+    render(<SettingsPage {...baseProps} settings={defaultEffectiveSettings()} initialCategory="cloud"
+      activeSourceId={undefined} platform={platform} onDataSourcesChanged={onDataSourcesChanged} />);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "File provider" }), { target: { value: "googleDrive" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose Sync Folder…" }));
+    await screen.findByText("Create an encrypted library in this folder. Existing connections on this device are included.");
+    expect(pickWorkspacePath).toHaveBeenCalledTimes(1);
+    expect(inspectConnectionFolder).toHaveBeenCalledWith(folder);
+    const previewButton = screen.getByRole("button", { name: "Preview Setup" });
+    fireEvent.change(screen.getByLabelText("File passphrase"), { target: { value: passphrase } });
+    expect(previewButton).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Confirm file passphrase"), { target: { value: passphrase } });
+    fireEvent.click(previewButton);
+    await screen.findByText("Updates to review 0 · Connections to write " + outgoing);
+    expect(enableConnectionFolder).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Enable Sync" }));
+    await screen.findByText("Personal connection sync is enabled.");
+    expect(enableConnectionFolder).toHaveBeenCalledWith({ folder, library: null, provider: "googleDrive", passphrase }, "ready");
+    expect(onDataSourcesChanged).toHaveBeenCalledOnce();
+    expect(pickWorkspacePath).toHaveBeenCalledTimes(1);
+  });
+
+  const connection = {
+    host: "device-a.example", displayName: "Warehouse", databaseType: "postgreSql", database: "dw",
+    port: 5432, username: "reader", sslMode: "verifyFull", ssh: null,
+  };
+  const review = {
+    token: "reviewed", outgoing: 0, createsLibrary: false,
+    rows: [{ action: "conflict", connection, existing: { ...connection, host: "device-b.example" } }],
+  };
+
+  it("rechecks the same folder when another device creates its library during setup", async () => {
+    const pickWorkspacePath = vi.fn().mockResolvedValue(folder);
+    const inspectConnectionFolder = vi.fn().mockResolvedValueOnce({ libraries: [] })
+      .mockResolvedValueOnce({ libraries: [library] });
+    const previewConnectionFolderSetup = vi.fn().mockRejectedValueOnce("chooseLibrary").mockResolvedValueOnce(review);
+    const platform = { pickWorkspacePath, inspectConnectionFolder, previewConnectionFolderSetup } as unknown as NodalStudioPlatform;
+    render(<SettingsPage {...baseProps} platform={platform} settings={defaultEffectiveSettings()} initialCategory="cloud" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose Sync Folder…" }));
+    fireEvent.change(await screen.findByLabelText("File passphrase"), { target: { value: passphrase } });
+    fireEvent.change(screen.getByLabelText("Confirm file passphrase"), { target: { value: passphrase } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview Setup" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Check Folder Again" }));
+    const field = await screen.findByLabelText("File passphrase");
+    expect(field).toHaveValue("");
+    expect(screen.queryByLabelText("Confirm file passphrase")).not.toBeInTheDocument();
+    expect(pickWorkspacePath).toHaveBeenCalledTimes(1);
+    expect(inspectConnectionFolder.mock.calls).toEqual([[folder], [folder]]);
+    fireEvent.change(field, { target: { value: passphrase } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview Setup" }));
+    expect(await screen.findByText("Keep both versions")).toBeVisible();
+    expect(previewConnectionFolderSetup).toHaveBeenLastCalledWith({ folder, library, provider: "iCloud", passphrase });
+  });
+
+  it("unlocks an existing library and keeps both versions in the setup preview", async () => {
+    const enableConnectionFolder = vi.fn().mockResolvedValue(status);
+    const platform = {
+      pickWorkspacePath: vi.fn().mockResolvedValue(folder),
+      inspectConnectionFolder: vi.fn().mockResolvedValue({ libraries: [library] }),
+      previewConnectionFolderSetup: vi.fn().mockResolvedValue(review),
+      enableConnectionFolder,
+    } as unknown as NodalStudioPlatform;
+    render(<SettingsPage {...baseProps} platform={platform} settings={defaultEffectiveSettings()} initialCategory="cloud" />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose Sync Folder…" }));
+    await screen.findByText("This folder has an encrypted connection library. Enter its passphrase to preview the merge.");
+    expect(screen.queryByLabelText("Confirm file passphrase")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("File passphrase"), { target: { value: passphrase } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview Setup" }));
+    await screen.findByText("Keep both versions");
+    expect(screen.getByText("reader@device-a.example:5432")).toBeVisible();
+    expect(screen.getByText("reader@device-b.example:5432")).toBeVisible();
+    expect(enableConnectionFolder).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Enable Sync" }));
+    await waitFor(() => expect(enableConnectionFolder).toHaveBeenCalledWith({ folder, library, provider: "iCloud", passphrase }, "reviewed"));
+  });
+
+  it("requires confirmation for incoming updates after setup", async () => {
+    const previewConnectionFolderUpdates = vi.fn().mockResolvedValue(review);
+    const applyConnectionFolderUpdates = vi.fn().mockResolvedValue(status);
+    const onDataSourcesChanged = vi.fn().mockResolvedValue(undefined);
+    const platform = { previewConnectionFolderUpdates, applyConnectionFolderUpdates } as unknown as NodalStudioPlatform;
+    render(<SettingsPage {...baseProps} platform={platform} settings={defaultEffectiveSettings()} initialCategory="cloud"
+      connectionFolderStatus={{ ...status, pending: 1, pendingId: "pending" }} onDataSourcesChanged={onDataSourcesChanged} />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview Updates" }));
+    await screen.findByText("Keep both versions");
+    expect(applyConnectionFolderUpdates).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Merge" }));
+    await screen.findByText("Reviewed connection updates were merged.");
+    expect(applyConnectionFolderUpdates).toHaveBeenCalledWith("reviewed");
+    expect(onDataSourcesChanged).toHaveBeenCalledOnce();
+  });
 });

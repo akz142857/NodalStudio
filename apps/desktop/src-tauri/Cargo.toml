@@ -26,6 +26,7 @@ mysql-adapter = { path = "../../../crates/mysql-adapter" }
 postgres-adapter = { path = "../../../crates/postgres-adapter" }
 query-engine = { path = "../../../crates/query-engine" }
 reqwest.workspace = true
+ring = "0.17"
 rustls-native-certs = "0.8"
 schema-diff = { path = "../../../crates/schema-diff" }
 schema-model = { path = "../../../crates/schema-model" }
@@ -48,11 +49,12 @@ tar = "0.4.46"
 plist = "1.10.0"
 tauri-plugin-dialog = "2"
 zip = { version = "4.6.1", default-features = false }
+zeroize = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSAppearance", "NSColor", "NSColorSpace"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }
 
 [lints]
 workspace = true

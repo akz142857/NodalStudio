@@ -196,7 +196,7 @@ export function App() {
   const [dataSources, setDataSources] = useState<DataSourceProfile[]>([]);
   const [sourcesRevision, setSourcesRevision] = useState(0);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [notices, setNotices] = useState<AppNotice[]>([]);
+  const [savedNotices, setNotices] = useState<AppNotice[]>([]);
   const [noticesOpen, setNoticesOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const commandPaletteTrigger = useRef<Element | null>(null);
@@ -241,6 +241,17 @@ export function App() {
     queryKey: ["runtime-info"],
     queryFn: () => platform.getRuntimeInfo(),
   });
+  const connectionFolder = useQuery({
+    queryKey: ["connection-folder-status"],
+    queryFn: () => platform.getConnectionFolderStatus(),
+    enabled: runtime.data?.kind === "desktop",
+    refetchInterval: 5_000,
+    retry: false,
+  });
+  const notifiedConnectionFolder = useRef<string | null>(null);
+  const notices = connectionFolder.data?.pendingId
+    ? savedNotices
+    : savedNotices.filter(({ id }) => id !== "connection-folder-update");
   const availableUpdate = useAvailableUpdate(platform,
     settingsAvailable && runtime.data?.kind === "desktop" && runtime.data.distribution !== "macAppStore" && settings.app.updates.automaticChecks && !settings.app.privacy.offlineMode,
     settings.app.updates);
@@ -440,6 +451,21 @@ export function App() {
       message: translate("navigation.nodalStudioIsAvailableReviewWhatSNew", { value0: availableUpdate }),
       createdAt: new Date().toISOString(), settingsCategory: "updates" });
   }, [availableUpdate, updateNotificationsEnabled, translate]);
+  useEffect(() => {
+    if (!connectionFolder.data) return;
+    const { pendingId, pending } = connectionFolder.data;
+    if (pendingId === notifiedConnectionFolder.current) return;
+    notifiedConnectionFolder.current = pendingId;
+    if (pendingId) {
+      publishNoticeRef.current({
+        id: "connection-folder-update",
+        title: translate("connectionFolder.updatesAvailable"),
+        message: translate("connectionFolder.updatesMessage", { count: pending }),
+        createdAt: new Date().toISOString(),
+        settingsCategory: "cloud",
+      });
+    }
+  }, [connectionFolder.data, translate]);
   const loadSemantics = useCallback(() => {
     if (!snapshot || activeSemanticSession.current !== semanticSession) return Promise.resolve();
     const request = ++semanticRequest.current;
@@ -659,18 +685,19 @@ export function App() {
   }, [runtime.data?.kind, translate]);
 
   useEffect(() => {
+    const connectable = dataSources.filter((profile) => !profile.connectionSync?.pending);
     if (
       autoConnectAttempted.current ||
       !settingsLoaded ||
       snapshot ||
       runtime.data?.kind !== "desktop" ||
-      dataSources.length === 0
+      connectable.length === 0
     ) return;
     autoConnectAttempted.current = true;
     const revision = startupRevision.current;
     const isCurrent = () => startupRevision.current === revision;
     void Promise.all(
-      dataSources.map(async (profile) => ({
+      connectable.map(async (profile) => ({
         profile,
         effective: await platform.getSettings(profile.id),
       })),
@@ -1768,6 +1795,8 @@ export function App() {
           platform={platform}
           settings={settings}
           runtime={runtime.data}
+          connectionFolderStatus={connectionFolder.data}
+          onConnectionFolderStatus={(status) => { queryClient.setQueryData(["connection-folder-status"], status); }}
           dataSources={dataSources}
           activeSourceId={snapshot?.sourceId}
           activeDatabase={snapshot?.database}

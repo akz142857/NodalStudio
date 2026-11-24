@@ -2424,6 +2424,7 @@ dependencies = [
  "postgres-adapter",
  "query-engine",
  "reqwest 0.12.28",
+ "ring",
  "rustls-native-certs",
  "schema-diff",
  "schema-model",
@@ -2446,6 +2447,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uuid",
+ "zeroize",
  "zip",
 ]
 

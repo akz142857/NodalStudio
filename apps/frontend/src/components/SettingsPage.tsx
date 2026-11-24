@@ -5,6 +5,8 @@ import { I18nProvider, useI18n, type Locale, formatDate } from "../i18n";
 import applicationLicense from "../../../../LICENSE?raw";
 import { PrivacyPolicy } from "./settings/PrivacyPolicy";
 import { UpdatePanel } from "./settings/UpdatePanel";
+import { ConnectionFolderSettings } from "./settings/ConnectionFolderSettings";
+import type { ConnectionFolderStatus } from "../platform/types";
 import { useUpdateBlocker } from "../platform/update-guard";
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
@@ -43,7 +45,7 @@ const categories = [
   ["history", "History & Storage", "snapshot retention backup cache disk"],
   ["git", "Git", "repository merge driver conflict fingerprint"],
   ["ai", "AI", "provider model context privacy explanation reply preferences instructions language detail terminology"],
-  ["cloud", "Cloud Sync", "team project sync offline queue conflict"],
+  ["cloud", "Cloud Sync", "iCloud Drive Google Drive connection folder personal team project sync offline queue conflict"],
   ["privacy", "Privacy & Security", "offline diagnostics token keychain log"],
   ["notifications", "Notifications", "schema change conflict warning quiet"],
   ["shortcuts", "Keyboard Shortcuts", "keyboard command focus refresh sidebar"],
@@ -60,7 +62,7 @@ const categoryIcons: Record<SettingsCategory, ActionIconName> = {
   notifications: "bell", shortcuts: "command", updates: "info", capabilities: "grid", advanced: "sliders",
 };
 const categoryMessages = {"general":"settings.category.general","appearance":"settings.category.appearance","canvas":"settings.category.canvas","data-sources":"settings.category.data-sources","history":"settings.category.history","git":"settings.category.git","ai":"settings.category.ai","cloud":"settings.category.cloud","privacy":"settings.category.privacy","notifications":"settings.category.notifications","shortcuts":"settings.category.shortcuts","updates":"settings.category.updates","capabilities":"settings.category.capabilities","advanced":"settings.category.advanced"} as const;
-const categoryAliases: Record<SettingsCategory, string> = {"general":"语言 主题 启动 日期 时间 language theme startup date time","appearance":"密度 字体 侧栏 详情 动效 对比度","canvas":"字段 外键 索引 关系 布局 注释","data-sources":"数据库 刷新 超时 连接","history":"快照 保留 备份 缓存 磁盘","git":"仓库 合并 冲突 指纹","ai":"提供方 模型 上下文 隐私 解释 回复 偏好 附加 指令 语言 详略 术语","cloud":"团队 项目 同步 离线 队列 冲突","privacy":"诊断 令牌 密钥 凭据 日志 安全","notifications":"结构 变更 冲突 警告 免打扰","shortcuts":"键盘 命令 聚焦 刷新 侧栏","updates":"版本 更新 通道 许可证 日志","capabilities":"支持 范围 矩阵 查询 图 导出 预检 限制","advanced":"性能 实验 重置 恢复"};
+const categoryAliases: Record<SettingsCategory, string> = {"general":"语言 主题 启动 日期 时间 language theme startup date time","appearance":"密度 字体 侧栏 详情 动效 对比度","canvas":"字段 外键 索引 关系 布局 注释","data-sources":"数据库 刷新 超时 连接","history":"快照 保留 备份 缓存 磁盘","git":"仓库 合并 冲突 指纹","ai":"提供方 模型 上下文 隐私 解释 回复 偏好 附加 指令 语言 详略 术语","cloud":"个人 连接 目录 团队 项目 同步 离线 队列 冲突","privacy":"诊断 令牌 密钥 凭据 日志 安全","notifications":"结构 变更 冲突 警告 免打扰","shortcuts":"键盘 命令 聚焦 刷新 侧栏","updates":"版本 更新 通道 许可证 日志","capabilities":"支持 范围 矩阵 查询 图 导出 预检 限制","advanced":"性能 实验 重置 恢复"};
 const navigationGroups = [
   { title: "settings.group.workspace", items: categories.slice(0, 5) },
   { title: "settings.group.services", items: categories.slice(5, 8) },
@@ -73,6 +75,8 @@ type SettingsPageProps = {
   dataSources: DataSourceProfile[];
   activeSourceId?: string;
   activeDatabase?: DatabaseInfo;
+  connectionFolderStatus?: ConnectionFolderStatus;
+  onConnectionFolderStatus?: (status: ConnectionFolderStatus) => void;
   initialCategory?: SettingsCategory;
   onClose: () => void;
   onUpdateApp: (settings: AppSettings) => Promise<void>;
@@ -96,6 +100,8 @@ function SettingsContent({
   dataSources,
   activeSourceId,
   activeDatabase,
+  connectionFolderStatus,
+  onConnectionFolderStatus,
   initialCategory = "general",
   onClose,
   onUpdateApp,
@@ -150,12 +156,11 @@ function SettingsContent({
   const [shortcutQuery, setShortcutQuery] = useState("");
   const filteredCategories = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const available = categories.filter(([id]) => !isMas || id !== "cloud");
-    return available.filter(([id, name, keywords]) => {
+    return categories.filter(([id, name, keywords]) => {
       const searchable = `${name} ${keywords} ${t(categoryMessages[id])} ${categoryAliases[id]}`.toLowerCase();
       return normalized.split(/\s+/).every((term) => searchable.includes(term));
     });
-  }, [query, t, isMas]);
+  }, [query, t]);
   const visibleCategory = filteredCategories.some(([id]) => id === category)
     ? category
     : filteredCategories[0]?.[0];
@@ -548,8 +553,13 @@ function SettingsContent({
             </SettingsSection>
           ) : null}
 
+          {visibleCategory === "cloud" && runtime?.kind === "desktop" ? (
+            <ConnectionFolderSettings platform={platform} status={connectionFolderStatus} offline={app.privacy.offlineMode}
+              onStatus={(status) => onConnectionFolderStatus?.(status)} onDataSourcesChanged={onDataSourcesChanged} />
+          ) : null}
+
           {visibleCategory === "cloud" && !isMas ? (
-            <SettingsSection title={t("settings.cloudSync")} description={t("settings.optionalMetadataCollaborationWithAnExplicitSyncAllowlist")}>
+            <SettingsSection title={t("connectionFolder.teamProjects")} description={t("settings.optionalMetadataCollaborationWithAnExplicitSyncAllowlist")}>
               <details className="settings-disclosure"><summary>{t("settings.howSharedDescriptionsAreReviewed")}</summary><p>{t("settings.sharedDescriptionsContainTextOnlyWithoutPerObject")}</p></details>
               <StatusCard status={app.privacy.offlineMode ? t("settings.offline") : source?.cloud.enabled ? t("settings.configured") : t("settings.off")} label={t("settings.cloudSyncIsDisabledByDefault")} />
               {source && cloud ? <>
