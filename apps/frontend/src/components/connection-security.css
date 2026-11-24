@@ -12,6 +12,8 @@
 .connection-file-field > div { display: flex; gap: 8px; margin-top: 6px; }
 .connection-file-field input { flex: 1; min-width: 0; font-size: 12px; }
 .connection-file-field button { flex: none; padding: 5px 10px; font-size: 12px; }
+.connection-security-content .connection-file-help { margin-top: 6px; }
+.connection-ssh-server-identity { border-top: 1px solid var(--ds-separator); padding-top: 12px; }
 .connection-file-field [role="alert"] { color: var(--ds-danger); margin-top: 6px; }
 .connection-ssh-section .connection-ssh-toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; }
 .connection-ssh-toggle input[type="checkbox"] { appearance: auto; width: 15px; height: 15px; min-height: 0; margin: 0; accent-color: var(--ds-accent); flex: none; }

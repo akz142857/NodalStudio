@@ -8,6 +8,9 @@ use std::{
 };
 use tauri_plugin_dialog::DialogExt;
 
+pub(crate) const MAS_KNOWN_HOSTS_REQUIRED: &str =
+    "Choose and authorize a trusted known_hosts file for the App Store edition.";
+
 fn local_file(value: Option<&str>, label: &str) -> Result<(), String> {
     if let Some(value) = value {
         let path = Path::new(value);
@@ -30,9 +33,7 @@ fn validate_mas_ssh(ssh: &schema_model::SshConfig) -> Result<(), String> {
             .as_deref()
             .is_none_or(|p| p.trim().is_empty())
         {
-            return Err(
-                "Choose and authorize a trusted known_hosts file for the App Store edition.".into(),
-            );
+            return Err(MAS_KNOWN_HOSTS_REQUIRED.into());
         }
     }
     Ok(())
@@ -113,11 +114,11 @@ impl Askpass {
     fn start(directory: &Path, password: &str) -> Result<Self, String> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         if password.len() > 16_384 || password.contains(['\n', '\r', '\0']) {
-            return Err("Unsupported SSH password length or characters.".into());
+            return Err("Unsupported SSH credential length or characters.".into());
         }
         let socket = directory.join("askpass.sock");
         let listener = tokio::net::UnixListener::bind(&socket)
-            .map_err(|_| "Unable to prepare SSH password authentication.")?;
+            .map_err(|_| "Unable to prepare the SSH credential helper.")?;
         let token = uuid::Uuid::new_v4().to_string();
         let expected = token.clone();
         let password = password.to_owned();
@@ -162,7 +163,7 @@ impl Askpass {
     }
 }
 
-/// Returns before Tauri initializes when launched by OpenSSH for password input.
+/// Returns before Tauri initializes when launched by OpenSSH for credential input.
 pub fn run_askpass_helper() -> bool {
     if std::env::var("NODAL_SSH_ASKPASS").as_deref() != Ok("1") {
         return false;
@@ -223,7 +224,7 @@ impl Tunnel {
         host: &str,
         port: u16,
         dialect: DatabaseType,
-        password: Option<&str>,
+        secret: Option<&str>,
     ) -> Result<Self, String> {
         let file_access = [
             security.tls.ca_certificate.as_deref(),
@@ -310,23 +311,45 @@ impl Tunnel {
                 path.replace('\\', "\\\\").replace('"', "\\\"")
             ));
         }
-        let askpass = if ssh.authentication == SshAuthentication::Password {
-            let password = password
-                .filter(|p| !p.is_empty())
-                .ok_or("Enter an SSH password.")?;
-            let askpass = Askpass::start(directory.path(), password)?;
-            command.args([
-                "-o",
-                "BatchMode=no",
-                "-o",
-                "PasswordAuthentication=yes",
-                "-o",
-                "PreferredAuthentications=password",
-                "-o",
-                "PubkeyAuthentication=no",
-                "-o",
-                "NumberOfPasswordPrompts=1",
-            ]);
+        let secret = secret.filter(|value| !value.is_empty());
+        let supplied = match ssh.authentication {
+            SshAuthentication::Password => {
+                command.args([
+                    "-o",
+                    "PasswordAuthentication=yes",
+                    "-o",
+                    "PreferredAuthentications=password",
+                    "-o",
+                    "PubkeyAuthentication=no",
+                ]);
+                Some(secret.ok_or("Enter an SSH password.")?)
+            }
+            SshAuthentication::PrivateKey => {
+                command
+                    .args([
+                        "-o",
+                        "PasswordAuthentication=no",
+                        "-o",
+                        "PreferredAuthentications=publickey",
+                        "-o",
+                        "IdentitiesOnly=yes",
+                        "-i",
+                    ])
+                    .arg(
+                        ssh.private_key
+                            .as_ref()
+                            .ok_or("Choose an SSH private key.")?,
+                    );
+                secret
+            }
+            SshAuthentication::Agent => {
+                command.args(["-o", "PasswordAuthentication=no", "-o", "IdentityFile=none"]);
+                None
+            }
+        };
+        let askpass = if let Some(secret) = supplied {
+            let askpass = Askpass::start(directory.path(), secret)?;
+            command.args(["-o", "BatchMode=no", "-o", "NumberOfPasswordPrompts=1"]);
             command
                 .env("SSH_ASKPASS", askpass_executable()?)
                 .env("SSH_ASKPASS_REQUIRE", "force")
@@ -336,16 +359,7 @@ impl Tunnel {
                 .env("NODAL_SSH_ASKPASS_TOKEN", &askpass.token);
             Some(askpass)
         } else {
-            command.args(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"]);
-            if ssh.authentication == SshAuthentication::PrivateKey {
-                command.args(["-o", "IdentitiesOnly=yes", "-i"]).arg(
-                    ssh.private_key
-                        .as_ref()
-                        .ok_or("Choose an SSH private key.")?,
-                );
-            } else {
-                command.args(["-o", "IdentityFile=none"]);
-            }
+            command.args(["-o", "BatchMode=yes"]);
             None
         };
         command
@@ -385,7 +399,7 @@ impl Tunnel {
                 if let Some(stderr) = child.stderr.take() {
                     let _ = stderr.take(4096).read_to_string(&mut message).await;
                 }
-                return Err(ssh_error(&message).into());
+                return Err(ssh_error(&message, ssh.authentication).into());
             }
             if tunnel.socket.as_ref().is_some_and(|path| path.exists()) {
                 return Ok(tunnel);
@@ -405,7 +419,7 @@ impl Tunnel {
         self.socket.as_deref()
     }
 }
-fn ssh_error(message: &str) -> &'static str {
+fn ssh_error(message: &str, authentication: SshAuthentication) -> &'static str {
     if message.contains("Host key verification failed")
         || message.contains("REMOTE HOST IDENTIFICATION HAS CHANGED")
     {
@@ -414,7 +428,11 @@ fn ssh_error(message: &str) -> &'static str {
         || message.contains("Load key")
         || message.contains("UNPROTECTED PRIVATE KEY")
     {
-        "SSH authentication failed. Check the username and password or private key. Unlock encrypted keys in your SSH Agent before connecting."
+        if authentication == SshAuthentication::PrivateKey {
+            "SSH private key authentication failed. Check the SSH username, selected key and its passphrase."
+        } else {
+            "SSH authentication failed. Check the SSH username and authentication credentials."
+        }
     } else {
         "Unable to establish the SSH tunnel. Check the jump host, authentication, and forwarding permissions."
     }
@@ -505,7 +523,13 @@ mod tests {
         for host in ["bastion.example.com", "127.0.0.1", "2001:db8::1"] {
             assert!(valid_host(host));
         }
-        assert!(ssh_error("Host key verification failed").contains("fingerprint"));
+        assert!(
+            ssh_error(
+                "Host key verification failed",
+                SshAuthentication::PrivateKey
+            )
+            .contains("fingerprint")
+        );
     }
     #[tokio::test]
     async fn direct_connections_do_not_start_a_tunnel() {
@@ -531,6 +555,42 @@ mod tests {
         assert_eq!(profile.security, ConnectionSecurity::default());
     }
 
+    // The command-line test harness has no native picker to grant sandbox access.
+    #[cfg(not(feature = "mac-app-store"))]
+    #[tokio::test]
+    #[ignore = "requires a disposable loopback SSH and PostgreSQL fixture"]
+    async fn encrypted_private_key_tunnel_acceptance() {
+        let fixture = std::env::var("NODAL_SSH_KEY_FIXTURE").unwrap();
+        assert!(fixture.starts_with("/private/tmp/nodal-ssh-pass."));
+        let port: u16 = std::env::var("NODAL_SSH_KEY_TEST_PORT")
+            .unwrap()
+            .parse()
+            .unwrap();
+        let mut input: crate::SaveDataSourceInput = serde_json::from_value(serde_json::json!({
+            "displayName": "Loopback encrypted key fixture", "host": "127.0.0.1", "port": 5432,
+            "database": "postgres", "username": "postgres", "password": "nodal-sandbox-fixture-only",
+            "databaseType": "postgreSql", "sslMode": "disable",
+            "security": { "tls": {}, "ssh": {
+                "host": "127.0.0.1", "port": port, "username": "nodaltest", "authentication": "privateKey",
+                "privateKey": format!("{fixture}/client"), "knownHosts": format!("{fixture}/known_hosts")
+            }}
+        })).unwrap();
+        let missing = crate::test_database_connection(&input)
+            .await
+            .err()
+            .expect("encrypted key requires its passphrase");
+        assert_eq!(missing.stage, "ssh");
+        input.ssh_key_passphrase = Some("incorrect fixture passphrase".into());
+        let incorrect = crate::test_database_connection(&input)
+            .await
+            .err()
+            .expect("wrong passphrase fails authentication");
+        assert_eq!(incorrect.stage, "ssh");
+        input.ssh_key_passphrase = Some("nodal-fixture-key-only".into());
+        let result = crate::test_database_connection(&input).await.unwrap();
+        assert!(result.database.version.starts_with("17"));
+    }
+
     /// Run only against the isolated local TLS/SSH fixture, never a saved data source.
     #[tokio::test]
     #[ignore = "requires the local nodal-security-acceptance fixture"]
@@ -553,6 +613,7 @@ mod tests {
             username: "postgres".into(),
             password: "nodal-local-test-only".into(),
             ssh_password: None,
+            ssh_key_passphrase: None,
             database_type: DatabaseType::PostgreSql,
             ssl_mode: SslMode::VerifyFull,
             security: ConnectionSecurity {

@@ -30,15 +30,22 @@ describe("connection security", () => {
   });
 });
 
-it("uses supported MAS authentication and explains the required host file", async () => {
-  const changed = vi.fn();
+it("shows the required App Store host file without opening a disclosure and authorizes it through the picker", async () => {
+  const changed = vi.fn<(security: ConnectionSecurity) => void>();
   const getRuntimeInfo = vi.fn().mockResolvedValue({ distribution: "macAppStore" });
-  const platform = { getRuntimeInfo } as unknown as NodalStudioPlatform;
+  const pickConnectionFile = vi.fn().mockResolvedValue("/trusted/known_hosts");
+  const platform = { getRuntimeInfo, pickConnectionFile } as unknown as NodalStudioPlatform;
   function Form() { const [security,setSecurity]=useState<ConnectionSecurity>({tls:{}}); return <ConnectionSecurityFields security={security} sslMode="disable" disabled={false} platform={platform} onChange={value=>{setSecurity(value);changed(value);}} />; }
   render(<Form />);
   await waitFor(()=>expect(getRuntimeInfo).toHaveBeenCalled());
   fireEvent.click(screen.getByRole("checkbox"));
   await waitFor(()=>expect(screen.getByLabelText("Authentication")).toHaveValue("privateKey"));
   expect(screen.getByRole("option",{name:/SSH agent/i})).toBeDisabled();
-  expect(screen.getByText(/System SSH agents are unavailable/)).toBeVisible();
+  const knownHosts = screen.getByLabelText("Known hosts file (required)");
+  expect(knownHosts).toBeVisible();
+  expect(knownHosts).toHaveAccessibleDescription(/already trusts this jump host/);
+  fireEvent.click(screen.getByRole("button", { name: "Choose known hosts file (required)" }));
+  await waitFor(() => expect(knownHosts).toHaveValue("/trusted/known_hosts"));
+  expect(pickConnectionFile).toHaveBeenCalledOnce();
+  expect(changed.mock.lastCall?.[0].ssh?.knownHosts).toBe("/trusted/known_hosts");
 });

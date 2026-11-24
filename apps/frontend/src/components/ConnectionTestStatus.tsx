@@ -64,5 +64,6 @@ export function ConnectionTestStatus({ state, form, onCancel }: { state: Connect
     </div>)}</div> : null}
     {running ? <div className="connection-test-progress" role="progressbar" aria-label={bt("business.connectionTestProgress")} aria-valuetext={detail}><span /></div> : null}
     <p id="connection-test-detail" className="connection-test-detail">{detail}</p>
+    {result?.database.version && form.databaseType !== "sqlite" ? <p className="connection-test-detail">{bt("business.databaseServerVersion", { version: result.database.version })}</p> : null}
   </section>;
 }

@@ -738,6 +738,7 @@ mod tests {
                 ssl_mode: SslMode::Disable,
                 security: ConnectionSecurity::default(),
                 ssh_password: None,
+                ssh_key_passphrase: None,
             };
             let saved = crate::save_data_source_using(input, &state).await.unwrap();
             assert_eq!(saved.display_name, "Renamed locally");

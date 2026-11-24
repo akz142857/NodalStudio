@@ -133,12 +133,14 @@ mod tests {
         let error = crate::prepare_connection_test(serde_json::from_value(ssh).unwrap())
             .err()
             .unwrap();
-        assert_eq!(error.stage, "ssh");
-        assert!(error.message.contains(if crate::purchase::IS_MAS {
-            "known_hosts"
+        if crate::purchase::IS_MAS {
+            assert_eq!(error.stage, "configuration");
+            assert_eq!(error.code, Some("sshKnownHostsRequired"));
+            assert!(error.message.contains("known_hosts"));
         } else {
-            "password"
-        }));
+            assert_eq!(error.stage, "ssh");
+            assert!(error.message.contains("password"));
+        }
         assert!(!error.ssh_connected);
     }
 }

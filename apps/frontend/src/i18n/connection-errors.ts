@@ -1,6 +1,7 @@
 import type { MessageKey, Translate } from "./messages";
 const messages = {
   "passwordRequired": "connectionErrors.passwordRequired",
+  "sshKnownHostsRequired": "connectionErrors.sshKnownHostsRequired",
   "tlsHandshake": "connectionErrors.tlsHandshake",
   "authenticationRejected": "connectionErrors.authenticationRejected",
   "databaseMissing": "connectionErrors.databaseMissing",

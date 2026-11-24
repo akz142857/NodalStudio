@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub const SSH_SERVICE: &str = "com.claycosmos.nodalstudio.ssh";
+pub const DATABASE_PASSWORD_REQUIRED: &str = "Enter the database password before testing.";
 
 /// Imported network models deliberately have no local connection binding.
 pub fn require_binding(profile: &schema_model::DataSourceProfile) -> Result<(), String> {
@@ -29,7 +30,7 @@ pub fn prepare_imported_binding(
         && existing.is_none_or(|profile| require_binding(profile).is_err())
     {
         if input.password.is_empty() {
-            return Err("Enter the database password to connect this imported model.".into());
+            return Err(DATABASE_PASSWORD_REQUIRED.into());
         }
         // Neither a database nor SSH password may fall back to an orphaned key.
         input.id = None;
@@ -41,6 +42,8 @@ struct SshSecret {
     host: String,
     port: u16,
     username: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    private_key: Option<String>,
     password: String,
 }
 fn entry(service: &str, id: Uuid) -> Result<keyring::Entry, String> {
@@ -69,13 +72,17 @@ fn write(service: &str, id: Uuid, value: Option<&str>) -> Result<(), String> {
 fn bound_password(value: &str, ssh: &SshConfig) -> Result<String, String> {
     let secret: SshSecret = serde_json::from_str(value)
         .map_err(|_| "Saved SSH password is unreadable. Enter it again.")?;
-    if secret.host != ssh.host || secret.port != ssh.port || secret.username != ssh.username {
+    if secret.private_key.is_some() || !matches_endpoint(&secret, ssh) {
         return Err(
             "The SSH host or account changed. Enter its password before connecting.".into(),
         );
     }
     Ok(secret.password)
 }
+fn matches_endpoint(secret: &SshSecret, ssh: &SshConfig) -> bool {
+    secret.host == ssh.host && secret.port == ssh.port && secret.username == ssh.username
+}
+
 pub fn resolve_ssh(
     id: Option<Uuid>,
     security: &ConnectionSecurity,
@@ -84,22 +91,33 @@ pub fn resolve_ssh(
     let Some(ssh) = security
         .ssh
         .as_ref()
-        .filter(|ssh| ssh.authentication == SshAuthentication::Password)
+        .filter(|ssh| ssh.authentication != SshAuthentication::Agent)
     else {
         return Ok(None);
     };
-    if let Some(password) = supplied.filter(|value| !value.is_empty()) {
-        if password.contains(['\n', '\r', '\0']) {
-            return Err("SSH passwords cannot contain line breaks or NUL characters.".into());
+    if let Some(secret) = supplied.filter(|value| !value.is_empty()) {
+        if secret.len() > 16_384 || secret.contains(['\n', '\r', '\0']) {
+            return Err("SSH passwords and private key passphrases cannot exceed 16,384 bytes or contain line breaks or NUL characters.".into());
         }
-        return Ok(Some(password.to_owned()));
+        return Ok(Some(secret.to_owned()));
     }
-    let stored = id
-        .map(|id| read(SSH_SERVICE, id))
-        .transpose()?
-        .flatten()
-        .ok_or("Enter an SSH password. It will be saved in the system credential store.")?;
+    let stored = id.map(|id| read(SSH_SERVICE, id)).transpose()?.flatten();
+    if ssh.authentication == SshAuthentication::PrivateKey {
+        return Ok(stored
+            .as_deref()
+            .and_then(|value| bound_passphrase(value, ssh)));
+    }
+    let stored =
+        stored.ok_or("Enter an SSH password. It will be saved in the system credential store.")?;
     bound_password(&stored, ssh).map(Some)
+}
+
+fn bound_passphrase(value: &str, ssh: &SshConfig) -> Option<String> {
+    let secret: SshSecret = serde_json::from_str(value).ok()?;
+    matches_endpoint(&secret, ssh)
+        .then_some(secret)
+        .filter(|secret| secret.private_key.is_some() && secret.private_key == ssh.private_key)
+        .map(|secret| secret.password)
 }
 
 pub struct SavedSecrets {
@@ -117,7 +135,7 @@ impl SavedSecrets {
 }
 /// Called only after verification, with rollback if profile persistence fails.
 pub fn save(id: Uuid, input: &crate::SaveDataSourceInput) -> Result<SavedSecrets, String> {
-    let ssh_password = resolve_ssh(input.id, &input.security, input.ssh_password.as_deref())?;
+    let ssh_secret = resolve_ssh(input.id, &input.security, input.ssh_secret())?;
     let previous = SavedSecrets {
         id,
         database: read(crate::KEYRING_SERVICE, id)?,
@@ -127,11 +145,15 @@ pub fn save(id: Uuid, input: &crate::SaveDataSourceInput) -> Result<SavedSecrets
         if !input.password.is_empty() {
             write(crate::KEYRING_SERVICE, id, Some(&input.password))?;
         }
-        if let (Some(ssh), Some(password)) = (&input.security.ssh, ssh_password) {
+        if let (Some(ssh), Some(password)) = (&input.security.ssh, ssh_secret) {
             let value = serde_json::to_string(&SshSecret {
                 host: ssh.host.clone(),
                 port: ssh.port,
                 username: ssh.username.clone(),
+                private_key: ssh
+                    .private_key
+                    .clone()
+                    .filter(|_| ssh.authentication == SshAuthentication::PrivateKey),
                 password,
             })
             .map_err(|_| "Unable to encode SSH credential.")?;
@@ -163,6 +185,7 @@ mod tests {
             database: "app".into(),
             password: String::new(),
             ssh_password: None,
+            ssh_key_passphrase: None,
             sqlite: None,
             database_type: schema_model::DatabaseType::PostgreSql,
             ssl_mode: schema_model::SslMode::Require,
@@ -205,6 +228,7 @@ mod tests {
             host: "jump.example".into(),
             port: 22,
             username: "alice".into(),
+            private_key: None,
             password: "test-secret".into(),
         })
         .unwrap();
@@ -218,6 +242,33 @@ mod tests {
         other = ssh();
         other.port = 2222;
         assert!(bound_password(&value, &other).is_err());
+    }
+    #[test]
+    fn keychain_passphrase_matches_only_the_original_key_and_endpoint() {
+        let mut config = ssh();
+        config.authentication = SshAuthentication::PrivateKey;
+        config.private_key = Some("/fixture/encrypted-key".into());
+        let legacy =
+            r#"{"host":"jump.example","port":22,"username":"alice","password":"legacy-password"}"#;
+        assert!(bound_passphrase(legacy, &config).is_none());
+        let value = serde_json::to_string(&SshSecret {
+            host: config.host.clone(),
+            port: config.port,
+            username: config.username.clone(),
+            private_key: config.private_key.clone(),
+            password: "fixture passphrase".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            bound_passphrase(&value, &config).as_deref(),
+            Some("fixture passphrase")
+        );
+        assert!(bound_password(&value, &ssh()).is_err());
+        config.private_key = Some("/fixture/replacement-key".into());
+        assert!(bound_passphrase(&value, &config).is_none());
+        config.private_key = Some("/fixture/encrypted-key".into());
+        config.username = "different-user".into();
+        assert!(bound_passphrase(&value, &config).is_none());
     }
     #[test]
     fn only_password_authentication_resolves_a_password() {
@@ -265,6 +316,7 @@ mod tests {
             username: "postgres".into(),
             password: "nodal-local-test-only".into(),
             ssh_password: Some("NodalTestPassword42".into()),
+            ssh_key_passphrase: None,
             database_type: DatabaseType::PostgreSql,
             ssl_mode: SslMode::VerifyFull,
             security: ConnectionSecurity {

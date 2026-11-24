@@ -213,10 +213,38 @@ struct SaveDataSourceInput {
     password: String,
     #[serde(default)]
     ssh_password: Option<String>,
+    #[serde(default)]
+    ssh_key_passphrase: Option<String>,
     database_type: DatabaseType,
     ssl_mode: SslMode,
     #[serde(default)]
     security: schema_model::ConnectionSecurity,
+}
+
+impl SaveDataSourceInput {
+    fn ssh_secret(&self) -> Option<&str> {
+        match self.security.ssh.as_ref()?.authentication {
+            schema_model::SshAuthentication::Password => self.ssh_password.as_deref(),
+            schema_model::SshAuthentication::PrivateKey => self.ssh_key_passphrase.as_deref(),
+            schema_model::SshAuthentication::Agent => None,
+        }
+    }
+
+    fn resolve_ssh_secret(&mut self) -> Result<(), String> {
+        let secret =
+            connection_credentials::resolve_ssh(self.id, &self.security, self.ssh_secret())?;
+        if self
+            .security
+            .ssh
+            .as_ref()
+            .is_some_and(|ssh| ssh.authentication == schema_model::SshAuthentication::PrivateKey)
+        {
+            self.ssh_key_passphrase = secret;
+        } else {
+            self.ssh_password = secret;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Deserialize)]
@@ -933,8 +961,9 @@ async fn test_postgres_connection(
     } else {
         None
     };
-    connection_credentials::prepare_imported_binding(&mut input, existing.as_ref())
-        .map_err(|message| ConnectionFailure::new("configuration", message))?;
+    connection_credentials::prepare_imported_binding(&mut input, existing.as_ref()).map_err(
+        |message| ConnectionFailure::new("configuration", message).with_code("passwordRequired"),
+    )?;
     let operation = tests.start(test_id.unwrap_or_else(Uuid::new_v4))?;
     // The first event acknowledges registration; clients may now safely cancel.
     connection_tests::progress(Some(&on_progress), "configuration", false);
@@ -981,8 +1010,13 @@ fn prepare_connection_test(
         .map_err(|message| ConnectionFailure::new("tls", message))?;
     let mut ssh = input.security.clone();
     ssh.tls = schema_model::TlsConfig::default();
-    connection_security::validate(&ssh, SslMode::Disable)
-        .map_err(|message| ConnectionFailure::new("ssh", message))?;
+    connection_security::validate(&ssh, SslMode::Disable).map_err(|message| {
+        if message == connection_security::MAS_KNOWN_HOSTS_REQUIRED {
+            ConnectionFailure::new("configuration", message).with_code("sshKnownHostsRequired")
+        } else {
+            ConnectionFailure::new("ssh", message)
+        }
+    })?;
     validate_connection_profile_input(&input)
         .map_err(|message| ConnectionFailure::new("configuration", message))?;
     if input.password.is_empty() {
@@ -998,12 +1032,9 @@ fn prepare_connection_test(
             })
             .map_err(|message| ConnectionFailure::new("database", message))?;
     }
-    input.ssh_password = connection_credentials::resolve_ssh(
-        input.id,
-        &input.security,
-        input.ssh_password.as_deref(),
-    )
-    .map_err(|message| ConnectionFailure::new("ssh", message))?;
+    input
+        .resolve_ssh_secret()
+        .map_err(|message| ConnectionFailure::new("ssh", message))?;
     Ok(input)
 }
 
@@ -1038,7 +1069,7 @@ async fn test_database_connection_with_progress(
         &input.host,
         input.port,
         input.database_type,
-        input.ssh_password.as_deref(),
+        input.ssh_secret(),
     )
     .await
     .map_err(|message| ConnectionFailure::new("ssh", message))?;
@@ -1126,11 +1157,7 @@ fn connection_input_with_resolved_password(
             .get_password()
             .map_err(|_| "Unable to read the database password from the keychain.".to_owned())?;
     }
-    input.ssh_password = connection_credentials::resolve_ssh(
-        input.id,
-        &input.security,
-        input.ssh_password.as_deref(),
-    )?;
+    input.resolve_ssh_secret()?;
     Ok(input)
 }
 
@@ -1356,17 +1383,16 @@ async fn capture_snapshot_using(
         (profile, password)
     };
     connection_security::validate(&profile.security, profile.ssl_mode)?;
-    let ssh_password = connection_credentials::resolve_ssh(
-        Some(profile.id),
-        &profile.security,
-        verified.and_then(|(_, input)| input.ssh_password.as_deref()),
-    )?;
+    let ssh_secret = match verified {
+        Some((_, input)) => input.ssh_secret().map(str::to_owned),
+        None => connection_credentials::resolve_ssh(Some(profile.id), &profile.security, None)?,
+    };
     let tunnel = connection_security::Tunnel::open(
         &profile.security,
         &profile.host,
         profile.port,
         profile.database_type,
-        ssh_password.as_deref(),
+        ssh_secret.as_deref(),
     )
     .await?;
     let snapshot = match profile.database_type {
@@ -5698,6 +5724,7 @@ mod tests {
             username: "developer".into(),
             password: "secret".into(),
             ssh_password: None,
+            ssh_key_passphrase: None,
             database_type: DatabaseType::PostgreSql,
             ssl_mode: SslMode::Prefer,
             security: schema_model::ConnectionSecurity::default(),
@@ -5717,6 +5744,7 @@ mod tests {
             username: "developer".into(),
             password: String::new(),
             ssh_password: None,
+            ssh_key_passphrase: None,
             database_type: DatabaseType::PostgreSql,
             ssl_mode: SslMode::Prefer,
             security: schema_model::ConnectionSecurity::default(),

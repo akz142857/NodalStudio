@@ -12,6 +12,7 @@ import { Button } from "../design-system/Button";
 import { ModalSurface } from "../design-system/ModalSurface";
 import "./model-navigation.css";
 import type {
+  ConnectionSecurity,
   DataSourceProfile,
   CaptureSnapshotResult,
   NodalStudioPlatform,
@@ -118,7 +119,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   }>();
   const pendingLocalSetup = editingProfile?.connectionSync?.pending === true;
   const requiresLiveVerification = editingProfile
-    ? pendingLocalSetup || connectionDetailsDiffer(editingProfile, form) || Boolean(form.sshPassword) || Boolean(form.password)
+    ? pendingLocalSetup || connectionDetailsDiffer(editingProfile, form) || Boolean(form.sshPassword || form.sshKeyPassphrase || form.password)
     : false;
 
   const savedSsh = pendingLocalSetup ? undefined : editingProfile?.security?.ssh;
@@ -145,6 +146,19 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     setTestState({ status: "idle" });
     setError(undefined);
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateSshSecurity(security: ConnectionSecurity) {
+    setTestState({ status: "idle" });
+    setError(undefined);
+    setForm((current) => {
+      const old = current.security?.ssh;
+      const next = security.ssh;
+      const sameKey = old && next && old.authentication === next.authentication
+        && old.host === next.host && old.port === next.port && old.username === next.username
+        && old.privateKey === next.privateKey;
+      return { ...current, security, sshKeyPassphrase: sameKey ? current.sshKeyPassphrase : "" };
+    });
   }
 
   async function pickSqlite(folder: boolean) {
@@ -183,6 +197,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     } catch (reason) {
       if (testController.current !== controller) return;
       const failure = connectionFailure(reason);
+      if (failure.code === "passwordRequired") setConnectionTab("general");
       if (controller.signal.aborted || failure.stage === "cancelled") setTestState((current) => ({ status: "cancelled", progress: current.status === "testing" ? current.progress : undefined }));
       else setTestState((current) => ({ status: "error", failure, progress: current.status === "testing" ? current.progress : undefined }));
     } finally {
@@ -218,7 +233,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
           profile,
           ...current.filter((item) => item.id !== profile.id),
         ]);
-        setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "" }));
+        setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "", sshKeyPassphrase: "" }));
         setEditingProfile(profile);
         setDialogOpen(false);
         return;
@@ -231,7 +246,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
         ...current.filter((item) => item.id !== profile.id),
       ]);
       await capture(profile.id);
-      setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "" }));
+      setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "", sshKeyPassphrase: "" }));
       setDialogOpen(false);
     } catch (reason) {
       if (typeof reason === "object" && reason !== null && "stage" in reason) {
@@ -259,7 +274,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
       ]);
       onSnapshot(result.capture);
       setOpenError((current) => current?.profile.id === profile.id ? undefined : current);
-      setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "" }));
+      setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "", sshKeyPassphrase: "" }));
       setEditingProfile(profile);
       setDialogOpen(false);
     } catch (reason) {
@@ -318,7 +333,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   }
 
   function openEditDialog(profile: DataSourceProfile) {
-    setForm({ ...profile, password: "", sshPassword: "" });
+    setForm({ ...profile, password: "", sshPassword: "", sshKeyPassphrase: "" });
     setEditingProfile(profile);
     setError(undefined);
     setTestState({ status: "idle" });
@@ -329,7 +344,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   function closeDialog() {
     if (pending) return;
     setDialogOpen(false);
-    setForm((current) => ({ ...current, password: "", sshPassword: "" }));
+    setForm((current) => ({ ...current, password: "", sshPassword: "", sshKeyPassphrase: "" }));
     setError(undefined);
   }
 
@@ -530,7 +545,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                           sqlite: undefined,
                           port: databaseType === "mySql" ? 3306 : 5432,
                           ...(databaseType === "sqlite" || current.databaseType === "sqlite"
-                            ? { password: "", sshPassword: "", security: undefined, sslMode: databaseType === "sqlite" ? "disable" as const : defaultSslMode }
+                            ? { password: "", sshPassword: "", sshKeyPassphrase: "", security: undefined, sslMode: databaseType === "sqlite" ? "disable" as const : defaultSslMode }
                             : {}),
                         }));
                       }}
@@ -608,7 +623,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
                 <ConnectionSecurityFields section="tls" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={(security) => updateField("security", security)} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={hasSavedSshPassword} />
               </div>
               <div className="connection-tab-panel" role="tabpanel" id="connection-panel-ssh" aria-labelledby="connection-tab-ssh" hidden={form.databaseType === "sqlite" || connectionTab !== "ssh"}>
-                <ConnectionSecurityFields section="ssh" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={(security) => updateField("security", security)} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={hasSavedSshPassword} />
+                <ConnectionSecurityFields section="ssh" security={form.security} sslMode={form.sslMode} disabled={!enabled || pending} platform={platform} onChange={updateSshSecurity} sshPassword={form.sshPassword} onSshPasswordChange={(password) => updateField("sshPassword", password)} hasSavedSshPassword={hasSavedSshPassword} sshKeyPassphrase={form.sshKeyPassphrase} onSshKeyPassphraseChange={(passphrase) => updateField("sshKeyPassphrase", passphrase)} />
               </div>
                 {editingProfile && !requiresLiveVerification && testState.status === "idle" ? (
                   <div className="connection-live-action">

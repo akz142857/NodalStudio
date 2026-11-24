@@ -19,6 +19,15 @@ it("handles structured native errors and plain platform errors", () => {
   expect(connectionFailure({ stage: "ssh", message: "Unknown host key", sshConnected: false }).stage).toBe("ssh");
   expect(connectionFailure(new Error("Unavailable")).message).toBe("Unavailable");
 });
+it("reports missing App Store host authorization as configuration with SSH still untested", () => {
+  const failure = connectionFailure({
+    stage: "configuration", code: "sshKnownHostsRequired", message: "Native fallback message", sshConnected: false,
+  });
+  render(<ConnectionTestStatus form={form} state={{ status: "error", failure }} />);
+  expect(screen.getByRole("alert")).toHaveTextContent("Check connection settings");
+  expect(screen.getByRole("alert")).toHaveTextContent("In the SSH tab, use Choose to authorize a trusted known_hosts file");
+  expect(screen.getByRole("group", { name: "SSH status" })).toHaveTextContent("Not tested");
+});
 it("shows separate checks and truthful indeterminate progress", () => {
   render(<ConnectionTestStatus form={form} onCancel={() => {}} state={{ status: "testing", progress: { phase: "handshake", sshConnected: true } }} />);
   expect(screen.getByRole("group", { name: "SSH status" })).toHaveTextContent("Connected");

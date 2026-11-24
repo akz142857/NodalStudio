@@ -170,6 +170,7 @@ export interface SaveDataSourceInput {
   username: string;
   password: string;
   sshPassword?: string;
+  sshKeyPassphrase?: string;
   databaseType: "postgreSql" | "mySql" | "sqlite";
   sslMode: SslMode;
   security?: ConnectionSecurity;

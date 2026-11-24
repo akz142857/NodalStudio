@@ -406,6 +406,7 @@ async fn failed_candidate_introspection_does_not_replace_profile_or_invalidate_c
         username: candidate.username.clone(),
         password: "unused".into(),
         ssh_password: None,
+        ssh_key_passphrase: None,
         database_type: candidate.database_type,
         ssl_mode: candidate.ssl_mode,
         security: candidate.security.clone(),

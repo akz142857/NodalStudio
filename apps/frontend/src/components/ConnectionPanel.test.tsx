@@ -194,6 +194,30 @@ describe("ConnectionPanel", () => {
     expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
   });
 
+  it("guides missing database passwords to Connection and tests with a separate private key passphrase", async () => {
+    const testPostgresConnection = vi.fn()
+      .mockRejectedValueOnce({ stage: "configuration", code: "passwordRequired", message: "Native fallback", sshConnected: false })
+      .mockResolvedValueOnce(connectionResult);
+    const saveDataSource = vi.fn();
+    renderPanel(platformMock({ testPostgresConnection, saveDataSource }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
+    fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Connect through SSH/ }));
+    fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "privateKey" } });
+    fireEvent.change(screen.getByLabelText("SSH private key"), { target: { value: "/fixture/client" } });
+    fireEvent.change(screen.getByLabelText("SSH private key passphrase"), { target: { value: "fixture passphrase" } });
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter the database password before testing.");
+    expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "fixture database password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(await screen.findByText("Database server version 8.0.40")).toBeVisible();
+    expect(testPostgresConnection).toHaveBeenLastCalledWith(expect.objectContaining({
+      password: "fixture database password", sshKeyPassphrase: "fixture passphrase",
+    }), expect.anything());
+    expect(saveDataSource).not.toHaveBeenCalled();
+  });
+
   it("shows the failed stage and keeps saving disabled", async () => {
     renderPanel(platformMock({ testPostgresConnection: vi.fn().mockRejectedValue({ stage: "tls", message: "Check the CA certificate.", sshConnected: true }) }));
     fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
