@@ -28,5 +28,5 @@ export function connectionSyncError(reason: unknown): ConnectionSyncErrorMessage
 }
 
 export function isValidSyncPassphrase(passphrase: string): boolean {
-  return Array.from(passphrase).length >= 12 && new TextEncoder().encode(passphrase).length <= 1024 && Boolean(passphrase.trim());
+  return Array.from(passphrase).length >= 4 && new TextEncoder().encode(passphrase).length <= 1024 && Boolean(passphrase.trim());
 }

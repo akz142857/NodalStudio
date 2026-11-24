@@ -206,7 +206,7 @@ impl PortableConnection {
 }
 
 fn validate_passphrase(passphrase: &str) -> Result<(), SyncError> {
-    if passphrase.len() > 1024 || passphrase.trim().is_empty() || passphrase.chars().count() < 12 {
+    if passphrase.len() > 1024 || passphrase.trim().is_empty() || passphrase.chars().count() < 4 {
         return Err(SyncError::PassphraseLength);
     }
     Ok(())
@@ -566,7 +566,7 @@ mod tests {
     use schema_model::SqliteFile;
     use snapshot_store::LocalSnapshotStore;
 
-    const PASSPHRASE: &str = "test passphrase for these files";
+    const PASSPHRASE: &str = "a😀界b";
 
     fn network() -> DataSourceProfile {
         let now = Utc::now();
@@ -635,6 +635,10 @@ mod tests {
             assert!(!payload.contains(omitted), "{omitted}");
         }
 
+        assert_eq!(
+            encrypt(&entries, "a😀界").unwrap_err(),
+            SyncError::PassphraseLength
+        );
         let mut bytes = encrypt(&entries, PASSPHRASE).unwrap();
         let other = encrypt(&entries, PASSPHRASE).unwrap();
         assert_ne!(
