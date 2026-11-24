@@ -66,6 +66,7 @@ export function DefinitionEditor({ snapshot, definition, disabled, lockTimeZone,
   useEffect(() => { if (focusName) nameInput.current?.focus(); }, [focusName]);
   const tables = useMemo<TableChoice[]>(() => snapshot.schemas.flatMap((schema) => schema.tables.map((table) => ({
     table, value: tableId(table.key), label: `${table.key.schema}.${table.key.name}`, searchName: table.key.name,
+    optionLabel: table.key.name, detail: table.key.schema,
   }))), [snapshot]);
   const { order, payment } = definition;
   const orderTable = tables.find((choice) => choice.value === tableId(order.table))?.table;
@@ -104,7 +105,7 @@ export function DefinitionEditor({ snapshot, definition, disabled, lockTimeZone,
       <div className="ontology-editor-grid">
         <label>{t("ontology.name")}<input ref={nameInput} required maxLength={120} value={definition.name} disabled={disabled}
           onChange={(event) => onChange({ ...definition, name: event.target.value })} /></label>
-        <label>{t("ontology.timeZone")}<select value={definition.timeZone} disabled={disabled || lockTimeZone}
+        <label>{t("ontology.timeZone")}<select className="ds-select" value={definition.timeZone} disabled={disabled || lockTimeZone}
           onChange={(event) => onChange({ ...definition, timeZone: event.target.value as BusinessTimeZone })}>
           <option value="UTC">UTC</option><option value="Asia/Singapore">Asia/Singapore</option>
         </select></label>
@@ -113,7 +114,7 @@ export function DefinitionEditor({ snapshot, definition, disabled, lockTimeZone,
     <fieldset disabled={disabled}>
       <legend><ActionIcon name="table" />{t("ontology.orderObject")}</legend>
       <div className="ontology-field-group">
-        <div className="ontology-editor-grid">
+        <div className="ontology-editor-grid ontology-binding-grid">
           <TableSelect tables={tables} value={order.table} disabled={disabled} onChange={(table) => setOrder({ table, idColumn: "" })} />
           <FieldSelect label={t("ontology.orderId")} options={orderKeys} value={order.idColumn} disabled={disabled} onChange={(idColumn) => setOrder({ idColumn })}
             description={orderTable && !orderKeys.length ? orderHintId : undefined} />
@@ -125,7 +126,7 @@ export function DefinitionEditor({ snapshot, definition, disabled, lockTimeZone,
     <fieldset disabled={disabled}>
       <legend><ActionIcon name="relationships" />{t("ontology.paymentObject")}</legend>
       <div className="ontology-field-group">
-        <div className="ontology-editor-grid">
+        <div className="ontology-editor-grid ontology-binding-grid">
           <TableSelect tables={tables} value={payment.table} disabled={disabled} onChange={(table) => setPayment({ table, orderIdColumn: "", statusColumn: "", paidAtColumn: "", timeStorage: undefined })} />
           <FieldSelect label={t("ontology.paymentOrderId")} options={paymentOrderKeys} value={payment.orderIdColumn} disabled={disabled} onChange={(orderIdColumn) => setPayment({ orderIdColumn })} />
           <FieldSelect label={t("ontology.paymentStatus")} options={statusFields} value={payment.statusColumn} disabled={disabled} onChange={(statusColumn) => setPayment({ statusColumn })} />
@@ -134,7 +135,7 @@ export function DefinitionEditor({ snapshot, definition, disabled, lockTimeZone,
           <FieldSelect label={t("ontology.paymentTime")} options={[...timeFields.keys()]} value={payment.paidAtColumn} disabled={disabled}
             onChange={(paidAtColumn) => setPayment({ paidAtColumn, timeStorage: timeFields.get(paidAtColumn)?.find((option) => option === payment.timeStorage) })} />
           {timeOptions.length ? <label>{t(engine === "mySql" ? "ontology.storageTimeZone" : "ontology.timeStorage")}
-            <select required value={hasStorage ? payment.timeStorage : ""} aria-describedby={isoSelected ? timeHintId : undefined}
+            <select className="ds-select" required value={hasStorage ? payment.timeStorage : ""} aria-describedby={isoSelected ? timeHintId : undefined}
               onChange={(event) => setPayment({ timeStorage: timeOptions.find((option) => option === event.target.value) })}>
               <option value="">{t("ontology.chooseTimeStorage")}</option>
               {timeOptions.map((option) => <option key={option} value={option}>{t(`ontology.storage.${option}`)}</option>)}

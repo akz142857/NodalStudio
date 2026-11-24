@@ -7,6 +7,7 @@ import "./search-select.css";
 export interface SearchChoice {
   value: string;
   label: string;
+  optionLabel?: string;
   detail?: string;
   searchName?: string;
 }
@@ -25,7 +26,10 @@ interface Props {
 }
 
 const resultLimit = 40;
-const popupHeight = 264;
+const popupHeight = 300;
+const popupMinWidth = 280;
+const popupGap = 6;
+const viewportInset = 8;
 
 function matchingChoices(options: readonly SearchChoice[], query: string) {
   const search = query.trim().toLowerCase();
@@ -48,6 +52,7 @@ export function SearchSelect({ label, value, options, placeholder, searchPlaceho
   const listId = `${id}-options`;
   const inputRef = useRef<HTMLInputElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [host, setHost] = useState<HTMLElement>();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
@@ -75,26 +80,30 @@ export function SearchSelect({ label, value, options, placeholder, searchPlaceho
   useLayoutEffect(() => {
     const input = inputRef.current;
     const popup = popupRef.current;
-    if (!open || !input || !popup) return;
-    function position(anchor: HTMLInputElement, panel: HTMLDivElement) {
-      const scale = panel.offsetWidth ? panel.getBoundingClientRect().width / panel.offsetWidth || 1 : 1;
-      const bounds = anchor.getBoundingClientRect();
+    const list = listRef.current;
+    if (!open || !input || !popup || !list) return;
+    const update = () => {
+      const scale = popup.offsetWidth ? popup.getBoundingClientRect().width / popup.offsetWidth || 1 : 1;
+      const bounds = input.getBoundingClientRect();
       const viewportWidth = window.innerWidth / scale;
       const viewportHeight = window.innerHeight / scale;
       const top = bounds.top / scale;
       const bottom = bounds.bottom / scale;
-      const width = Math.min(Math.max(bounds.width / scale, 224), viewportWidth - 16);
-      const above = top - 12;
-      const below = viewportHeight - bottom - 12;
-      const upward = below < popupHeight && above > below;
-      panel.style.width = `${width}px`;
-      panel.style.left = `${Math.max(8, Math.min(bounds.left / scale, viewportWidth - width - 8))}px`;
-      panel.style.maxHeight = `${Math.max(0, Math.min(popupHeight, upward ? above : below))}px`;
-      panel.style.top = upward ? "auto" : `${bottom + 4}px`;
-      panel.style.bottom = upward ? `${viewportHeight - top + 4}px` : "auto";
-    }
-    const update = () => position(input, popup);
+      const width = Math.min(Math.max(bounds.width / scale, popupMinWidth), viewportWidth - 2 * viewportInset);
+      popup.style.width = `${width}px`;
+      popup.style.left = `${Math.max(viewportInset, Math.min(bounds.left / scale, viewportWidth - width - viewportInset))}px`;
+      const above = top - viewportInset - popupGap;
+      const below = viewportHeight - bottom - viewportInset - popupGap;
+      const contentHeight = popup.offsetHeight + list.scrollHeight - list.clientHeight;
+      const upward = below < Math.min(popupHeight, contentHeight) && above > below;
+      popup.style.maxHeight = `${Math.max(0, Math.min(popupHeight, upward ? above : below))}px`;
+      popup.style.top = upward ? "auto" : `${bottom + popupGap}px`;
+      popup.style.bottom = upward ? `${viewportHeight - top + popupGap}px` : "auto";
+    };
     update();
+    const resize = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(update);
+    resize?.observe(input);
+    resize?.observe(popup);
     const dismissOutside = (event: Event) => {
       if (event.target instanceof Node && event.target !== input && !popup.contains(event.target)) setHost(undefined);
     };
@@ -102,6 +111,7 @@ export function SearchSelect({ label, value, options, placeholder, searchPlaceho
     window.addEventListener("scroll", dismissOutside, true);
     document.addEventListener("pointerdown", dismissOutside);
     return () => {
+      resize?.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", dismissOutside, true);
       document.removeEventListener("pointerdown", dismissOutside);
@@ -148,11 +158,12 @@ export function SearchSelect({ label, value, options, placeholder, searchPlaceho
       <ActionIcon name={open ? "chevronUp" : "chevronDown"} />
     </div>
     {open && host ? createPortal(<div className="search-select-popup" ref={popupRef}>
-      <div id={listId} role="listbox" aria-label={t("business.options", { value0: label })}>
+      <div id={listId} ref={listRef} role="listbox" aria-label={t("business.options", { value0: label })}>
         {visible.map((option, position) => <button type="button" role="option" tabIndex={-1} key={option.value}
           id={`${listId}-${position}`} aria-selected={option.value === value} data-active={position === active}
+          aria-label={option.optionLabel ? option.label : undefined} title={option.label}
           className="search-select-option" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option)}>
-          <span><span>{option.label}</span>{option.detail ? <small>{option.detail}</small> : null}</span>
+          <span><span>{option.optionLabel ?? option.label}</span>{option.detail ? <small>{option.detail}</small> : null}</span>
           {option.value === value ? <ActionIcon name="check" /> : null}
         </button>)}
       </div>

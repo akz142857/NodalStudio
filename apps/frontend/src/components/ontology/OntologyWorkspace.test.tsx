@@ -118,6 +118,9 @@ it("saves an approved sample and sends an impacted definition to Change Review",
   expect(screen.getByRole("status")).toHaveTextContent("Showing 40 of 1,202");
   fireEvent.change(orderTable, { target: { value: "ORDERS" } });
   const exact = within(screen.getByRole("listbox")).getByRole("option", { name: "public.orders" });
+  expect(within(exact).getByText("orders")).toBeVisible();
+  expect(within(exact).getByText("public")).toBeVisible();
+  expect(exact).toHaveAttribute("title", "public.orders");
   expect(orderTable).toHaveAttribute("aria-activedescendant", exact.id);
   fireEvent.keyDown(orderTable, { key: "ArrowDown" });
   expect(orderTable).not.toHaveAttribute("aria-activedescendant", exact.id);
