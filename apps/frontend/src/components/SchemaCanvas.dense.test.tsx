@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 // Inline the global stylesheet's section files; design-system imports stay out as before.
 const canvasStyles = readFileSync(resolve("src/styles.css"), "utf8")
-  .split("\n")
+  .split(/\r?\n/)
   .map((line) => /^@import "\.\/(styles\/[\w-]+\.css)";$/.exec(line))
   .filter((match) => match !== null)
   .map((match) => readFileSync(resolve("src", match[1]), "utf8"))

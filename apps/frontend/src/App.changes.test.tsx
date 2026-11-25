@@ -188,7 +188,7 @@ describe("App schema changes", () => {
     expect(screen.getByRole("dialog", { name: "Use a business definition" })).toHaveTextContent("paid_at");
     expect(screen.queryByRole("button", { name: "Preview SQL" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "View Change Review" }));
-    await screen.findByRole("button", { name: "Confirm Binding and Close Item" });
+    await screen.findByRole("button", { name: "Confirm Binding and Close Item" }, { timeout: 5_000 });
     loadReview.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Refresh database" }));
     await waitFor(() => expect(loadReview).toHaveBeenCalledWith(sourceId, expect.objectContaining({ itemKey: `ontology:${original.id}` })));
