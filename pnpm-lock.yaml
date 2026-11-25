@@ -114,7 +114,7 @@ importers:
         specifier: ^28.1.0
         version: 28.1.0
       stylelint:
-        specifier: '16'
+        specifier: ^16.26.1
         version: 16.26.1(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
