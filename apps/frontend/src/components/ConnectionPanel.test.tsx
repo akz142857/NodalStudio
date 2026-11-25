@@ -11,6 +11,7 @@ import type {
 import { ConnectionPanel } from "./ConnectionPanel";
 import { SchemaTree } from "./SchemaTree";
 import { reportSnapshot } from "../test/schema-report-fixture";
+import { lastServerDatabase, rememberServerDatabase } from "../platform/database-server";
 
 afterEach(() => {
   cleanup();
@@ -79,8 +80,8 @@ function renderPanel(platform = platformMock(), activeSourceId: string | null = 
   return { onSnapshot, onSourceDeleted };
 }
 
-async function editCurrentConnection() {
-  fireEvent.click(await screen.findByRole("button", { name: "Data source: flow" }));
+async function editCurrentConnection(name = "Flow") {
+  fireEvent.click(await screen.findByRole("button", { name: `Connection: ${name}` }));
   fireEvent.click(screen.getByRole("menuitem", { name: "Edit current connection…" }));
 }
 
@@ -94,15 +95,15 @@ it("keeps the PostgreSQL source menu focused on connection actions", async () =>
   const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([postgres]) });
   render(<ConnectionPanel enabled activeSourceId={postgres.id} platform={platform} onSnapshot={vi.fn()} onRefresh={vi.fn()}
     defaultDatabaseType="postgreSql" defaultSslMode="prefer" />);
-  const database = await screen.findByRole("button", { name: "Data source: flow" });
+  const database = await screen.findByRole("button", { name: "Connection: Flow" });
   expect(screen.queryByRole("button", { name: "Connection actions" })).not.toBeInTheDocument();
   fireEvent.click(database);
-  const switcher = screen.getByRole("menu", { name: "Switch database" });
+  const switcher = screen.getByRole("menu", { name: "Switch connection" });
   expect(within(switcher).queryByRole("menuitem", { name: "Dump SQL File" })).not.toBeInTheDocument();
 
   fireEvent.contextMenu(database);
-  const actions = screen.getByRole("menu", { name: "Actions for flow" });
-  expect(screen.queryByRole("menu", { name: "Switch database" })).not.toBeInTheDocument();
+  const actions = screen.getByRole("menu", { name: "Actions for Flow" });
+  expect(screen.queryByRole("menu", { name: "Switch connection" })).not.toBeInTheDocument();
   expect(within(actions).getByRole("menuitem", { name: "New connection…" })).toBeEnabled();
   expect(within(actions).getByRole("menuitem", { name: "Manage connections…" })).toBeEnabled();
   expect(within(actions).getByRole("menuitem", { name: "Refresh schema" })).toBeEnabled();
@@ -111,7 +112,7 @@ it("keeps the PostgreSQL source menu focused on connection actions", async () =>
   expect(database).toHaveFocus();
 
   fireEvent.keyDown(database, { key: "F10", shiftKey: true });
-  const keyboardMenu = screen.getByRole("menu", { name: "Actions for flow" });
+  const keyboardMenu = screen.getByRole("menu", { name: "Actions for Flow" });
   fireEvent.keyDown(keyboardMenu, { key: "End" });
   expect(within(keyboardMenu).getByRole("menuitem", { name: "Refresh schema" })).toHaveFocus();
   fireEvent.keyDown(keyboardMenu, { key: "Escape" });
@@ -141,12 +142,13 @@ it("disables schema SQL dump on SSH while keeping table export available", async
   expect(onDump).not.toHaveBeenCalled();
 });
 
-function renderWorkspace(platform: NodalStudioPlatform) {
+function renderWorkspace(platform: NodalStudioPlatform, initialSourceId = profile.id) {
   const onSnapshot = vi.fn(), onSourceDeleted = vi.fn();
   function Workspace() {
-    const [sourceId, setSourceId] = useState<string | undefined>(profile.id);
+    const [sourceId, setSourceId] = useState<string | undefined>(initialSourceId);
     return <ConnectionPanel enabled platform={platform} activeSourceId={sourceId}
       defaultDatabaseType="mySql" defaultSslMode="prefer"
+      onDatabaseCleared={() => setSourceId(undefined)}
       onSnapshot={(result) => { onSnapshot(result); setSourceId(result.snapshot.sourceId); }}
       onSourceDeleted={(id) => { onSourceDeleted(id); setSourceId((current) => current === id ? undefined : current); }}>
       <p>Model for {sourceId}</p>
@@ -229,14 +231,18 @@ describe("ConnectionPanel", () => {
     fireEvent.click(screen.getByRole("tab", { name: "TLS" }));
     expect(screen.getByRole("group", { name: "Server status" })).toHaveTextContent("Connected");
     fireEvent.click(screen.getByRole("button", { name: "Save server connection" }));
-    const browser = within(await screen.findByRole("dialog", { name: "Open a database" }));
+    expect(await screen.findByRole("button", { name: "Connection: Fixture server" })).toBeVisible();
+    expect(listServerDatabases).not.toHaveBeenCalled();
+    const databasePicker = screen.getByRole("combobox", { name: "Database" });
+    fireEvent.click(databasePicker);
+    expect(await screen.findByRole("option", { name: maintenanceDatabase })).toBeVisible();
+    fireEvent.keyDown(databasePicker, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "New database…" }));
+    const browser = within(await screen.findByRole("dialog", { name: "New database" }));
     expect(browser.getByText(server.displayName)).toBeVisible();
     expect(browser.getByText(`${engine} · ${server.host}:${port} · SSH`)).toBeVisible();
-    expect(await browser.findByText("No user databases are visible.")).toBeVisible();
     expect(saveDataSource).toHaveBeenCalledWith(expect.objectContaining({ databaseType, database: "", security: server.security }));
     expect(capturePostgresSnapshot).not.toHaveBeenCalled();
-    fireEvent.click(browser.getByRole("button", { name: "New database…" }));
-    expect(screen.getByRole("dialog", { name: "New database" })).toBeVisible();
     expect(browser.getByLabelText("Database name")).toHaveFocus();
     expect(browser.getByText(databaseType === "postgreSql"
       ? "The new database uses the default PostgreSQL template."
@@ -264,8 +270,10 @@ describe("ConnectionPanel", () => {
       openServerDatabase,
     }), null);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Select database" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: /Fixture server/ }));
+    fireEvent.click(screen.getByRole("button", { name: "New database…" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "New database" })).getByRole("button", { name: "Back" }));
     const browser = within(await screen.findByRole("dialog", { name: "Open a database" }));
     await browser.findByRole("option", { name: "inventory" });
     expect(browser.getByRole("button", { name: "Open" })).toBeDisabled();
@@ -296,6 +304,155 @@ describe("ConnectionPanel", () => {
     await waitFor(() => expect(onSnapshot).toHaveBeenCalledWith(captureResult));
     expect(openServerDatabase).toHaveBeenCalledExactlyOnceWith(server.id, database.database, server.updatedAt);
     expect(listServerDatabases).toHaveBeenCalledOnce();
+  });
+
+  it("lists only accessible databases on demand and restores the last opened database for its server", async () => {
+    const server = { ...profile, id: "browse-server", database: "", displayName: "Shared server" };
+    const archive = { ...server, id: "archive-source", database: "reporting_archive", displayName: "Linked archive", serverSourceId: server.id };
+    const fixedSnapshot = { ...captureResult.snapshot, sourceId: profile.id };
+    const archiveSnapshot = { ...captureResult.snapshot, sourceId: archive.id };
+    const listServerDatabases = vi.fn().mockResolvedValueOnce(["inventory", archive.database])
+      .mockResolvedValueOnce([archive.database]).mockResolvedValueOnce(["inventory"]);
+    const openServerDatabase = vi.fn().mockResolvedValue({ profile: archive, capture: { ...captureResult, snapshot: archiveSnapshot } });
+    renderWorkspace(platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, server, archive]), listServerDatabases,
+      openServerDatabase, getSnapshot: vi.fn().mockResolvedValue(fixedSnapshot) }));
+    const switchConnection = async (current: string, next: RegExp) => {
+      fireEvent.click(await screen.findByRole("button", { name: `Connection: ${current}` }));
+      expect(screen.queryByRole("menuitemradio", { name: /Linked archive/ })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("menuitemradio", { name: next }));
+    };
+    expect(await screen.findByText("flow")).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "Database" })).not.toBeInTheDocument();
+    await switchConnection("Flow", /^Shared server/);
+    const databasePicker = screen.getByRole("combobox", { name: "Database" });
+    expect(screen.queryByText("Model for source-1")).not.toBeInTheDocument();
+    expect(listServerDatabases).not.toHaveBeenCalled();
+    fireEvent.click(databasePicker);
+    fireEvent.change(databasePicker, { target: { value: "arch" } });
+    expect(await screen.findByRole("option", { name: archive.database })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "inventory" })).not.toBeInTheDocument();
+    fireEvent.keyDown(databasePicker, { key: "Enter" });
+    expect(await screen.findByText("Model for archive-source")).toBeVisible();
+    expect(openServerDatabase).toHaveBeenCalledExactlyOnceWith(server.id, archive.database, server.updatedAt);
+    expect(lastServerDatabase(server.id)).toBe(archive.database);
+
+    await switchConnection("Shared server", /^Flow/);
+    expect(await screen.findByText("Model for source-1")).toBeVisible();
+    await switchConnection("Flow", /^Shared server/);
+    expect(await screen.findByText("Model for archive-source")).toBeVisible();
+    expect(openServerDatabase).toHaveBeenCalledTimes(2);
+
+    await switchConnection("Shared server", /^Flow/);
+    expect(await screen.findByText("Model for source-1")).toBeVisible();
+    await switchConnection("Flow", /^Shared server/);
+    await waitFor(() => expect(listServerDatabases).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Database" })).toBeEnabled());
+    expect(openServerDatabase).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Model for archive-source")).not.toBeInTheDocument();
+  });
+
+  it("announces catalog loading and the target database while retaining the current workspace until success", async () => {
+    const server = { ...profile, id: "progress-server", displayName: "Shared server", database: "" };
+    const current = { ...profile, id: "progress-current", serverSourceId: server.id };
+    const target = { ...current, id: "progress-target", database: "reporting" };
+    const capture = { ...captureResult, snapshot: { ...captureResult.snapshot, sourceId: target.id } };
+    let finishCatalog!: (databases: string[]) => void;
+    let failOpen!: (reason: Error) => void;
+    const databases = [target.database, ...Array.from({ length: 42 }, (_, index) => `archive_${index}`), current.database];
+    const listServerDatabases = vi.fn().mockImplementationOnce(() => new Promise<string[]>((resolve) => { finishCatalog = resolve; })).mockResolvedValue(databases);
+    const openServerDatabase = vi.fn<NodalStudioPlatform["openServerDatabase"]>()
+      .mockImplementationOnce(() => new Promise((_, reject) => { failOpen = reject; }))
+      .mockResolvedValue({ profile: target, capture });
+    renderWorkspace(platformMock({ listDataSources: vi.fn().mockResolvedValue([server, current, target]), listServerDatabases, openServerDatabase }), current.id);
+
+    const picker = await screen.findByRole("combobox", { name: "Database" });
+    fireEvent.click(picker);
+    expect(screen.getByText("Loading databases…")).toBeVisible();
+    expect(screen.getByRole("listbox")).toHaveAttribute("aria-busy", "true");
+    await act(async () => { finishCatalog(databases); await Promise.resolve(); });
+    const selected = screen.getByRole("option", { name: current.database, selected: true });
+    expect(picker).toHaveAttribute("aria-activedescendant", selected.id);
+    expect(screen.getAllByRole("option")).toHaveLength(40);
+
+    fireEvent.click(screen.getByRole("option", { name: target.database }));
+    expect(picker).toHaveAttribute("aria-busy", "true");
+    expect(picker).toHaveValue(current.database);
+    expect(screen.getByText("Opening reporting…")).toBeVisible();
+    expect(screen.getByText(`Model for ${current.id}`)).toBeVisible();
+    await act(async () => { failOpen(new Error("Database unavailable")); await Promise.resolve(); });
+    expect(picker).not.toHaveAttribute("aria-busy");
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn’t Open “reporting”");
+    expect(screen.getByText(`Model for ${current.id}`)).toBeVisible();
+
+    fireEvent.keyDown(picker, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: target.database }));
+    expect(await screen.findByText(`Model for ${target.id}`)).toBeVisible();
+    expect(picker).toHaveValue(target.database);
+    expect(screen.queryByText("Opening reporting…")).not.toBeInTheDocument();
+  });
+
+  it.each(["catalog", "open"] as const)("keeps the current workspace when a remembered database's %s request fails", async (phase) => {
+    const server = { ...profile, id: `restore-failure-${phase}`, displayName: "Reporting server", database: "" };
+    rememberServerDatabase(server.id, "reporting");
+    let fail!: (reason: Error) => void;
+    const failure = new Promise<never>((_, reject) => { fail = reject; });
+    const listServerDatabases = vi.fn().mockImplementation(() => phase === "catalog" ? failure : Promise.resolve(["reporting"]));
+    const openServerDatabase = vi.fn().mockReturnValue(failure);
+    const { onSnapshot } = renderWorkspace(platformMock({
+      listDataSources: vi.fn().mockResolvedValue([profile, server]), listServerDatabases, openServerDatabase,
+    }));
+    fireEvent.click(await screen.findByRole("button", { name: "Connection: Flow" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /^Reporting server/ }));
+    expect(screen.getByText("Opening reporting on Reporting server…")).toBeVisible();
+    expect(screen.getByText(`Model for ${profile.id}`)).toBeVisible();
+    await waitFor(() => expect(phase === "catalog" ? listServerDatabases : openServerDatabase).toHaveBeenCalledOnce());
+    await act(async () => { fail(new Error("Server unavailable")); await Promise.resolve(); });
+    expect(screen.getByRole("alert")).toHaveTextContent("Server unavailable");
+    expect(screen.queryByText("Opening reporting on Reporting server…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connection: Flow" })).toBeEnabled();
+    expect(screen.getByText(`Model for ${profile.id}`)).toBeVisible();
+    expect(onSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("reopens a linked database through the updated server after editing its host", async () => {
+    const server = { ...profile, id: "edit-server", displayName: "Shared server", database: "" };
+    const database = { ...profile, id: "edit-database", displayName: "Linked Flow", serverSourceId: server.id };
+    const updatedServer = { ...server, host: "new.example.test", updatedAt: "2026-07-19T00:00:00Z" };
+    const capture = { ...captureResult, snapshot: { ...captureResult.snapshot, sourceId: database.id } };
+    const listSnapshots = vi.fn();
+    const listServerDatabases = vi.fn().mockResolvedValue([database.database]);
+    const openServerDatabase = vi.fn().mockResolvedValue({ profile: { ...database, host: updatedServer.host }, capture });
+    const { onSnapshot } = renderWorkspace(platformMock({
+      listDataSources: vi.fn().mockResolvedValue([server, database]), listSnapshots, listServerDatabases, openServerDatabase,
+      testPostgresConnection: vi.fn().mockResolvedValue({ ...connectionResult, database: { ...connectionResult.database, name: "" } }),
+      saveDataSource: vi.fn().mockResolvedValue(updatedServer),
+    }), database.id);
+
+    expect(await screen.findByText(`Model for ${database.id}`)).toBeVisible();
+    await editCurrentConnection(server.displayName);
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: updatedServer.host } });
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(await screen.findByText("Server connected")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(screen.queryByText(`Model for ${database.id}`)).not.toBeInTheDocument());
+    expect(screen.getByRole("combobox", { name: "Database" })).toHaveValue("");
+
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function(this: HTMLDialogElement) { this.open = true; } });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function(this: HTMLDialogElement) { this.open = false; } });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: `Connection: ${server.displayName}` }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
+      fireEvent.click(screen.getByRole("button", { name: `Open ${database.displayName}` }));
+      expect(await screen.findByText(`Model for ${database.id}`)).toBeVisible();
+    } finally {
+      cleanup();
+      Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+      Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
+    }
+    expect(listServerDatabases).toHaveBeenCalledWith(server.id);
+    expect(openServerDatabase).toHaveBeenCalledExactlyOnceWith(server.id, database.database, updatedServer.updatedAt);
+    expect(listSnapshots).not.toHaveBeenCalled();
+    expect(onSnapshot).toHaveBeenCalledWith(capture);
   });
 
   it("guides missing database passwords to Connection and tests with a separate private key passphrase", async () => {
@@ -363,7 +520,7 @@ describe("ConnectionPanel", () => {
       <SchemaTree snapshot={snapshot} onSelectTable={vi.fn()} />
     </ConnectionPanel>;
     const { rerender } = render(panel());
-    await screen.findByRole("button", { name: "Data source: flow" });
+    await screen.findByRole("button", { name: "Connection: Flow" });
     fireEvent.click(screen.getByRole("button", { name: /Tables/ }));
     const search = screen.getByRole("searchbox", { name: "Search database objects" });
     fireEvent.change(search, { target: { value: "orders" } });
@@ -393,8 +550,8 @@ describe("ConnectionPanel", () => {
     expect(screen.getByRole("dialog", { name: "Edit Flow" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("textbox", { name: "Source content" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Data source: flow" }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /MySQL · Other/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Connection: Flow" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /^Other/ }));
     await waitFor(() => expect(onSnapshot).toHaveBeenCalledOnce());
     expect(listSnapshots).toHaveBeenCalledWith(other.id);
     rerender(panel(other.id));
@@ -402,7 +559,7 @@ describe("ConnectionPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add database" }));
     expect(screen.getByRole("dialog", { name: "Create database connection" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.getByRole("button", { name: "Data source: flow" })).toHaveTextContent("MySQL · Other");
+    expect(screen.getByRole("button", { name: "Connection: Other" })).toHaveTextContent("MySQL · 127.0.0.1:3306");
     rerender(panel(profile.id));
     expect(screen.getByRole("textbox", { name: "Source content" })).toBeVisible();
   });
@@ -410,7 +567,7 @@ describe("ConnectionPanel", () => {
   it("keeps connection fields in a create dialog", async () => {
     renderPanel();
 
-    expect(await screen.findByRole("button", { name: "Data source: flow" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Connection: Flow" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Add database" }));
@@ -430,7 +587,7 @@ describe("ConnectionPanel", () => {
     const panel = (id?: string) => <ConnectionPanel enabled activeSourceId={id} platform={platform}
       onSnapshot={vi.fn()} defaultDatabaseType="mySql" defaultSslMode="prefer" />;
     const { rerender } = render(panel());
-    fireEvent.click(await screen.findByRole("button", { name: "Select database" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
     fireEvent.click(screen.getByRole("menuitemradio"));
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledOnce());
     if (timing === "after") rerender(panel(profile.id));
@@ -449,7 +606,7 @@ describe("ConnectionPanel", () => {
     const capturePostgresSnapshot = vi.fn();
     const platform = platformMock({ capturePostgresSnapshot, getSnapshot: vi.fn().mockRejectedValueOnce(new Error("Fixture local read timed out")).mockResolvedValue(captureResult.snapshot) });
     const { onSnapshot } = renderPanel(platform, null);
-    fireEvent.click(await screen.findByRole("button", { name: "Select database" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
     fireEvent.click(screen.getByRole("menuitemradio"));
     fireEvent.click(await screen.findByRole("button", { name: "Try Again" }));
     await waitFor(() => expect(onSnapshot).toHaveBeenCalledOnce());
@@ -461,7 +618,7 @@ describe("ConnectionPanel", () => {
     const verifyAndRefreshDataSource = vi.fn().mockResolvedValue({ profile, connection: connectionResult, capture: captureResult });
     const platform = platformMock({ listSnapshots: vi.fn().mockResolvedValue([]), verifyAndRefreshDataSource });
     const { onSnapshot } = renderPanel(platform, null);
-    fireEvent.click(await screen.findByRole("button", { name: "Select database" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
     fireEvent.click(screen.getByRole("menuitemradio"));
 
     const alert = await screen.findByRole("alert");
@@ -484,9 +641,9 @@ describe("ConnectionPanel", () => {
     const platform = platformMock({ listSnapshots, getSnapshot, capturePostgresSnapshot });
     const { onSnapshot } = renderPanel(platform, null);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Select database" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
     expect(screen.getByRole("menuitemradio")).toHaveAttribute("aria-checked", "false");
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /MySQL · Flow/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /^Flow/ }));
 
     await waitFor(() => expect(listSnapshots).toHaveBeenCalledWith(profile.id));
     expect(getSnapshot).toHaveBeenCalledWith("snapshot-1");
@@ -529,7 +686,7 @@ describe("ConnectionPanel", () => {
     expect(testPostgresConnection).not.toHaveBeenCalled();
     expect(capturePostgresSnapshot).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Data source: flow" })).toHaveTextContent("MySQL · Flow local");
+    expect(screen.getByRole("button", { name: "Connection: Flow local" })).toHaveTextContent("MySQL · 127.0.0.1:3306");
   });
 
   it("requires verification for connection detail changes and reuses the system credential store password", async () => {
@@ -579,7 +736,7 @@ describe("ConnectionPanel", () => {
     expect(screen.getByRole("dialog", { name: "Edit Flow" })).toBeInTheDocument();
     expect(saveDataSource).not.toHaveBeenCalled();
     expect(capturePostgresSnapshot).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Data source: flow" })).toHaveTextContent("MySQL · Flow");
+    expect(screen.getByRole("button", { name: "Connection: Flow" })).toHaveTextContent("MySQL · 127.0.0.1:3306");
   });
 
   it("deletes a source and its local data after confirmation", async () => {
@@ -601,7 +758,7 @@ describe("ConnectionPanel", () => {
     }));
     expect(clearCredentials).toHaveBeenCalledWith(profile.id, { database: true, ai: true, cloud: true });
     expect(onSourceDeleted).toHaveBeenCalledWith(profile.id);
-    expect(screen.queryByRole("button", { name: "Data source: flow" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connection: Flow" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /No database connected/ })).toBeVisible();
     expect(onSnapshot).not.toHaveBeenCalled();
     expect(listSnapshots).not.toHaveBeenCalled();
@@ -616,13 +773,13 @@ describe("ConnectionPanel", () => {
     await editCurrentConnection();
     fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
     confirmSourceDeletion("Flow");
-    expect(await screen.findByRole("button", { name: "Data source: warehouse" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Connection: Flow" })).toBeVisible();
     expect(screen.getByText("Model for source-2")).toBeVisible();
     expect(onSourceDeleted).toHaveBeenCalledExactlyOnceWith(profile.id);
     expect(onSnapshot).toHaveBeenCalledExactlyOnceWith({ snapshot, stored: false, changeSet: null });
     expect(listSnapshots).toHaveBeenCalledExactlyOnceWith(remaining.id);
     expect(capturePostgresSnapshot).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Data source: warehouse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connection: Flow" }));
     expect(screen.getAllByRole("menuitemradio")).toHaveLength(1);
     expect(screen.getByRole("menuitemradio")).toHaveAttribute("aria-checked", "true");
   });
@@ -640,13 +797,13 @@ describe("ConnectionPanel", () => {
     confirmSourceDeletion("Flow");
     expect(await screen.findByText("Local snapshot unavailable")).toBeVisible();
     expect(screen.queryByText("Model for source-1")).not.toBeInTheDocument();
-    const trigger = screen.getByRole("button", { name: "Select database" });
+    const trigger = screen.getByRole("button", { name: "Select connection" });
     expect(trigger).toHaveTextContent("1 saved connection");
     fireEvent.click(trigger);
     expect(screen.getByRole("menuitem", { name: "Manage connections…" })).toBeEnabled();
     expect(screen.getByRole("menuitemradio")).toHaveAttribute("aria-checked", "false");
     fireEvent.click(screen.getByRole("menuitemradio"));
-    expect(await screen.findByRole("button", { name: "Data source: warehouse" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Connection: Flow" })).toBeVisible();
     expect(screen.queryByText("Local snapshot unavailable")).not.toBeInTheDocument();
   });
 
@@ -660,7 +817,7 @@ describe("ConnectionPanel", () => {
       const deleteSourceData = vi.fn().mockRejectedValueOnce(new Error("Local storage unavailable")).mockResolvedValue(1);
       const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listSnapshots, clearCredentials, deleteSourceData });
       const { onSnapshot, onSourceDeleted } = renderWorkspace(platform);
-      await screen.findByRole("button", { name: "Data source: flow" });
+      await screen.findByRole("button", { name: "Connection: Flow" });
       fireEvent.contextMenu(screen.getByRole("region", { name: "Data sources" }));
       fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
       const manager = screen.getByRole("dialog", { name: "Manage connections" });
@@ -691,7 +848,7 @@ describe("ConnectionPanel", () => {
       expect(search).toHaveValue("other");
       expect(search).toHaveFocus();
       fireEvent.click(within(manager).getByRole("button", { name: "Close" }));
-      expect(screen.getByRole("button", { name: "Data source: flow" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Connection: Flow" })).toBeVisible();
       expect(screen.getByText("Model for source-1")).toBeVisible();
       expect(onSnapshot).not.toHaveBeenCalled();
       expect(listSnapshots).not.toHaveBeenCalled();
@@ -744,7 +901,7 @@ describe("database navigation actions", () => {
       <input aria-label="Object search" /><button>Table object</button>
     </ConnectionPanel>;
     const { rerender } = render(panel());
-    await screen.findByRole("button", { name: "Data source: flow" });
+    await screen.findByRole("button", { name: "Connection: Flow" });
     const region = screen.getByRole("region", { name: "Data sources" });
     fireEvent.contextMenu(screen.getByRole("textbox", { name: "Object search" }));
     fireEvent.contextMenu(screen.getByRole("button", { name: "Table object" }));
@@ -770,7 +927,7 @@ describe("database navigation actions", () => {
 
   it("disables refresh without an active snapshot or permitted refresh callback", async () => {
     renderPanel(platformMock(), null);
-    await screen.findByRole("button", { name: "Select database" });
+    await screen.findByRole("button", { name: "Select connection" });
     fireEvent.contextMenu(screen.getByRole("region", { name: "Data sources" }));
     expect(screen.getByRole("menuitem", { name: "Refresh schema" })).toBeDisabled();
     fireEvent.pointerDown(document.body);
@@ -785,13 +942,13 @@ describe("database navigation actions", () => {
       const listSnapshots = vi.fn().mockResolvedValue([{ id: "snapshot-1" }]), saveDataSource = vi.fn(), capturePostgresSnapshot = vi.fn();
       const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listSnapshots, saveDataSource, capturePostgresSnapshot });
       const { onSnapshot } = renderPanel(platform, null);
-      await screen.findByRole("button", { name: "Select database" });
+      await screen.findByRole("button", { name: "Select connection" });
       const region = screen.getByRole("region", { name: "Data sources" });
       const manage = () => {
         fireEvent.contextMenu(region);
         fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
       };
-      fireEvent.click(screen.getByRole("button", { name: "Select database" }));
+      fireEvent.click(screen.getByRole("button", { name: "Select connection" }));
       fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
       const manager = screen.getByRole("dialog", { name: "Manage connections" });
       const search = screen.getByRole("searchbox", { name: "Find database connections" });
@@ -954,11 +1111,11 @@ it("reloads the picker and editor when a backup import removes the SQLite bindin
   const api = platformMock({ listDataSources });
   const props = { enabled: true, activeSourceId: profile.id, platform: api, onSnapshot: vi.fn(), defaultDatabaseType: "sqlite" as const, defaultSslMode: "disable" as const };
   const view = render(<ConnectionPanel {...props} sourcesRevision={0} />);
-  expect(await screen.findByRole("button", { name: "Data source: flow" })).toHaveAttribute("title", expect.stringContaining("/synthetic/original.sqlite"));
+  expect(await screen.findByRole("button", { name: "Connection: Flow" })).toHaveAttribute("title", expect.stringContaining("/synthetic/original.sqlite"));
   view.rerender(<ConnectionPanel {...props} sourcesRevision={1} />);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Data source: flow" })).toHaveAttribute("title", expect.stringContaining("Imported model")));
-  expect(screen.getByRole("button", { name: "Data source: flow" }).getAttribute("title")).not.toContain("/synthetic/original.sqlite");
-  await editCurrentConnection();
+  const imported = await screen.findByRole("button", { name: "Connection: Imported model" });
+  expect(imported).not.toHaveAttribute("title", expect.stringContaining("/synthetic/original.sqlite"));
+  await editCurrentConnection("Imported model");
   expect(screen.getByRole("textbox", { name: "Database file" })).toHaveValue("");
   expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Imported model");
 });
@@ -989,7 +1146,7 @@ describe("manual connection sync", () => {
     const testPostgresConnection = vi.fn();
     const platform = platformMock({ pickWorkspacePath, previewConnectionSync, importConnectionSync, listSnapshots, testPostgresConnection });
     renderPanel(platform, null);
-    fireEvent.click(await screen.findByRole("button", { name: "Select database" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
     fireEvent.click(screen.getByRole("button", { name: "Connection sync…" }));
     fireEvent.click(screen.getByRole("button", { name: "Import" }));

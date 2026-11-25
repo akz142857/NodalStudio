@@ -3,7 +3,7 @@ import { autocompletion, type Completion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory } from "@codemirror/commands";
 import { syntaxHighlighting } from "@codemirror/language";
 import { linter, lintGutter } from "@codemirror/lint";
-import { Compartment, EditorState } from "@codemirror/state";
+import { Annotation, Compartment, EditorState } from "@codemirror/state";
 import { EditorView, highlightActiveLine, lineNumbers, keymap, placeholder } from "@codemirror/view";
 import { sqlHighlightStyle } from "../../design-system/sql-highlight";
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -29,6 +29,8 @@ interface SqlEditorProps {
   ddlEngine?: string;
   onStop: () => void;
 }
+
+const syncDraft = Annotation.define<boolean>();
 
 function completions(snapshot: DatabaseSnapshot | undefined, t: Translate): Completion[] {
   if (!snapshot) return [];
@@ -106,7 +108,9 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
         ]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged || update.selectionSet) { editRevision.current++; setMenu(undefined); }
-          if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          if (update.transactions.some((transaction) => transaction.docChanged && !transaction.annotation(syncDraft))) {
+            onChangeRef.current(update.state.doc.toString());
+          }
         }),
         EditorView.theme({
           "&": { height: "100%", fontSize: "13px", color: "var(--ds-text)", backgroundColor: "var(--ds-field)" },
@@ -141,7 +145,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   useLayoutEffect(() => {
     const view = viewRef.current;
     if (!view || view.state.doc.toString() === value) return;
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value }, annotations: syncDraft.of(true) });
   }, [value]);
 
   async function edit(action: "copy" | "cut" | "paste" | "format") {

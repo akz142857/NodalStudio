@@ -1,7 +1,7 @@
 import { SchemaIndexDetails } from "./SchemaIndexDetails";
 import { translateUiLabel } from "../i18n/business-labels";
 import { useI18n } from "../i18n";
-import { memo, useCallback, useContext, useMemo, useState, type MouseEvent, type KeyboardEvent, type ReactNode, type CSSProperties } from "react";
+import { memo, useCallback, useContext, useId, useMemo, useState, type MouseEvent, type KeyboardEvent, type ReactNode, type CSSProperties } from "react";
 import type { DatabaseSnapshot, ObjectKey, TableDefinition } from "../platform";
 import type { EnumDefinition, ViewDefinition, ProgramDefinition, SchemaDefinition } from "../platform/types";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
@@ -23,6 +23,7 @@ interface SchemaTreeProps {
   snapshot: DatabaseSnapshot;
   navigation?: ReactNode;
   databaseMode?: boolean;
+  queriesBeforeObjects?: boolean;
   savedQueries?: readonly SavedQuery[];
   onOpenSavedQuery?: (query: SavedQuery) => void;
   onNewQuery?: () => void;
@@ -142,7 +143,7 @@ const SchemaObjectRows = memo(function SchemaObjectRows({ objects, selectedName,
 });
 
 /** Filtering expands matches without changing the user's normal disclosure state. */
-export function SchemaTree({ snapshot, databaseMode = false, savedQueries, onOpenSavedQuery, onNewQuery, onDeleteSavedQuery, selectedTable, rowCounts, onSelectTable, onOpenTable, onOpenView, onShowDefinition, onExportTable, onDumpSchema, onOpenQuery, navigation, selectedObject, onOpenObject, onCloseObject }: SchemaTreeProps) {
+export function SchemaTree({ snapshot, databaseMode = false, queriesBeforeObjects = false, savedQueries, onOpenSavedQuery, onNewQuery, onDeleteSavedQuery, selectedTable, rowCounts, onSelectTable, onOpenTable, onOpenView, onShowDefinition, onExportTable, onDumpSchema, onOpenQuery, navigation, selectedObject, onOpenObject, onCloseObject }: SchemaTreeProps) {
   const { t: bt } = useI18n();
   const source = useContext(ConnectionSourceContext);
   const TYPE_LABEL = { tables: bt("business.tables"), views: bt("business.views"), materializedViews: bt("objects.materializedViews"), enums: bt("business.enums"), functions: bt("objects.functions"), procedures: bt("objects.procedures"), triggers: bt("objects.triggers"), events: bt("objects.events") } as const;
@@ -163,9 +164,9 @@ export function SchemaTree({ snapshot, databaseMode = false, savedQueries, onOpe
   const filtering = Boolean(normalized);
   const menuScope = JSON.stringify([snapshot.sourceId, snapshot.id, normalized]);
   const activeMenu = context?.scope === menuScope ? context : undefined;
-  const expanded = (key: string) => filtering ? (searchOpen[key] ?? true) : (effectiveOpen[key] ?? false);
-  const toggle = (key: string) => {
-    if (filtering) setSearchOpen((current) => ({ ...current, [key]: !(current[key] ?? true) }));
+  const expanded = (key: string, filtered = filtering) => filtered ? (searchOpen[key] ?? true) : (effectiveOpen[key] ?? false);
+  const toggle = (key: string, filtered = filtering) => {
+    if (filtered) setSearchOpen((current) => ({ ...current, [key]: !(current[key] ?? true) }));
     else setOpen((current) => ({ ...current, [key]: !current[key] }));
   };
   // Disclosure and menu state share the same groups until the model or filter changes.
@@ -187,8 +188,11 @@ export function SchemaTree({ snapshot, databaseMode = false, savedQueries, onOpe
       return matches.length ? [{ name, groups: matches, count: matches.reduce((total, group) => total + group.objects.length, 0) }] : [];
     });
   }, [catalog, normalized]);
-  const visibleQueries = savedQueries?.filter(({ name }) => !normalized || normalized.split(/\s+/).every((term) => name.toLocaleLowerCase().includes(term)));
-  const totals = filtering ? visible.reduce((sum, schema) => sum + schema.count, 0) + (visibleQueries?.length ?? 0) : 0;
+  const queryFiltering = filtering && !queriesBeforeObjects;
+  const visibleQueries = queryFiltering ? savedQueries?.filter(({ name }) => normalized.split(/\s+/).every((term) => name.toLocaleLowerCase().includes(term))) : savedQueries;
+  const savedQueryListId = useId();
+  const queriesExpanded = expanded(":savedQueries", queryFiltering);
+  const totals = filtering ? visible.reduce((sum, schema) => sum + schema.count, 0) + (queryFiltering ? visibleQueries?.length ?? 0 : 0) : 0;
   const activeKey = selectedObject ?? previewKey;
   const openObject = useCallback((key: ObjectKey) => {
     if (onOpenObject && key.kind !== "enum") { setPreviewKey(undefined); onOpenObject(key); }
@@ -250,10 +254,28 @@ export function SchemaTree({ snapshot, databaseMode = false, savedQueries, onOpe
       { label: bt("business.copyQualifiedName"), run: () => copyName(menuObject.key) },
     ] : [];
 
+  const savedQuerySection = visibleQueries && (!queryFiltering || visibleQueries.length > 0) && <div className="saved-query-section" data-before-objects={queriesBeforeObjects || undefined}>
+    <button type="button" className="tree-row saved-query-heading" aria-label={bt("savedQueries.count", { count: visibleQueries.length })}
+      aria-expanded={queriesExpanded} aria-controls={savedQueryListId} onClick={() => toggle(":savedQueries", queryFiltering)}>
+      <TreeDisclosureIcon open={queriesExpanded} /><ActionIcon name="codeDocument" /><span className="tree-label">{bt("savedQueries.label")}</span><small>{visibleQueries.length}</small>
+    </button>
+    <div id={savedQueryListId} hidden={!queriesExpanded} className="saved-query-list">
+      {queriesExpanded && <>
+        {visibleQueries.map((query) => <div key={query.id} className="saved-query-row">
+          <button type="button" className="tree-row saved-query-item" onClick={() => onOpenSavedQuery?.(query)} title={query.name}><ActionIcon name="codeDocument" /><span className="tree-label">{query.name}</span></button>
+          {onDeleteSavedQuery && <button type="button" className="saved-query-delete" aria-label={bt("savedQueries.delete", { value0: query.name })}
+            title={bt("savedQueries.delete", { value0: query.name })} onClick={() => onDeleteSavedQuery(query)}><ActionIcon name="trash" /></button>}
+        </div>)}
+        {!queryFiltering && onNewQuery && <button type="button" className="tree-row saved-query-new" onClick={onNewQuery}><ActionIcon name="add" />{bt("savedQueries.new")}</button>}
+      </>}
+    </div>
+  </div>;
+
   return <section className="schema-tree" aria-label={bt("business.databaseStructure")} onContextMenu={(event) => {
     event.preventDefault();
   }}>
     {navigation}
+    {queriesBeforeObjects && savedQuerySection}
     <h2 className="navigation-section-title">{bt("business.databaseObjects")}</h2>
     <div className="schema-object-search">
       <ActionIcon name="search" />
@@ -303,19 +325,7 @@ export function SchemaTree({ snapshot, databaseMode = false, savedQueries, onOpe
         }) : null}
       </div>;
     })}
-    {visibleQueries && (!filtering || visibleQueries.length > 0) && <div className="tree-node">
-      <button type="button" className="tree-row tree-row-schema" aria-expanded={expanded(":savedQueries")} onClick={() => toggle(":savedQueries")}>
-        <TreeDisclosureIcon open={expanded(":savedQueries")} /><ActionIcon name="report" /><span className="tree-label">{bt("savedQueries.label")}</span><small>{visibleQueries.length}</small>
-      </button>
-      {expanded(":savedQueries") && <>
-        {visibleQueries.map((query) => <div key={query.id} className="tree-object-row">
-          <button type="button" className="tree-row tree-row-object" onClick={() => onOpenSavedQuery?.(query)} title={query.name}><span className="tree-label">{query.name}</span></button>
-          <button type="button" className="tree-object-actions" aria-label={bt("savedQueries.delete", { value0: query.name })}
-            title={bt("savedQueries.delete", { value0: query.name })} onClick={() => onDeleteSavedQuery?.(query)}><ActionIcon name="close" /></button>
-        </div>)}
-        {!filtering && <button type="button" className="tree-row tree-row-object" onClick={onNewQuery}>{bt("savedQueries.new")}</button>}
-      </>}
-    </div>}
+    {!queriesBeforeObjects && savedQuerySection}
     {activeMenu && menuName && actions.length > 0 ? <SchemaObjectMenu key={JSON.stringify(typeof menuObject === "string" ? menuObject : menuObject?.key)}
       x={activeMenu.x} y={activeMenu.y} name={menuName} actions={actions} onClose={closeMenu} /> : null}
   </section>;

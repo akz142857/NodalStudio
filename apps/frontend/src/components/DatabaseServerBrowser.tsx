@@ -14,9 +14,10 @@ type Catalog =
 
 const mysqlSystemDatabases = new Set(["information_schema", "mysql", "performance_schema", "sys"]);
 
-export function DatabaseServerBrowser({ server, platform, onOpenStart, onOpen, onClose }: {
+export function DatabaseServerBrowser({ server, platform, startCreating = false, onOpenStart, onOpen, onClose }: {
   server: DataSourceProfile;
   platform: NodalStudioPlatform;
+  startCreating?: boolean;
   onOpenStart?: () => void;
   onOpen: (profile: DataSourceProfile, capture: CaptureSnapshotResult) => void;
   onClose: () => void;
@@ -35,7 +36,7 @@ export function DatabaseServerBrowser({ server, platform, onOpenStart, onOpen, o
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
   const [selection, setSelection] = useState<string>();
-  const [draft, setDraft] = useState<string>();
+  const [draft, setDraft] = useState<string | undefined>(startCreating ? "" : undefined);
   const [activity, setActivity] = useState<{ action: "creating" | "opening"; database: string }>();
   const [error, setError] = useState<string>();
   const [created, setCreated] = useState<string>();

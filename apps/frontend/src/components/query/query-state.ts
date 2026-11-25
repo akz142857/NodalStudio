@@ -1,11 +1,13 @@
 import type { QueryExecutionResult } from "../../platform";
 import { setUpdateBlocker } from "../../platform/update-guard";
+import type { SavedQuery } from "./saved-queries";
 
 export type QueryTab = "results" | "message" | "history";
 
 export interface QuerySession {
   draft: string;
   previousDraft?: { sql: string; rowLimit: number };
+  savedQuery?: Pick<SavedQuery, "id" | "name">;
   outputSourceId?: string;
   result?: QueryExecutionResult;
   message: string;
@@ -20,6 +22,9 @@ export interface QuerySession {
 const sessions = new Map<string, QuerySession>();
 const draftPrefix = "nodalstudio.query-draft.v1:";
 const draftKey = (workspace: string) => `${draftPrefix}${encodeURIComponent(workspace)}`;
+export const legacyQueryWorkspaceKey = "query-workspace";
+export const queryWorkspaceKey = (sourceId: string) => `${legacyQueryWorkspaceKey}:${sourceId}`;
+export const unboundQueryWorkspaceKey = queryWorkspaceKey("no-source");
 
 export const MIN_QUERY_RESULT_HEIGHT = 120;
 export const MAX_QUERY_RESULT_HEIGHT = 650;
@@ -36,6 +41,7 @@ export function loadQuerySession(sourceId: string): QuerySession {
   if (existing) return existing;
   let draft = "";
   let previousDraft: QuerySession["previousDraft"];
+  let savedQuery: QuerySession["savedQuery"];
   let restoreFailed = false;
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(draftKey(sourceId)) ?? "null");
@@ -48,10 +54,16 @@ export function loadQuerySession(sourceId: string): QuerySession {
         previousDraft = { sql: previous.sql, rowLimit: previous.rowLimit };
       }
     }
+    if (stored && typeof stored === "object" && "savedQuery" in stored) {
+      const saved = stored.savedQuery;
+      if (saved && typeof saved === "object" && "id" in saved && "name" in saved
+        && typeof saved.id === "string" && typeof saved.name === "string") savedQuery = { id: saved.id, name: saved.name };
+    }
   } catch { restoreFailed = true; }
   return {
     draft,
     previousDraft,
+    savedQuery,
     message: restoreFailed ? "The saved SQL draft could not be restored from local storage." : "Ready. Only one read-only SELECT statement can be executed.",
     activeTab: restoreFailed ? "message" : "results",
     rowLimit: 100,
@@ -60,17 +72,29 @@ export function loadQuerySession(sourceId: string): QuerySession {
   };
 }
 
-export function saveQuerySession(sourceId: string, session: QuerySession): void {
+export function saveQuerySession(sourceId: string, session: QuerySession): boolean {
   sessions.set(sourceId, session);
   // Persist only the editor draft, never query results or database row contents.
   // The blocker survives QueryPage unmounting when Settings is opened.
   try {
-    if (session.draft || session.previousDraft) localStorage.setItem(draftKey(sourceId), JSON.stringify({ draft: session.draft, previousDraft: session.previousDraft }));
+    if (session.draft || session.previousDraft || session.savedQuery) localStorage.setItem(draftKey(sourceId), JSON.stringify({ draft: session.draft, previousDraft: session.previousDraft, savedQuery: session.savedQuery }));
     else localStorage.removeItem(draftKey(sourceId));
     setUpdateBlocker(`query-draft:${sourceId}`, undefined);
+    return true;
   } catch {
     setUpdateBlocker(`query-draft:${sourceId}`, "save your SQL draft locally (open Query and edit it to retry, or copy and clear it)");
+    return false;
   }
+}
+
+export function recoverQueryDraft(fromWorkspace: string, workspace: string, current: QuerySession): QuerySession {
+  const previous = loadQuerySession(fromWorkspace);
+  if (current.draft || current.previousDraft || (!previous.draft && !previous.previousDraft)) return current;
+  const recovered = { ...current, draft: previous.draft, previousDraft: previous.previousDraft, savedQuery: undefined };
+  if (saveQuerySession(workspace, recovered)) {
+    saveQuerySession(fromWorkspace, { ...previous, draft: "", previousDraft: undefined, savedQuery: undefined });
+  }
+  return recovered;
 }
 
 /** Called after an explicitly requested factory reset. Other preferences are untouched. */

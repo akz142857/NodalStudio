@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n";
-import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ConnectionTestStatus } from "./ConnectionTestStatus";
 import { connectionFailure, type ConnectionTestState } from "./connection-test-state";
 import { ConnectionSecurityFields } from "./ConnectionSecurityFields";
@@ -7,7 +7,9 @@ import { ConnectionManager } from "./ConnectionManager";
 import { SchemaObjectMenu } from "./SchemaObjectMenu";
 import { DataSourcePicker } from "./DataSourcePicker";
 import { DatabaseServerBrowser } from "./DatabaseServerBrowser";
-import { isServerConnection, isServerConnectionForm } from "../platform/database-server";
+import { SearchSelect } from "./SearchSelect";
+import { isServerConnection, isServerConnectionForm, lastServerDatabase, rememberServerDatabase } from "../platform/database-server";
+import { translateConnectionFailure } from "../i18n/connection-errors";
 import { ConnectionSourceContext } from "./connection-source-context";
 import { ActionIcon } from "./ActionIcon";
 import { Button } from "../design-system/Button";
@@ -26,12 +28,15 @@ interface ConnectionPanelProps {
   enabled: boolean;
   /** The source whose snapshot is on the canvas; its objects nest beneath it. */
   activeSourceId?: string;
+  initializingDatabase?: boolean;
   /** Reload profiles after imports or settings mutations outside this panel. */
   sourcesRevision?: number;
   /** The schema tree rendered below the active source's picker. */
   children?: ReactNode;
   platform: NodalStudioPlatform;
   onSnapshot: (result: CaptureSnapshotResult) => void;
+  onOpenDatabase?: (result: CaptureSnapshotResult) => void;
+  onDatabaseCleared?: () => void;
   onSourceSaved?: (source: DataSourceProfile) => void;
   onSourceOpenStart?: () => void;
   onRefresh?: () => void;
@@ -53,6 +58,11 @@ const initialForm: SaveDataSourceInput = {
 };
 
 class MissingSchemaSnapshotError extends Error {}
+
+type DatabaseCatalogResult = { state: "ready"; databases: string[] } | { state: "error"; failure: ReturnType<typeof connectionFailure> };
+type DatabaseCatalog = { serverKey: string } & ({ state: "loading" } | DatabaseCatalogResult);
+
+const serverKey = (server: DataSourceProfile) => JSON.stringify([server.id, server.updatedAt]);
 
 function newConnectionForm(
   databaseType: SaveDataSourceInput["databaseType"],
@@ -87,7 +97,7 @@ function connectionDetailsDiffer(
   );
 }
 
-export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, children, platform, onSnapshot, onSourceSaved, onSourceOpenStart, onSourceDeleted, onRefresh, refreshDisabled, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
+export function ConnectionPanel({ enabled, activeSourceId, initializingDatabase, sourcesRevision, children, platform, onSnapshot, onOpenDatabase, onDatabaseCleared, onSourceSaved, onSourceOpenStart, onSourceDeleted, onRefresh, refreshDisabled, defaultDatabaseType, defaultSslMode }: ConnectionPanelProps) {
   const { t: bt } = useI18n();
   const sslModeDescriptions: Record<SslMode, string> = {
     disable: bt("business.tLSIsDisabledForThisConnection"),
@@ -120,6 +130,13 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<DataSourceProfile>();
   const [serverBrowser, setServerBrowser] = useState<DataSourceProfile>();
+  const [selectedServer, setSelectedServer] = useState<{ id: string; previousSourceId?: string }>();
+  const [databaseCatalog, setDatabaseCatalog] = useState<DatabaseCatalog>();
+  const [databaseError, setDatabaseError] = useState<{ context: typeof openContext; database: string; message: string }>();
+  const [pendingDatabase, setPendingDatabase] = useState<{ connection: DataSourceProfile; database: string }>();
+  const databaseStatusId = useId();
+  const databaseRequest = useRef<{ serverKey: string; result: Promise<DatabaseCatalogResult> }>(undefined);
+  const openingDatabase = useRef(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     profile: DataSourceProfile;
     resolve: (confirmed: boolean) => void;
@@ -141,6 +158,33 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
   const formSsh = form.security?.ssh;
   const hasSavedSshPassword = savedSsh?.authentication === "password" && formSsh?.host === savedSsh.host
     && formSsh?.port === savedSsh.port && formSsh?.username === savedSsh.username;
+
+  const serverProfiles = profiles.filter(isServerConnection);
+  const connections = profiles.filter((profile) => !serverProfiles.some((server) => server.id === profile.serverSourceId));
+  const activeProfile = profiles.find((profile) => profile.id === activeSourceId);
+  const parentServer = serverProfiles.find((server) => server.id === activeProfile?.serverSourceId);
+  const browsingServer = serverProfiles.find((server) => server.id === selectedServer?.id);
+  // A workspace loaded elsewhere takes over the sidebar selection.
+  if (selectedServer && activeSourceId && activeSourceId !== selectedServer.previousSourceId) setSelectedServer(undefined);
+  const activeConnection = browsingServer ?? parentServer ?? activeProfile;
+  const activeServer = activeConnection && isServerConnection(activeConnection) ? activeConnection : undefined;
+  const activeDatabase = activeServer
+    ? activeProfile?.serverSourceId === activeServer.id ? activeProfile.database : undefined
+    : activeConnection?.database;
+  const activeServerKey = activeServer && serverKey(activeServer);
+  const catalog = databaseCatalog?.serverKey === activeServerKey ? databaseCatalog : undefined;
+  const databaseStatus = pendingDatabase
+    ? pendingDatabase.connection.id === activeConnection?.id
+      ? bt("serverConnection.opening", { database: pendingDatabase.database })
+      : bt("serverConnection.openingOn", { database: pendingDatabase.database, connection: pendingDatabase.connection.displayName })
+    : initializingDatabase && activeDatabase ? bt("serverConnection.initializing", { database: activeDatabase }) : "";
+  const visibleDatabaseError = databaseError?.context === openContext ? databaseError : undefined;
+  const databaseOptions = catalog?.state === "ready"
+    ? catalog.databases.map((name) => ({ value: name, label: name })) : [];
+
+  useEffect(() => {
+    if (parentServer && activeProfile?.database) rememberServerDatabase(parentServer.id, activeProfile.database);
+  }, [parentServer, activeProfile?.database]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -272,7 +316,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
         profile,
         ...current.filter((item) => item.id !== profile.id),
       ]);
-      if (isServerConnection(profile)) setServerBrowser(profile);
+      if (isServerConnection(profile)) selectServer(profile, requiresLiveVerification);
       else if (mapped) onSnapshot(mapped.capture);
       setForm((current) => ({ ...current, id: profile.id, password: "", sshPassword: "", sshKeyPassphrase: "" }));
       setDialogOpen(false);
@@ -323,7 +367,73 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
       throw new MissingSchemaSnapshotError(bt("business.missingSchemaSnapshot", { value0: bt("business.verifyRefresh") }));
     }
     const snapshot = await platform.getSnapshot(latest.id);
-    onSnapshot({ snapshot, stored: false, changeSet: null });
+    (onOpenDatabase ?? onSnapshot)({ snapshot, stored: false, changeSet: null });
+  }
+
+  function selectServer(server: DataSourceProfile, connectionChanged = false) {
+    onSourceOpenStart?.();
+    setOpenError(undefined);
+    setDatabaseError(undefined);
+    setSelectedServer({ id: server.id, previousSourceId: activeSourceId });
+    // A change to the server binding requires reopening the database through the server.
+    if (connectionChanged || activeProfile?.serverSourceId !== server.id) onDatabaseCleared?.();
+  }
+
+  function loadDatabases(server: DataSourceProfile): Promise<DatabaseCatalogResult> {
+    const key = serverKey(server);
+    if (databaseRequest.current?.serverKey === key) return databaseRequest.current.result;
+    setDatabaseCatalog({ serverKey: key, state: "loading" });
+    const result = platform.listServerDatabases(server.id).then<DatabaseCatalogResult, DatabaseCatalogResult>(
+      (databases) => ({ state: "ready", databases }),
+      (reason: unknown) => ({ state: "error", failure: connectionFailure(reason) }),
+    ).then((catalog) => {
+      if (databaseRequest.current?.result === result) setDatabaseCatalog({ serverKey: key, ...catalog });
+      return catalog;
+    }).finally(() => {
+      if (databaseRequest.current?.result === result) databaseRequest.current = undefined;
+    });
+    databaseRequest.current = { serverKey: key, result };
+    return result;
+  }
+
+  function acceptServerDatabase(server: DataSourceProfile, profile: DataSourceProfile, capture: CaptureSnapshotResult) {
+    rememberServerDatabase(server.id, profile.database);
+    onSourceSaved?.(profile);
+    setProfiles((current) => [profile, ...current.filter((source) => source.id !== profile.id)]);
+    (onOpenDatabase ?? onSnapshot)(capture);
+  }
+
+  async function chooseDatabase(server: DataSourceProfile, database: string, listedFrom?: "remembered" | "manager") {
+    if (openingDatabase.current) return;
+    openingDatabase.current = true;
+    onSourceOpenStart?.();
+    setOpenError(undefined);
+    setDatabaseError(undefined);
+    setPendingDatabase({ connection: server, database });
+    setPending(true);
+    const showError = (message: string) => setDatabaseError({ context: openContext, database, message });
+    try {
+      if (listedFrom) {
+        const catalog = await loadDatabases(server);
+        if (catalog.state === "error") {
+          showError(translateConnectionFailure(catalog.failure, bt));
+          return;
+        }
+        if (!catalog.databases.includes(database)) {
+          if (listedFrom === "remembered") selectServer(server);
+          else showError(bt("serverConnection.databaseUnavailable"));
+          return;
+        }
+      }
+      const { profile, capture } = await platform.openServerDatabase(server.id, database, server.updatedAt);
+      acceptServerDatabase(server, profile, capture);
+    } catch (reason) {
+      showError(translateConnectionFailure(connectionFailure(reason), bt));
+    } finally {
+      openingDatabase.current = false;
+      setPendingDatabase(undefined);
+      setPending(false);
+    }
   }
 
   async function handleExistingOpen(profile: DataSourceProfile) {
@@ -333,16 +443,27 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
       return;
     }
     if (isServerConnection(profile)) {
-      setOpenError(undefined);
-      setServerBrowser(profile);
+      if (profile.id === activeServer?.id) return;
+      const lastDatabase = lastServerDatabase(profile.id);
+      if (lastDatabase) await chooseDatabase(profile, lastDatabase, "remembered");
+      else selectServer(profile);
+      return;
+    }
+    const server = serverProfiles.find((source) => source.id === profile.serverSourceId);
+    if (server) {
+      if (server.connectionSync?.pending) { openEditDialog(server); return; }
+      await chooseDatabase(server, profile.database, "manager");
       return;
     }
     onSourceOpenStart?.();
     setPending(true);
+    setPendingDatabase({ connection: profile, database: profile.database });
     setError(undefined);
     setOpenError(undefined);
+    setDatabaseError(undefined);
     try {
       await openSavedSnapshot(profile);
+      setSelectedServer(undefined);
     } catch (reason) {
       setOpenError({
         context: openContext,
@@ -351,6 +472,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
         missingSnapshot: reason instanceof MissingSchemaSnapshotError,
       });
     } finally {
+      setPendingDatabase(undefined);
       setPending(false);
     }
   }
@@ -418,9 +540,8 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
     deleteConfirmation?.resolve(confirmed);
   }
 
-  const activeProfile = profiles.find((profile) => profile.id === activeSourceId);
   const visibleMenu = menu?.context === openContext ? menu : undefined;
-  const menuProfile = visibleMenu && visibleMenu.trigger !== navigation.current ? activeProfile : undefined;
+  const menuProfile = visibleMenu && visibleMenu.trigger !== navigation.current ? activeConnection : undefined;
   // A successful open from another entry point supersedes this attempt, even
   // when its rejection arrives after the workspace has already changed.
   const visibleOpenError = openError?.context === openContext ? openError : undefined;
@@ -452,20 +573,42 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
         openConnectionMenu(event);
       }}>
       <header className="source-navigation-heading">
-        <h2 id="data-sources-title">{bt("business.databases")}</h2>
+        <h2 id="data-sources-title">{bt("serverConnection.connections")}</h2>
         <button type="button" className="create-connection-button" aria-label={bt("business.addDatabase")} onClick={openCreateDialog} disabled={!enabled || pending}><span aria-hidden="true">＋</span> {bt("business.add")}</button>
       </header>
       {profiles.length > 0 ? <div className="source-navigation-current">
-        <DataSourcePicker profiles={profiles} activeProfile={activeProfile} disabled={!enabled || pending}
+        <DataSourcePicker profiles={connections} activeProfile={activeConnection} disabled={!enabled || pending}
           onSelect={(profile) => { void handleExistingOpen(profile); }}
           onEdit={openEditDialog} onManage={() => setManagerOpen("manage")} onContextMenu={openConnectionMenu} />
       </div> : null}
-      {serverBrowser ? <DatabaseServerBrowser key={serverBrowser.id} server={serverBrowser} platform={platform}
+      {(activeConnection || databaseStatus || visibleDatabaseError) && <div className="source-database-scope ds-surface">
+        {activeServer ? <SearchSelect key={activeServerKey} variant="database" label={bt("business.database")} value={activeDatabase ?? ""} options={databaseOptions}
+            placeholder={bt("business.selectDatabase")} searchPlaceholder={bt("serverConnection.search")} missingLabel={activeDatabase}
+            validateSelection={catalog?.state === "ready"}
+            disabled={!enabled || (pending && !pendingDatabase) || activeServer.connectionSync?.pending}
+            busy={Boolean(databaseStatus)} loading={!catalog || catalog.state === "loading"} describedBy={databaseStatus ? databaseStatusId : undefined}
+            labelAction={<Button variant="ghost" size="small" className="source-database-add" aria-label={bt("serverConnection.newDatabase")} title={bt("serverConnection.newDatabase")}
+              disabled={!enabled || pending || Boolean(databaseStatus) || activeServer.connectionSync?.pending} onClick={() => setServerBrowser(activeServer)}><ActionIcon name="add" /></Button>}
+            onOpen={() => void loadDatabases(activeServer)}
+            emptyMessage={catalog?.state === "error" ? translateConnectionFailure(catalog.failure, bt)
+              : catalog?.state !== "ready" ? bt("serverConnection.loading") : bt(databaseOptions.length ? "serverConnection.noSearchResults" : "serverConnection.noDatabases")}
+            onChange={(database) => void chooseDatabase(activeServer, database)} /> : activeConnection && <div className="source-database-fixed">
+          <span>{bt("business.database")}</span><div className="source-database-fixed-value">
+            <ActionIcon name="database" /><p title={activeDatabase}>{activeDatabase}</p>
+            {databaseStatus && <span className="search-select-progress" aria-hidden="true" />}
+          </div>
+        </div>}
+        {visibleDatabaseError && <div className="source-database-error" role="alert">
+          <strong>{bt("business.couldNotOpenDatabase", { value0: visibleDatabaseError.database })}</strong><p>{visibleDatabaseError.message}</p>
+        </div>}
+        <p id={databaseStatusId} className={databaseStatus ? "source-database-status" : "visually-hidden"} aria-live="polite" aria-atomic="true">
+          {databaseStatus && !activeConnection && <span className="search-select-progress" aria-hidden="true" />}{databaseStatus}
+        </p>
+      </div>}
+      {serverBrowser ? <DatabaseServerBrowser key={serverBrowser.id} server={serverBrowser} platform={platform} startCreating
         onOpenStart={onSourceOpenStart} onClose={() => setServerBrowser(undefined)}
         onOpen={(profile, capture) => {
-          onSourceSaved?.(profile);
-          setProfiles((current) => [profile, ...current.filter((source) => source.id !== profile.id)]);
-          onSnapshot(capture);
+          acceptServerDatabase(serverBrowser, profile, capture);
           setServerBrowser(undefined);
         }} /> : null}
       {visibleOpenError ? <div className="ds-surface connection-open-error">
@@ -484,7 +627,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
         </div>
       </div> : null}
       {visibleMenu ? <SchemaObjectMenu x={visibleMenu.x} y={visibleMenu.y}
-        name={menuProfile?.database ?? bt("business.databases")}
+        name={menuProfile?.displayName ?? bt("serverConnection.connections")}
         actions={[
           { label: bt("business.newConnection"), disabled: !enabled || pending, run: openCreateDialog },
           { label: bt("business.manageConnections"), disabled: !enabled || pending, run: () => setManagerOpen("manage") },
@@ -506,7 +649,7 @@ export function ConnectionPanel({ enabled, activeSourceId, sourcesRevision, chil
         onDelete={deleteSource} /> : null}
       {profiles.length > 0 ? (
         <div className="saved-sources">
-          {activeProfile ? <div key={activeProfile.id}><ConnectionSourceContext.Provider value={activeProfile}>{children}</ConnectionSourceContext.Provider></div> : null}
+          {activeProfile && (!activeServer || activeDatabase) ? <div key={activeProfile.id}><ConnectionSourceContext.Provider value={activeProfile}>{children}</ConnectionSourceContext.Provider></div> : null}
         </div>
       ) : (<>
         <button type="button" className="empty-data-source" onClick={openCreateDialog} disabled={!enabled}>

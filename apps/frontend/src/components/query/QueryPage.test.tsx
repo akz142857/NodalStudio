@@ -1,12 +1,13 @@
 import { EditorView } from "@codemirror/view";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DatabaseSnapshot, QueryExecutionResult, NodalStudioPlatform } from "../../platform";
+import type { DatabaseSnapshot, QueryExecutionResult, QueryHistoryEntry, NodalStudioPlatform } from "../../platform";
 import type { ConfirmedDefinition, OntologyQueryDraft } from "../../platform/ontology-types";
 import { discoverySettings } from "../../test/discovery-fixture";
 import { reportSemantics, reportSnapshot } from "../../test/schema-report-fixture";
-import { clearQuerySessions, loadQuerySession, saveQuerySession } from "./query-state";
+import { clearQuerySessions, legacyQueryWorkspaceKey, loadQuerySession, queryWorkspaceKey, saveQuerySession, unboundQueryWorkspaceKey } from "./query-state";
 import { QueryPage } from "./QueryPage";
+import { usesAppleKeyboard } from "../command-shortcuts";
 
 const snapshot: DatabaseSnapshot = {
   id: "snapshot",
@@ -26,6 +27,7 @@ const result: QueryExecutionResult = {
   truncated: false,
   notices: [],
 };
+const reportWorkspace = queryWorkspaceKey(reportSnapshot.sourceId);
 
 describe("QueryPage", () => {
   beforeEach(() => clearQuerySessions());
@@ -53,7 +55,7 @@ describe("QueryPage", () => {
       listSnapshots: vi.fn().mockResolvedValue([{ id: reportSnapshot.id }]),
       draftOntologyLastMonth, prepareDiscovery, executeReadonlyQuery,
     } as unknown as NodalStudioPlatform;
-    saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 7;" });
+    saveQuerySession(reportWorkspace, { ...loadQuerySession(reportWorkspace), draft: "SELECT 7;" });
     const { container } = render(<QueryPage snapshot={reportSnapshot} platform={platform} runtimeKind="desktop"
       settings={discoverySettings()} semantics={reportSemantics}
       ontology={{ entries: [entry], loading: false, review: vi.fn(), reload: vi.fn() }} />);
@@ -69,13 +71,13 @@ describe("QueryPage", () => {
     draftOntologyLastMonth.mockRejectedValueOnce(new Error("Review the updated definition before generating SQL."));
     fireEvent.click(within(sheet).getByRole("button", { name: "Open in SQL Editor" }));
     expect(await within(sheet).findByRole("alert")).toHaveTextContent("Review the updated definition");
-    expect(loadQuerySession("query-workspace").draft).toBe("SELECT 7;");
+    expect(loadQuerySession(reportWorkspace).draft).toBe("SELECT 7;");
     fireEvent.click(within(sheet).getByRole("button", { name: "Preview SQL" }));
     await within(sheet).findByText(draft.sql);
     fireEvent.click(within(sheet).getByRole("button", { name: "Open in SQL Editor" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(EditorView.findFromDOM(container.querySelector<HTMLElement>(".cm-editor")!)?.state.doc.toString()).toBe(draft.sql);
-    expect(loadQuerySession("query-workspace").previousDraft?.sql).toBe("SELECT 7;");
+    expect(loadQuerySession(reportWorkspace).previousDraft?.sql).toBe("SELECT 7;");
     expect(draftOntologyLastMonth).toHaveBeenCalledTimes(4);
     expect(prepareDiscovery).not.toHaveBeenCalled();
     expect(executeReadonlyQuery).not.toHaveBeenCalled();
@@ -96,7 +98,7 @@ describe("QueryPage", () => {
     const onConsumeOpenRequest = vi.fn();
     const api = { listQueryHistory: vi.fn().mockResolvedValue([]), draftOntologyLastMonth } as unknown as NodalStudioPlatform;
     const target = { id: entry.id, revision: entry.revision };
-    saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 7;" });
+    saveQuerySession(reportWorkspace, { ...loadQuerySession(reportWorkspace), draft: "SELECT 7;" });
     render(<QueryPage snapshot={reportSnapshot} platform={api} runtimeKind="desktop" onConsumeOpenRequest={onConsumeOpenRequest}
       openRequest={{ id: 1, kind: "ontology", sourceId: original.sourceId, sql: original.sql, ontology: { target, draft: original } }}
       ontology={{ entries: [entry], loading: false, review: vi.fn(), reload: vi.fn() }} />);
@@ -106,10 +108,10 @@ describe("QueryPage", () => {
     expect(await within(sheet).findByText(updated.sql)).toBeVisible();
     expect(draftOntologyLastMonth).toHaveBeenCalledWith({ scope: { sourceId: original.sourceId, snapshotId: original.snapshotId }, target });
     expect(onConsumeOpenRequest).not.toHaveBeenCalled();
-    expect(loadQuerySession("query-workspace").draft).toBe("SELECT 7;");
+    expect(loadQuerySession(reportWorkspace).draft).toBe("SELECT 7;");
     fireEvent.click(within(sheet).getByRole("button", { name: "Open in SQL Editor" }));
     await waitFor(() => expect(onConsumeOpenRequest).toHaveBeenCalledOnce());
-    expect(loadQuerySession("query-workspace").draft).toBe(updated.sql);
+    expect(loadQuerySession(reportWorkspace).draft).toBe(updated.sql);
   });
   it.each([false, true])("runs MySQL cursor statements and discards a late result after changing sources (return to original: %s)", async (returnToOriginal) => {
     let finish!: (value: QueryExecutionResult) => void;
@@ -125,24 +127,78 @@ describe("QueryPage", () => {
     fireEvent.keyDown(editor, { key: "R", metaKey: true, shiftKey: true });
     await waitFor(() => expect(executeReadonlyQuery).toHaveBeenCalledWith(expect.objectContaining({ sourceId: snapshot.sourceId, sql: "SELECT 9;" })));
     rerender(<QueryPage platform={api} snapshot={{ ...snapshot, sourceId: "other-source" }} runtimeKind="desktop" />);
+    expect(screen.getByRole("textbox", { name: "SQL editor" })).not.toHaveTextContent("SELECT 9;");
     expect(cancelQuery).toHaveBeenCalledWith(executeReadonlyQuery.mock.calls[0][0].queryId);
     if (returnToOriginal) rerender(<QueryPage platform={api} snapshot={mysql} runtimeKind="desktop" />);
     await act(async () => { finish(result); await Promise.resolve(); });
     expect(screen.queryByRole("region", { name: "Query results" })).not.toBeInTheDocument();
-    expect(screen.getByText(/Data source changed/)).toBeVisible();
+    expect(screen.getByText(/Database changed/)).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "SQL editor" }).textContent?.includes("SELECT 9;")).toBe(returnToOriginal);
   });
-  it("keeps the draft and suppresses the previous data source output on remount", async () => {
-    const sessionKey = "query-workspace";
+  it("keeps each database's draft and suppresses another database's output on remount", () => {
+    const sessionKey = queryWorkspaceKey(snapshot.sourceId);
     saveQuerySession(sessionKey, { ...loadQuerySession(sessionKey), outputSourceId: snapshot.sourceId,
       draft: "SELECT 42;", message: "Output from the previous connection", result, outcome: "succeeded", rowLimit: 500 });
     const api = { listQueryHistory: vi.fn().mockResolvedValue([]) } as unknown as NodalStudioPlatform;
     const nextSnapshot = { ...snapshot, sourceId: "other-source" };
-    const { container } = render(<QueryPage platform={api} snapshot={nextSnapshot} runtimeKind="desktop" />);
-    expect(await screen.findByText(/Data source changed/)).toBeVisible();
+    const { container, rerender } = render(<QueryPage platform={api} snapshot={nextSnapshot} runtimeKind="desktop" />);
     expect(screen.queryByText("Output from the previous connection")).not.toBeInTheDocument();
-    expect(loadQuerySession(sessionKey)).toMatchObject({ outputSourceId: nextSnapshot.sourceId, draft: "SELECT 42;", rowLimit: 500 });
-    expect(loadQuerySession(sessionKey).result).toBeUndefined();
+    expect(loadQuerySession(sessionKey)).toMatchObject({ outputSourceId: snapshot.sourceId, draft: "SELECT 42;", rowLimit: 500 });
+    expect(EditorView.findFromDOM(container.querySelector<HTMLElement>(".cm-editor")!)?.state.doc.toString()).toBe("");
+    rerender(<QueryPage platform={api} snapshot={snapshot} runtimeKind="desktop" />);
     expect(EditorView.findFromDOM(container.querySelector<HTMLElement>(".cm-editor")!)?.state.doc.toString()).toBe("SELECT 42;");
+  });
+
+  it("keeps the save shortcut in the visible Query workspace", () => {
+    const workspace = queryWorkspaceKey(snapshot.sourceId);
+    saveQuerySession(workspace, { ...loadQuerySession(workspace), draft: "SELECT 12;", savedQuery: { id: "saved", name: "Example" } });
+    const platform = { listQueryHistory: vi.fn().mockResolvedValue([]) } as unknown as NodalStudioPlatform;
+    const onSaveQuery = vi.fn().mockReturnValue({ query: { id: "saved", name: "Example", sql: "SELECT 12;" } });
+    const page = <QueryPage platform={platform} snapshot={snapshot} runtimeKind="desktop" onSaveQuery={onSaveQuery} />;
+    const { rerender } = render(<div inert>{page}</div>);
+    const shortcut = { key: "s", metaKey: usesAppleKeyboard(), ctrlKey: !usesAppleKeyboard() };
+    expect(fireEvent.keyDown(document.body, shortcut)).toBe(true);
+    expect(onSaveQuery).not.toHaveBeenCalled();
+    rerender(<div>{page}</div>);
+    expect(fireEvent.keyDown(document.body, shortcut)).toBe(false);
+    expect(onSaveQuery).toHaveBeenCalledWith("Example", "SELECT 12;", "saved");
+  });
+
+  it("keeps the current history when a clear in another database finishes late", async () => {
+    const next = { ...snapshot, sourceId: "next-database" };
+    const entry: QueryHistoryEntry = { id: "entry", sourceId: snapshot.sourceId, sqlText: "SELECT 42;", executedAt: snapshot.capturedAt, durationMs: 2, rowCount: 1, status: "succeeded", errorKind: null };
+    let finishClear!: (deleted: number) => void;
+    const clearQueryHistory = vi.fn().mockImplementation(() => new Promise<number>((resolve) => { finishClear = resolve; }));
+    const listQueryHistory = vi.fn((sourceId: string) => Promise.resolve(sourceId === snapshot.sourceId
+      ? [entry] : [{ ...entry, sourceId, sqlText: "SELECT 99;" }]));
+    const api = { clearQueryHistory, listQueryHistory } as unknown as NodalStudioPlatform;
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const { rerender } = render(<QueryPage platform={api} snapshot={snapshot} runtimeKind="desktop" />);
+      fireEvent.click(await screen.findByRole("tab", { name: "History 1" }));
+      fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+      expect(clearQueryHistory).toHaveBeenCalledWith(snapshot.sourceId);
+      rerender(<QueryPage platform={api} snapshot={next} runtimeKind="desktop" />);
+      fireEvent.click(await screen.findByRole("tab", { name: "History 1" }));
+      expect(screen.getByRole("button", { name: "SELECT 99;" })).toBeVisible();
+      await act(async () => { finishClear(1); await Promise.resolve(); });
+      expect(screen.getByRole("button", { name: "SELECT 99;" })).toBeVisible();
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it.each([legacyQueryWorkspaceKey, unboundQueryWorkspaceKey])("only moves an unassigned draft from %s when the user chooses to restore it", (workspace) => {
+    saveQuerySession(workspace, { ...loadQuerySession(workspace), draft: "SELECT 7;" });
+    const executeReadonlyQuery = vi.fn();
+    const api = { listQueryHistory: vi.fn().mockResolvedValue([]), executeReadonlyQuery } as unknown as NodalStudioPlatform;
+    render(<QueryPage platform={api} snapshot={snapshot} runtimeKind="desktop" />);
+    expect(screen.getByRole("textbox", { name: "SQL editor" })).not.toHaveTextContent("SELECT 7;");
+    fireEvent.click(screen.getByRole("button", { name: "Restore unassigned SQL draft in app" }));
+    expect(screen.getByRole("textbox", { name: "SQL editor" })).toHaveTextContent("SELECT 7;");
+    expect(loadQuerySession(queryWorkspaceKey(snapshot.sourceId)).draft).toBe("SELECT 7;");
+    expect(loadQuerySession(workspace).draft).toBe("");
+    expect(executeReadonlyQuery).not.toHaveBeenCalled();
   });
   it("runs editor SQL and resizes the output with the global pointer stream", async () => {
     let finishQuery!: (value: QueryExecutionResult) => void;

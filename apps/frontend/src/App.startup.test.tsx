@@ -29,14 +29,14 @@ function setup(autoConnect = false) {
     return value;
   };
   vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "desktop", label: "Startup runtime", version: "test" });
-  vi.spyOn(platform, "listDataSources").mockResolvedValue([{ id: saved.sourceId } as DataSourceProfile]);
-  vi.spyOn(platform, "getSettings").mockImplementation((id) => Promise.resolve(settings(id)));
+  const listSources = vi.spyOn(platform, "listDataSources").mockResolvedValue([{ id: saved.sourceId } as DataSourceProfile]);
+  const readSettings = vi.spyOn(platform, "getSettings").mockImplementation((id) => Promise.resolve(settings(id)));
   vi.spyOn(platform, "getSemantics").mockResolvedValue(reportSemantics);
   vi.spyOn(platform, "listSnapshots").mockResolvedValue([{ id: saved.id, sourceId: saved.sourceId, capturedAt: saved.capturedAt, fingerprint: saved.fingerprint, databaseName: saved.database.name, schemaCount: saved.schemas.length, tableCount: 3 }]);
   const read = vi.spyOn(platform, "getSnapshot").mockResolvedValue(saved);
   const capture = vi.spyOn(platform, "capturePostgresSnapshot").mockResolvedValue({ snapshot: saved, stored: false, changeSet: null });
   const mount = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);
-  return { read, capture, mount };
+  return { read, capture, mount, listSources, readSettings };
 }
 
 describe("startup workspace restoration", () => {
@@ -56,6 +56,18 @@ describe("startup workspace restoration", () => {
     mount();
     expect(await screen.findByTestId("loaded-source")).toHaveTextContent(saved.sourceId);
     expect(capture).toHaveBeenCalledWith(saved.sourceId, "background");
+  });
+
+  it.each([false, true])("skips a restored database whose server changed (auto-connect: %s)", async (autoConnect) => {
+    const { read, capture, mount, listSources, readSettings } = setup(autoConnect);
+    const server = { id: "startup-server", database: "", databaseType: "postgreSql", updatedAt: "2026-10-15T00:00:00Z" } as DataSourceProfile;
+    listSources.mockResolvedValue([server, { ...server, id: saved.sourceId, database: saved.database.name, serverSourceId: server.id, updatedAt: "2026-10-14T00:00:00Z" }]);
+    await act(async () => { mount(); await Promise.resolve(); });
+    expect(readSettings).toHaveBeenCalled();
+    expect(readSettings).not.toHaveBeenCalledWith(saved.sourceId);
+    expect(read).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("loaded-source")).not.toBeInTheDocument();
   });
 
   it.each([false, true])("does not overwrite a manual selection with a late startup result (auto-connect: %s)", async (autoConnect) => {

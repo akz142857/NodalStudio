@@ -38,6 +38,10 @@ const paths = {
   import: <path d="M12 3.5v11m-3.5-3.5 3.5 3.5 3.5-3.5M4.5 13.5V18a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4.5" />,
   preflight: <>{documentOutline}<path d="m8.75 13.25 2.25 2.25 4.25-4.25" /></>,
   report: <>{documentOutline}<path d="M9 12.5h6M9 16h4.5" /></>,
+  codeDocument: <>{documentOutline}<path d="m10.25 11.5-2.5 2.5 2.5 2.5m3.5-5 2.5 2.5-2.5 2.5" /></>,
+  save: <>{documentOutline}<path d="M12 10.5v6m-2.5-2.5 2.5 2.5 2.5-2.5" /></>,
+  edit: <path d="m14.5 5.5 4 4M5 19l4.5-1 9.8-9.8a2.8 2.8 0 0 0-4-4L5.5 14Z" />,
+  trash: <path d="M4 6.5h16M9 6.5V4h6v2.5M6 6.5l1 12a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5l1-12M10 10v6m4-6v6" />,
   viewer: <><rect x="3.5" y="4.5" width="17" height="13" rx="2" /><path d="M8.5 20.5h7M12 17.5v3m-2-12-2.5 2.5 2.5 2.5m4-5 2.5 2.5-2.5 2.5" /></>,
   refresh: <path d="M20.25 10a8.5 8.5 0 0 0-14.5-4L3.5 8.5m0-4.5v4.5H8m-4.25 5.5a8.5 8.5 0 0 0 14.5 4l2.25-2.5m0 4.5v-4.5H16" />,
   settings: <><path d="m10 3.5-.65 2.2-1.9 1.1-2.25-.6-2 3.5 1.6 1.6v1.4l-1.6 1.6 2 3.5 2.25-.6 1.9 1.1.65 2.2h4l.65-2.2 1.9-1.1 2.25.6 2-3.5-1.6-1.6v-1.4l1.6-1.6-2-3.5-2.25.6-1.9-1.1-.65-2.2Z" /><circle cx="12" cy="12" r="2.8" /></>,
@@ -64,6 +68,6 @@ const paths = {
 
 export type ActionIconName = keyof typeof paths;
 
-export function ActionIcon({ name }: { name: ActionIconName }) {
-  return <svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+export function ActionIcon({ name, className }: { name: ActionIconName; className?: string }) {
+  return <svg className={className} aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }

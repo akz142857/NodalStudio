@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n";
 import { ActionIcon } from "./ActionIcon";
@@ -22,6 +22,13 @@ interface Props {
   describedBy?: string;
   disabled?: boolean;
   required?: boolean;
+  variant?: "database";
+  labelAction?: ReactNode;
+  busy?: boolean;
+  loading?: boolean;
+  onOpen?: () => void;
+  emptyMessage?: string;
+  validateSelection?: boolean;
   onChange: (value: string) => void;
 }
 
@@ -46,7 +53,7 @@ function matchingChoices(options: readonly SearchChoice[], query: string) {
   }).sort((left, right) => left.rank - right.rank).map(({ option }) => option);
 }
 
-export function SearchSelect({ label, value, options, placeholder, searchPlaceholder, missingLabel, describedBy, disabled, required, onChange }: Props) {
+export function SearchSelect({ label, value, options, placeholder, searchPlaceholder, missingLabel, describedBy, disabled, required, variant, labelAction, busy, loading, onOpen, emptyMessage, validateSelection = true, onChange }: Props) {
   const { t } = useI18n();
   const id = useId();
   const listId = `${id}-options`;
@@ -55,21 +62,28 @@ export function SearchSelect({ label, value, options, placeholder, searchPlaceho
   const listRef = useRef<HTMLDivElement>(null);
   const [host, setHost] = useState<HTMLElement>();
   const [query, setQuery] = useState("");
-  const [index, setIndex] = useState(0);
-  const open = Boolean(host && !disabled);
+  const [index, setIndex] = useState<number>();
+  const open = Boolean(host && !disabled && !busy);
   const search = open ? query : "";
   const matches = useMemo(() => matchingChoices(options, search), [options, search]);
-  const visible = matches.slice(0, resultLimit);
-  const active = Math.min(index, visible.length - 1);
-  const activeId = open && active >= 0 ? `${listId}-${active}` : undefined;
   const selected = options.find((option) => option.value === value);
+  const visible = matches.slice(0, resultLimit);
+  if (variant === "database" && !search && selected && !visible.includes(selected)) {
+    visible.pop();
+    visible.unshift(selected);
+  }
+  const selectedIndex = variant === "database" ? visible.findIndex((option) => option.value === value) : 0;
+  const active = Math.min(index ?? Math.max(0, selectedIndex), visible.length - 1);
+  const activeId = open && active >= 0 ? `${listId}-${active}` : undefined;
   const selectedLabel = selected?.label ?? (value ? missingLabel ?? t("business.missing", { value0: value }) : "");
   const prompt = searchPlaceholder ?? t("business.search", { value0: label.toLocaleLowerCase() });
 
   function expand(input: HTMLInputElement, last = false) {
+    if (disabled || busy) return;
     setQuery("");
-    setIndex(last ? Math.min(options.length, resultLimit) - 1 : 0);
+    setIndex(last ? resultLimit - 1 : undefined);
     setHost(input.closest("dialog") ?? document.body);
+    onOpen?.();
   }
 
   function choose(option: SearchChoice) {
@@ -89,7 +103,7 @@ export function SearchSelect({ label, value, options, placeholder, searchPlaceho
       const viewportHeight = window.innerHeight / scale;
       const top = bounds.top / scale;
       const bottom = bounds.bottom / scale;
-      const width = Math.min(Math.max(bounds.width / scale, popupMinWidth), viewportWidth - 2 * viewportInset);
+      const width = Math.min(Math.max(bounds.width / scale, variant === "database" ? 224 : popupMinWidth), viewportWidth - 2 * viewportInset);
       popup.style.width = `${width}px`;
       popup.style.left = `${Math.max(viewportInset, Math.min(bounds.left / scale, viewportWidth - width - viewportInset))}px`;
       const above = top - viewportInset - popupGap;
@@ -116,19 +130,20 @@ export function SearchSelect({ label, value, options, placeholder, searchPlaceho
       window.removeEventListener("scroll", dismissOutside, true);
       document.removeEventListener("pointerdown", dismissOutside);
     };
-  }, [open]);
+  }, [open, variant]);
 
   useLayoutEffect(() => {
     if (activeId) document.getElementById(activeId)?.scrollIntoView?.({ block: "nearest" });
   }, [activeId, search]);
 
-  return <div className="search-select">
-    <label htmlFor={id}>{label}</label>
+  return <div className="search-select" data-variant={variant}>
+    {labelAction ? <div className="search-select-heading"><label htmlFor={id}>{label}</label>{labelAction}</div> : <label htmlFor={id}>{label}</label>}
     <div className="search-select-anchor">
       <input id={id} ref={inputRef} role="combobox" autoComplete="off" spellCheck={false}
         aria-autocomplete="list" aria-expanded={open} aria-controls={open ? listId : undefined}
         aria-activedescendant={activeId} aria-required={required} aria-describedby={describedBy}
-        aria-invalid={Boolean(value && !selected) || undefined} disabled={disabled}
+        aria-invalid={Boolean(validateSelection && value && !selected) || undefined} disabled={disabled}
+        aria-busy={busy || undefined} aria-disabled={busy || undefined} readOnly={busy}
         placeholder={open ? prompt : placeholder ?? prompt} value={open ? query : selectedLabel}
         title={open ? undefined : selectedLabel || undefined}
         onFocus={(event) => expand(event.currentTarget)}
@@ -140,14 +155,15 @@ export function SearchSelect({ label, value, options, placeholder, searchPlaceho
           setIndex(0);
         }}
         onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing) return;
+          if (busy || event.nativeEvent.isComposing) return;
           if (event.key === "Escape" && open) {
             event.preventDefault();
             event.stopPropagation();
             setHost(undefined);
-          } else if (event.key === "Enter" && open) {
+          } else if (event.key === "Enter" && (open || variant === "database")) {
             event.preventDefault();
-            if (visible[active]) choose(visible[active]);
+            if (!open) expand(event.currentTarget);
+            else if (visible[active]) choose(visible[active]);
           } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
             const down = event.key === "ArrowDown";
@@ -155,10 +171,11 @@ export function SearchSelect({ label, value, options, placeholder, searchPlaceho
             else setIndex(Math.max(0, Math.min(visible.length - 1, active + (down ? 1 : -1))));
           }
         }} />
-      <ActionIcon name={open ? "chevronUp" : "chevronDown"} />
+      {variant === "database" && <ActionIcon className="search-select-leading" name={open ? "search" : "database"} />}
+      {busy ? <span className="search-select-progress" aria-hidden="true" /> : <ActionIcon name={open ? "chevronUp" : "chevronDown"} />}
     </div>
-    {open && host ? createPortal(<div className="search-select-popup" ref={popupRef}>
-      <div id={listId} ref={listRef} role="listbox" aria-label={t("business.options", { value0: label })}>
+    {open && host ? createPortal(<div className="search-select-popup" data-variant={variant} ref={popupRef}>
+      <div id={listId} ref={listRef} role="listbox" aria-label={t("business.options", { value0: label })} aria-busy={loading || undefined}>
         {visible.map((option, position) => <button type="button" role="option" tabIndex={-1} key={option.value}
           id={`${listId}-${position}`} aria-selected={option.value === value} data-active={position === active}
           aria-label={option.optionLabel ? option.label : undefined} title={option.label}
@@ -167,7 +184,9 @@ export function SearchSelect({ label, value, options, placeholder, searchPlaceho
           {option.value === value ? <ActionIcon name="check" /> : null}
         </button>)}
       </div>
-      {!visible.length ? <div className="search-select-status" role="status">{t("searchSelect.noMatches")}</div>
+      {!visible.length ? <div className="search-select-status" role="status">
+        {loading && <span className="search-select-progress" aria-hidden="true" />}{emptyMessage ?? t("searchSelect.noMatches")}
+      </div>
         : matches.length > resultLimit ? <div className="search-select-status" role="status">
           {t("searchSelect.refine", { value0: resultLimit, value1: matches.length })}
         </div> : null}

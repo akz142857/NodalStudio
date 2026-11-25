@@ -12,7 +12,7 @@ const second: DataSourceProfile = { ...first, id: "mysql", database: "Flow", dat
 function setup() {
   const onSelect = vi.fn();
   const view = render(<><DataSourcePicker profiles={[first, second]} activeProfile={first} disabled={false} onSelect={onSelect} /><button>Edit connection</button></>);
-  const trigger = screen.getByRole("button", { name: "Data source: midigi_db" });
+  const trigger = screen.getByRole("button", { name: "Connection: Local development" });
   return { ...view, trigger, onSelect };
 }
 
@@ -21,10 +21,10 @@ describe("DataSourcePicker", () => {
     const onSelect = vi.fn(), onEdit = vi.fn(), onManage = vi.fn();
     const profiles = [first, ...Array.from({ length: 24 }, (_, index) => ({ ...second, id: `source-${index}` }))];
     render(<DataSourcePicker profiles={profiles} activeProfile={first} disabled={false} onSelect={onSelect} onEdit={onEdit} onManage={onManage} />);
-    const trigger = screen.getByRole("button", { name: "Data source: midigi_db" });
+    const trigger = screen.getByRole("button", { name: "Connection: Local development" });
     expect(screen.queryByText("Edit current connection…")).not.toBeInTheDocument();
     fireEvent.click(trigger);
-    const menu = within(screen.getByRole("menu", { name: "Switch database" }));
+    const menu = within(screen.getByRole("menu", { name: "Switch connection" }));
     const list = menu.getByRole("group", { name: "Data sources" });
     const actions = within(menu.getByRole("group", { name: "Connection actions" }));
     const sourceOptions = within(list);
@@ -52,7 +52,7 @@ describe("DataSourcePicker", () => {
   it("offers management but no current-connection edit before a model is selected", () => {
     const onManage = vi.fn();
     render(<DataSourcePicker profiles={[first]} disabled={false} onSelect={vi.fn()} onEdit={vi.fn()} onManage={onManage} />);
-    fireEvent.click(screen.getByRole("button", { name: "Select database" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select connection" }));
     expect(screen.queryByRole("menuitem", { name: "Edit current connection…" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
     expect(onManage).toHaveBeenCalledOnce();
@@ -62,7 +62,7 @@ describe("DataSourcePicker", () => {
   it("uses the same detail picker before any model is selected without marking a source active", () => {
     const onSelect = vi.fn();
     render(<DataSourcePicker profiles={[first, second]} disabled={false} onSelect={onSelect} />);
-    const trigger = screen.getByRole("button", { name: "Select database" });
+    const trigger = screen.getByRole("button", { name: "Select connection" });
     expect(trigger).toHaveTextContent("2 saved connections");
     fireEvent.click(trigger);
     const options = screen.getAllByRole("menuitemradio");
@@ -75,12 +75,12 @@ describe("DataSourcePicker", () => {
 
   it("distinguishes identically named connections and only switches on activation", () => {
     const { trigger, onSelect } = setup();
-    expect(trigger).toHaveTextContent("midigi_dbPostgreSQL · Local development");
+    expect(trigger).toHaveTextContent("Local developmentPostgreSQL · 127.0.0.1:5433");
     fireEvent.click(trigger);
-    const menu = screen.getByRole("menu", { name: "Switch database" });
+    const menu = screen.getByRole("menu", { name: "Switch connection" });
     const options = within(menu).getAllByRole("menuitemradio");
-    expect(options[0]).toHaveTextContent("midigi_dbPostgreSQL · Local development127.0.0.1:5433");
-    expect(options[1]).toHaveTextContent("FlowMySQL · Local development127.0.0.1:3306");
+    expect(options[0]).toHaveTextContent("Local developmentPostgreSQL · midigi_db127.0.0.1:5433");
+    expect(options[1]).toHaveTextContent("Local developmentMySQL · Flow127.0.0.1:3306");
     expect(options[0]).toHaveAttribute("aria-checked", "true");
     expect(options[0]).toHaveFocus();
     fireEvent.keyDown(options[0], { key: "ArrowDown" });
@@ -157,7 +157,7 @@ describe("DataSourcePicker", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(trigger);
     rerender(<>{picker(false, second)}<button>Edit connection</button></>);
-    expect(screen.getByRole("button", { name: "Data source: Flow" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Connection: Local development" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 });

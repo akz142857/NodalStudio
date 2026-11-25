@@ -6,7 +6,7 @@ import type { DiscoveryInput, DiscoveryPreview, DiscoveryResult, NodalStudioPlat
 import { reportSemantics, reportSnapshot } from "../../test/schema-report-fixture";
 import { discoveryPreview, discoveryResult, discoverySettings } from "../../test/discovery-fixture";
 import { QueryPage } from "./QueryPage";
-import { clearQuerySessions, saveQuerySession, loadQuerySession } from "./query-state";
+import { clearQuerySessions, saveQuerySession, loadQuerySession, queryWorkspaceKey } from "./query-state";
 import { QueryDraftPanel, type QueryDraftSeed } from "./QueryDraftPanel";
 const sql = 'SELECT o.id, o.total FROM public.orders AS o LIMIT 100;';
 const seed: QueryDraftSeed = { id: 1, sourceId: reportSnapshot.sourceId, snapshotId: reportSnapshot.id, question: "Show order IDs and totals", root: reportSnapshot.schemas[0].tables[1].key, tables: [reportSnapshot.schemas[0].tables[1].key], domainId: null };
@@ -113,7 +113,9 @@ describe("SQL drafting", () => {
     expect(p.mocks.executeReadonlyQuery).not.toHaveBeenCalled();
   });
   it.each(["postgreSql", "mySql"] as const)("%s drafting requires review and replacement, permits undo, and never runs automatically", async (dialect) => {
-    const p = setup(dialect); const sql = p.draftSql; saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 42;" });
+    const p = setup(dialect); const sql = p.draftSql;
+    const workspaceKey = queryWorkspaceKey(p.snapshot.sourceId);
+    saveQuerySession(workspaceKey, { ...loadQuerySession(workspaceKey), draft: "SELECT 42;" });
     const { container } = render(<QueryPage {...p} runtimeKind="desktop" draftSeed={seed} />);
     expect(screen.getByLabelText("Question")).toHaveValue("");
     expect(screen.getByText(seed.question)).toBeVisible();

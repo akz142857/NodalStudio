@@ -10,7 +10,8 @@ import { saveTableFilter, saveTableSort, tableFilterKey, tablePageNumberKey, tab
 import { reportSemantics, reportSnapshot } from "./test/schema-report-fixture";
 import { enumSnapshot } from "./test/enum-fixture";
 import type { CanvasLocateRequest, SchemaCanvasProps } from "./components/SchemaCanvas";
-import { clearQuerySessions, loadQuerySession, saveQuerySession } from "./components/query/query-state";
+import { clearQuerySessions, loadQuerySession, queryWorkspaceKey, saveQuerySession } from "./components/query/query-state";
+import { usesAppleKeyboard } from "./components/command-shortcuts";
 import { TableDataPreview } from "./components/TableDataPreview";
 import { SqliteTableWorkspace } from "./components/SqliteTableWorkspace";
 const changes: SchemaChangeSet = { id: "changes", beforeSnapshotId: "before", afterSnapshotId: reportSnapshot.id, createdAt: reportSnapshot.capturedAt, operations: [], riskSummary: { high: 0, medium: 0, low: 0, informational: 0 } };
@@ -67,9 +68,12 @@ const objectFixtures = ddlFixtures.map(({ engine, snapshot, profile }) => {
     },
   };
 });
-vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot, onSourceSaved, children }: {
-  onSnapshot: (result: CaptureSnapshotResult) => void; onSourceSaved: (source: DataSourceProfile) => void; children: ReactNode;
+vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot, onOpenDatabase, onSourceSaved, initializingDatabase, children }: {
+  onSnapshot: (result: CaptureSnapshotResult) => void; onOpenDatabase: (result: CaptureSnapshotResult) => void;
+  onSourceSaved: (source: DataSourceProfile) => void; initializingDatabase: boolean; children: ReactNode;
 }) => <>
+  <span data-testid="database-initializing">{String(initializingDatabase)}</span>
+  <button onClick={() => onOpenDatabase({ snapshot: reportSnapshot, stored: false, changeSet: null })}>Open saved navigation fixture</button>
   <button onClick={() => onSnapshot({ snapshot: reportSnapshot, stored: false, changeSet: null })}>Load navigation fixture</button>
   <button onClick={() => onSnapshot({ snapshot: reportSnapshot, stored: false, changeSet: changes })}>Load changed fixture</button>
   <button onClick={() => onSnapshot({ snapshot: enumSnapshot, stored: false, changeSet: null })}>Load enum fixture</button>
@@ -125,6 +129,18 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
   beforeAll(() => configure({ asyncUtilTimeout: 5_000 }));
   afterAll(() => configure({ asyncUtilTimeout }));
   beforeEach(() => localStorage.clear()); afterEach(() => vi.restoreAllMocks());
+
+  it.each([false, true])("finishes database initialization when model views settle (load fails: %s)", async (loadFails) => {
+    const platform = await mount();
+    let settle!: () => void;
+    vi.spyOn(platform, "getSemantics").mockImplementationOnce(() => new Promise((resolve, reject) => {
+      settle = () => { if (loadFails) reject(new Error("View settings unavailable")); else resolve(reportSemantics); };
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Open saved navigation fixture" }));
+    expect(screen.getByTestId("database-initializing")).toHaveTextContent("true");
+    await act(async () => { settle(); await Promise.resolve(); });
+    expect(screen.getByTestId("database-initializing")).toHaveTextContent("false");
+  });
 
   it("keeps Database active while the global search is open and locates the keyboard selection", async () => {
     await mount();
@@ -198,19 +214,41 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open" }, { timeout: 5000 }));
     const editor = await screen.findByRole("textbox", { name: "SQL editor" });
     const editorView = EditorView.findFromDOM(editor)!;
+    const saveShortcut = { key: "s", metaKey: usesAppleKeyboard(), ctrlKey: !usesAppleKeyboard() };
     act(() => editorView.dispatch({ changes: { from: 0, insert: "SELECT 7;" } }));
-    fireEvent.click(screen.getByRole("button", { name: "Save Query" }));
+    expect(screen.getByRole("button", { name: "Queries (0)" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save Query" })).toHaveAttribute("aria-keyshortcuts", usesAppleKeyboard() ? "Meta+S" : "Control+S");
+    fireEvent.keyDown(editor, saveShortcut);
     const dialog = within(screen.getByRole("dialog", { name: "Save Query" }));
     fireEvent.change(dialog.getByRole("textbox", { name: "Query name" }), { target: { value: "Orders check" } });
+    fireEvent.keyDown(dialog.getByRole("textbox", { name: "Query name" }), saveShortcut);
+    expect(dialog.getByRole("button", { name: "Save" })).toBeVisible();
     fireEvent.click(dialog.getByRole("button", { name: "Save" }));
+    expect(screen.getByText("Query saved on this device.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Orders check" })).toBeVisible();
+    act(() => editorView.dispatch({ changes: { from: 0, to: 9, insert: "SELECT 8;" } }));
+    fireEvent.keyDown(screen.getByRole("searchbox", { name: "Search database objects" }), saveShortcut);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("Query saved on this device.")).toBeVisible();
     act(() => editorView.dispatch({ changes: { from: 0, to: 9, insert: "SELECT 9;" } }));
     fireEvent.click(screen.getByRole("button", { name: "Database" }));
+    expect(fireEvent.keyDown(screen.getByRole("searchbox", { name: "Search database objects" }), saveShortcut)).toBe(true);
     expect(screen.getByRole("button", { name: "Orders check" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Query" }));
     fireEvent.click(screen.getByRole("button", { name: "Orders check" }));
     fireEvent.click(await screen.findByRole("button", { name: "Open" }, { timeout: 5000 }));
-    expect(screen.getByRole("textbox", { name: "SQL editor" })).toHaveTextContent("SELECT 7;");
+    expect(screen.getByRole("textbox", { name: "SQL editor" })).toHaveTextContent("SELECT 8;");
     expect(execute).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search database objects" }), { target: { value: "missing object" } });
+    expect(screen.getByRole("button", { name: "Orders check" })).toBeVisible();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Delete Orders check" }));
+    expect(screen.getByRole("button", { name: "Queries (0)" })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "SQL editor" })).toHaveTextContent("SELECT 8;");
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "SQL editor" }), saveShortcut);
+    const newName = within(screen.getByRole("dialog", { name: "Save Query" }));
+    expect(newName.getByRole("textbox", { name: "Query name" })).toHaveValue("");
+    fireEvent.click(newName.getByRole("button", { name: "Cancel" }));
     fireEvent.click(screen.getByRole("button", { name: "Restore previous SQL draft" }));
     expect(screen.getByRole("textbox", { name: "SQL editor" })).toHaveTextContent("SELECT 9;");
     fireEvent.click(screen.getByRole("button", { name: "Load MySQL object fixture" }));
@@ -508,6 +546,8 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
       expect(dialog.getByText("filePath" in target ? target.filePath! : `${target.username}@${target.host}:${target.port} / ${target.database}`)).toBeVisible();
       expect(dialog.getByLabelText("SQL to execute")).toHaveTextContent(selected);
       expect(ddl).not.toHaveBeenCalled();
+      fireEvent.keyDown(dialog.getByRole("button", { name: "Cancel" }), { key: "s", metaKey: usesAppleKeyboard(), ctrlKey: !usesAppleKeyboard() });
+      expect(screen.queryByRole("dialog", { name: "Save Query" })).not.toBeInTheDocument();
       fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
       expect(ddl).not.toHaveBeenCalled();
 
@@ -768,7 +808,8 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value(this: HTMLDialogElement) { this.open = true; } });
     Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value(this: HTMLDialogElement) { this.open = false; } });
     clearQuerySessions();
-    saveQuerySession("query-workspace", { ...loadQuerySession("query-workspace"), draft: "SELECT 42;", rowLimit: 500 });
+    const workspaceKey = queryWorkspaceKey(reportSnapshot.sourceId);
+    saveQuerySession(workspaceKey, { ...loadQuerySession(workspaceKey), draft: "SELECT 42;", rowLimit: 500 });
     try {
       const platform = await mount();
       const query = vi.spyOn(platform, "executeReadonlyQuery").mockResolvedValue({

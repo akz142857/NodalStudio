@@ -11,6 +11,16 @@
   },
   {
     "ecosystem": "cargo",
+    "name": "alloc-stdlib",
+    "version": "0.3.0",
+    "file": "cargo-alloc-stdlib-0.3.0/LICENSE",
+    "url": "https://raw.githubusercontent.com/dropbox/rust-alloc-no-stdlib/0a81fd6928ea3b33c8cd484aa4575d50ffb98012/LICENSE",
+    "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae",
+    "revision": "0a81fd6928ea3b33c8cd484aa4575d50ffb98012",
+    "packagePath": "alloc-stdlib"
+  },
+  {
+    "ecosystem": "cargo",
     "name": "block2",
     "version": "0.6.2",
     "file": "cargo-block2-0.6.2/LICENSE.md",

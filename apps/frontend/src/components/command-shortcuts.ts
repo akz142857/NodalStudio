@@ -4,6 +4,7 @@ export const WORKSPACE_SHORTCUTS = [
   ["navigation.openDatabase", "Mod+3"],
   ["navigation.openQuery", "Mod+4"],
 ] as const;
+export const QUERY_SAVE_SHORTCUT = "Mod+S";
 
 export function usesAppleKeyboard() {
   return /Mac|iPhone|iPad/i.test(navigator.platform);

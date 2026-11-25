@@ -35,12 +35,13 @@ import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import { useSystemAccent } from "./design-system/system-accent";
 import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
-import { formatCommandShortcut, usesAppleKeyboard, WORKSPACE_SHORTCUTS } from "./components/command-shortcuts";
+import { formatCommandShortcut, QUERY_SAVE_SHORTCUT, usesAppleKeyboard, WORKSPACE_SHORTCUTS } from "./components/command-shortcuts";
 import type { QueryDraftSeed } from "./components/query/QueryDraftPanel";
 import type { OpenQueryRequest } from "./components/query/QueryPage";
 import { QuickQueryDock } from "./components/query/QuickQueryDock";
 import { tablePreviewSql } from "./components/query/query-format";
-import { clearQuerySessions } from "./components/query/query-state";
+import { clearQuerySessions, loadQuerySession, queryWorkspaceKey, saveQuerySession } from "./components/query/query-state";
+import { isServerConnection } from "./platform/database-server";
 import { clearSavedQueries, deleteNamedQuery, listSavedQueries, saveNamedQuery, type SavedQuery } from "./components/query/saved-queries";
 import type { SchemaSearchResult } from "./graph/schema-search";
 import { GlobalSearch } from "./components/GlobalSearch";
@@ -152,6 +153,10 @@ export function App() {
   const [selectedTable, setSelectedTable] = useState<TableDefinition>();
   const [columnFocus, setColumnFocus] = useState<{ snapshot: DatabaseSnapshot | undefined; table: TableDefinition; name: string }>();
   const [semanticsSettledSnapshot, setSemanticsSettledSnapshot] = useState<DatabaseSnapshot>();
+  const [initializingDatabaseSnapshot, setInitializingDatabaseSnapshot] = useState<DatabaseSnapshot>();
+  if (initializingDatabaseSnapshot && (initializingDatabaseSnapshot !== snapshot || semanticsSettledSnapshot === snapshot)) {
+    setInitializingDatabaseSnapshot(undefined);
+  }
   const [locateRequest, setLocateRequest] = useState<CanvasLocateRequest>();
   const locateRevision = useRef(0);
   const finishLocate = useCallback((request: CanvasLocateRequest) => setLocateRequest((current) => current === request ? undefined : current), []);
@@ -235,7 +240,7 @@ export function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const autoConnectAttempted = useRef(false);
   const startupRevision = useRef(0);
-  const beginSourceOpen = useCallback(() => { startupRevision.current += 1; }, []);
+  const beginSourceOpen = useCallback(() => { startupRevision.current += 1; autoConnectAttempted.current = true; }, []);
   useEffect(() => () => { startupRevision.current += 1; }, []);
   const [dismissedUpdate, setDismissedUpdate] = useState<string>();
   const notifiedUpdate = useRef<string | undefined>(undefined);
@@ -519,7 +524,14 @@ export function App() {
       ? result.snapshot.schemas.find((schema) => schema.name === table.key.schema)?.tables.find((item) => item.key.name === table.key.name)
       : undefined);
     setLocateRequest(undefined);
-    if (!sameSource) { setSavedView(undefined); setOpenQueryRequest(undefined); }
+    if (!sameSource) {
+      setSemantics(emptySemantics);
+      setSemanticsSnapshot(undefined);
+      setSemanticsSettledSnapshot(undefined);
+      setSavedView(undefined);
+      setOpenQueryRequest(undefined);
+      setQueryDraftSeed(undefined);
+    }
     else if (historyPreview) setSavedView(latestWorkspace.current?.view);
     latestWorkspace.current = { snapshot: result.snapshot, view: sameSource ? (historyPreview ? latestWorkspace.current?.view : savedView) : undefined };
     const notificationSettings = settings.app.notifications;
@@ -538,6 +550,23 @@ export function App() {
       });
     }
   }, [publishNotice, settings.app.notifications, settings.source?.refresh.changeNotifications, snapshot?.sourceId, savedView, historyPreview, translate]);
+
+  function clearOpenDatabase() {
+    setSnapshot(undefined);
+    setChangeSet(undefined);
+    setHistoryPreview(false);
+    setDatabaseObjectSelection(undefined);
+    setSelectedTable(undefined);
+    setLocateRequest(undefined);
+    setSavedView(undefined);
+    setSemantics(emptySemantics);
+    setSemanticsSnapshot(undefined);
+    setSemanticsSettledSnapshot(undefined);
+    setOpenQueryRequest(undefined);
+    setQueryDraftSeed(undefined);
+    setPreflightOpen(false);
+    latestWorkspace.current = undefined;
+  }
 
   const ddlWorkspace = useRef<{ snapshot: DatabaseSnapshot; targetKey: string; accept: typeof handleCapture } | undefined>(undefined);
   useLayoutEffect(() => {
@@ -681,7 +710,12 @@ export function App() {
   }, [runtime.data?.kind, translate]);
 
   useEffect(() => {
-    const connectable = dataSources.filter((profile) => !profile.connectionSync?.pending);
+    const servers = new Map(dataSources.filter(isServerConnection).map((profile) => [profile.id, profile]));
+    const connectable = dataSources.filter((profile) => {
+      if (profile.connectionSync?.pending || servers.has(profile.id)) return false;
+      const server = profile.serverSourceId ? servers.get(profile.serverSourceId) : undefined;
+      return !server || (!server.connectionSync?.pending && Date.parse(profile.updatedAt) >= Date.parse(server.updatedAt));
+    });
     if (
       autoConnectAttempted.current ||
       !settingsLoaded ||
@@ -1070,8 +1104,12 @@ export function App() {
 
   function deleteSavedQuery(query: SavedQuery) {
     if (!sourceId || !window.confirm(t("savedQueries.confirmDelete", { value0: query.name }))) return;
-    if (deleteNamedQuery(sourceId, query.id)) setSavedQueryCatalog({ sourceId, queries: listSavedQueries(sourceId) });
-    else publishNotice({ id: "saved-query-delete", title: t("savedQueries.storageError"), message: query.name, createdAt: new Date().toISOString() });
+    if (deleteNamedQuery(sourceId, query.id)) {
+      setSavedQueryCatalog({ sourceId, queries: listSavedQueries(sourceId) });
+      const workspace = queryWorkspaceKey(sourceId);
+      const session = loadQuerySession(workspace);
+      if (session.savedQuery?.id === query.id) saveQuerySession(workspace, { ...session, savedQuery: undefined });
+    } else publishNotice({ id: "saved-query-delete", title: t("savedQueries.storageError"), message: query.name, createdAt: new Date().toISOString() });
   }
 
   function openTable(table: TableDefinition) {
@@ -1380,6 +1418,11 @@ export function App() {
             platform={platform}
             sourcesRevision={sourcesRevision}
             onSnapshot={(result) => handleCapture(result, mode === "database")}
+            onOpenDatabase={(result) => {
+              if (result.snapshot.sourceId !== domainWorkspace.current.snapshot?.sourceId) setInitializingDatabaseSnapshot(result.snapshot);
+              handleCapture(result, domainWorkspace.current.mode !== "changes");
+            }}
+            onDatabaseCleared={clearOpenDatabase}
             onSourceSaved={(profile) => {
               void queryClient.resetQueries({ queryKey: ontologyDefinitionsKey({ sourceId: profile.id }) });
               setOpenQueryRequest((request) => request?.ontology?.draft.sourceId === profile.id ? undefined : request);
@@ -1394,18 +1437,12 @@ export function App() {
               setSavedQueryCatalog((catalog) => catalog?.sourceId === sourceId ? undefined : catalog);
               setDataSources((current) => current.filter((source) => source.id !== sourceId));
               setSqliteEditors((current) => current.filter((editor) => editor.target.sourceId !== sourceId));
-              if (snapshot?.sourceId === sourceId) {
-                setSnapshot(undefined);
-                setChangeSet(undefined);
-                setSelectedTable(undefined);
-                setLocateRequest(undefined);
-                setSemantics(emptySemantics);
-                setSavedView(undefined);
-              }
+              if (snapshot?.sourceId === sourceId) clearOpenDatabase();
             }}
             defaultDatabaseType={settings.app.connectionDefaults.databaseEngine}
             defaultSslMode={settings.app.connectionDefaults.sslMode}
             activeSourceId={snapshot?.sourceId}
+            initializingDatabase={Boolean(initializingDatabaseSnapshot && initializingDatabaseSnapshot === snapshot && semanticsSettledSnapshot !== snapshot)}
           >
             {snapshot ? (
               <SchemaTree
@@ -1414,7 +1451,8 @@ export function App() {
                   onApply={(view) => { setObjectDocument(undefined); setMode("explore"); setPreflightOpen(false); setRelationshipSearch(undefined); setSearchOpen(false); applyView(view); }} /> : undefined}
                 snapshot={snapshot}
                 databaseMode={mode === "database"}
-                savedQueries={mode === "database" && querySupported && !historyPreview ? savedQueries : undefined}
+                queriesBeforeObjects={mode === "query"}
+                savedQueries={(mode === "database" || mode === "query") && querySupported && !historyPreview ? savedQueries : undefined}
                 onOpenSavedQuery={openSavedQuery}
                 onNewQuery={() => openSavedQuery()}
                 onDeleteSavedQuery={deleteSavedQuery}
@@ -1554,6 +1592,7 @@ export function App() {
               onSchemaDdlCommitted={acceptSchemaDdl}
               openRequest={openQueryRequest}
               onConsumeOpenRequest={() => setOpenQueryRequest(undefined)}
+              savedQueries={savedQueries}
               onSaveQuery={sourceId && querySupported && !historyPreview ? (name, sql, id) => {
                 const outcome = saveNamedQuery(sourceId, name, sql, id);
                 if ("query" in outcome) setSavedQueryCatalog({ sourceId, queries: listSavedQueries(sourceId) });
@@ -1803,6 +1842,7 @@ function activeAppShortcut(binding: string | undefined, inQuery: boolean, worksp
   if (!binding) return undefined;
   const normalized = binding.trim().toLowerCase();
   if (workspaceShortcuts.some((shortcut) => shortcut?.toLowerCase() === normalized)) return undefined;
+  if (inQuery && normalized === QUERY_SAVE_SHORTCUT.toLowerCase()) return undefined;
   const parts = normalized.split("+");
   const key = parts.pop();
   const mod = parts.includes("mod");

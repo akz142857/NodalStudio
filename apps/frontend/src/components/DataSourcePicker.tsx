@@ -54,8 +54,8 @@ export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect, 
   }
   return <>
     <button ref={trigger} type="button" className="source-navigation-picker" aria-disabled={disabled || undefined}
-      aria-label={activeProfile ? bt("business.dataSourceDetail", { value0: activeProfile.database }) : bt("business.selectDatabase")} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-      title={activeProfile ? bt("business.switchDatabase", { value0: activeProfile.database, value1: engine(activeProfile), value2: activeProfile.displayName, value3: address(activeProfile) }) : bt("business.selectADatabaseToOpenItsSavedModel")}
+      aria-label={activeProfile ? bt("serverConnection.selectedConnection", { name: activeProfile.displayName }) : bt("serverConnection.selectConnection")} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
+      title={activeProfile ? `${activeProfile.displayName} · ${engine(activeProfile)} · ${address(activeProfile)}` : bt("serverConnection.selectConnection")}
       onClick={() => {
         if (disabled) return;
         setOpening(open ? undefined : { sourceId: activeSourceId, focus: "selected" });
@@ -69,7 +69,7 @@ export function DataSourcePicker({ profiles, activeProfile, disabled, onSelect, 
         setOpening({ sourceId: activeSourceId, focus: event.key === "ArrowDown" ? "first" : "last" });
       }}>
       <ActionIcon name="database" />
-      <span className="source-navigation-label"><strong>{activeProfile?.database ?? bt("business.selectDatabase")}</strong><span>{activeProfile ? `${engine(activeProfile)} · ${activeProfile.displayName}` : bt("business.savedConnection", { value0: profiles.length, value1: locale === "zh-CN" ? "" : (profiles.length === 1 ? "" : "s") })}</span></span>
+      <span className="source-navigation-label"><strong>{activeProfile?.displayName ?? bt("serverConnection.selectConnection")}</strong><span>{activeProfile ? `${engine(activeProfile)} · ${address(activeProfile)}` : bt("business.savedConnection", { value0: profiles.length, value1: locale === "zh-CN" ? "" : (profiles.length === 1 ? "" : "s") })}</span></span>
       <ActionIcon name="chevronDown" />
     </button>
     {open && opening ? <DataSourceMenu id={menuId} trigger={trigger} profiles={profiles} activeSourceId={activeSourceId}
@@ -144,7 +144,7 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
       window.removeEventListener("scroll", scroll, true);
     };
   }, [onClose, trigger]);
-  return createPortal(<div ref={root} id={id} className="data-source-menu" role="menu" aria-label={bt("business.switchDatabaseDetail")}
+  return createPortal(<div ref={root} id={id} className="data-source-menu" role="menu" aria-label={bt("serverConnection.switchConnection")}
     onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}
     onKeyDown={(event) => {
       event.stopPropagation();
@@ -168,7 +168,7 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
         focusMenuItem(items[next], sources.current);
       }
     }}>
-    <div className="data-source-menu-heading" aria-hidden="true">{bt("business.switchDatabaseDetail")}</div>
+    <div className="data-source-menu-heading" aria-hidden="true">{bt("serverConnection.switchConnection")}</div>
     <div ref={sources} className="data-source-menu-list" role="group" aria-label={bt("business.dataSources")}>
       {profiles.map((profile) => <button key={profile.id} type="button" role="menuitemradio" aria-checked={profile.id === activeSourceId}
         title={isServerConnection(profile)
@@ -176,7 +176,7 @@ function DataSourceMenu({ id, trigger, profiles, activeSourceId, initialFocus, o
           : `${profile.database} — ${engine(profile)} · ${profile.displayName} · ${address(profile)}`}
         onClick={() => onSelect(profile)}>
         <ActionIcon name="database" />
-        <span className="data-source-menu-label"><strong>{profile.database || profile.displayName}</strong><span>{engine(profile)} · {isServerConnection(profile) ? bt("serverConnection.serverConnection") : profile.displayName}</span>
+        <span className="data-source-menu-label"><strong>{profile.displayName}</strong><span>{engine(profile)} · {isServerConnection(profile) ? bt("serverConnection.serverConnection") : profile.database}</span>
           <small>{address(profile)}{profile.connectionSync?.pending ? ` · ${bt("connectionSync.pendingSetup")}` : ""}</small>
         </span>
         <span className="data-source-menu-check" aria-hidden="true">✓</span>

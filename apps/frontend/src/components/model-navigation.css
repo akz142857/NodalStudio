@@ -31,6 +31,18 @@
 .source-navigation-label strong, .source-navigation-label > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-navigation-label strong { color: var(--ds-text); font: var(--ds-weight-emphasis) var(--ds-text-body)/var(--ds-leading) var(--ds-font-ui); }
 .source-navigation-label > span { color: var(--ds-secondary); font: var(--ds-text-caption)/var(--ds-leading) var(--ds-font-ui); }
+.source-database-scope { display: grid; gap: var(--ds-space-1); min-width: 0; padding: 0 2px 4px; }
+.source-database-scope :is(.search-select-heading label, .source-database-fixed > span) { color: var(--ds-secondary); font-size: var(--ds-text-caption); font-weight: var(--ds-weight-medium); }
+.source-database-fixed { display: grid; gap: var(--ds-space-1); min-width: 0; }
+.source-database-fixed-value { display: flex; align-items: center; gap: var(--ds-space-2); min-height: var(--ds-control-height); padding-inline: 9px; color: var(--ds-secondary); }
+.source-database-fixed-value > svg { flex: none; width: 15px; height: 15px; }
+.source-database-fixed-value p { min-width: 0; flex: 1; margin: 0; overflow: hidden; color: var(--ds-text); font-size: var(--ds-text-control); font-weight: var(--ds-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.source-database-scope .source-database-add { display: grid; place-items: center; width: var(--ds-control-height-small); padding: 0; color: var(--ds-secondary); }
+.source-database-add > svg { width: 15px; height: 15px; }
+.source-database-status, .source-database-error { margin: 0; padding-inline: 2px; overflow-wrap: anywhere; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.source-database-status { display: flex; align-items: center; gap: var(--ds-space-1); }
+.source-database-error { color: var(--ds-danger); }
+.source-database-error p { margin: 2px 0 0; color: var(--ds-secondary); }
 .source-navigation-heading button:disabled, .source-navigation-current :disabled { opacity: .45; cursor: default; }
 .connection-open-error {
   display: grid;
@@ -81,6 +93,23 @@
 .model-navigation .schema-object-search { margin: 4px 0 10px; }
 .model-navigation .schema-object-search input { border-color: transparent; background: var(--ds-subtle); }
 .model-navigation .navigation-section-title { padding: 4px 6px; margin: 8px 0 3px; color: var(--ds-tertiary); font-size: var(--ds-text-caption); font-weight: 500; }
+.saved-query-section { margin-top: var(--ds-space-2); padding-top: var(--ds-space-1); border-top: 1px solid var(--ds-separator); }
+.saved-query-section[data-before-objects] { margin-block-end: var(--ds-space-2); }
+.model-navigation .saved-query-heading { color: var(--ds-text); font-weight: var(--ds-weight-emphasis); }
+.saved-query-heading > svg:not(.tree-twisty) { color: var(--ds-accent); }
+.saved-query-heading small { color: var(--ds-secondary); font-variant-numeric: tabular-nums; }
+.saved-query-list { padding-inline-start: 19px; }
+.saved-query-row { display: flex; align-items: center; min-width: 0; }
+.saved-query-item { flex: 1; }
+.saved-query-item > svg, .saved-query-new > svg { flex: none; width: var(--ds-icon-size); height: var(--ds-icon-size); color: var(--ds-secondary); }
+.model-navigation .saved-query-new { color: var(--ds-secondary); font-weight: var(--ds-weight-medium); }
+.saved-query-new > svg { color: var(--ds-accent); }
+.saved-query-delete { display: grid; place-items: center; flex: 0 0 26px; height: 26px; padding: 0; border: 0; border-radius: var(--ds-radius-control); color: var(--ds-secondary); background: transparent; }
+.saved-query-delete > svg { width: 14px; height: 14px; }
+.saved-query-delete:hover { color: var(--ds-danger); background: var(--ds-hover); }
+@media (hover: hover) {
+  .saved-query-row:not(:hover, :focus-within) .saved-query-delete { opacity: 0; }
+}
 .model-view-navigation { margin-bottom: 14px; min-width: 0; }
 .model-view-navigation button { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 29px; padding: 5px 7px; border: 0; border-radius: var(--ds-radius-control); background: transparent; color: var(--ds-secondary); text-align: left; font: var(--ds-text-control)/var(--ds-leading) var(--ds-font-ui); cursor: pointer; }
 .model-view-navigation button svg { width: 15px; height: 15px; flex: none; }
