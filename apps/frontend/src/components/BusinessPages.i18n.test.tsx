@@ -49,18 +49,22 @@ it("keeps a connection draft and in-flight test when language changes", async ()
   const view = bilingual(<ConnectionPanel enabled platform={platform} onSnapshot={vi.fn()} defaultDatabaseType="postgreSql" defaultSslMode="verifyFull" />);
   await waitFor(() => expect(listDataSources).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("button", { name: "Add database" }));
-  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "客户数据库 untouched" } });
+  fireEvent.change(screen.getByLabelText("Name (optional)"), { target: { value: "客户数据库 untouched" } });
+  fireEvent.change(screen.getByLabelText("Host"), { target: { value: "db.example.test" } });
+  fireEvent.change(screen.getByLabelText("Username"), { target: { value: "fixture-user" } });
   fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-only-password" } });
+  fireEvent.change(screen.getByLabelText("Database", { selector: "select" }), { target: { value: "named" } });
+  fireEvent.change(screen.getByLabelText("Database name"), { target: { value: reportSnapshot.database.name } });
   fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
   view.chinese();
-  expect(screen.getByLabelText("名称")).toHaveValue("客户数据库 untouched");
+  expect(screen.getByLabelText("名称（可选）")).toHaveValue("客户数据库 untouched");
   expect(screen.getByLabelText("密码")).toHaveValue("test-only-password");
   expect(screen.getByLabelText("连接测试结果")).toHaveTextContent("检查设置和凭据中");
   expect(testPostgresConnection).toHaveBeenCalledOnce();
   expect(listDataSources).toHaveBeenCalledOnce();
   await act(async () => { finish({ database: reportSnapshot.database, sslActive: true, serverReadOnly: true }); await Promise.resolve(); });
   expect(screen.getByText("连接成功")).toBeVisible();
-  expect(screen.getByRole("button", { name: "保存并查看结构" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "连接并打开" })).toBeEnabled();
 });
 
 it("preserves tree search and raw object names while translating actions", () => {

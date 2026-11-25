@@ -3,6 +3,7 @@ import { Button } from "../design-system/Button";
 import { useI18n } from "../i18n";
 import type { DataSourceProfile, NodalStudioPlatform } from "../platform";
 import type { ConnectionSyncPreview, PortableConnection } from "../platform/types";
+import { isServerConnection } from "../platform/database-server";
 import { connectionSyncError, isValidSyncPassphrase } from "./connection-sync-messages";
 
 const tlsLabels = {
@@ -32,7 +33,7 @@ function ConnectionDetails({ connection }: { connection: PortableConnection }) {
   const host = connection.host.includes(":") && !connection.host.startsWith("[") ? "[" + connection.host + "]" : connection.host;
   return <div className="connection-sync-details">
     <strong>{connection.displayName}</strong>
-    <span>{engine} · {connection.database}</span>
+    <span>{engine} · {isServerConnection(connection) ? t("serverConnection.serverConnection") : connection.database}</span>
     {connection.databaseType !== "sqlite" ? <>
       <span>{connection.username}@{host}:{connection.port}</span>
       <span>TLS · {t(tlsLabels[connection.sslMode])}</span>

@@ -8,9 +8,9 @@ import { ActionIcon } from "./ActionIcon";
 import { ConnectionSync } from "./ConnectionSync";
 import { connectionFailure } from "./connection-test-state";
 
-export function ConnectionManager({ profiles, activeSourceId, pending, platform, startWithImport, onClose, onCreate, onEdit, onOpen, onDelete, onImported }: {
+export function ConnectionManager({ profiles, activeConnectionId, pending, platform, startWithImport, onClose, onCreate, onEdit, onOpen, onDelete, onImported }: {
   profiles: DataSourceProfile[];
-  activeSourceId?: string;
+  activeConnectionId?: string;
   pending: boolean;
   platform: NodalStudioPlatform;
   startWithImport: boolean;
@@ -75,11 +75,11 @@ export function ConnectionManager({ profiles, activeSourceId, pending, platform,
       <div className="connection-manager-tools">
         <div className="connection-manager-search">
           <ActionIcon name="search" />
-          <input ref={search} type="search" aria-label={bt("business.findDatabaseConnections")} placeholder={bt("business.findDatabases")} value={query} onChange={(event) => setQuery(event.target.value)} />
+          <input ref={search} type="search" aria-label={bt("business.findDatabaseConnections")} placeholder={bt("business.findConnections")} value={query} onChange={(event) => setQuery(event.target.value)} />
         </div>
         <Button disabled={pending} onClick={() => leave(onCreate)}>
           <ActionIcon name="add" />
-          {bt("business.addDatabaseDetail")}
+          {bt("business.addConnectionDetail")}
         </Button>
       </div>
       <div className="connection-manager-list">
@@ -90,7 +90,7 @@ export function ConnectionManager({ profiles, activeSourceId, pending, platform,
             <ActionIcon name="database" />
             <div>
               <strong title={profile.displayName}>{profile.displayName}</strong>
-              <span title={details}>{details}{profile.id === activeSourceId ? bt("business.current") : ""}</span>
+              <span title={details}>{details}{profile.id === activeConnectionId ? bt("business.current") : ""}</span>
               {pendingSetup ? <span>{bt("connectionSync.pendingSetup")}</span> : null}
             </div>
             <Button variant="danger" disabled={pending} aria-label={bt("business.deleteConnectionNamed", { value0: profile.displayName })} onClick={() => void deleteConnection(profile)}>{bt("business.deleteConnection")}</Button>

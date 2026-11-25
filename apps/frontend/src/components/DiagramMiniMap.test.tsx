@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { ReactFlowProvider, useStoreApi, type Node } from "@xyflow/react";
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { DiagramMiniMap } from "./DiagramMiniMap";
 
-const probe = vi.hoisted(() => ({ update: vi.fn(), destroy: vi.fn(), create: vi.fn() }));
-vi.mock("@xyflow/system", async (load) => ({ ...await load<typeof import("@xyflow/system")>(), XYMinimap: (...args: unknown[]) => { probe.create(...args); return { update: probe.update, destroy: probe.destroy }; } }));
+const probe = vi.hoisted(() => ({ update: vi.fn(), destroy: vi.fn(), create: vi.fn(), pointer: vi.fn(() => [120, 240]) }));
+vi.mock("@xyflow/system", async (load) => ({ ...await load<typeof import("@xyflow/system")>(), XYMinimap: (...args: unknown[]) => { probe.create(...args); return { update: probe.update, destroy: probe.destroy, pointer: probe.pointer }; } }));
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); });
 
 it("draws all 2,000 model nodes in two paths, skips hidden cards, and coalesces movement without subscribing per node", () => {
@@ -63,4 +63,41 @@ it("retains the ordinary React Flow minimap for small diagrams", () => {
   const { container } = render(<ReactFlowProvider initialNodes={nodes}><DiagramMiniMap dense={false} /></ReactFlowProvider>);
   expect(container.querySelector(".react-flow__minimap-node")?.tagName.toLowerCase()).toBe("rect");
   expect(container.querySelector("[data-minimap-nodes]")).toBeNull();
+});
+
+it.each([false, true])("expands the minimap in place and preserves navigation while held (dense: %s)", (dense) => {
+  const setCenter = vi.fn().mockResolvedValue(true);
+  function Probe() {
+    const store = useStoreApi();
+    useEffect(() => { store.setState({ panZoom: {} as NonNullable<ReturnType<typeof store.getState>["panZoom"]>, setCenter, transform: [0, 0, 0.75] }); }, [store]);
+    return null;
+  }
+  const { container } = render(<ReactFlowProvider><Probe /><DiagramMiniMap dense={dense} /></ReactFlowProvider>);
+  const anchor = container.querySelector(".canvas-minimap")!;
+  const svg = anchor.querySelector("svg")!;
+  expect(svg).toHaveAttribute("width", "100");
+  expect(svg).toHaveAttribute("height", "75");
+  const options = probe.create.mock.calls[0]?.[0] as { getViewScale: () => number } | undefined;
+  const smallScale = options?.getViewScale();
+  fireEvent.pointerEnter(anchor, { pointerType: "mouse" });
+  expect(svg).toHaveAttribute("width", "200");
+  expect(svg).toHaveAttribute("height", "150");
+  if (dense) {
+    expect(options?.getViewScale()).toBeCloseTo(smallScale! / 2);
+    expect(probe.create).toHaveBeenCalledOnce();
+    expect(probe.update).toHaveBeenCalledWith(expect.objectContaining({ pannable: true, zoomable: true }));
+  }
+  expect(fireEvent.mouseDown(anchor, { button: 0 })).toBe(false);
+  fireEvent.click(svg, { clientX: 120, clientY: 240 });
+  expect(setCenter).toHaveBeenCalledWith(120, 240, { zoom: 0.75 });
+
+  fireEvent.pointerDown(svg, { button: 0, pointerId: 1, isPrimary: true, pointerType: "mouse" });
+  fireEvent.pointerLeave(anchor, { pointerId: 1, pointerType: "mouse" });
+  expect(svg).toHaveAttribute("width", "200");
+  fireEvent.pointerUp(window, { pointerId: 1, pointerType: "mouse" });
+  expect(svg).toHaveAttribute("width", "100");
+  fireEvent.pointerEnter(anchor, { pointerType: "mouse" });
+  expect(svg).toHaveAttribute("width", "200");
+  fireEvent.blur(window);
+  expect(svg).toHaveAttribute("width", "100");
 });

@@ -1,7 +1,7 @@
 import { I18nProvider, useI18n } from "../i18n";
 import type { Language } from "../platform/settings-types";
 import { canvasToolButton, openCanvasTools } from "../test/canvas-tools";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildSchemaGraph, type TableNode as TableNodeType } from "../graph/schema-graph";
@@ -202,6 +202,36 @@ describe("SchemaCanvas table selection", () => {
     expect(screen.queryByRole("button", { name: "Dismiss layout result" })).not.toBeInTheDocument();
     fireEvent.click(canvasToolButton("Clear selection"));
     expect(screen.queryByRole("toolbar", { name: "Selected tables" })).not.toBeInTheDocument();
+  });
+
+  it("offers Save as view beside Select and at the selection corner with the bottom toolbar collapsed", async () => {
+    const { container } = render(<CanvasHarness semantics={positionedSemantics} onApplyView={vi.fn()} onSaveView={vi.fn()} onDeleteView={vi.fn()} />);
+    const toolbar = within(screen.getByRole("toolbar", { name: "Diagram tools" }));
+    const select = toolbar.getByRole("button", { name: "Box select" });
+    expect(toolbar.queryByRole("button", { name: "Save selection as view" })).not.toBeInTheDocument();
+
+    await selectNodes(container, ["public.orders", "archive.orders"]);
+    const saveView = toolbar.getByRole("button", { name: "Save selection as view" });
+    expect(select.nextElementSibling).toBe(saveView);
+    expect(saveView).toBeEnabled();
+    expect(saveView.firstElementChild?.tagName).toBe("svg");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse canvas toolbar" }));
+    expect(saveView).toBeVisible();
+
+    const selectionToolbar = container.querySelector<HTMLElement>(".react-flow__node-toolbar")!;
+    const shortcut = within(selectionToolbar).getByRole("button", { name: "Save selection as view" });
+    expect(shortcut).toBeEnabled();
+    expect(shortcut.firstElementChild?.tagName).toBe("svg");
+    expect(within(shortcut).getByText("Save as view…")).toBeVisible();
+    expect(selectionToolbar).toHaveAttribute("data-id", "public.orders archive.orders");
+    expect(selectionToolbar.style.transform).toContain("translate(-100%, -100%)");
+    const initialPosition = selectionToolbar.style.transform;
+    fireEvent.wheel(container.querySelector(".react-flow__pane")!, { deltaX: 40, deltaMode: 0 });
+    await waitFor(() => expect(selectionToolbar.style.transform).not.toBe(initialPosition));
+
+    fireEvent.click(container.querySelector(".react-flow__pane")!);
+    expect(saveView).not.toBeInTheDocument();
+    expect(shortcut).not.toBeInTheDocument();
   });
 
   it("keeps layout undo shortcuts working from the new toolbar outside the React Flow surface", async () => {

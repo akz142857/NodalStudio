@@ -8,6 +8,7 @@ import { UpdatePanel } from "./settings/UpdatePanel";
 import { ConnectionFolderSettings } from "./settings/ConnectionFolderSettings";
 import type { ConnectionFolderStatus } from "../platform/types";
 import type { ConnectionSyncErrorMessage } from "./connection-sync-messages";
+import { isSavedConnection, isServerConnection } from "../platform/database-server";
 import { useUpdateBlocker } from "../platform/update-guard";
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
@@ -74,6 +75,7 @@ type SettingsPageProps = {
   settings: EffectiveSettings;
   runtime?: RuntimeInfo;
   dataSources: DataSourceProfile[];
+  activeConnectionId?: string;
   activeSourceId?: string;
   activeDatabase?: DatabaseInfo;
   connectionFolderStatus?: ConnectionFolderStatus;
@@ -101,6 +103,7 @@ function SettingsContent({
   settings,
   runtime,
   dataSources,
+  activeConnectionId,
   activeSourceId,
   activeDatabase,
   connectionFolderStatus,
@@ -119,6 +122,9 @@ function SettingsContent({
   onFactoryReset,
 }: SettingsPageProps) {
   const { t, locale, plural } = useI18n();
+  const connections = dataSources.filter(isSavedConnection);
+  const activeProfile = dataSources.find((profile) => profile.id === activeSourceId);
+  const currentConnection = connections.find((profile) => profile.id === (activeConnectionId ?? activeProfile?.serverSourceId ?? activeProfile?.id));
 
   const isMas = runtime?.distribution === "macAppStore";
   const commandLabels: Record<string, string> = { openSettings: t("settings.command.openSettings"), focusSearch: t("settings.command.focusSearch"), refreshSchema: t("settings.command.refreshSchema"), toggleLeftSidebar: t("settings.command.toggleLeftSidebar"), toggleRightInspector: t("settings.command.toggleRightInspector"), fitCanvas: t("settings.command.fitCanvas"), focusSelectedTable: t("settings.command.focusSelectedTable"), relayoutCanvas: t("settings.command.relayoutCanvas"), largeModelVirtualization: t("settings.command.largeModelVirtualization"), relationshipInferenceV2: t("settings.command.relationshipInferenceV2"), environmentDrift: t("settings.command.environmentDrift"), migrationProvenance: t("settings.command.migrationProvenance"), codeLineage: t("settings.command.codeLineage") };
@@ -287,12 +293,30 @@ function SettingsContent({
 
   async function confirmSourceDeletion(profile: DataSourceProfile, kind: "history" | "semantics" | "connection") {
     const impact = await platform.previewSourceDataDeletion(profile.id);
-    const detail = kind === "history"
+    const detail = kind === "connection" && isServerConnection(profile) ? t("serverConnection.removeImpact") : kind === "history"
       ? t("settings.snapshotRecordsApproximately", { value0: impact.snapshotRecords, value1: formatBytes(impact.snapshotBytes) })
       : kind === "semantics"
         ? t("settings.semanticLayoutRecordsAndPendingSyncItemsApproximately", { value0: impact.semanticRecords, value1: impact.pendingSyncRecords, value2: formatBytes(impact.semanticBytes + impact.syncQueueBytes) })
         : t("settings.connectionRecordAndItsDatabaseSystemCredentialStore", { value0: impact.connectionRecords, value1: impact.snapshotRecords, value2: impact.semanticRecords });
     return window.confirm(t("settings.forAffectedCloudProjectDataIsNotDeleted", { value0: kind === "connection" ? t("settings.delete.connection") : kind === "history" ? t("settings.delete.history") : t("settings.delete.semantics"), value1: profile.displayName, value2: detail }));
+  }
+
+  function deleteWorkspaceData(profile: DataSourceProfile, kind: "history" | "semantics") {
+    void runOperation(async () => {
+      if (!await confirmSourceDeletion(profile, kind)) return;
+      const count = await platform.deleteSourceData(profile.id, {
+        deleteConnection: false, deleteHistory: kind === "history", deleteSemantics: kind === "semantics", removeDatabaseCredential: false,
+      });
+      await onReload();
+      setOperationMessage(t(kind === "history" ? "settings.deletedHistoryRecords" : "settings.deletedSemanticRecords", { value0: count }));
+    });
+  }
+
+  function workspaceMaintenance(profile: DataSourceProfile) {
+    return <>
+      <Button type="button" variant="danger" onClick={() => deleteWorkspaceData(profile, "history")}>{t("settings.deleteHistory")}</Button>
+      <Button type="button" variant="danger" onClick={() => deleteWorkspaceData(profile, "semantics")}>{t("settings.deleteSemantics")}</Button>
+    </>;
   }
 
   async function updateSystemNotifications(enabled: boolean) {
@@ -464,17 +488,20 @@ function SettingsContent({
 
           {visibleCategory === "data-sources" ? (
             <SettingsSection title={t("settings.dataSources")} description={t("settings.connectionBehaviorAndSchemaRefreshPolicy")}>
-              <StatusCard status={activeSourceId ? t("settings.configured") : t("settings.noActiveSource")} label={t(plural(dataSources.length) === "one" ? "settings.sources.count.one" : "settings.sources.count.other", { count: dataSources.length })} />
+              <StatusCard status={currentConnection ? t("settings.configured") : t("settings.noActiveSource")} label={t(plural(connections.length) === "one" ? "settings.sources.count.one" : "settings.sources.count.other", { count: connections.length })} />
               <SettingsGroup title={t("settings.connectionDefaults")}>
               <SelectRow label={t("settings.defaultDatabaseEngine")} value={app.connectionDefaults.databaseEngine} onChange={(databaseEngine) => void saveApp({ ...app, connectionDefaults: { ...app.connectionDefaults, databaseEngine: databaseEngine as AppSettings["connectionDefaults"]["databaseEngine"] } })} options={[['postgreSql','PostgreSQL'],['mySql','MySQL'],['sqlite','SQLite']]} />
               <SelectRow label={t("settings.defaultSSLMode")} value={app.connectionDefaults.sslMode} onChange={(sslMode) => void saveApp({ ...app, connectionDefaults: { ...app.connectionDefaults, sslMode: sslMode as AppSettings["connectionDefaults"]["sslMode"] } })} options={[['disable',t("settings.disable")],['prefer',t("settings.prefer")],['require',t("settings.require")],['verifyCa',t("settings.verifyCA")],['verifyFull',t("settings.verifyFull")]]} />
               </SettingsGroup>
               <SettingsGroup title={t("settings.savedConnections")}>
-              <div className="data-source-settings-list">{dataSources.length === 0 ? <p className="settings-empty-inline">{t("settings.noSavedConnectionsAddADataSourceFrom")}</p> : null}{dataSources.map((profile) => <article key={profile.id}><div><header><strong>{profile.displayName}</strong>{activeSourceId === profile.id ? <small>{t("settings.activeConnection")}</small> : null}</header><span>{profile.databaseType === "sqlite" ? "SQLite" : profile.databaseType === "mySql" ? "MySQL" : "PostgreSQL"} · {profile.databaseType === "sqlite" ? profile.sqlite?.path ?? t("sqlite.unbound") : `${profile.host}:${profile.port}/${profile.database} · SSL ${profile.sslMode}`}</span></div>
+              <div className="data-source-settings-list">{connections.length === 0 ? <p className="settings-empty-inline">{t("settings.noSavedConnectionsAddADataSourceFrom")}</p> : null}{connections.map((profile) => <article key={profile.id}><div><header><strong>{profile.displayName}</strong>{currentConnection?.id === profile.id ? <small>{t("settings.activeConnection")}</small> : null}</header><span>{profile.databaseType === "sqlite" ? "SQLite" : profile.databaseType === "mySql" ? "MySQL" : "PostgreSQL"} · {profile.databaseType === "sqlite" ? profile.sqlite?.path ?? t("sqlite.unbound") : `${profile.host}:${profile.port}${profile.database ? `/${profile.database}` : ""} · SSL ${profile.sslMode}`}</span></div>
                 <div className="setting-action-row"><Button type="button" onClick={() => void runOperation(async () => { const displayName = window.prompt(t("settings.renameDataSource"), profile.displayName)?.trim(); if (!displayName || displayName === profile.displayName) return; await platform.renameDataSource(profile.id, displayName); await onDataSourcesChanged(); setOperationMessage(t("settings.dataSourceRenamed")); })}>{t("settings.rename")}</Button><Button type="button" onClick={() => void runOperation(async () => { const copy = await platform.duplicateDataSource(profile.id); await onDataSourcesChanged(); setOperationMessage(t("settings.createdWithoutCredentialsSelectItInTheConnection", { value0: copy.displayName })); })}>{t("settings.duplicateParameters")}</Button></div>
-                <details className="settings-disclosure"><summary>{t("settings.connectionMaintenance")}</summary><div className="setting-action-row"><Button type="button" variant="danger" disabled={profile.databaseType === "sqlite"} onClick={() => void runOperation(async () => { if (!window.confirm(t("settings.forgetTheSavedDatabaseAndSSHPasswordsFor", { value0: profile.displayName }))) return; await platform.clearCredentials(profile.id, { database: true, ai: false, cloud: false }); setOperationMessage(t("settings.databaseAndSSHCredentialsRemovedFromSystemCredential")); })}>{t("settings.forgetPassword")}</Button><Button type="button" variant="danger" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "history")) return; const count = await platform.deleteSourceData(profile.id, { deleteConnection: false, deleteHistory: true, deleteSemantics: false, removeDatabaseCredential: false }); await onReload(); setOperationMessage(t("settings.deletedHistoryRecords", { value0: count })); })}>{t("settings.deleteHistory")}</Button><Button type="button" variant="danger" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "semantics")) return; const count = await platform.deleteSourceData(profile.id, { deleteConnection: false, deleteHistory: false, deleteSemantics: true, removeDatabaseCredential: false }); await onReload(); setOperationMessage(t("settings.deletedSemanticRecords", { value0: count })); })}>{t("settings.deleteSemantics")}</Button><Button type="button" variant="danger" className="danger-setting-action" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "connection")) return; await platform.deleteSourceData(profile.id, { deleteConnection: true, deleteHistory: false, deleteSemantics: false, removeDatabaseCredential: true }); await onDataSourcesChanged(); await onReload(); setOperationMessage(t("settings.dataSourceConnectionRemoved")); })}>{t("settings.removeConnection")}</Button></div></details>
+                <details className="settings-disclosure"><summary>{t("settings.connectionMaintenance")}</summary><div className="setting-action-row"><Button type="button" variant="danger" disabled={profile.databaseType === "sqlite"} onClick={() => void runOperation(async () => { if (!window.confirm(t("settings.forgetTheSavedDatabaseAndSSHPasswordsFor", { value0: profile.displayName }))) return; await platform.clearCredentials(profile.id, { database: true, ai: false, cloud: false }); setOperationMessage(t("settings.databaseAndSSHCredentialsRemovedFromSystemCredential")); })}>{t("settings.forgetPassword")}</Button>{!isServerConnection(profile) ? workspaceMaintenance(profile) : null}<Button type="button" variant="danger" className="danger-setting-action" onClick={() => void runOperation(async () => { if (!await confirmSourceDeletion(profile, "connection")) return; await platform.deleteSourceData(profile.id, { deleteConnection: true, deleteHistory: false, deleteSemantics: false, removeDatabaseCredential: true }); await onDataSourcesChanged(); await onReload(); setOperationMessage(t("settings.dataSourceConnectionRemoved")); })}>{t("settings.removeConnection")}</Button></div></details>
               </article>)}</div>
               </SettingsGroup>
+              {currentConnection && activeProfile?.serverSourceId === currentConnection.id ? <SettingsGroup title={t("settings.currentDatabaseMaintenance", { database: activeProfile.database })}>
+                <div className="setting-action-row">{workspaceMaintenance(activeProfile)}</div>
+              </SettingsGroup> : null}
               {source ? <>
               <SettingsGroup title={t("settings.refreshNotifications")}>
                 <SelectRow label={t("settings.automaticRefresh")} value={String(source.refresh.intervalSeconds)} onChange={(value) => void saveSource({ ...source, refresh: { ...source.refresh, intervalSeconds: Number(value) } })} options={refreshIntervals} />

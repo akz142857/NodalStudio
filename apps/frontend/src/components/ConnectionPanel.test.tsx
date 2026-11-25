@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { useState } from "react";
+import { StrictMode, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CaptureSnapshotResult,
@@ -90,6 +90,18 @@ function confirmSourceDeletion(name: string) {
   fireEvent.click(within(confirmation).getByRole("button", { name: "Delete" }));
 }
 
+function enterServerAccount(password = "fixture-only") {
+  fireEvent.change(screen.getByLabelText("Host"), { target: { value: profile.host } });
+  fireEvent.change(screen.getByLabelText("Username"), { target: { value: profile.username } });
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value: password } });
+}
+
+function enterDatabaseName(database: string) {
+  fireEvent.change(screen.getByLabelText("Database", { selector: "select" }), { target: { value: "named" } });
+  fireEvent.change(screen.getByLabelText("Database name"), { target: { value: database } });
+}
+
+
 it("keeps the PostgreSQL source menu focused on connection actions", async () => {
   const postgres: DataSourceProfile = { ...profile, databaseType: "postgreSql" };
   const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([postgres]) });
@@ -166,37 +178,108 @@ describe("ConnectionPanel", () => {
       options = next;
       return new Promise<ConnectionTestResult>((resolve) => { finish = resolve; });
     });
-    renderPanel(platformMock({ testPostgresConnection }));
+    const saveAndMapDataSource = vi.fn();
+    renderPanel(platformMock({ testPostgresConnection, saveAndMapDataSource }));
     fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
-    fireEvent.change(screen.getByLabelText("Database (optional)"), { target: { value: profile.database } });
-    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    enterServerAccount();
+    enterDatabaseName(profile.database);
+    fireEvent.click(screen.getByRole("button", { name: "Connect and open" }));
     act(() => options?.onProgress?.({ phase: "handshake", sshConnected: false }));
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Connecting to the database and negotiating TLS…");
+    expect(screen.queryByRole("button", { name: "Test connection" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel connection test" }));
     expect(options?.signal?.aborted).toBe(true);
     expect(screen.getByRole("button", { name: "Cancel connection test" })).toBeDisabled();
     await act(async () => { finish(connectionResult); await Promise.resolve(); });
     expect(screen.getByText("Connection test cancelled")).toBeVisible();
     expect(screen.queryByText("Connection successful")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
+    expect(saveAndMapDataSource).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Connect and open" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Test connection" })).toBeEnabled();
   });
 
   it("tests without saving and invalidates the result after edits", async () => {
-    const saveDataSource = vi.fn(), capturePostgresSnapshot = vi.fn();
-    const platform = platformMock({ saveDataSource, capturePostgresSnapshot });
+    const saveAndMapDataSource = vi.fn().mockResolvedValue({ profile, capture: captureResult });
+    const testPostgresConnection = vi.fn().mockResolvedValue(connectionResult);
+    const platform = platformMock({ saveAndMapDataSource, testPostgresConnection });
     renderPanel(platform);
     fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
-    fireEvent.change(screen.getByLabelText("Database (optional)"), { target: { value: profile.database } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-secret" } });
+    enterServerAccount();
+    enterDatabaseName(profile.database);
     fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
     expect(await screen.findByText("Connection successful")).toBeVisible();
-    expect(saveDataSource).not.toHaveBeenCalled();
-    expect(capturePostgresSnapshot).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Save and map" })).toBeEnabled();
+    expect(saveAndMapDataSource).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Host"), { target: { value: "different.example" } });
     expect(screen.queryByText("Connection successful")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Connect and open" }));
+    await waitFor(() => expect(saveAndMapDataSource).toHaveBeenCalledOnce());
+    expect(testPostgresConnection).toHaveBeenCalledTimes(2);
+    expect(testPostgresConnection).toHaveBeenLastCalledWith(expect.objectContaining({ host: "different.example", database: profile.database }), expect.anything());
+  });
+
+  it("clears a typed SSH password when the jump host changes", () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Add database" }));
+    fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Connect through SSH/ }));
+    fireEvent.change(screen.getByLabelText("SSH host"), { target: { value: "first.example" } });
+    fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "password" } });
+    fireEvent.change(screen.getByLabelText("SSH password"), { target: { value: "first-password" } });
+    fireEvent.change(screen.getByLabelText("SSH host"), { target: { value: "second.example" } });
+    expect(screen.getByLabelText("SSH password")).toHaveValue("");
+  });
+
+  it("prompts for connection details and opens the chosen PostgreSQL database from a single catalog request", async () => {
+    const server = { ...profile, id: "postgres-server", displayName: profile.host, database: "", databaseType: "postgreSql" as const, port: 5432 };
+    const database = { ...server, id: "postgres-child", database: "reporting", serverSourceId: server.id };
+    const listServerDatabases = vi.fn().mockResolvedValue(["inventory", database.database]);
+    const saveDataSource = vi.fn().mockResolvedValue(server);
+    const openServerDatabase = vi.fn().mockResolvedValue({ profile: database, capture: captureResult });
+    const testPostgresConnection = vi.fn().mockResolvedValue(connectionResult);
+    const onSnapshot = vi.fn();
+    const platform = platformMock({ testPostgresConnection, saveDataSource, listServerDatabases, openServerDatabase });
+    render(<StrictMode><ConnectionPanel enabled platform={platform} onSnapshot={onSnapshot}
+      defaultDatabaseType="postgreSql" defaultSslMode="require" /></StrictMode>);
+    fireEvent.click(screen.getByRole("button", { name: "Add database" }));
+    expect(screen.getByLabelText("Host")).toHaveValue("");
+    expect(screen.getByLabelText("Database", { selector: "select" })).toHaveValue("browse");
+    fireEvent.click(screen.getByRole("button", { name: "Connect…" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter the database server’s hostname or IP address.");
+    expect(testPostgresConnection).not.toHaveBeenCalled();
+    enterServerAccount();
+    fireEvent.click(screen.getByRole("button", { name: "Connect…" }));
+    const chooser = within(await screen.findByRole("dialog", { name: "Open a database" }));
+    fireEvent.change(chooser.getByRole("searchbox", { name: "Search databases" }), { target: { value: "report" } });
+    fireEvent.click(await chooser.findByRole("option", { name: database.database }));
+    expect(chooser.queryByRole("option", { name: "inventory" })).not.toBeInTheDocument();
+    fireEvent.click(chooser.getByRole("button", { name: "Open database" }));
+    await waitFor(() => expect(onSnapshot).toHaveBeenCalledWith(captureResult));
+    expect(testPostgresConnection).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ database: "", port: 5432 }), expect.anything());
+    expect(saveDataSource).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ database: "", displayName: profile.host }));
+    expect(listServerDatabases).toHaveBeenCalledExactlyOnceWith(server.id);
+    expect(openServerDatabase).toHaveBeenCalledExactlyOnceWith(server.id, database.database, server.updatedAt);
+  });
+
+  it("returns to the connection form when PostgreSQL requires a specific database name", async () => {
+    const testPostgresConnection = vi.fn().mockRejectedValueOnce({
+      stage: "database", code: "postgresMaintenanceUnavailable", message: "Maintenance databases unavailable",
+    }).mockResolvedValueOnce(connectionResult);
+    const saveAndMapDataSource = vi.fn().mockResolvedValue({ profile, capture: captureResult });
+    const { onSnapshot } = renderPanel(platformMock({ testPostgresConnection, saveAndMapDataSource }));
+    fireEvent.click(screen.getByRole("button", { name: "Add database" }));
+    fireEvent.change(screen.getByLabelText("Database engine"), { target: { value: "postgreSql" } });
+    enterServerAccount();
+    fireEvent.click(screen.getByRole("tab", { name: "TLS" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect…" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter an accessible database name");
+    expect(screen.getByLabelText("Host")).toBeVisible();
+    expect(saveAndMapDataSource).not.toHaveBeenCalled();
+    enterDatabaseName(profile.database);
+    fireEvent.click(screen.getByRole("button", { name: "Connect and open" }));
+    await waitFor(() => expect(onSnapshot).toHaveBeenCalledWith(captureResult));
+    expect(testPostgresConnection).toHaveBeenLastCalledWith(expect.objectContaining({
+      databaseType: "postgreSql", database: profile.database, username: profile.username,
+    }), expect.anything());
   });
 
   it.each([
@@ -220,8 +303,8 @@ describe("ConnectionPanel", () => {
     }));
     fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
     fireEvent.change(screen.getByLabelText("Database engine"), { target: { value: databaseType } });
-    expect(screen.getByLabelText("Database (optional)")).toHaveValue("");
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "fixture password" } });
+    expect(screen.getByLabelText("Database", { selector: "select" })).toHaveValue("browse");
+    enterServerAccount("fixture password");
     fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Connect through SSH/ }));
     fireEvent.change(screen.getByLabelText("SSH host"), { target: { value: "jump.example" } });
@@ -230,14 +313,12 @@ describe("ConnectionPanel", () => {
     expect(await screen.findByText("Server connected")).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "TLS" }));
     expect(screen.getByRole("group", { name: "Server status" })).toHaveTextContent("Connected");
-    fireEvent.click(screen.getByRole("button", { name: "Save server connection" }));
-    expect(await screen.findByRole("button", { name: "Connection: Fixture server" })).toBeVisible();
-    expect(listServerDatabases).not.toHaveBeenCalled();
-    const databasePicker = screen.getByRole("combobox", { name: "Database" });
-    fireEvent.click(databasePicker);
-    expect(await screen.findByRole("option", { name: maintenanceDatabase })).toBeVisible();
-    fireEvent.keyDown(databasePicker, { key: "Escape" });
-    fireEvent.click(screen.getByRole("button", { name: "New database…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect…" }));
+    const chooser = within(await screen.findByRole("dialog", { name: "Open a database" }));
+    expect(await chooser.findByRole("option", { name: maintenanceDatabase })).toBeVisible();
+    expect(testPostgresConnection).toHaveBeenCalledOnce();
+    expect(listServerDatabases).toHaveBeenCalledOnce();
+    fireEvent.click(chooser.getByRole("button", { name: "New database…" }));
     const browser = within(await screen.findByRole("dialog", { name: "New database" }));
     expect(browser.getByText(server.displayName)).toBeVisible();
     expect(browser.getByText(`${engine} · ${server.host}:${port} · SSH`)).toBeVisible();
@@ -253,7 +334,7 @@ describe("ConnectionPanel", () => {
     expect(await browser.findByRole("alert")).toHaveTextContent("Schema connection interrupted");
     expect(createServerDatabase).toHaveBeenCalledWith(server.id, database.database, server.updatedAt);
     expect(browser.getByRole("option", { name: database.database })).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(browser.getByRole("button", { name: "Open" }));
+    fireEvent.click(browser.getByRole("button", { name: "Open database" }));
     await waitFor(() => expect(onSnapshot).toHaveBeenCalledWith(capture));
     expect(openServerDatabase).toHaveBeenCalledWith(server.id, database.database, server.updatedAt);
     expect(createServerDatabase).toHaveBeenCalledOnce();
@@ -273,6 +354,7 @@ describe("ConnectionPanel", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: /Fixture server/ }));
     fireEvent.click(screen.getByRole("button", { name: "New database…" }));
+    expect(listServerDatabases).not.toHaveBeenCalled();
     fireEvent.click(within(screen.getByRole("dialog", { name: "New database" })).getByRole("button", { name: "Back" }));
     const browser = within(await screen.findByRole("dialog", { name: "Open a database" }));
     await browser.findByRole("option", { name: "inventory" });
@@ -306,14 +388,15 @@ describe("ConnectionPanel", () => {
     expect(listServerDatabases).toHaveBeenCalledOnce();
   });
 
-  it("lists only accessible databases on demand and restores the last opened database for its server", async () => {
+  it("lists databases on demand and restores the last database without refreshing the server catalog", async () => {
     const server = { ...profile, id: "browse-server", database: "", displayName: "Shared server" };
     const archive = { ...server, id: "archive-source", database: "reporting_archive", displayName: "Linked archive", serverSourceId: server.id };
     const fixedSnapshot = { ...captureResult.snapshot, sourceId: profile.id };
     const archiveSnapshot = { ...captureResult.snapshot, sourceId: archive.id };
-    const listServerDatabases = vi.fn().mockResolvedValueOnce(["inventory", archive.database])
-      .mockResolvedValueOnce([archive.database]).mockResolvedValueOnce(["inventory"]);
-    const openServerDatabase = vi.fn().mockResolvedValue({ profile: archive, capture: { ...captureResult, snapshot: archiveSnapshot } });
+    const listServerDatabases = vi.fn().mockResolvedValueOnce(["inventory", archive.database]).mockResolvedValueOnce(["inventory"]);
+    const opened = { profile: archive, capture: { ...captureResult, snapshot: archiveSnapshot } };
+    const openServerDatabase = vi.fn().mockResolvedValueOnce(opened).mockResolvedValueOnce(opened)
+      .mockRejectedValueOnce({ stage: "database", code: "databaseMissing", message: "Database gone" });
     renderWorkspace(platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, server, archive]), listServerDatabases,
       openServerDatabase, getSnapshot: vi.fn().mockResolvedValue(fixedSnapshot) }));
     const switchConnection = async (current: string, next: RegExp) => {
@@ -345,9 +428,13 @@ describe("ConnectionPanel", () => {
     await switchConnection("Shared server", /^Flow/);
     expect(await screen.findByText("Model for source-1")).toBeVisible();
     await switchConnection("Flow", /^Shared server/);
-    await waitFor(() => expect(listServerDatabases).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Database" })).toBeEnabled());
-    expect(openServerDatabase).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole("alert")).toHaveTextContent("The database does not exist.");
+    expect(openServerDatabase).toHaveBeenCalledTimes(3);
+    expect(listServerDatabases).toHaveBeenCalledOnce();
+    expect(screen.getByText("Model for source-1")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Choose a database…" }));
+    expect(await within(screen.getByRole("dialog", { name: "Open a database" })).findByRole("option", { name: "inventory" })).toBeVisible();
+    expect(listServerDatabases).toHaveBeenCalledTimes(2);
     expect(screen.queryByText("Model for archive-source")).not.toBeInTheDocument();
   });
 
@@ -391,12 +478,12 @@ describe("ConnectionPanel", () => {
     expect(screen.queryByText("Opening reporting…")).not.toBeInTheDocument();
   });
 
-  it.each(["catalog", "open"] as const)("keeps the current workspace when a remembered database's %s request fails", async (phase) => {
-    const server = { ...profile, id: `restore-failure-${phase}`, displayName: "Reporting server", database: "" };
+  it("keeps the current workspace when a remembered database fails to open", async () => {
+    const server = { ...profile, id: "restore-failure", displayName: "Reporting server", database: "" };
     rememberServerDatabase(server.id, "reporting");
     let fail!: (reason: Error) => void;
     const failure = new Promise<never>((_, reject) => { fail = reject; });
-    const listServerDatabases = vi.fn().mockImplementation(() => phase === "catalog" ? failure : Promise.resolve(["reporting"]));
+    const listServerDatabases = vi.fn().mockRejectedValue(new Error("Catalog unavailable"));
     const openServerDatabase = vi.fn().mockReturnValue(failure);
     const { onSnapshot } = renderWorkspace(platformMock({
       listDataSources: vi.fn().mockResolvedValue([profile, server]), listServerDatabases, openServerDatabase,
@@ -405,13 +492,18 @@ describe("ConnectionPanel", () => {
     fireEvent.click(screen.getByRole("menuitemradio", { name: /^Reporting server/ }));
     expect(screen.getByText("Opening reporting on Reporting server…")).toBeVisible();
     expect(screen.getByText(`Model for ${profile.id}`)).toBeVisible();
-    await waitFor(() => expect(phase === "catalog" ? listServerDatabases : openServerDatabase).toHaveBeenCalledOnce());
+    await waitFor(() => expect(openServerDatabase).toHaveBeenCalledOnce());
+    expect(listServerDatabases).not.toHaveBeenCalled();
     await act(async () => { fail(new Error("Server unavailable")); await Promise.resolve(); });
     expect(screen.getByRole("alert")).toHaveTextContent("Server unavailable");
     expect(screen.queryByText("Opening reporting on Reporting server…")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connection: Flow" })).toBeEnabled();
     expect(screen.getByText(`Model for ${profile.id}`)).toBeVisible();
     expect(onSnapshot).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Choose a database…" }));
+    const chooser = within(screen.getByRole("dialog", { name: "Open a database" }));
+    expect(await chooser.findByRole("alert")).toHaveTextContent("Catalog unavailable");
+    expect(chooser.getByRole("button", { name: "Refresh databases" })).toBeEnabled();
   });
 
   it("reopens a linked database through the updated server after editing its host", async () => {
@@ -437,18 +529,9 @@ describe("ConnectionPanel", () => {
     await waitFor(() => expect(screen.queryByText(`Model for ${database.id}`)).not.toBeInTheDocument());
     expect(screen.getByRole("combobox", { name: "Database" })).toHaveValue("");
 
-    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function(this: HTMLDialogElement) { this.open = true; } });
-    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function(this: HTMLDialogElement) { this.open = false; } });
-    try {
-      fireEvent.click(screen.getByRole("button", { name: `Connection: ${server.displayName}` }));
-      fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
-      fireEvent.click(screen.getByRole("button", { name: `Open ${database.displayName}` }));
-      expect(await screen.findByText(`Model for ${database.id}`)).toBeVisible();
-    } finally {
-      cleanup();
-      Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
-      Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
-    }
+    fireEvent.click(screen.getByRole("combobox", { name: "Database" }));
+    fireEvent.click(await screen.findByRole("option", { name: database.database }));
+    expect(await screen.findByText(`Model for ${database.id}`)).toBeVisible();
     expect(listServerDatabases).toHaveBeenCalledWith(server.id);
     expect(openServerDatabase).toHaveBeenCalledExactlyOnceWith(server.id, database.database, updatedServer.updatedAt);
     expect(listSnapshots).not.toHaveBeenCalled();
@@ -456,20 +539,20 @@ describe("ConnectionPanel", () => {
   });
 
   it("guides missing database passwords to Connection and tests with a separate private key passphrase", async () => {
-    const testPostgresConnection = vi.fn()
-      .mockRejectedValueOnce({ stage: "configuration", code: "passwordRequired", message: "Native fallback", sshConnected: false })
-      .mockResolvedValueOnce(connectionResult);
+    const testPostgresConnection = vi.fn().mockResolvedValueOnce(connectionResult);
     const saveDataSource = vi.fn();
     renderPanel(platformMock({ testPostgresConnection, saveDataSource }));
     fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
+    enterServerAccount("");
     fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Connect through SSH/ }));
     fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "privateKey" } });
     fireEvent.change(screen.getByLabelText("SSH private key"), { target: { value: "/fixture/client" } });
-    fireEvent.change(screen.getByLabelText("SSH private key passphrase"), { target: { value: "fixture passphrase" } });
+    fireEvent.change(screen.getByLabelText("Key passphrase"), { target: { value: "fixture passphrase" } });
     fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Enter the database password before testing.");
-    expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter the password for this database account.");
+    expect(testPostgresConnection).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Host")).toBeVisible();
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "fixture database password" } });
     fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
     expect(await screen.findByText("Server version 8.0.40")).toBeVisible();
@@ -479,34 +562,38 @@ describe("ConnectionPanel", () => {
     expect(saveDataSource).not.toHaveBeenCalled();
   });
 
-  it("shows the failed stage and keeps saving disabled", async () => {
-    renderPanel(platformMock({ testPostgresConnection: vi.fn().mockRejectedValue({ stage: "tls", message: "Check the CA certificate.", sshConnected: true }) }));
+  it("shows the failed stage and lets the user retry without writing a source", async () => {
+    const saveAndMapDataSource = vi.fn();
+    renderPanel(platformMock({ saveAndMapDataSource, testPostgresConnection: vi.fn().mockRejectedValue({ stage: "tls", message: "Check the CA certificate.", sshConnected: true }) }));
     fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
-    fireEvent.change(screen.getByLabelText("Database (optional)"), { target: { value: profile.database } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-secret" } });
-    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    enterServerAccount();
+    enterDatabaseName(profile.database);
+    fireEvent.click(screen.getByRole("button", { name: "Connect and open" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("TLS verification failed");
     expect(screen.getByRole("alert")).toHaveTextContent("Check the CA certificate.");
-    expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
+    expect(saveAndMapDataSource).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Connect and open" })).toBeEnabled();
   });
 
   it("keeps edits across security tabs and clears passwords when closing", async () => {
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
-    expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Host")).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
-    expect(screen.getByLabelText("Database (optional)")).not.toBeVisible();
+    expect(screen.queryByRole("tabpanel", { name: "Connection" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Host").closest("[role=tabpanel]")).toHaveAttribute("inert");
     fireEvent.click(screen.getByRole("checkbox", { name: /Connect through SSH/ }));
     fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "password" } });
     fireEvent.change(screen.getByLabelText("SSH password"), { target: { value: "test-only" } });
     fireEvent.click(screen.getByRole("tab", { name: "TLS" }));
-    expect(screen.getByLabelText("SSH password")).not.toBeVisible();
+    expect(screen.queryByRole("tabpanel", { name: "SSH" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("SSH password").closest("[role=tabpanel]")).toHaveAttribute("inert");
     expect(screen.getByLabelText("SSL mode")).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: /SSH/ }));
     expect(screen.getByLabelText("SSH password")).toHaveValue("test-only");
-    fireEvent.click(screen.getByRole("button", { name: "Close connection dialog" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     fireEvent.click(screen.getByRole("button", { name: "Add database" }));
-    expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Host")).toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
     expect(screen.getByRole("checkbox", { name: /Connect through SSH/ })).not.toBeChecked();
   });
@@ -659,8 +746,7 @@ describe("ConnectionPanel", () => {
 
     expect(screen.getByRole("dialog", { name: "Edit Flow" })).toBeInTheDocument();
     expect(screen.getByLabelText("Database")).toHaveValue("flow");
-    expect(screen.getByLabelText("Password")).toHaveAttribute("placeholder", "Optional — keep current password");
-    expect(screen.getByText("System credential storage")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toHaveAccessibleDescription("Leave blank to keep the saved password.");
     expect(screen.getByText("Use TLS when available; this mode can fall back to an unencrypted connection.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Verify & refresh" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Delete data source" })).toBeInTheDocument();
@@ -870,12 +956,9 @@ describe("ConnectionPanel", () => {
     }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
-    fireEvent.change(screen.getByLabelText("Database (optional)"), { target: { value: profile.database } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "fixture-only" } });
-    const map = screen.getByRole("button", { name: "Save and map" });
-    expect(map).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
-    await waitFor(() => expect(map).toBeEnabled());
+    enterServerAccount();
+    enterDatabaseName(profile.database);
+    const map = screen.getByRole("button", { name: "Connect and open" });
     fireEvent.click(map);
     expect(await screen.findByText("Structure read timed out")).toBeVisible();
     expect(onSnapshot).not.toHaveBeenCalled();
@@ -887,6 +970,7 @@ describe("ConnectionPanel", () => {
     expect(saveDataSource).not.toHaveBeenCalled();
     expect(testPostgresConnection).toHaveBeenCalledOnce();
     expect(saveAndMapDataSource).toHaveBeenCalledTimes(2);
+    expect(saveAndMapDataSource.mock.calls[0][0]).toEqual(expect.objectContaining({ database: profile.database, displayName: profile.database }));
     expect(saveAndMapDataSource.mock.calls[1][1]).toEqual(saveAndMapDataSource.mock.calls[0][1]);
   });
 
@@ -934,6 +1018,88 @@ describe("database navigation actions", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  it("shows the same connection list in the switcher and manager while a linked database is active", async () => {
+    const server = { ...profile, id: "manager-server", displayName: "Shared server", database: "" };
+    const linked = { ...profile, id: "manager-link", displayName: "Shared server · flow", serverSourceId: server.id };
+    const orphan = { ...profile, id: "manager-legacy", displayName: "Legacy workspace", serverSourceId: "removed-server" };
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function(this: HTMLDialogElement) { this.open = true; } });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function(this: HTMLDialogElement) { this.open = false; } });
+    try {
+      renderWorkspace(platformMock({ listDataSources: vi.fn().mockResolvedValue([linked, profile, server, orphan]) }), linked.id);
+      fireEvent.click(await screen.findByRole("button", { name: "Connection: Shared server" }));
+      const switcher = within(screen.getByRole("menu", { name: "Switch connection" }));
+      const switcherNames = switcher.getAllByRole("menuitemradio").map((item) => item.querySelector("strong")?.textContent);
+      expect(switcherNames).toEqual([profile.displayName, server.displayName]);
+      fireEvent.click(switcher.getByRole("menuitem", { name: "Manage connections…" }));
+      const manager = screen.getByRole("dialog", { name: "Manage connections" });
+      const rows = Array.from(manager.querySelectorAll(".connection-manager-row"));
+      expect(rows.map((row) => row.querySelector("strong")?.textContent)).toEqual(switcherNames);
+      expect(rows[1]).toHaveTextContent("Current");
+      expect(rows[0]).not.toHaveTextContent("Current");
+      const search = within(manager).getByRole("searchbox", { name: "Find database connections" });
+      fireEvent.change(search, { target: { value: linked.displayName } });
+      expect(within(manager).getByText("No matching connections.")).toBeVisible();
+    } finally {
+      cleanup();
+      Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+      Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
+    }
+  });
+
+  it("closes the active database when removing its server and leaves the database workspace intact", async () => {
+    const server = { ...profile, id: "server-to-delete", displayName: "Shared server", database: "" };
+    const linked = { ...profile, id: "active-database", displayName: "Shared server · flow", serverSourceId: server.id };
+    const deleteSourceData = vi.fn().mockResolvedValue(1);
+    const listSnapshots = vi.fn();
+    const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([linked, server, profile]), deleteSourceData, listSnapshots });
+    const { onSourceDeleted } = renderWorkspace(platform, linked.id);
+    await editCurrentConnection(server.displayName);
+    fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
+    expect(screen.getByText(/Snapshots and semantics for its databases are kept/)).toBeVisible();
+    confirmSourceDeletion(server.displayName);
+
+    const picker = await screen.findByRole("button", { name: "Select connection" });
+    expect(onSourceDeleted).toHaveBeenCalledWith(server.id);
+    expect(deleteSourceData).toHaveBeenCalledExactlyOnceWith(server.id, expect.anything());
+    expect(listSnapshots).not.toHaveBeenCalled();
+    fireEvent.click(picker);
+    const switcher = within(screen.getByRole("menu", { name: "Switch connection" }));
+    expect(switcher.getAllByRole("menuitemradio")).toHaveLength(1);
+    expect(switcher.getByRole("menuitemradio")).toHaveTextContent(profile.displayName);
+  });
+
+  it("tests and saves an imported server in place before browsing its databases", async () => {
+    const server = { ...profile, id: "imported-server", displayName: "Imported server", database: "", connectionSync: { originId: "remote-server", pending: true } };
+    const saved = { ...server, connectionSync: { ...server.connectionSync, pending: false } };
+    const saveDataSource = vi.fn().mockRejectedValueOnce(new Error("Server verification failed")).mockResolvedValue(saved);
+    const listServerDatabases = vi.fn().mockResolvedValue(["flow"]);
+    const verifyAndRefreshDataSource = vi.fn();
+    const saveAndMapDataSource = vi.fn();
+    const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([server]), saveDataSource, listServerDatabases, verifyAndRefreshDataSource, saveAndMapDataSource });
+    renderPanel(platform, null);
+    fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Imported server/ }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Imported server" });
+    fireEvent.change(within(dialog).getByLabelText("Password"), { target: { value: "fixture-password" } });
+    const save = within(dialog).getByRole("button", { name: "Save changes" });
+    expect(save).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Test connection" }));
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+
+    expect(await within(dialog).findByText("Server verification failed")).toBeVisible();
+    expect(within(dialog).queryByText("Server connected")).not.toBeInTheDocument();
+    expect(save).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Test connection" }));
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+
+    expect(await screen.findByRole("button", { name: "Connection: Imported server" })).toBeVisible();
+    expect(saveDataSource).toHaveBeenCalledWith(expect.objectContaining({ id: server.id, database: "", password: "fixture-password" }));
+    expect(verifyAndRefreshDataSource).not.toHaveBeenCalled();
+    expect(saveAndMapDataSource).not.toHaveBeenCalled();
+  });
+
   it("manages every saved connection and reuses existing open and edit flows", async () => {
     Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function(this: HTMLDialogElement) { this.open = true; } });
     Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function(this: HTMLDialogElement) { this.open = false; } });
@@ -974,7 +1140,7 @@ describe("database navigation actions", () => {
       manage();
       const actions = within(screen.getByRole("dialog", { name: "Manage connections" }));
       expect(actions.getByRole("button", { name: "Close" }).closest("footer")?.querySelectorAll("button")).toHaveLength(1);
-      fireEvent.click(actions.getByRole("button", { name: "Add database…" }));
+      fireEvent.click(actions.getByRole("button", { name: "Add connection…" }));
       expect(screen.getByRole("dialog", { name: "Create database connection" })).toBeVisible();
       expect(saveDataSource).not.toHaveBeenCalled();
       expect(capturePostgresSnapshot).not.toHaveBeenCalled();
@@ -1005,7 +1171,7 @@ it("opens SQLite through a file picker without network or credential fields", as
 });
 
 
-it("omits single-page SQLite tabs and restores network security tabs when switching engines", async () => {
+it("omits network tabs for SQLite and supports keyboard navigation across connection settings", async () => {
   renderPanel();
   fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
   fireEvent.change(screen.getByRole("combobox", { name: "Database engine" }), { target: { value: "sqlite" } });
@@ -1014,17 +1180,23 @@ it("omits single-page SQLite tabs and restores network security tabs when switch
   expect(screen.queryByRole("combobox", { name: "SSL mode" })).not.toBeInTheDocument();
   expect(screen.getByText("File access").closest("details")).not.toHaveAttribute("open");
   fireEvent.change(screen.getByRole("combobox", { name: "Database engine" }), { target: { value: "postgreSql" } });
-  expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByLabelText("Host")).toBeVisible();
+  const tabs = screen.getByRole("tablist", { name: "Connection settings" });
+  expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Connection", "TLS", "SSH"]);
   fireEvent.keyDown(screen.getByRole("tab", { name: "Connection" }), { key: "ArrowRight" });
-  expect(screen.getByRole("tab", { name: "TLS" })).toHaveAttribute("aria-selected", "true");
   expect(screen.getByRole("combobox", { name: "SSL mode" })).toBeVisible();
+  fireEvent.keyDown(screen.getByRole("tab", { name: "TLS" }), { key: "ArrowRight" });
+  expect(screen.getByRole("tab", { name: "SSH" })).toHaveAttribute("aria-selected", "true");
+  fireEvent.click(screen.getByRole("tab", { name: "Connection" }));
+  expect(screen.getByLabelText("Host")).toBeVisible();
+  expect(screen.getByRole("tabpanel", { name: "Connection" })).toBeVisible();
 });
 
 it("preserves network TLS and credentials when switching between PostgreSQL and MySQL", async () => {
   const testPostgresConnection = vi.fn().mockResolvedValue(connectionResult);
   renderPanel(platformMock({ testPostgresConnection }));
   fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
-  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "entered-password" } });
+  enterServerAccount("entered-password");
   fireEvent.click(screen.getByRole("tab", { name: "TLS" }));
   fireEvent.change(screen.getByLabelText("SSL mode"), { target: { value: "verifyFull" } });
   fireEvent.click(screen.getByRole("tab", { name: "Connection" }));
@@ -1040,9 +1212,9 @@ it.each(["mySql", "postgreSql"] as const)("offers TLS guidance for a private %s 
   fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
   fireEvent.change(screen.getByLabelText("Database engine"), { target: { value: engine } });
   fireEvent.change(screen.getByLabelText("Host"), { target: { value: "office-db.example" } });
-  fireEvent.click(screen.getByRole("button", { name: "Require TLS" }));
-  expect(screen.getByText("This connection is set to always use TLS.")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "TLS settings" }));
+  fireEvent.click(screen.getByRole("tab", { name: "TLS" }));
+  expect(screen.getByText("Use the TLS mode specified by your database provider.")).toBeVisible();
+  fireEvent.change(screen.getByLabelText("SSL mode"), { target: { value: "require" } });
   expect(screen.getByLabelText("SSL mode")).toHaveValue("require");
   expect(testPostgresConnection).not.toHaveBeenCalled();
   expect(saveDataSource).not.toHaveBeenCalled();
@@ -1055,8 +1227,8 @@ it("retries an explicitly rejected unencrypted connection using the same draft a
   const saveDataSource = vi.fn();
   renderPanel(platformMock({ testPostgresConnection, saveDataSource }));
   fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
+  enterServerAccount("fixture-password");
   fireEvent.change(screen.getByLabelText("Host"), { target: { value: "office-db.example" } });
-  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "fixture-password" } });
   fireEvent.click(screen.getByRole("tab", { name: "SSH" }));
   fireEvent.click(screen.getByRole("checkbox", { name: /Connect through SSH/ }));
   fireEvent.change(screen.getByLabelText("SSH host"), { target: { value: "jump.example" } });
@@ -1074,22 +1246,26 @@ it("blocks saving or changing the connection while a SQLite file picker is pendi
   let choose!: (path: string) => void;
   const pickWorkspacePath = vi.fn().mockImplementationOnce(() => Promise.resolve("/tmp/first.db"))
     .mockImplementationOnce(() => new Promise<string>((resolve) => { choose = resolve; }));
-  const saveDataSource = vi.fn();
-  const api = platformMock({ pickWorkspacePath, saveDataSource });
+  const testPostgresConnection = vi.fn().mockResolvedValue(connectionResult);
+  const saveAndMapDataSource = vi.fn().mockResolvedValue({ profile, capture: captureResult });
+  const api = platformMock({ pickWorkspacePath, saveAndMapDataSource, testPostgresConnection });
   renderPanel(api);
   fireEvent.click(await screen.findByRole("button", { name: "Add database" }));
   fireEvent.change(screen.getByRole("combobox", { name: "Database engine" }), { target: { value: "sqlite" } });
   fireEvent.click(screen.getByRole("button", { name: "Choose database file" }));
   await screen.findByDisplayValue("/tmp/first.db");
   fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Save and map" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Open SQLite file" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Choose database file" }));
   expect(screen.getByRole("combobox", { name: "Database engine" })).toBeDisabled();
   fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
-  expect(saveDataSource).not.toHaveBeenCalled();
+  expect(saveAndMapDataSource).not.toHaveBeenCalled();
   await act(() => Promise.resolve(choose("/tmp/second.db")));
   expect(screen.getByDisplayValue("/tmp/second.db")).toBeVisible();
-  expect(screen.getByRole("button", { name: "Save and map" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Open SQLite file" }));
+  await waitFor(() => expect(saveAndMapDataSource).toHaveBeenCalledOnce());
+  expect(testPostgresConnection).toHaveBeenCalledTimes(2);
+  expect(testPostgresConnection).toHaveBeenLastCalledWith(expect.objectContaining({ sqlite: { path: "/tmp/second.db" } }), expect.anything());
 });
 
 

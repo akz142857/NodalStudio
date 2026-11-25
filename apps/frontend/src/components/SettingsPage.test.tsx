@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defaultEffectiveSettings, type AppSettings, type DataSourceSettings, type NodalStudioPlatform } from "../platform";
+import { defaultEffectiveSettings, type AppSettings, type DataSourceProfile, type DataSourceSettings, type NodalStudioPlatform } from "../platform";
 import { SettingsPage } from "./SettingsPage";
 
 afterEach(cleanup);
@@ -21,6 +21,27 @@ const baseProps = {
 };
 
 describe("SettingsPage", () => {
+  it("shows saved connections and marks the server for the current database workspace", () => {
+    const server: DataSourceProfile = {
+      id: "server", displayName: "Shared server", database: "", databaseType: "postgreSql", host: "server.test", port: 5432,
+      username: "reader", sslMode: "require", createdAt: "2026-10-15T00:00:00Z", updatedAt: "2026-10-15T00:00:00Z",
+    };
+    const workspace = { ...server, id: "workspace", displayName: "Linked workspace", database: "inventory", serverSourceId: server.id };
+    const detached = { ...workspace, id: "detached", displayName: "Detached workspace", serverSourceId: "removed-server" };
+    const fixed = { ...server, id: "fixed", displayName: "Pinned database", database: "warehouse" };
+    render(<SettingsPage {...baseProps} initialCategory="data-sources" settings={defaultEffectiveSettings(workspace.id)}
+      dataSources={[workspace, fixed, server, detached]} activeSourceId={workspace.id} />);
+
+    expect(screen.getByText("2 saved connections")).toBeVisible();
+    const rows = screen.getAllByRole("article");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("Pinned database");
+    expect(rows[1]).toHaveTextContent("Shared server");
+    expect(within(rows[1]).getByText("Current")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Database maintenance · inventory" })).toBeVisible();
+    expect(screen.queryByText("Detached workspace")).not.toBeInTheDocument();
+  });
+
   it("shows an empty state instead of stale preferences when search has no results", () => {
     render(<SettingsPage {...baseProps} settings={defaultEffectiveSettings()} />);
     fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), { target: { value: "no-such-preference" } });

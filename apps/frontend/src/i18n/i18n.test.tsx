@@ -29,7 +29,7 @@ it("interpolates data as text without interpreting SQL, markup or nested placeho
   const t = createTranslator("zh-CN");
   const name = '<script>SELECT {value1} FROM orders</script>';
   expect(t("settings.createdProject", { value0: name })).toBe(`已创建项目 ${name}。`);
-  expect(t("settings.sources.count.other", { count: 1200 })).toBe("已保存 1,200 个数据源");
+  expect(t("settings.sources.count.other", { count: 1200 })).toBe("已保存 1,200 个连接");
 });
 it("formats dates with the app locale while preserving explicit ISO", () => {
   const date = new Date("2026-10-24T10:00:00Z");

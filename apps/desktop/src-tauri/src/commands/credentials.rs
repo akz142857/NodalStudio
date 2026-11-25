@@ -59,16 +59,7 @@ pub(crate) async fn get_security_status(
         .map_err(safe_store_error)?;
     let pending = state.store.pending_sync().await.map_err(safe_store_error)?;
     let source_id = input.source_id;
-    let mut stale_model_sources = 0_u64;
-    for profile in &profiles {
-        let model_is_stale = state
-            .store
-            .latest_snapshot(profile.id)
-            .await
-            .map_err(safe_store_error)?
-            .is_none_or(|snapshot| Utc::now() - snapshot.captured_at > chrono::Duration::days(30));
-        stale_model_sources += u64::from(model_is_stale);
-    }
+    let stale_model_sources = count_stale_models(&state.store, &profiles).await?;
     let mut unresolved_git_conflict_reports = 0_u64;
     for settings in state
         .store
@@ -108,6 +99,26 @@ pub(crate) async fn get_security_status(
         stale_model_sources,
         unresolved_git_conflict_reports,
     })
+}
+
+async fn count_stale_models(
+    store: &LocalSnapshotStore,
+    profiles: &[DataSourceProfile],
+) -> Result<u64, String> {
+    let mut stale_models = 0;
+    let stale_before = Utc::now() - chrono::Duration::days(30);
+    for profile in profiles
+        .iter()
+        .filter(|profile| !profile.is_server_connection())
+    {
+        let model_is_stale = store
+            .latest_snapshot(profile.id)
+            .await
+            .map_err(safe_store_error)?
+            .is_some_and(|snapshot| snapshot.captured_at < stale_before);
+        stale_models += u64::from(model_is_stale);
+    }
+    Ok(stale_models)
 }
 
 // SQLite has no transport or database password. Do not probe its Keychain entry
@@ -161,4 +172,61 @@ pub(crate) async fn list_external_access(
         .list_external_access()
         .await
         .map_err(safe_store_error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn counts_only_database_models_with_stale_snapshots() {
+        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
+        let now = Utc::now();
+        let server = DataSourceProfile {
+            id: Uuid::new_v4(),
+            display_name: "Shared server".into(),
+            database: String::new(),
+            database_type: DatabaseType::PostgreSql,
+            host: "db.example".into(),
+            port: 5432,
+            username: "reader".into(),
+            ssl_mode: SslMode::Require,
+            server_source_id: None,
+            connection_sync: None,
+            sqlite: None,
+            security: schema_model::ConnectionSecurity::default(),
+            created_at: now,
+            updated_at: now,
+        };
+        let workspace = |database: &str| DataSourceProfile {
+            id: Uuid::new_v4(),
+            server_source_id: Some(server.id),
+            database: database.into(),
+            ..server.clone()
+        };
+        let current = workspace("inventory");
+        let stale = workspace("reporting");
+        let empty = workspace("unmapped");
+
+        for (profile, days_old) in [(&current, 2), (&stale, 45)] {
+            let mut snapshot = DatabaseSnapshot::new(
+                profile.id,
+                DatabaseInfo {
+                    name: profile.database.clone(),
+                    database_type: profile.database_type,
+                    version: "17".into(),
+                },
+                vec![],
+            );
+            snapshot.captured_at = now - chrono::Duration::days(days_old);
+            snapshot.canonicalize().unwrap();
+            store.save_snapshot(&snapshot).await.unwrap();
+        }
+        assert_eq!(
+            count_stale_models(&store, &[server, current, stale, empty])
+                .await
+                .unwrap(),
+            1
+        );
+    }
 }

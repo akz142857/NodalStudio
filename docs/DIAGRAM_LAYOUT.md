@@ -53,15 +53,17 @@
 
 ## 保存模型视图（2026-10-23）
 
-多选表后点击底部工具条中的 **Save as view…**（无障碍名称为 Save selection as view），输入名称并核对成员。新视图为明确成员（depth 0），初始布局与视图在同一 SQLite 事务保存。刷新不自动增加成员。旧根表/层数视图原语义不变，编辑时标明层数；每个视图现在也有独立布局。
+选中表后，可点击选区右上角或标题栏 **Select** 旁的 **Save as view…**。两个入口都打开同一个对话框，可输入名称并核对成员。新视图为明确成员（depth 0），初始布局与视图在同一 SQLite 事务保存。刷新不自动增加成员。旧根表/层数视图原语义不变，编辑时标明层数；每个视图现在也有独立布局。
 
 标题下拉提供完整模型和保存视图，活动业务域也有独立标识且可返回完整模型。标题栏 **View actions（⋯）** 菜单中的 Edit view 修改名称/成员；Duplicate view 创建独立标识和布局；Delete view 明确只删除本地视图及其布局，不删除表、说明和项目关系，也不撤销已有导出或分享副本。编辑采用窗口内模态对话框，支持成员搜索；筛选不会移除已勾选的隐藏成员。Escape 取消并恢复入口焦点，保存/删除期间禁止重复操作和关闭。删除确认默认聚焦 Cancel。缺失成员保留并标明 unavailable。最后打开的视图是本机导航偏好；布局本体在 SQLite 中保存。个人视角及每视图布局不扩展现有云/Git 共享范围，便携备份沿用已有布局备份能力。
 
 ## 底部工具条（2026-10-23）
 
-画布使用一条固定在底部的工具条，整合多选数量、Save as view…、Tools、缩放、适配视角和交互锁定。没有选中表时不显示选区数量和保存视图入口。Tools 向上展开工具面板，按 Selected tables / Entire diagram 区分作用范围；固定、选区自动布局、对齐/均分、业务域、清除选择及全图操作仍使用原回调和保存边界。Relationships、Align / distribute 等在面板内部展开，高度不足时滚动，不再叠加横向浮层。
+工具条默认在画布底部居中。拖动胶囊左侧的六点手柄可在画布中移动工具条，也可在手柄上用方向键移动，按 Home 恢复默认位置。Tools 面板朝可用空间较多的一侧展开，按 Selected tables / Entire diagram 区分作用范围，高度不足时可滚动。
 
-点击末尾收起按钮可将整条工具条缩为 Tools 入口，仍显示选中数量徽标；点击恢复工具条。展开/收起仅改变本次界面状态，不清除选区、不重排表、不保存布局或视角。切换模型范围会重置面板状态。点击面板外部关闭面板；键盘可在 Tools 按 ↑ 进入面板，Escape 先关闭当前子菜单，再关闭工具面板并恢复入口焦点。窄画布时工具条换行，面板始终受画布高度约束。缩略图默认距画布右/下边缘 16px；与工具条或底部上下文提示横向相交时，才上移到对应控件上方并保留 12px 间距。观察工具条自身宽度变化，覆盖多选增宽但高度不变的情况。Tools 中的 Minimap 可独立显示/隐藏缩略图，当前组件内保留，重开应用默认显示；它不写入模型布局。缩略图的现有点击、平移和缩放控制器不变，新增外框和视口轮廓用于区分整体范围与当前视口。缩放按钮仍保存所属模型/视图的 viewport；历史、比较、共享图的隔离规则保持不变。
+点击末尾收起按钮可将工具条缩为 Tools 入口，保留拖动手柄和选中数量徽标。点击面板外部关闭面板。键盘可在 Tools 按 ↑ 进入面板，Escape 可关闭子菜单或工具面板并恢复入口焦点。窄画布时工具条换行，面板受画布边缘约束。
+
+缩略图默认内容尺寸为 100 × 75 像素，鼠标移入恢复到 200 × 150 像素。拖动视口时保持展开，释放后若鼠标已移出则缩回。可点击定位、拖动平移、滚轮缩放，也可在 Tools 中切换显示。缩略图预留展开空间避让工具条及其面板，收放时保持位置。
 
 ## 验证
 
@@ -71,7 +73,7 @@
 
 ## Navigating from the schema tree
 
-The sidebar starts with a Databases heading and an always-visible Add action. A two-line database pop-up shows the connection name and actual database, with ellipsis for long names; clicking anywhere in the control opens the native saved-source list. The native selector retains keyboard navigation and a full-name tooltip. Edit connection… and the Model navigation disclosure are separate actions. Before opening a database it lists available sources and the same Add action. Blank-space right-click or Shift+F10 on the sidebar opens New connection…, Manage connections… and Refresh schema. Management searches saved sources and reuses their existing open/edit/create flows; refresh uses the workspace refresh callback and is unavailable without a current source, during refresh, or in historical preview. Context menus preserve object and input actions, support arrows/Enter/Escape, and suppress native WebView commands. Long names stay within the sidebar and expose full names in tooltips. The Model views section navigates to the full model or saved views of the current source using the existing view callback; selection leaves preflight/business exploration and clears diagram search, without saving any layout. View navigation is disabled during historical preview or while semantics load. The canvas view selector remains available when the sidebar is hidden; management stays in the canvas View actions menu.
+The sidebar starts with a Databases heading and an always-visible Add action. A two-line database pop-up shows the connection name and actual database, with ellipsis for long names; clicking anywhere in the control opens the native saved-source list. The native selector retains keyboard navigation and a full-name tooltip. Edit connection… and the Model navigation disclosure are separate actions. Before opening a database it lists available sources and the same Add action. Blank-space right-click or Shift+F10 on the sidebar opens New connection…, Manage connections… and Refresh schema. Management searches saved sources and reuses their existing open/edit/create flows; refresh uses the workspace refresh callback and is unavailable without a current source, during refresh, or in historical preview. Context menus preserve object and input actions, support arrows/Enter/Escape, and suppress native WebView commands. Long names stay within the sidebar and expose full names in tooltips. The Model views section navigates to the full model or saved views of the current source using the existing view callback; selection leaves preflight/business exploration and clears diagram search, without saving any layout. Each saved view in the sidebar has a delete button. Confirming deletion of the active view returns the canvas to the full model. View navigation and deletion are disabled during historical preview or while semantics load. The canvas view selector and View actions menu remain available when the sidebar is hidden.
 
 Database objects retain schemas, table/view/enum navigation, context actions and read-only details. Empty object-type groups are omitted; empty schemas remain visible with a zero count. Object types use line icons and trailing counts. The sidebar has its own table/view name filter; it does not filter the Diagram. Searching opens matching schema/type groups temporarily, and clearing restores their previous disclosure state. A table click or **Locate in diagram** switches to Database, clears Diagram search/saved-view filters, leaves relationship isolation and centers/selects the requested table after layout and node measurement finish. Repeating the same click recenters it. Requests are scoped to a source and snapshot, canceled by a new selection/mode/source, and acknowledged after use so they do not replay on remount.
 

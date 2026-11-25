@@ -1,8 +1,49 @@
 import { useI18n } from "../i18n";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { ActionIcon } from "./ActionIcon";
 import { ControlButton, Controls, useReactFlow, useStore, useStoreApi } from "@xyflow/react";
+import { MINIMAP_HEIGHT, MINIMAP_WIDTH } from "./DiagramMiniMap";
 import "./canvas-toolbar.css";
+
+const canvasInset = 16;
+const overlayGap = 12;
+const defaultPosition = { x: 0.5, y: 1 };
+const clampFraction = (value: number) => Math.max(0, Math.min(1, value));
+
+function measureDock(dock: HTMLDivElement | null) {
+  const surface = dock?.parentElement;
+  if (!dock || !surface?.classList.contains("schema-canvas-surface")) return;
+  const canvas = surface.getBoundingClientRect();
+  const rect = dock.getBoundingClientRect();
+  const scale = (surface.offsetWidth && canvas.width / surface.offsetWidth) || 1;
+  return { surface, canvas, rect, scale, inset: canvasInset * scale };
+}
+
+function positionMinimap(canvas: DOMRect, obstacles: DOMRect[], scale: number) {
+  const inset = canvasInset * scale;
+  const gap = overlayGap * scale;
+  const right = canvas.right - inset;
+  const bottom = canvas.bottom - inset;
+  const width = (MINIMAP_WIDTH + 2) * scale;
+  const height = (MINIMAP_HEIGHT + 2) * scale;
+  const rightEdges = [right, ...obstacles.map((item) => Math.min(right, item.left - gap))];
+  const bottomEdges = [bottom, ...obstacles.map((item) => Math.min(bottom, item.top - gap))];
+  let best: { right: number; bottom: number } | undefined;
+
+  // Keep the full footprint clear for both sizes without moving the map on hover.
+  for (const mapRight of rightEdges) {
+    if (mapRight - width < canvas.left + inset) continue;
+    for (const mapBottom of bottomEdges) {
+      if (mapBottom - height < canvas.top + inset) continue;
+      const blocked = obstacles.some((item) =>
+        mapRight > item.left - gap && mapRight - width < item.right + gap
+        && mapBottom > item.top - gap && mapBottom - height < item.bottom + gap);
+      const offset = { right: (canvas.right - mapRight) / scale, bottom: (canvas.bottom - mapBottom) / scale };
+      if (!blocked && (!best || offset.right + offset.bottom < best.right + best.bottom)) best = offset;
+    }
+  }
+  return best ?? { right: canvasInset, bottom: canvasInset };
+}
 
 export interface CanvasRelationshipFilter {
   id: string;
@@ -51,16 +92,18 @@ interface CanvasToolbarProps {
   status?: string;
   context?: ReactNode;
   selectedCount?: number;
-  createViewAction?: ReactNode;
   selectionActions?: ReactNode;
   navigationControls?: ReactNode;
 }
 
-/** A stable bottom dock. Collapsing is presentation-only and never clears selection. */
-export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, layoutDisabled, onViewAll, onAutoLayout, onManageRelationships, onReviewInferences, status, context, selectedCount = 0, createViewAction, selectionActions, navigationControls, minimapVisible, onToggleMinimap }: CanvasToolbarProps) {
+/** The dock position is local to the canvas, separate from diagram layout. */
+export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, layoutDisabled, onViewAll, onAutoLayout, onManageRelationships, onReviewInferences, status, context, selectedCount = 0, selectionActions, navigationControls, minimapVisible, onToggleMinimap }: CanvasToolbarProps) {
   const { t: bt, locale } = useI18n();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [position, setPosition] = useState(defaultPosition);
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ id: number; offsetX: number; offsetY: number } | undefined>(undefined);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const restore = useRef<HTMLButtonElement>(null);
@@ -68,48 +111,101 @@ export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, 
   const id = useId();
   const expanded = open && !disabled && !collapsed;
   const close = () => { setOpen(false); trigger.current?.focus(); };
+  const placeOverlays = useCallback(() => {
+    const dock = root.current;
+    const measured = measureDock(dock);
+    if (!dock || !measured) return;
+    const { surface, canvas, rect, scale, inset } = measured;
+    const above = (rect.top - canvas.top - inset) / scale;
+    const below = (canvas.bottom - rect.bottom - inset) / scale;
+    const panelWidth = Math.max(0, Math.min(320, (canvas.width - 2 * inset) / scale));
+    const halfPanel = panelWidth * scale / 2;
+    const center = Math.max(canvas.left + inset + halfPanel, Math.min((rect.left + rect.right) / 2, canvas.right - inset - halfPanel));
+    dock.dataset.panelSide = below > above ? "below" : "above";
+    dock.style.setProperty("--canvas-tools-width", `${panelWidth}px`);
+    dock.style.setProperty("--canvas-tools-left", `${(center - rect.left) / scale}px`);
+    dock.style.setProperty("--canvas-tools-height", `${Math.max(0, Math.max(above, below) - 8)}px`);
+
+    const obstacles = [rect];
+    const tools = panel.current;
+    if (tools && !tools.hidden) obstacles.push(tools.getBoundingClientRect());
+    const minimap = positionMinimap(canvas, obstacles, scale);
+    surface.style.setProperty("--canvas-minimap-right", `${minimap.right}px`);
+    surface.style.setProperty("--canvas-minimap-bottom", `${minimap.bottom}px`);
+  }, []);
   useLayoutEffect(() => {
     const dock = root.current;
-    const workspace = dock?.closest(".schema-canvas-workspace");
-    const surface = workspace?.querySelector<HTMLElement>(".schema-canvas-surface");
-    const footer = workspace?.querySelector<HTMLElement>(".workspace-layout-status");
-    if (!dock || !surface || !footer) return;
-    const position = () => {
-      dock.style.bottom = `${footer.offsetHeight + 16}px`;
-      dock.style.setProperty("--canvas-tools-height", `${Math.max(80, surface.clientHeight - dock.offsetHeight - 32)}px`);
-      const minimap = surface.querySelector<HTMLElement>(".react-flow__minimap");
-      if (minimap) {
-        const bounds = surface.getBoundingClientRect();
-        const mapWidth = minimap.offsetWidth;
-        const mapLeft = bounds.right - 16 - mapWidth;
-        let bottom = 16;
-        for (const element of dock.querySelectorAll<HTMLElement>(".canvas-command-bar, .canvas-command-restore, .canvas-command-context, .canvas-command-status")) {
-          if (element.hidden) continue;
-          const rect = element.getBoundingClientRect();
-          if (rect.right + 12 > mapLeft && rect.left < bounds.right - 16 + 12) bottom = Math.max(bottom, bounds.bottom - rect.top + 12);
-        }
-        minimap.style.bottom = `${bottom}px`;
-      }
+    const measured = measureDock(dock);
+    if (!dock || !measured) return;
+    const { surface } = measured;
+    const observer = new ResizeObserver(placeOverlays);
+    observer.observe(surface);
+    observer.observe(dock);
+    if (panel.current) observer.observe(panel.current);
+    return () => {
+      observer.disconnect();
+      surface.style.removeProperty("--canvas-minimap-right");
+      surface.style.removeProperty("--canvas-minimap-bottom");
     };
-    position();
-    const observer = new ResizeObserver(position);
-    observer.observe(surface); observer.observe(footer); observer.observe(dock);
-    dock.querySelectorAll<HTMLElement>(".canvas-command-bar, .canvas-command-restore").forEach((element) => observer.observe(element));
-    const minimap = surface.querySelector<HTMLElement>(".react-flow__minimap");
-    if (minimap) observer.observe(minimap);
-    return () => observer.disconnect();
-  }, [collapsed, minimapVisible]);
+  }, [placeOverlays]);
+  useLayoutEffect(placeOverlays, [placeOverlays, position, collapsed, expanded]);
   useEffect(() => {
     if (!expanded) return;
     const outside = (event: PointerEvent) => {
-      // A saved-view dialog is portaled outside the dock and owns focus until closed.
-      if (event.target instanceof Element && event.target.closest("dialog")) return;
+      // Closing Tools would move the minimap during the gesture the user just started.
+      if (event.target instanceof Element && event.target.closest("dialog, .canvas-minimap")) return;
       if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
     };
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
   }, [expanded]);
-  return <div className="canvas-command-dock" ref={root} onKeyDown={(event) => {
+
+  function moveDock(left: number, top: number, { canvas, rect, inset }: NonNullable<ReturnType<typeof measureDock>>) {
+    const horizontalTravel = canvas.width - rect.width - 2 * inset;
+    const verticalTravel = canvas.height - rect.height - 2 * inset;
+    setPosition((current) => ({
+      x: horizontalTravel > 0 ? clampFraction((left - canvas.left - inset) / horizontalTravel) : current.x,
+      y: verticalTravel > 0 ? clampFraction((top - canvas.top - inset) / verticalTravel) : current.y,
+    }));
+  }
+
+  function endDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (drag.current?.id !== event.pointerId) return;
+    drag.current = undefined;
+    setDragging(false);
+  }
+
+  const grip = <div className="canvas-command-grip" role="group" tabIndex={disabled ? -1 : 0} aria-disabled={disabled || undefined}
+    aria-label={bt("business.moveCanvasToolbar")} title={bt("business.moveCanvasToolbarHelp")}
+    onPointerDown={(event) => {
+      if (disabled || event.button !== 0 || event.isPrimary === false || drag.current) return;
+      const measured = measureDock(root.current);
+      if (!measured) return;
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      drag.current = { id: event.pointerId, offsetX: event.clientX - measured.rect.left, offsetY: event.clientY - measured.rect.top };
+      setDragging(true);
+    }} onPointerMove={(event) => {
+      const active = drag.current;
+      if (disabled || active?.id !== event.pointerId) return;
+      const measured = measureDock(root.current);
+      if (measured) moveDock(event.clientX - active.offsetX, event.clientY - active.offsetY, measured);
+    }} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
+    onKeyDown={(event) => {
+      if (disabled || event.altKey || event.ctrlKey || event.metaKey || !["Home", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      const measured = measureDock(root.current);
+      if (!measured) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "Home") { setPosition(defaultPosition); return; }
+      const step = (event.shiftKey ? 64 : 16) * measured.scale;
+      const x = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+      const y = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+      moveDock(measured.rect.left + x, measured.rect.top + y, measured);
+    }}><ActionIcon name="grip" /></div>;
+
+  return <div className="canvas-command-dock" ref={root} data-dragging={dragging || undefined}
+    style={{ "--canvas-dock-x": position.x, "--canvas-dock-y": position.y } as CSSProperties} onKeyDown={(event) => {
     if (event.key === "Escape" && expanded && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); close(); }
   }} onBlur={(event) => {
     if (event.relatedTarget instanceof Element && event.relatedTarget.closest("dialog")) return;
@@ -135,15 +231,19 @@ export function CanvasToolbar({ tableCount, comparisonLabel, filters, disabled, 
         {onManageRelationships ? <button type="button" className="canvas-command-manage" onClick={() => { close(); onManageRelationships(); }}><ActionIcon name="sliders" />{bt("business.manageRelationships")}<ActionIcon name="chevronRight" /></button> : null}
       </div>
     </div>
-    <button ref={restore} type="button" className="canvas-command-restore" hidden={!collapsed} disabled={disabled} aria-label={bt("business.expandCanvasToolbar")} title={bt("business.expandToolbarSelectionIsPreserved")} onClick={() => { setCollapsed(false); requestAnimationFrame(() => trigger.current?.focus()); }}><ActionIcon name="sliders" />{bt("business.tools")}{selectedCount > 0 ? <span className="canvas-command-badge">{selectedCount}</span> : null}</button>
-    <div className="canvas-command-bar" role="toolbar" aria-label={bt("business.canvasTools")} hidden={collapsed}>
+    <div className={collapsed ? "canvas-command-restore" : "canvas-command-bar"} role={collapsed ? undefined : "toolbar"} aria-label={collapsed ? undefined : bt("business.canvasTools")}>
+      {grip}
+      {collapsed ? <button ref={restore} type="button" disabled={disabled} aria-label={bt("business.expandCanvasToolbar")} title={bt("business.expandToolbarSelectionIsPreserved")} onClick={() => { setCollapsed(false); requestAnimationFrame(() => trigger.current?.focus()); }}><ActionIcon name="sliders" />{bt("business.tools")}{selectedCount > 0 ? <span className="canvas-command-badge">{selectedCount}</span> : null}</button> : <>
       {selectedCount > 0 ? <span className="canvas-command-count">{selectedCount} {bt("businessExtra.table")}{locale === "zh-CN" || selectedCount === 1 ? "" : "s"} {bt("businessExtra.selected")}</span> : null}
-      {createViewAction}
       <button ref={trigger} type="button" disabled={disabled} aria-label={bt("business.canvasTools")} title={bt("business.showOrHideCanvasTools")} aria-expanded={expanded} aria-controls={id} onKeyDown={(event) => {
-        if (event.key === "ArrowUp") { event.preventDefault(); setOpen(true); requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus()); }
-      }} onClick={() => setOpen((value) => !value)}><ActionIcon name="sliders" />{bt("business.tools")}</button>
+        if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); setOpen(true); requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus()); }
+      }} onClick={(event) => {
+        event.currentTarget.focus({ preventScroll: true });
+        setOpen((value) => !value);
+      }}><ActionIcon name="sliders" />{bt("business.tools")}</button>
       {navigationControls ? <div className="canvas-command-navigation">{navigationControls}</div> : null}
       <button type="button" disabled={disabled} aria-label={bt("business.collapseCanvasToolbar")} title={bt("business.collapseToolbarKeepSelection")} onClick={() => { setOpen(false); setCollapsed(true); requestAnimationFrame(() => restore.current?.focus()); }}><ActionIcon name="chevronDown" /></button>
+      </>}
     </div>
   </div>;
 }

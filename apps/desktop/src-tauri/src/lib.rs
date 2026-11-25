@@ -84,6 +84,8 @@ mod purchase;
 mod query_export;
 mod relationship_batches;
 mod schema_report;
+#[cfg(not(mobile))]
+mod startup_window;
 mod storage_errors;
 #[cfg(target_os = "macos")]
 mod system_appearance;
@@ -1010,14 +1012,22 @@ async fn save_data_source_using(
         .await?;
         return Ok(profile);
     }
-    if existing
+    let pending = existing
         .as_ref()
-        .is_some_and(|profile| profile.connection_sync.is_some_and(|sync| sync.pending))
-    {
+        .is_some_and(|profile| profile.connection_sync.is_some_and(|sync| sync.pending));
+    if pending && !input.is_server_connection() {
         return Err("Use Verify & Refresh to finish setting up this imported connection.".into());
     }
     connection_credentials::prepare_imported_binding(&mut input, existing.as_ref())?;
-    validate_connection_profile_input(&input)?;
+    if pending {
+        let resolved = connection_input_with_resolved_password(input)?;
+        test_database_connection_with_progress(&resolved, None, &state.sessions)
+            .await
+            .map_err(|error| error.to_string())?;
+        input = resolved;
+    } else {
+        validate_connection_profile_input(&input)?;
+    }
     if existing.is_none() && input.password.is_empty() {
         return Err("A database password is required for a new data source.".into());
     }
@@ -1138,6 +1148,7 @@ async fn test_database_connection_with_progress(
     progress: Option<&tauri::ipc::Channel<connection_tests::ConnectionTestProgress>>,
     sessions: &ConnectionSessions,
 ) -> Result<ConnectionTestResult, ConnectionFailure> {
+    const TEST_PHASE_TIMEOUT: Duration = Duration::from_secs(15);
     if input.database_type == DatabaseType::Sqlite {
         connection_tests::progress(progress, "file", false);
         let now = Utc::now();
@@ -1163,45 +1174,61 @@ async fn test_database_connection_with_progress(
             &profile,
             &input.password,
             input.ssh_secret(),
-            Duration::from_secs(15),
+            TEST_PHASE_TIMEOUT,
             || connection_tests::progress(progress, "handshake", ssh_connected),
         )
         .await?;
-    let result = match &session.pool {
-        DatabasePool::Postgres(pool) => test_postgres_target(input, pool, progress).await,
-        DatabasePool::MySql(pool) => {
-            connection_tests::progress(progress, "metadata", ssh_connected);
-            let database = if input.is_server_connection() {
-                database_server::test_mysql_server(pool).await
-            } else {
-                test_mysql_connection(pool).await
-            }
-            .map_err(|error| connection_diagnostics::mysql(error).after_ssh(ssh_connected))?;
-            let server_read_only = sqlx::query_scalar::<_, i64>("SELECT @@global.read_only")
-                .fetch_optional(pool)
-                .await
-                .ok()
-                .flatten()
-                .map(|value| value != 0);
-            connection_tests::progress(progress, "tls", ssh_connected);
-            let ssl_active = sqlx::query("SHOW STATUS LIKE 'Ssl_cipher'")
-                .fetch_optional(pool)
-                .await
-                .ok()
-                .flatten()
-                .and_then(|row| row.try_get::<String, _>(1).ok())
-                .map(|cipher| !cipher.is_empty());
-            Ok(ConnectionTestResult {
-                database,
-                ssl_active,
-                server_read_only,
-            })
+    let read_metadata = async {
+        match &session.pool {
+            DatabasePool::Postgres(pool) => test_postgres_target(input, pool, progress).await,
+            DatabasePool::MySql(pool) => test_mysql_target(input, pool, progress).await,
         }
     };
+    let result = tokio::time::timeout(TEST_PHASE_TIMEOUT, read_metadata)
+        .await
+        .map_err(|_| {
+            ConnectionFailure::new("timeout", "Connected, but the server took too long to respond. Check the network or server load and try again.")
+                .with_code("connectionMetadataTimeout")
+                .after_ssh(ssh_connected)
+        })?;
     if result.is_ok() {
         sessions.retain_verified(&testing).await;
     }
     result
+}
+
+async fn test_mysql_target(
+    input: &SaveDataSourceInput,
+    pool: &sqlx::MySqlPool,
+    progress: Option<&tauri::ipc::Channel<connection_tests::ConnectionTestProgress>>,
+) -> Result<ConnectionTestResult, ConnectionFailure> {
+    let ssh_connected = input.security.ssh.is_some();
+    connection_tests::progress(progress, "metadata", ssh_connected);
+    let database = if input.is_server_connection() {
+        database_server::test_mysql_server(pool).await
+    } else {
+        test_mysql_connection(pool).await
+    }
+    .map_err(|error| connection_diagnostics::mysql(error).after_ssh(ssh_connected))?;
+    let server_read_only = sqlx::query_scalar::<_, i64>("SELECT @@global.read_only")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|value| value != 0);
+    connection_tests::progress(progress, "tls", ssh_connected);
+    let ssl_active = sqlx::query("SHOW STATUS LIKE 'Ssl_cipher'")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|row| row.try_get::<String, _>(1).ok())
+        .map(|cipher| !cipher.is_empty());
+    Ok(ConnectionTestResult {
+        database,
+        ssl_active,
+        server_read_only,
+    })
 }
 
 async fn test_postgres_target(
@@ -2314,6 +2341,8 @@ pub fn run() {
             app.manage(database_export::Jobs::default());
             purchase::start(app.handle().clone());
             connection_sync::folder::start(app.handle().clone());
+            #[cfg(not(mobile))]
+            startup_window::show_main_window(app)?;
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -2650,6 +2679,51 @@ mod tests {
         };
         assert!(validate_connection_profile_input(&input).is_ok());
         assert!(validate_connection_input(&input).is_err());
+    }
+
+    #[tokio::test]
+    async fn imported_server_keeps_its_pending_identity_until_credentials_are_verified() {
+        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
+        let state = AppState {
+            store,
+            ai_limiter: Arc::new(Semaphore::new(1)),
+            snapshot_captures: Arc::default(),
+            cloud_operations: Arc::default(),
+            active_queries: Arc::default(),
+            sessions: ConnectionSessions::default(),
+        };
+        let id = Uuid::new_v4();
+        let input = SaveDataSourceInput {
+            sqlite: None,
+            id: Some(id),
+            display_name: "Imported server".into(),
+            host: "db.example".into(),
+            port: 5432,
+            database: String::new(),
+            username: "reader".into(),
+            password: String::new(),
+            ssh_password: None,
+            ssh_key_passphrase: None,
+            database_type: DatabaseType::PostgreSql,
+            ssl_mode: SslMode::Require,
+            security: schema_model::ConnectionSecurity::default(),
+        };
+        let now = Utc::now();
+        let mut profile = data_source_profile_from_input(&input, id, now, now);
+        profile.connection_sync = Some(schema_model::ConnectionSyncIdentity {
+            origin_id: Uuid::new_v4(),
+            pending: true,
+        });
+        state.store.save_data_source(&profile).await.unwrap();
+
+        assert_eq!(
+            save_data_source_using(input, &state).await.unwrap_err(),
+            connection_credentials::DATABASE_PASSWORD_REQUIRED
+        );
+        assert_eq!(
+            state.store.get_data_source(id).await.unwrap(),
+            Some(profile)
+        );
     }
 
     #[tokio::test]

@@ -99,7 +99,7 @@
 .saved-query-heading > svg:not(.tree-twisty) { color: var(--ds-accent); }
 .saved-query-heading small { color: var(--ds-secondary); font-variant-numeric: tabular-nums; }
 .saved-query-list { padding-inline-start: 19px; }
-.saved-query-row { display: flex; align-items: center; min-width: 0; }
+.saved-query-row, .model-view-row { display: flex; align-items: center; min-width: 0; }
 .saved-query-item { flex: 1; }
 .saved-query-item > svg, .saved-query-new > svg { flex: none; width: var(--ds-icon-size); height: var(--ds-icon-size); color: var(--ds-secondary); }
 .model-navigation .saved-query-new { color: var(--ds-secondary); font-weight: var(--ds-weight-medium); }
@@ -117,6 +117,8 @@
 .model-view-navigation button:hover:not(:disabled) { background: var(--ds-hover); }
 .model-view-navigation button[aria-current] { background: var(--ds-selection); color: var(--ds-selection-text); box-shadow: var(--ds-selection-indicator); font-weight: var(--ds-weight-emphasis); }
 .model-view-navigation button:disabled { opacity: .45; cursor: default; }
+.model-view-navigation .model-view-delete { flex: 0 0 29px; justify-content: center; padding: 0; }
+.model-view-navigation .model-view-delete:hover:not(:disabled) { color: var(--ds-danger); }
 .model-view-navigation p { margin: 5px 7px; font-size: var(--ds-text-caption); color: var(--ds-secondary); }
 
 .connection-manager { width: min(540px, calc(100vw - 48px)); max-height: calc(100vh - 48px); box-sizing: border-box; padding: var(--ds-dialog-padding); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-dialog); color: var(--ds-text); background: var(--ds-surface); box-shadow: var(--ds-shadow-dialog); }

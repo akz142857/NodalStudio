@@ -25,7 +25,7 @@ use std::{fs, path::Path};
 use super::{
     MAX_PROFILES, MergeAction, NONCE_LEN, PortableConnection, PreviewRow, SyncEntry, SyncError,
     VERSION, open_password, open_payload, publish_file, read_file, seal_password, seal_payload,
-    validate_passphrase,
+    validate_passphrase, workspace_sync_origins,
 };
 use crate::{
     AppState,
@@ -83,6 +83,8 @@ struct QueuedRevision {
     profile: Uuid,
     link: Link,
     sealed: Vec<u8>,
+    #[serde(default)]
+    server_scoped: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -176,10 +178,27 @@ fn revision_name(library: Uuid, revision: Uuid) -> String {
     )
 }
 
+// Older versions ignore this prefix and can keep syncing individual databases.
+fn server_revision_name(library: Uuid, revision: Uuid) -> String {
+    format!("server-{}", revision_name(library, revision))
+}
+
 struct Catalog {
     root: PathBuf,
     libraries: BTreeSet<Uuid>,
     revisions: BTreeMap<Uuid, BTreeSet<Uuid>>,
+    server_revisions: BTreeSet<(Uuid, Uuid)>,
+}
+
+impl Catalog {
+    fn revision_path(&self, library: Uuid, revision: Uuid) -> PathBuf {
+        self.root
+            .join(if self.server_revisions.contains(&(library, revision)) {
+                server_revision_name(library, revision)
+            } else {
+                revision_name(library, revision)
+            })
+    }
 }
 
 fn catalog(path: &Path) -> Result<Catalog, SyncError> {
@@ -195,6 +214,7 @@ fn catalog(path: &Path) -> Result<Catalog, SyncError> {
         root,
         libraries: BTreeSet::new(),
         revisions: BTreeMap::new(),
+        server_revisions: BTreeSet::new(),
     };
     match fs::symlink_metadata(&result.root) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(result),
@@ -216,13 +236,25 @@ fn catalog(path: &Path) -> Result<Catalog, SyncError> {
             result
                 .libraries
                 .insert(exact_id(id).ok_or(SyncError::InvalidFile)?);
-        } else if let Some(ids) = stem.strip_prefix("revision-") {
+        } else if let Some((ids, server_scoped)) = stem
+            .strip_prefix("server-revision-")
+            .map(|ids| (ids, true))
+            .or_else(|| stem.strip_prefix("revision-").map(|ids| (ids, false)))
+        {
             let (library, revision) = ids.split_once('-').ok_or(SyncError::InvalidFile)?;
-            result
+            let library = exact_id(library).ok_or(SyncError::InvalidFile)?;
+            let revision = exact_id(revision).ok_or(SyncError::InvalidFile)?;
+            let first = result
                 .revisions
-                .entry(exact_id(library).ok_or(SyncError::InvalidFile)?)
+                .entry(library)
                 .or_default()
-                .insert(exact_id(revision).ok_or(SyncError::InvalidFile)?);
+                .insert(revision);
+            if !first && server_scoped != result.server_revisions.contains(&(library, revision)) {
+                return Err(SyncError::InvalidFile);
+            }
+            if server_scoped {
+                result.server_revisions.insert((library, revision));
+            }
         }
     }
     if result
@@ -327,7 +359,7 @@ fn scan(
         if binding.seen.contains(id) || queued.contains(id) {
             continue;
         }
-        let path = folder.root.join(revision_name(binding.library, *id));
+        let path = folder.revision_path(binding.library, *id);
         let bytes = read_managed(&path)?;
         pending_bytes += bytes.len();
         if pending.len() >= MAX_UNSEEN_REVISIONS || pending_bytes > MAX_PENDING_BYTES {
@@ -338,6 +370,8 @@ fn scan(
             || record.library != binding.library
             || record.entry.origin_id.is_nil()
             || !record.entry.connection.is_valid()
+            || (folder.server_revisions.contains(&(binding.library, *id))
+                && !record.entry.connection.is_server_connection())
         {
             return Err(SyncError::InvalidFile);
         }
@@ -368,10 +402,9 @@ fn unpublished(
 ) -> Result<Vec<(Uuid, SyncEntry, String)>, SyncError> {
     let mut outgoing = Vec::new();
     for profile in local {
-        let entry = SyncEntry::from_profile(profile);
-        if !entry.connection.is_valid() {
+        let Some(entry) = SyncEntry::for_export(profile) else {
             continue;
-        }
+        };
         let digest = hash(&entry.connection)?;
         let linked = binding
             .links
@@ -415,6 +448,7 @@ fn stage(
             profile,
             link,
             sealed,
+            server_scoped: revision.entry.connection.is_server_connection(),
         });
     }
     Ok(())
@@ -443,6 +477,29 @@ impl Merge {
     }
 }
 
+fn matching_connection<'a>(
+    binding: &Binding,
+    candidates: &'a [DataSourceProfile],
+    entry: &SyncEntry,
+) -> Option<&'a DataSourceProfile> {
+    let by_origin = candidates.iter().find(|profile| {
+        let origin = binding
+            .links
+            .get(&profile.id)
+            .map(|link| link.origin)
+            .or_else(|| profile.connection_sync.map(|identity| identity.origin_id))
+            .unwrap_or(profile.id);
+        origin == entry.origin_id
+    });
+    by_origin.or_else(|| {
+        candidates.iter().find(|profile| {
+            profile
+                .display_name
+                .eq_ignore_ascii_case(&entry.connection.display_name)
+        })
+    })
+}
+
 fn review(
     binding: &mut Binding,
     pending: &BTreeMap<Uuid, Revision>,
@@ -454,7 +511,13 @@ fn review(
         .collect();
     let mut covered = BTreeSet::new();
     let mut proposed = Merge::default();
-    let mut candidates = local.to_vec();
+    let workspace_origins =
+        workspace_sync_origins(local, |id| binding.links.get(&id).map(|link| link.origin));
+    let mut candidates: Vec<_> = local
+        .iter()
+        .filter(|profile| profile.server_source_id.is_none())
+        .cloned()
+        .collect();
     for head in pending
         .values()
         .filter(|record| !parents.contains(&record.id))
@@ -470,26 +533,21 @@ fn review(
                 .copied(),
         );
         let entry = &head.entry;
+        if workspace_origins.contains(&entry.origin_id) {
+            proposed.rows.push(PreviewRow {
+                connection: entry.connection.clone(),
+                action: MergeAction::Unchanged,
+                existing: None,
+            });
+            continue;
+        }
         let digest = hash(&entry.connection)?;
         let linked_base = candidates.iter().find(|profile| {
             binding.links.get(&profile.id).is_some_and(|link| {
                 link.origin == entry.origin_id && ancestors.contains(&link.revision)
             })
         });
-        let existing = linked_base.or_else(|| {
-            candidates.iter().find(|profile| {
-                let previous = SyncEntry::from_profile(profile);
-                binding
-                    .links
-                    .get(&profile.id)
-                    .map_or(previous.origin_id, |link| link.origin)
-                    == entry.origin_id
-                    || previous
-                        .connection
-                        .display_name
-                        .eq_ignore_ascii_case(&entry.connection.display_name)
-            })
-        });
+        let existing = linked_base.or_else(|| matching_connection(binding, &candidates, entry));
         let existing_config = existing.map(|profile| SyncEntry::from_profile(profile).connection);
         let identical = candidates
             .iter()
@@ -688,17 +746,21 @@ fn check_catalog(folder: &Catalog, binding: &Binding) -> Result<(), SyncError> {
 
 fn publish_outbox(folder: &Catalog, binding: &Binding) -> Result<(), SyncError> {
     for item in &binding.outbox {
-        let name = revision_name(binding.library, item.link.revision);
-        let path = folder.root.join(&name);
+        let revision = item.link.revision;
         if folder
             .revisions
             .get(&binding.library)
-            .is_some_and(|ids| ids.contains(&item.link.revision))
+            .is_some_and(|ids| ids.contains(&revision))
         {
-            if read_managed(&path)? != item.sealed {
+            if read_managed(&folder.revision_path(binding.library, revision))? != item.sealed {
                 return Err(SyncError::InvalidFile);
             }
         } else {
+            let name = if item.server_scoped {
+                server_revision_name(binding.library, revision)
+            } else {
+                revision_name(binding.library, revision)
+            };
             publish_file(&folder.root, &name, &item.sealed)?;
         }
     }
@@ -717,7 +779,7 @@ async fn flush_queued(
         let _scope = crate::file_access::access(path).map_err(|_| SyncError::InvalidSelection)?;
         let folder = catalog(path)?;
         check_catalog(&folder, &saved.binding)?;
-        let discarded = discard_deleted_drafts(&mut saved.binding, &folder, &local);
+        let discarded = discard_ineligible_drafts(&mut saved.binding, &folder, &local);
         if saved.binding.outbox.is_empty() {
             stage(&mut saved.binding, &local, &key)?;
         }
@@ -767,12 +829,16 @@ async fn flush_queued(
     Ok(saved)
 }
 
-fn discard_deleted_drafts(
+fn discard_ineligible_drafts(
     binding: &mut Binding,
     folder: &Catalog,
     local: &[DataSourceProfile],
 ) -> bool {
-    let current_ids: BTreeSet<_> = local.iter().map(|profile| profile.id).collect();
+    let current_ids: BTreeSet<_> = local
+        .iter()
+        .filter(|profile| profile.server_source_id.is_none())
+        .map(|profile| profile.id)
+        .collect();
     let published = folder.revisions.get(&binding.library);
     let previous_count = binding.outbox.len();
     binding.outbox.retain(|item| {
@@ -781,7 +847,7 @@ fn discard_deleted_drafts(
         {
             return true;
         }
-        // A published copy that arrives later must not resurrect a locally deleted source.
+        // Mark obsolete local drafts seen in case a previously published copy arrives later.
         binding.seen.insert(item.link.revision);
         false
     });
@@ -965,7 +1031,7 @@ fn select_library(
             .fill(&mut manifest.key)
             .map_err(|_| SyncError::Unavailable)?;
         let ciphertext = if create_manifest {
-            seal_password(LIBRARY_MAGIC, &manifest, passphrase)?
+            seal_password(LIBRARY_MAGIC, VERSION, &manifest, passphrase)?
         } else {
             Vec::new()
         };
@@ -1512,13 +1578,92 @@ mod tests {
         .unwrap();
         let published_id = published_revision.link.revision;
         let found = catalog(folder.path()).unwrap();
-        assert!(discard_deleted_drafts(&mut binding, &found, &[]));
+        assert!(discard_ineligible_drafts(&mut binding, &found, &[]));
         assert_eq!(binding.outbox.len(), 1);
         assert_eq!(binding.outbox[0].link.revision, published_id);
         assert!(binding.seen.contains(&pending_revision));
         publish_outbox(&found, &binding).unwrap();
         let found = catalog(folder.path()).unwrap();
         assert_eq!(found.revisions[&library.id], BTreeSet::from([published_id]));
+    }
+
+    #[test]
+    fn publishes_the_server_and_discards_drafts_for_its_database_workspaces() {
+        let folder = tempfile::tempdir().unwrap();
+        let library = create_library(folder.path());
+        let mut sender = binding_for(folder.path(), &library);
+        let mut server = profile();
+        server.database.clear();
+        let mut workspace = profile();
+        stage(&mut sender, &[workspace.clone()], &library.key).unwrap();
+        let old_workspace_revision = sender.outbox[0].link.revision;
+        workspace.server_source_id = Some(server.id);
+        let local = [server.clone(), workspace];
+        let found = catalog(folder.path()).unwrap();
+        assert!(discard_ineligible_drafts(&mut sender, &found, &local));
+        assert!(sender.seen.contains(&old_workspace_revision));
+        assert!(sender.outbox.is_empty());
+        stage(&mut sender, &local, &library.key).unwrap();
+        assert_eq!(sender.outbox.len(), 1);
+        assert_eq!(sender.outbox[0].profile, server.id);
+        let revision = sender.outbox[0].link.revision;
+        publish_outbox(&found, &sender).unwrap();
+        assert!(
+            found
+                .root
+                .join(server_revision_name(library.id, revision))
+                .is_file()
+        );
+        assert!(
+            !found
+                .root
+                .join(revision_name(library.id, revision))
+                .exists()
+        );
+
+        let mut recipient = binding_for(folder.path(), &library);
+        let found = catalog(folder.path()).unwrap();
+        let incoming = scan(&found, &recipient, &library.key).unwrap();
+        let merge = review(&mut recipient, &incoming, &[]).unwrap();
+        assert_eq!(merge.rows.len(), 1);
+        assert_eq!(merge.rows[0].action, MergeAction::Add);
+        assert_eq!(merge.added.len(), 1);
+        assert!(merge.added[0].is_server_connection());
+        assert!(merge.added[0].connection_sync.unwrap().pending);
+    }
+
+    #[test]
+    fn ignores_a_legacy_workspace_revision_under_its_linked_origin() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = create_library(directory.path());
+        let mut binding = binding_for(directory.path(), &library);
+        let mut workspace = profile();
+        workspace.server_source_id = Some(Uuid::new_v4());
+        let mut entry = SyncEntry::from_profile(&workspace);
+        entry.origin_id = Uuid::new_v4();
+        let parent = Uuid::new_v4();
+        binding.links.insert(
+            workspace.id,
+            Link {
+                revision: parent,
+                origin: entry.origin_id,
+                digest: hash(&entry.connection).unwrap(),
+            },
+        );
+        let id = Uuid::new_v4();
+        let incoming = BTreeMap::from([(
+            id,
+            Revision {
+                library: binding.library,
+                id,
+                parent: Some(parent),
+                entry,
+            },
+        )]);
+        let merge = review(&mut binding, &incoming, &[workspace]).unwrap();
+        assert_eq!(merge.rows[0].action, MergeAction::Unchanged);
+        assert!(merge.added.is_empty());
+        assert!(binding.seen.contains(&id));
     }
 
     #[tokio::test]

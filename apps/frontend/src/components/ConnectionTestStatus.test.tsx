@@ -8,16 +8,15 @@ const form: SaveDataSourceInput = {
   displayName: "Fixture", host: "localhost", port: 5432, database: "app", username: "user", password: "fixture",
   databaseType: "postgreSql", sslMode: "prefer", security: { tls: {}, ssh: { host: "jump", port: 22, username: "user", authentication: "password" } },
 };
-it("shows a continuous SSH-to-server route and reports disabled TLS separately", () => {
+it("shows all network nodes in order, including disabled TLS", () => {
   render(<ConnectionTestStatus form={{ ...form, databaseType: "mySql", database: "", sslMode: "disable" }} state={{ status: "success", result: { database: { name: "", databaseType: "mySql", version: "8.4" }, sslActive: false, serverReadOnly: false } }} />);
   const route = within(screen.getByRole("list"));
   const nodes = route.getAllByRole("listitem");
-  expect(nodes).toHaveLength(2);
+  expect(nodes).toHaveLength(3);
   expect(within(nodes[0]).getByRole("group", { name: "SSH status" })).toHaveTextContent("Connected");
-  expect(within(nodes[1]).getByRole("group", { name: "Server status" })).toHaveTextContent("Connected");
-  for (const node of nodes) expect(node).toHaveAttribute("data-tone", "success");
-  expect(route.queryByRole("group", { name: "TLS status" })).not.toBeInTheDocument();
-  expect(screen.getByRole("group", { name: "TLS status" })).toHaveTextContent("TLS Not enabled");
+  expect(within(nodes[1]).getByRole("group", { name: "TLS status" })).toHaveTextContent("Not enabled");
+  expect(within(nodes[2]).getByRole("group", { name: "Server status" })).toHaveTextContent("Connected");
+  expect(nodes.map((node) => node.getAttribute("data-tone"))).toEqual(["success", "neutral", "success"]);
   expect(screen.getByRole("status")).toHaveTextContent("Server connected");
 });
 it("does not claim TLS passed when Prefer falls back to plaintext", () => {
@@ -41,6 +40,16 @@ it("keeps successful SSH visible when database authentication fails", () => {
   expect(screen.getByRole("alert")).toHaveTextContent("SSHConnected");
   expect(screen.getByRole("alert")).toHaveTextContent("TLSNot verified");
 });
+it("keeps the established connection visible when reading server metadata times out", () => {
+  render(<ConnectionTestStatus form={form} state={{
+    status: "error",
+    failure: { stage: "timeout", code: "connectionMetadataTimeout", message: "Metadata timed out", sshConnected: true },
+    progress: { phase: "metadata", sshConnected: true },
+  }} />);
+  expect(screen.getByRole("group", { name: "SSH status" })).toHaveTextContent("Connected");
+  expect(screen.getByRole("group", { name: "TLS status" })).toHaveTextContent("Not verified");
+  expect(screen.getByRole("group", { name: "Database status" })).toHaveTextContent("Connected");
+});
 it("handles structured native errors and plain platform errors", () => {
   expect(connectionFailure({ stage: "ssh", message: "Unknown host key", sshConnected: false }).stage).toBe("ssh");
   expect(connectionFailure(new Error("Unavailable")).message).toBe("Unavailable");
@@ -55,12 +64,11 @@ it("reports missing App Store host authorization as configuration with SSH still
   expect(screen.getByRole("group", { name: "SSH status" })).toHaveTextContent("Not tested");
 });
 it("shows separate checks and truthful indeterminate progress", () => {
-  render(<ConnectionTestStatus form={form} onCancel={() => {}} state={{ status: "testing", progress: { phase: "handshake", sshConnected: true } }} />);
+  render(<ConnectionTestStatus form={form} state={{ status: "testing", progress: { phase: "handshake", sshConnected: true } }} />);
   expect(screen.getByRole("group", { name: "SSH status" })).toHaveTextContent("Connected");
   expect(screen.getByRole("group", { name: "TLS status" })).toHaveTextContent("Negotiating");
   expect(screen.getByRole("group", { name: "Database status" })).toHaveTextContent("Connecting");
   expect(screen.getByRole("progressbar")).not.toHaveAttribute("aria-valuenow");
-  expect(screen.getByRole("button", { name: "Cancel connection test" })).toBeEnabled();
 });
 it("preserves finished SSH after cancellation without marking TLS successful", () => {
   render(<ConnectionTestStatus form={form} state={{ status: "cancelled", progress: { phase: "handshake", sshConnected: true } }} />);

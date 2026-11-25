@@ -17,6 +17,9 @@ describe("connection security", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose ca certificate" }));
     await waitFor(() => expect(screen.getByLabelText("CA certificate")).toHaveValue("/certs/root.pem"));
     fireEvent.click(screen.getByRole("checkbox", { name: /Connect through SSH/ }));
+    const identity = screen.getByRole("region", { name: "Server identity" });
+    expect(identity.closest("details")).toBeNull();
+    expect(screen.getByLabelText("Known hosts file")).toBeVisible();
     fireEvent.change(screen.getByLabelText("SSH host"), { target: { value: "jump.example.com" } });
     fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "privateKey" } });
     expect(screen.getByLabelText("SSH private key")).toBeVisible();

@@ -41,7 +41,7 @@ import type { OpenQueryRequest } from "./components/query/QueryPage";
 import { QuickQueryDock } from "./components/query/QuickQueryDock";
 import { tablePreviewSql } from "./components/query/query-format";
 import { clearQuerySessions, loadQuerySession, queryWorkspaceKey, saveQuerySession } from "./components/query/query-state";
-import { isServerConnection } from "./platform/database-server";
+import { isSavedConnection, isServerConnection } from "./platform/database-server";
 import { clearSavedQueries, deleteNamedQuery, listSavedQueries, saveNamedQuery, type SavedQuery } from "./components/query/saved-queries";
 import type { SchemaSearchResult } from "./graph/schema-search";
 import { GlobalSearch } from "./components/GlobalSearch";
@@ -202,6 +202,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("general");
   const [dataSources, setDataSources] = useState<DataSourceProfile[]>([]);
+  const [activeConnectionId, setActiveConnectionId] = useState<string>();
   const [sourcesRevision, setSourcesRevision] = useState(0);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [savedNotices, setNotices] = useState<AppNotice[]>([]);
@@ -300,6 +301,7 @@ export function App() {
   const databaseObject = useMemo(() => databaseObjectSelection && databaseObjectSelection.sourceId === snapshot?.sourceId
     ? findDocumentObject(snapshot, databaseObjectSelection.key) : undefined, [databaseObjectSelection, snapshot]);
   const activeProfile = dataSources.find((source) => source.id === snapshot?.sourceId);
+  const hasSavedConnections = dataSources.some(isSavedConnection);
   const countProfile = activeProfile && querySupported && !historyPreview && activeProfile.databaseType === snapshot?.database.databaseType
     && (activeProfile.databaseType === "sqlite" ||
       (settingsAvailable && !settings.app.privacy.offlineMode && activeProfile.database === snapshot.database.name))
@@ -342,11 +344,11 @@ export function App() {
   const ontologyDefinitionId = ontologySelection?.sourceId === ontologySnapshot?.sourceId ? ontologySelection?.id : undefined;
   const postgresExport = runtime.data?.kind === "desktop" && snapshot?.database.databaseType === "postgreSql" && !historyPreview;
   const postgresDump = postgresExport && runtime.data?.distribution !== "macAppStore";
-  const domainWorkspace = useRef({ snapshot, semantics, semanticsSnapshot, runtimeKind: runtime.data?.kind, mode, reviewView, historyPreview });
+  const domainWorkspace = useRef({ snapshot, semantics, semanticsSnapshot, savedView, runtimeKind: runtime.data?.kind, mode, reviewView, historyPreview });
   const pendingDomainUpdates = useRef(new Set<string>());
   useLayoutEffect(() => {
-    domainWorkspace.current = { snapshot, semantics, semanticsSnapshot, runtimeKind: runtime.data?.kind, mode, reviewView, historyPreview };
-  }, [snapshot, semantics, semanticsSnapshot, runtime.data?.kind, mode, reviewView, historyPreview]);
+    domainWorkspace.current = { snapshot, semantics, semanticsSnapshot, savedView, runtimeKind: runtime.data?.kind, mode, reviewView, historyPreview };
+  }, [snapshot, semantics, semanticsSnapshot, savedView, runtime.data?.kind, mode, reviewView, historyPreview]);
 
   const addTablesToDomain = useCallback(async (domainId: string, tableKeys: ObjectKey[]) => {
     const workspace = domainWorkspace.current;
@@ -710,11 +712,12 @@ export function App() {
   }, [runtime.data?.kind, translate]);
 
   useEffect(() => {
-    const servers = new Map(dataSources.filter(isServerConnection).map((profile) => [profile.id, profile]));
+    const servers = new Map(dataSources.filter((profile) => isSavedConnection(profile) && isServerConnection(profile)).map((profile) => [profile.id, profile]));
     const connectable = dataSources.filter((profile) => {
       if (profile.connectionSync?.pending || servers.has(profile.id)) return false;
-      const server = profile.serverSourceId ? servers.get(profile.serverSourceId) : undefined;
-      return !server || (!server.connectionSync?.pending && Date.parse(profile.updatedAt) >= Date.parse(server.updatedAt));
+      if (!profile.serverSourceId) return true;
+      const server = servers.get(profile.serverSourceId);
+      return server && !server.connectionSync?.pending && Date.parse(profile.updatedAt) >= Date.parse(server.updatedAt);
     });
     if (
       autoConnectAttempted.current ||
@@ -997,10 +1000,22 @@ export function App() {
   }, [snapshot, historyPreview, mode, semanticSession, translate]);
 
   const deleteModelView = useCallback(async (id: string) => {
-    if (!snapshot || historyPreview || mode !== "explore") throw new Error(translate("navigation.returnToTheLatestModelToDeleteViews"));
+    if (!snapshot || historyPreview || semanticsSnapshot !== snapshot) throw new Error(translate("navigation.returnToTheLatestModelToDeleteViews"));
     await platform.deleteView(snapshot.sourceId, id, snapshot.id);
-    if (activeSemanticSession.current === semanticSession) setSemantics((current) => ({ ...current, savedViews: current.savedViews.filter((item) => item.id !== id), viewLayouts: current.viewLayouts?.filter((item) => item.viewId !== id) }));
-  }, [snapshot, historyPreview, mode, semanticSession, translate]);
+    try {
+      const preference = `nodalstudio:last-view:${snapshot.sourceId}`;
+      if (localStorage.getItem(preference) === id) localStorage.removeItem(preference);
+    } catch { /* Optional navigation preference. */ }
+    const latest = latestWorkspace.current;
+    if (latest?.snapshot.sourceId === snapshot.sourceId && latest.view?.id === id) latestWorkspace.current = { snapshot: latest.snapshot };
+    if (activeSemanticSession.current !== semanticSession) {
+      const current = currentSemanticLoader.current;
+      if (current?.sourceId === snapshot.sourceId) void current.load().catch(() => undefined);
+      return;
+    }
+    setSemantics((current) => ({ ...current, savedViews: current.savedViews.filter((item) => item.id !== id), viewLayouts: current.viewLayouts?.filter((item) => item.viewId !== id) }));
+    if (domainWorkspace.current.savedView?.id === id) applyView(undefined);
+  }, [snapshot, historyPreview, semanticsSnapshot, semanticSession, applyView, translate]);
 
   function rememberLatestWorkspace() {
     if (snapshot && !historyPreview) latestWorkspace.current = { snapshot, view: savedView };
@@ -1423,6 +1438,7 @@ export function App() {
               handleCapture(result, domainWorkspace.current.mode !== "changes");
             }}
             onDatabaseCleared={clearOpenDatabase}
+            onActiveConnectionChange={setActiveConnectionId}
             onSourceSaved={(profile) => {
               void queryClient.resetQueries({ queryKey: ontologyDefinitionsKey({ sourceId: profile.id }) });
               setOpenQueryRequest((request) => request?.ontology?.draft.sourceId === profile.id ? undefined : request);
@@ -1446,9 +1462,10 @@ export function App() {
           >
             {snapshot ? (
               <SchemaTree
-                navigation={runtime.data?.kind === "desktop" && mode !== "database" ? <ModelViewNavigation sourceId={snapshot.sourceId} views={semantics.savedViews} activeView={savedView}
+                navigation={runtime.data?.kind === "desktop" && mode !== "database" ? <ModelViewNavigation key={snapshot.id} sourceId={snapshot.sourceId} views={semantics.savedViews} activeView={savedView}
                   disabled={historyPreview || semanticsSnapshot !== snapshot}
-                  onApply={(view) => { setObjectDocument(undefined); setMode("explore"); setPreflightOpen(false); setRelationshipSearch(undefined); setSearchOpen(false); applyView(view); }} /> : undefined}
+                  onApply={(view) => { setObjectDocument(undefined); setMode("explore"); setPreflightOpen(false); setRelationshipSearch(undefined); setSearchOpen(false); applyView(view); }}
+                  onDelete={deleteModelView} /> : undefined}
                 snapshot={snapshot}
                 databaseMode={mode === "database"}
                 queriesBeforeObjects={mode === "query"}
@@ -1669,9 +1686,9 @@ export function App() {
               <div className="canvas-grid" />
               <div className="hero-card">
                 <p className="eyebrow">{t("navigation.eXPLORECHANGESHISTORY")}</p>
-                <h2>{dataSources.length ? t("navigation.selectADatabaseToExplore") : t("navigation.yourDatabaseModelKeptVisible")}</h2>
+                <h2>{hasSavedConnections ? t("navigation.selectADatabaseToExplore") : t("navigation.yourDatabaseModelKeptVisible")}</h2>
                 <p>
-                  {dataSources.length
+                  {hasSavedConnections
                     ? t("navigation.chooseASavedConnectionFromTheDatabasePicker")
                     : t("navigation.connectADatabaseToGenerateAnERMap")}
                 </p>
@@ -1765,6 +1782,7 @@ export function App() {
           connectionFolderMergeError={connectionFolderMergeError}
           onConnectionFolderMergeError={setConnectionFolderMergeError}
           dataSources={dataSources}
+          activeConnectionId={activeConnectionId}
           activeSourceId={snapshot?.sourceId}
           activeDatabase={snapshot?.database}
           initialCategory={settingsCategory}
@@ -1794,8 +1812,17 @@ export function App() {
             ]);
           }}
           onDataSourcesChanged={async () => {
+            const next = await platform.listDataSources();
+            const openedSourceId = domainWorkspace.current.snapshot?.sourceId;
+            const openedProfile = next.find((profile) => profile.id === openedSourceId);
+            const removedConnection = !openedProfile && dataSources.some((profile) => profile.id === openedSourceId);
+            const removedServer = openedProfile?.serverSourceId
+              && !next.some((profile) => profile.id === openedProfile.serverSourceId && isServerConnection(profile));
+            if (removedConnection || removedServer) {
+              clearOpenDatabase();
+            }
             setSourcesRevision((current) => current + 1);
-            setDataSources(await platform.listDataSources());
+            setDataSources(next);
           }}
           onFactoryReset={() => {
             clearQuerySessions();

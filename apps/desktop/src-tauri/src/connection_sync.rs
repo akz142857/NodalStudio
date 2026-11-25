@@ -1,6 +1,7 @@
 //! Encrypted, credential-free snapshots for manual transfer between installations.
 pub mod folder;
 use std::{
+    collections::HashSet,
     fs::{self, File},
     io::{Read, Write},
     num::NonZeroU32,
@@ -29,6 +30,7 @@ use crate::{
 
 const MAGIC: &[u8] = b"NODAL-CONNECTIONS";
 const VERSION: u8 = 1;
+const SERVER_CONNECTIONS_VERSION: u8 = 2;
 const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
 #[cfg(test)]
@@ -92,6 +94,14 @@ struct SyncEntry {
 }
 
 impl SyncEntry {
+    fn for_export(profile: &DataSourceProfile) -> Option<Self> {
+        if profile.server_source_id.is_some() {
+            return None;
+        }
+        let entry = Self::from_profile(profile);
+        entry.connection.is_valid().then_some(entry)
+    }
+
     fn from_profile(profile: &DataSourceProfile) -> Self {
         let sqlite = profile.database_type == DatabaseType::Sqlite;
         let database = if sqlite {
@@ -185,19 +195,25 @@ fn valid_host(host: &str) -> bool {
 }
 
 impl PortableConnection {
+    fn is_server_connection(&self) -> bool {
+        self.database_type != DatabaseType::Sqlite && self.database.is_empty()
+    }
+
     fn is_valid(&self) -> bool {
-        if self.display_name.trim().is_empty() || self.database.trim().is_empty() {
+        if self.display_name.trim().is_empty() {
             return false;
         }
         if self.database_type == DatabaseType::Sqlite {
-            return !self.database.contains(['/', '\\'])
+            return !self.database.trim().is_empty()
+                && !self.database.contains(['/', '\\'])
                 && self.host.is_empty()
                 && self.username.is_empty()
                 && self.port == 0
                 && self.ssh.is_none()
                 && self.ssl_mode == SslMode::Disable;
         }
-        valid_host(&self.host)
+        (self.database.is_empty() || !self.database.trim().is_empty())
+            && valid_host(&self.host)
             && self.port != 0
             && !self.username.trim().is_empty()
             && self.ssh.as_ref().is_none_or(|ssh| {
@@ -236,11 +252,20 @@ fn encrypt(entries: &[SyncEntry], passphrase: &str) -> Result<Vec<u8>, SyncError
     if entries.len() > MAX_PROFILES {
         return Err(SyncError::TooLarge);
     }
-    seal_password(MAGIC, entries, passphrase)
+    let version = if entries
+        .iter()
+        .any(|entry| entry.connection.is_server_connection())
+    {
+        SERVER_CONNECTIONS_VERSION
+    } else {
+        VERSION
+    };
+    seal_password(MAGIC, version, entries, passphrase)
 }
 
 fn seal_password<T: Serialize + ?Sized>(
     magic: &[u8],
+    version: u8,
     data: &T,
     passphrase: &str,
 ) -> Result<Vec<u8>, SyncError> {
@@ -256,7 +281,7 @@ fn seal_password<T: Serialize + ?Sized>(
     let (salt, nonce) = random.split_at(SALT_LEN);
     let mut file = Vec::new();
     file.extend_from_slice(magic);
-    file.push(VERSION);
+    file.push(version);
     file.extend_from_slice(&random);
     seal_payload(&derive_key(salt, passphrase), file, nonce, payload)
 }
@@ -306,6 +331,7 @@ fn open_password<T: serde::de::DeserializeOwned>(
     }
     match file.get(magic.len()) {
         Some(&VERSION) => {}
+        Some(&SERVER_CONNECTIONS_VERSION) if magic == MAGIC => {}
         Some(_) => return Err(SyncError::UnsupportedVersion),
         None => return Err(SyncError::InvalidFile),
     }
@@ -360,11 +386,31 @@ pub struct SyncPreview {
     rows: Vec<PreviewRow>,
 }
 
+fn workspace_sync_origins(
+    local: &[DataSourceProfile],
+    linked_origin: impl Fn(Uuid) -> Option<Uuid>,
+) -> HashSet<Uuid> {
+    local
+        .iter()
+        .filter(|profile| profile.server_source_id.is_some())
+        .flat_map(|profile| {
+            std::iter::once(profile.id)
+                .chain(profile.connection_sync.map(|identity| identity.origin_id))
+                .chain(linked_origin(profile.id))
+        })
+        .collect()
+}
+
 fn merge(
     entries: Vec<SyncEntry>,
     local: &[DataSourceProfile],
 ) -> (Vec<PreviewRow>, Vec<DataSourceProfile>) {
-    let mut candidates: Vec<SyncEntry> = local.iter().map(SyncEntry::from_profile).collect();
+    let workspace_origins = workspace_sync_origins(local, |_| None);
+    let mut candidates: Vec<SyncEntry> = local
+        .iter()
+        .filter(|profile| profile.server_source_id.is_none())
+        .map(SyncEntry::from_profile)
+        .collect();
     let mut rows = Vec::with_capacity(entries.len());
     let mut added = Vec::new();
     for entry in entries {
@@ -376,9 +422,10 @@ fn merge(
             .iter()
             .find(|candidate| candidate.origin_id == entry.origin_id)
             .or_else(|| candidates.iter().find(|candidate| same_name(candidate)));
-        let (action, existing) = if candidates
-            .iter()
-            .any(|candidate| candidate.connection == entry.connection)
+        let (action, existing) = if workspace_origins.contains(&entry.origin_id)
+            || candidates
+                .iter()
+                .any(|candidate| candidate.connection == entry.connection)
         {
             (MergeAction::Unchanged, None)
         } else if let Some(existing) = existing {
@@ -476,16 +523,16 @@ pub async fn export_connection_sync(
         let folder = Path::new(&folder);
         let _scope = connection_sync_access(folder, SelectionKind::ConnectionSyncFolder)
             .map_err(|_| SyncError::InvalidSelection)?;
-        let entries: Vec<_> = profiles
-            .iter()
-            .map(SyncEntry::from_profile)
-            .filter(|entry| entry.connection.is_valid())
-            .collect();
+        let entries: Vec<_> = profiles.iter().filter_map(SyncEntry::for_export).collect();
         let encrypted = encrypt(&entries, &passphrase)?;
         Ok(SyncExportReceipt {
             file_name: write_file(folder, &encrypted)?,
             count: entries.len(),
-            skipped: profiles.len() - entries.len(),
+            skipped: profiles
+                .iter()
+                .filter(|profile| profile.server_source_id.is_none())
+                .count()
+                - entries.len(),
         })
     })
     .await
@@ -665,11 +712,59 @@ mod tests {
             decrypt(&bytes, PASSPHRASE).unwrap_err(),
             SyncError::CannotDecrypt
         );
-        bytes[MAGIC.len()] = VERSION + 1;
+        bytes[MAGIC.len()] = SERVER_CONNECTIONS_VERSION + 1;
         assert_eq!(
             decrypt(&bytes, PASSPHRASE).unwrap_err(),
             SyncError::UnsupportedVersion
         );
+    }
+
+    #[test]
+    fn exports_servers_and_explicit_connections_but_excludes_database_workspaces() {
+        for engine in [DatabaseType::MySql, DatabaseType::PostgreSql] {
+            let mut server = network();
+            server.database_type = engine;
+            let fixed = server.clone();
+            server.id = Uuid::new_v4();
+            server.display_name = "Shared server".into();
+            server.database.clear();
+            let mut workspace = fixed.clone();
+            workspace.id = Uuid::new_v4();
+            workspace.server_source_id = Some(server.id);
+            let mut detached = workspace.clone();
+            detached.id = Uuid::new_v4();
+            detached.server_source_id = Some(Uuid::new_v4());
+
+            let entries: Vec<_> = [&server, &workspace, &fixed, &detached]
+                .into_iter()
+                .filter_map(SyncEntry::for_export)
+                .collect();
+            let bytes = encrypt(&entries, PASSPHRASE).unwrap();
+            assert_eq!(bytes[MAGIC.len()], SERVER_CONNECTIONS_VERSION);
+            let entries = decrypt(&bytes, PASSPHRASE).unwrap();
+            assert_eq!(entries.len(), 2);
+            assert_eq!(entries[0].origin_id, server.id);
+            assert_eq!(entries[1].origin_id, fixed.id);
+            let (rows, added) = merge(entries, &[workspace.clone(), detached]);
+            assert!(rows.iter().all(|row| row.action == MergeAction::Add));
+            assert!(added[0].is_server_connection());
+            assert!(added[0].server_source_id.is_none());
+            assert!(added[0].connection_sync.unwrap().pending);
+            assert_eq!(added[1].database, fixed.database);
+
+            let (rows, added) = merge(vec![SyncEntry::from_profile(&workspace)], &[workspace]);
+            assert_eq!(rows[0].action, MergeAction::Unchanged);
+            assert!(added.is_empty());
+        }
+        let mut empty_sqlite = SyncEntry::from_profile(&network()).connection;
+        empty_sqlite.database_type = DatabaseType::Sqlite;
+        empty_sqlite.database.clear();
+        empty_sqlite.host.clear();
+        empty_sqlite.username.clear();
+        empty_sqlite.port = 0;
+        empty_sqlite.ssh = None;
+        empty_sqlite.ssl_mode = SslMode::Disable;
+        assert!(!empty_sqlite.is_valid());
     }
 
     #[test]

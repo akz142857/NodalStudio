@@ -35,6 +35,8 @@ it("keeps static business-page copy in the shared catalog", () => {
   "components/DiagramSelectionActions.tsx",
   "components/DiagramLayoutActions.tsx",
   "components/DiagramMiniMap.tsx",
+  "components/ModelViewNavigation.tsx",
+  "components/SavedViewDialog.tsx",
   "components/SavedViewsToolbar.tsx",
   "components/DiagramExportActions.tsx",
   "components/HistoryPanel.tsx",

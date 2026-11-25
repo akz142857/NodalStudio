@@ -7,17 +7,18 @@ import type { CaptureSnapshotResult, DataSourceProfile, NodalStudioPlatform } fr
 import { ActionIcon } from "./ActionIcon";
 import { connectionFailure } from "./connection-test-state";
 
-type Catalog =
-  | { state: "loading" }
+export type DatabaseCatalogResult =
   | { state: "ready"; databases: string[] }
   | { state: "error"; failure: ReturnType<typeof connectionFailure> };
 
 const mysqlSystemDatabases = new Set(["information_schema", "mysql", "performance_schema", "sys"]);
 
-export function DatabaseServerBrowser({ server, platform, startCreating = false, onOpenStart, onOpen, onClose }: {
+export function DatabaseServerBrowser({ server, platform, loadCatalog, startCreating = false, firstSelection = false, onOpenStart, onOpen, onClose }: {
   server: DataSourceProfile;
   platform: NodalStudioPlatform;
+  loadCatalog: (server: DataSourceProfile) => Promise<DatabaseCatalogResult>;
   startCreating?: boolean;
+  firstSelection?: boolean;
   onOpenStart?: () => void;
   onOpen: (profile: DataSourceProfile, capture: CaptureSnapshotResult) => void;
   onClose: () => void;
@@ -32,8 +33,7 @@ export function DatabaseServerBrowser({ server, platform, startCreating = false,
   const catalogScroll = useRef(0);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const pending = useRef(false);
-  const [catalog, setCatalog] = useState<Catalog>({ state: "loading" });
-  const [reload, setReload] = useState(0);
+  const [catalog, setCatalog] = useState<DatabaseCatalogResult | { state: "loading" }>({ state: "loading" });
   const [query, setQuery] = useState("");
   const [selection, setSelection] = useState<string>();
   const [draft, setDraft] = useState<string | undefined>(startCreating ? "" : undefined);
@@ -54,13 +54,11 @@ export function DatabaseServerBrowser({ server, platform, startCreating = false,
   const onlySystemDatabases = databases.every((name) => postgres ? name === "postgres" : mysqlSystemDatabases.has(name));
 
   useEffect(() => {
+    if (creating || !loading) return;
     let current = true;
-    void platform.listServerDatabases(server.id).then(
-      (databases) => { if (current) setCatalog({ state: "ready", databases }); },
-      (reason: unknown) => { if (current) setCatalog({ state: "error", failure: connectionFailure(reason) }); },
-    );
+    void loadCatalog(server).then((result) => { if (current) setCatalog(result); });
     return () => { current = false; };
-  }, [platform, reload, server.id]);
+  }, [creating, loadCatalog, loading, server]);
 
   useEffect(() => {
     if (!busy) (creating ? nameInput : searchInput).current?.focus({ preventScroll: true });
@@ -130,7 +128,6 @@ export function DatabaseServerBrowser({ server, platform, startCreating = false,
     setError(undefined);
     setCreated(undefined);
     setCatalog({ state: "loading" });
-    setReload((current) => current + 1);
   }
 
   function back() {
@@ -152,6 +149,7 @@ export function DatabaseServerBrowser({ server, platform, startCreating = false,
           <p id={description}>
             <strong>{server.displayName}</strong>
             <span>{postgres ? "PostgreSQL" : "MySQL"} · {address}{server.security?.ssh ? " · SSH" : null}</span>
+            {firstSelection && !creating ? <span>{t("connectionSetup.chooseHelp")}</span> : null}
           </p>
         </header>
         <form onSubmit={(event) => {
@@ -228,9 +226,9 @@ export function DatabaseServerBrowser({ server, platform, startCreating = false,
               <ActionIcon name="add" />{t("serverConnection.newDatabase")}
             </Button>}
             <div className="database-server-actions">
-              <Button disabled={busy} onClick={onClose}>{t("business.cancel")}</Button>
+              <Button disabled={busy} onClick={onClose}>{t(firstSelection ? "connectionSetup.chooseLater" : "business.cancel")}</Button>
               <Button type="submit" variant="primary" disabled={busy || (creating ? !draft.trim() : selected === undefined)}>
-                {t(creating ? "serverConnection.createAndOpen" : "serverConnection.open")}
+                {t(creating ? "serverConnection.createAndOpen" : firstSelection ? "connectionSetup.openDatabase" : "serverConnection.open")}
               </Button>
             </div>
           </footer>

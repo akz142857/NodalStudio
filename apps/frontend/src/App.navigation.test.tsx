@@ -1696,6 +1696,57 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     expect(localStorage.getItem(`nodalstudio:last-view:${reportSnapshot.sourceId}`)).toBeNull();
     expect(save).not.toHaveBeenCalled();
   });
+  it("confirms sidebar model-view deletion and returns to the full model only when deleting the active view", async () => {
+    const showModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
+    const close = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "close");
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value(this: HTMLDialogElement) { this.open = true; } });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value(this: HTMLDialogElement) { this.open = false; } });
+    try {
+      const platform = await mount();
+      const view = { id: "active-view", sourceId: reportSnapshot.sourceId, name: "Fulfillment", rootTableKeys: [reportSnapshot.schemas[0].tables[0].key], relationshipDepth: 0, updatedAt: "now" };
+      const inactive = { ...view, id: "inactive-view", name: "Reporting" };
+      vi.spyOn(platform, "getSemantics").mockResolvedValue({ ...reportSemantics, savedViews: [view, inactive] });
+      const remove = vi.spyOn(platform, "deleteView").mockRejectedValueOnce(new Error("Storage unavailable")).mockResolvedValue(true);
+      const preference = `nodalstudio:last-view:${reportSnapshot.sourceId}`;
+
+      fireEvent.click(screen.getByRole("button", { name: "Load navigation fixture" }));
+      const navigation = within(await screen.findByRole("navigation", { name: "Model views" }));
+      fireEvent.click(await navigation.findByRole("button", { name: view.name }));
+      expect(screen.getByTestId("canvas-view")).toHaveTextContent(view.name);
+
+      const deleteReporting = navigation.getByRole("button", { name: "Delete model view Reporting" });
+      fireEvent.click(deleteReporting);
+      expect(screen.getByRole("dialog", { name: "Delete “Reporting”?" })).toBeVisible();
+      const cancel = screen.getByRole("button", { name: "Cancel" });
+      expect(cancel).toHaveFocus();
+      fireEvent.click(cancel);
+      expect(deleteReporting).toHaveFocus();
+      expect(remove).not.toHaveBeenCalled();
+
+      fireEvent.click(deleteReporting);
+      fireEvent.click(screen.getByRole("button", { name: "Confirm delete view" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Storage unavailable");
+      expect(navigation.getByRole("button", { name: inactive.name })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Confirm delete view" }));
+      await waitFor(() => expect(deleteReporting).not.toBeInTheDocument());
+      expect(remove).toHaveBeenNthCalledWith(2, reportSnapshot.sourceId, inactive.id, reportSnapshot.id);
+      expect(screen.getByTestId("canvas-view")).toHaveTextContent(view.name);
+      expect(localStorage.getItem(preference)).toBe(view.id);
+
+      fireEvent.click(navigation.getByRole("button", { name: "Delete model view Fulfillment" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirm delete view" }));
+      const fullModel = navigation.getByRole("button", { name: "Full model" });
+      await waitFor(() => expect(fullModel).toHaveAttribute("aria-current", "page"));
+      expect(fullModel).toHaveFocus();
+      expect(screen.getByTestId("canvas-view")).toHaveTextContent("Full model");
+      expect(localStorage.getItem(preference)).toBeNull();
+      expect(remove).toHaveBeenNthCalledWith(3, reportSnapshot.sourceId, view.id, reportSnapshot.id);
+    } finally {
+      cleanup();
+      if (showModal) Object.defineProperty(HTMLDialogElement.prototype, "showModal", showModal); else Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+      if (close) Object.defineProperty(HTMLDialogElement.prototype, "close", close); else Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
+    }
+  });
   it("keeps sidebar search independent, reveals filtered tables, and issues a new request for repeated clicks", async () => {
     await mount(); fireEvent.click(screen.getByRole("button", { name: "Load navigation fixture" }));
     const globalSearch = screen.getByRole("combobox", { name: "Search schema" });

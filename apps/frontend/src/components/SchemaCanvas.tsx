@@ -5,7 +5,9 @@ import {
   Background,
   ReactFlow,
   ReactFlowProvider,
+  NodeToolbar,
   PanOnScrollMode,
+  Position,
   SelectionMode,
   applyNodeChanges,
   useEdgesState,
@@ -14,11 +16,12 @@ import {
   useNodesInitialized,
   useReactFlow,
   useOnViewportChange,
+  useStore,
   type Connection,
   type NodeChange,
   type NodeTypes,
 } from "@xyflow/react";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   DatabaseSnapshot,
   AppSettings,
@@ -95,6 +98,12 @@ const SHARED_EDGE_THRESHOLD = 400;
 const multiSelectionKeys = ["Shift", "Meta", "Control"];
 const zoomActivationKeys = ["Meta", "Control"];
 const emptyDomainGroups: DomainGroup[] = [];
+
+function SelectionSaveToolbar({ nodeIds, children }: { nodeIds: string[]; children: ReactNode }) {
+  const drawingSelection = useStore((state) => state.userSelectionActive);
+  return <NodeToolbar nodeId={nodeIds} position={Position.Top} align="end" offset={8}
+    isVisible={!drawingSelection} className="nopan nodrag">{children}</NodeToolbar>;
+}
 
 export interface CanvasLocateRequest {
   sourceId: string;
@@ -215,6 +224,11 @@ function SchemaCanvasInner({
     ? `comparison:${changeSet.id}:${beforeSnapshot?.fingerprint ?? "partial"}:${snapshot.fingerprint}`
     : snapshot.fingerprint}`;
   const [focusNodeId, setFocusNodeId] = useState<string>();
+  const [previousViewId, setPreviousViewId] = useState(savedView?.id);
+  if (previousViewId !== savedView?.id) {
+    setPreviousViewId(savedView?.id);
+    setFocusNodeId(undefined);
+  }
   const locateKey = locateRequest?.sourceId === snapshot.sourceId && locateRequest.snapshotId === snapshot.id ? JSON.stringify(locateRequest) : undefined;
   const [previousLocate, setPreviousLocate] = useState<string>();
   if (locateKey && previousLocate !== locateKey) { setPreviousLocate(locateKey); setFocusNodeId(undefined); }
@@ -908,17 +922,9 @@ function SchemaCanvasInner({
             else if (layoutFeedback.retry === "auto" || layoutFeedback.retry === "selected") autoLayoutTables(layoutFeedback.retry === "selected");
             else if (layoutFeedback.retry) arrangeSelectedTables(layoutFeedback.retry);
           } : undefined} />;
-  const renderWorkspaceTools = (controls?: SavedViewControls) => <>
-    <DatabaseSnapshotHeader snapshot={snapshot} latestSnapshotId={latestSnapshotId} refreshState={refreshState} onOpenHistory={onOpenHistory}
-      title={controls?.picker ?? <h2>{savedView?.name ?? (temporaryViewKind === "historical" ? bt("business.historicalModel") : changeSet ? bt("business.schemaComparison") : readOnlyPreview ? bt("business.dDLPreview") : bt("business.fullModel"))}</h2>}
-      tableCount={graph.nodes.length} viewActions={controls?.menu}
-      tools={<>
-        {layoutActions("history")}<button className="workspace-select-button" type="button" aria-label={bt("business.boxSelect")} title={boxSelectMode ? bt("business.dragEmptyCanvasToSelectTablesHoldSpaceTo") : bt("business.boxSelectShiftDragOrShiftCtrlClickTo")} aria-pressed={boxSelectMode} disabled={!layoutReady || exportRendering} onClick={() => setBoxSelectMode((value) => !value)}><ActionIcon name="select" /><span>{bt("business.select")}</span></button></>} />
-    {controls?.notice}
-      <CanvasToolbar key={selectionScope}
+  const renderCanvasToolbar = () => <CanvasToolbar key={selectionScope}
         minimapVisible={showMiniMap} onToggleMinimap={() => setShowMiniMap((value) => !value)}
         selectedCount={selectedNodes.length}
-        createViewAction={controls?.createAction}
         selectionActions={selectedNodes.length ? <>
       <DiagramSelectionActions inline key={selectionScope} snapshot={snapshot} selectedCount={selectedNodes.length} selectedTableKeys={selectedTableKeys}
         domainGroups={semantics?.domainGroups ?? emptyDomainGroups} disabled={!layoutReady || exportRendering}
@@ -927,10 +933,7 @@ function SchemaCanvasInner({
         layoutActions={layoutActions("selection")}
         onClear={() => setNodes((current) => current.map((node) => node.selected ? { ...node, selected: false } : node))} />
     </> : undefined}
-        navigationControls={<div inert={exportRendering} onClickCapture={(event) => {
-          guardExportInput(event, exportRendering);
-          if (!exportRendering && event.target instanceof Element && event.target.closest(".react-flow__controls-zoomin, .react-flow__controls-zoomout, .react-flow__controls-fitview")) viewportGestureScope.current = layoutScope;
-        }}><CanvasNavigationControls /></div>}
+        navigationControls={<div inert={exportRendering}><CanvasNavigationControls /></div>}
         tableCount={nodes.length}
         comparisonLabel={changeSet ? beforeSnapshot ? bt("business.beforeAfter") : bt("business.after") : undefined}
         disabled={exportRendering}
@@ -951,7 +954,21 @@ function SchemaCanvasInner({
           {query ? <span title={bt("business.filteredBy", { value0: query })}>{bt("business.filteredByDetail")}{query}”</span> : null}
           {focusNodeId ? <button type="button" onClick={() => setFocusNodeId(undefined)}>{bt("business.showAllRelations")}</button> : null}
         </> : undefined}
-      />
+      />;
+  const renderWorkspaceTools = (controls?: SavedViewControls) => <>
+    <DatabaseSnapshotHeader snapshot={snapshot} latestSnapshotId={latestSnapshotId} refreshState={refreshState} onOpenHistory={onOpenHistory}
+      title={controls?.picker ?? <h2>{savedView?.name ?? (temporaryViewKind === "historical" ? bt("business.historicalModel") : changeSet ? bt("business.schemaComparison") : readOnlyPreview ? bt("business.dDLPreview") : bt("business.fullModel"))}</h2>}
+      tableCount={graph.nodes.length} viewActions={controls?.menu}
+      tools={<>
+        {layoutActions("history")}
+        <div className="workspace-selection-tools">
+          <button type="button" aria-label={bt("business.boxSelect")} title={boxSelectMode ? bt("business.dragEmptyCanvasToSelectTablesHoldSpaceTo") : bt("business.boxSelectShiftDragOrShiftCtrlClickTo")} aria-pressed={boxSelectMode} disabled={!layoutReady || exportRendering} onClick={() => setBoxSelectMode((value) => !value)}><ActionIcon name="select" /><span>{bt("business.select")}</span></button>
+          {controls?.createAction}
+        </div>
+      </>} />
+    {controls?.notice}
+    {controls?.selectionCreateAction && !geometryGestureActive && !exportRendering && !interactionPaused ?
+      <SelectionSaveToolbar nodeIds={selectedNodes.map((node) => node.id)}>{controls.selectionCreateAction}</SelectionSaveToolbar> : null}
     {layoutActions("status")}
   </>;
 
@@ -1163,6 +1180,7 @@ function SchemaCanvasInner({
       </ReactFlow>
       </SharedEdgeLayer>
       </CanvasInteractionProvider>
+      {renderCanvasToolbar()}
       <DiagramExportSurface ref={exportSurface} />
       {columnContextMenu ? (
         <div className="relationship-context-menu" role="menu" style={{ left: columnContextMenu.x, top: columnContextMenu.y }}>

@@ -2,6 +2,10 @@ import type { DataSourceProfile } from "./types";
 
 type ConnectionTarget = Pick<DataSourceProfile, "databaseType" | "database">;
 
+export function isSavedConnection(profile: Pick<DataSourceProfile, "serverSourceId">): boolean {
+  return !profile.serverSourceId;
+}
+
 export function isServerConnection(source: ConnectionTarget): boolean {
   return (source.databaseType === "mySql" || source.databaseType === "postgreSql") && source.database === "";
 }

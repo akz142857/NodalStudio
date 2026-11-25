@@ -25,6 +25,20 @@ describe("Saved model views", () => {
     expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ name: "Orders", snapshotId: reportSnapshot.id, sourceId: reportSnapshot.sourceId, relationshipDepth: 0, rootTableKeys: keys.slice(0, 2) }));
     expect(Object.keys(vi.mocked(props.onSave).mock.calls[0][0].positions!)).toHaveLength(2);
   });
+  it("preserves positions for the final member list when checkboxes change before saving", async () => {
+    const props = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Save selection as view" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "View name" }), { target: { value: "Edited selection" } });
+    const memberName = (index: number) => `${keys[index].schema}.${keys[index].name}`;
+    fireEvent.click(screen.getByRole("checkbox", { name: memberName(0) }));
+    fireEvent.click(screen.getByRole("checkbox", { name: memberName(2) }));
+    fireEvent.click(screen.getByRole("button", { name: "Save view" }));
+    await waitFor(() => expect(props.onApply).toHaveBeenCalled());
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ rootTableKeys: keys.slice(1, 3), positions: {
+      [memberName(1)]: props.positions[memberName(1)],
+      [memberName(2)]: props.positions[memberName(2)],
+    } }));
+  });
   it("keeps the same draft identity and input after a failed save", async () => {
     const props = setup({ onSave: vi.fn().mockRejectedValueOnce(new Error("disk full")).mockResolvedValue(view) });
     fireEvent.click(screen.getByRole("button", { name: "Save selection as view" }));

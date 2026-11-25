@@ -17,7 +17,8 @@ const messages = {
   "permissionDenied": "connectionErrors.permissionDenied",
   "requestRejected": "connectionErrors.requestRejected",
   "unreachable": "connectionErrors.unreachable",
-  "identityUnavailable": "connectionErrors.identityUnavailable"
+  "identityUnavailable": "connectionErrors.identityUnavailable",
+  "connectionMetadataTimeout": "connectionErrors.metadataTimeout",
 } as const satisfies Record<string, MessageKey>;
 /** Only structured application codes are translated; unknown diagnostics stay intact. */
 export function translateConnectionFailure(failure: { code?: string; message: string }, t: Translate) {

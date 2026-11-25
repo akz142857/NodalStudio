@@ -125,13 +125,6 @@
 @media (max-width: 640px) {
   .connection-dialog-backdrop { padding: 8px; }
   .connection-dialog { width: calc(var(--ds-viewport-width) - 16px); max-height: calc(var(--ds-viewport-height) - 16px); padding: 16px; }
-  .connection-identity-grid,
-  .connection-access-grid { grid-template-columns: minmax(0, 1fr); }
-  .connection-database-field,
-  .connection-credential-note { grid-column: auto; }
-  .connection-section-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
-  .connection-security-setting { align-items: stretch; flex-direction: column; gap: 10px; }
-  .connection-security-setting > label { width: 100%; }
   .connection-live-action { align-items: stretch; flex-direction: column; gap: 10px; }
   .connection-live-action > button { width: 100%; }
   .connection-dialog footer { align-items: stretch; flex-direction: column-reverse; }

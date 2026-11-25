@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { ReactFlowProvider, useStoreApi } from "@xyflow/react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { DiagramMiniMap } from "./DiagramMiniMap";
+import { DiagramMiniMap, MINIMAP_WIDTH } from "./DiagramMiniMap";
 
 it("pans and zooms the main viewport through the real XYMinimap controller using current geometry", async () => {
   let store: ReturnType<typeof useStoreApi>;
@@ -13,7 +13,8 @@ it("pans and zooms the main viewport through the real XYMinimap controller using
   await waitFor(() => expect(container.querySelector('[data-minimap-nodes="1"]')).not.toBeNull());
   const svg = screen.getByRole("img", { name: "Mini Map" });
   Object.defineProperty(svg, "viewBox", { value: { baseVal: { x: 0, y: 0, width: 210, height: 160 } } });
-  const scale = Number(svg.getAttribute("viewBox")!.split(" ")[2]) / 210;
+  const viewScale = Number(svg.getAttribute("viewBox")!.split(" ")[2]) / (MINIMAP_WIDTH + 10);
+  const scale = viewScale * MINIMAP_WIDTH / Number(svg.getAttribute("width"));
   // JSDOM 28 rejects Vitest's window proxy in UIEventInit; D3 needs the
   // event view for its actual window mouse listeners.
   const mouse = (target: Element | Window, type: string, init: MouseEventInit) => {

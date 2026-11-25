@@ -70,6 +70,43 @@ describe("startup workspace restoration", () => {
     expect(screen.queryByTestId("loaded-source")).not.toBeInTheDocument();
   });
 
+  it.each([false, true])("skips a database whose server was removed (auto-connect: %s)", async (autoConnect) => {
+    const { read, capture, mount, listSources, readSettings } = setup(autoConnect);
+    listSources.mockResolvedValue([{ id: saved.sourceId, databaseType: "postgreSql", database: saved.database.name, serverSourceId: "removed-server" } as DataSourceProfile]);
+    await act(async () => { mount(); await Promise.resolve(); });
+    expect(readSettings).toHaveBeenCalled();
+    expect(readSettings).not.toHaveBeenCalledWith(saved.sourceId);
+    expect(read).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("loaded-source")).not.toBeInTheDocument();
+  });
+
+  it.each([false, true])("closes the current database after removing its connection from Settings (shared server: %s)", async (sharedServer) => {
+    const { mount, listSources } = setup();
+    const platform = getPlatform();
+    const server = {
+      id: "settings-server", database: "", databaseType: "postgreSql", displayName: "Shared server", host: "server.test",
+      port: 5432, username: "reader", sslMode: "require", createdAt: saved.capturedAt, updatedAt: saved.capturedAt,
+    } as const;
+    const database = { ...server, id: saved.sourceId, database: saved.database.name, serverSourceId: sharedServer ? server.id : undefined };
+    listSources.mockResolvedValue(sharedServer ? [server, database] : [database]);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.spyOn(platform, "previewSourceDataDeletion").mockResolvedValue({ connectionRecords: 1 } as Awaited<ReturnType<typeof platform.previewSourceDataDeletion>>);
+    const remove = vi.spyOn(platform, "deleteSourceData").mockImplementation(() => {
+      listSources.mockResolvedValue(sharedServer ? [database] : []);
+      return Promise.resolve(1);
+    });
+    mount();
+    expect(await screen.findByTestId("loaded-source")).toHaveTextContent(saved.sourceId);
+    fireEvent.click(screen.getByRole("button", { name: "Open Settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Data Sources" }));
+    fireEvent.click(screen.getByText("Connection maintenance"));
+    fireEvent.click(screen.getByRole("button", { name: "Remove connection…" }));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith(sharedServer ? server.id : database.id, expect.objectContaining({ deleteConnection: true, deleteHistory: false })));
+    expect(await screen.findByText("0 saved connections")).toBeVisible();
+    expect(screen.queryByTestId("loaded-source")).not.toBeInTheDocument();
+  });
+
   it.each([false, true])("does not overwrite a manual selection with a late startup result (auto-connect: %s)", async (autoConnect) => {
     const { read, capture, mount } = setup(autoConnect);
     let finish!: () => void;

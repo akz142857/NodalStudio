@@ -11,7 +11,14 @@
 .model-workspace-subtitle > span:not(:first-child) { flex: none; }
 .model-workspace-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 .model-workspace-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 30px; min-height: 30px; padding: 5px 7px; border: 0; border-radius: var(--ds-radius-control); background: transparent; color: var(--ds-secondary); font: var(--ds-text-control) var(--ds-font-ui); }
-.model-workspace-actions .workspace-select-button { margin: 0 5px; }
+.workspace-selection-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.workspace-selection-tools button { white-space: nowrap; }
+.workspace-selection-tools .create-view-action { color: var(--ds-accent); background: var(--ds-selection); }
+.workspace-selection-tools .create-view-action:hover:not(:disabled) { color: var(--ds-selection-text); }
+.selection-save-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 5px 9px; border: 1px solid var(--ds-accent); border-radius: var(--ds-radius-control); color: var(--ds-accent); background: var(--ds-surface); box-shadow: var(--ds-shadow-raised); cursor: pointer; font: var(--ds-text-control) var(--ds-font-ui); white-space: nowrap; }
+.selection-save-button svg { flex: none; }
+.selection-save-button:hover:not(:disabled) { color: var(--ds-selection-text); background: var(--ds-selection); }
+.selection-save-button:disabled { opacity: .45; cursor: default; }
 .model-workspace-actions button:hover:not(:disabled) { color: var(--ds-text); background: var(--ds-hover); }
 .model-workspace-actions button[aria-pressed="true"], .model-workspace-actions button[aria-expanded="true"] { background: var(--ds-selection); color: var(--ds-selection-text); }
 .model-workspace-actions button:disabled, .model-workspace-title select:disabled { opacity: .4; }
@@ -44,7 +51,7 @@
 .saved-view-dialog button[type="submit"] { color: var(--ds-on-accent); background: var(--ds-accent-fill); border-color: var(--ds-accent-fill); }
 .saved-view-dialog button:disabled { opacity: .45; }
 .saved-view-dialog [role="alert"], .model-workspace-actions .diagram-toolbar-popover .workspace-destructive, .saved-view-dialog .workspace-destructive { color: var(--ds-danger); }
-@media (pointer: coarse) { .model-workspace-actions button { min-height: 44px; min-width: 44px; } }
+@media (pointer: coarse) { .model-workspace-actions button, .selection-save-button { min-height: 44px; min-width: 44px; } }
 
 .workspace-layout-status > [role] { min-width: 0; max-height: 80px; overflow-y: auto; overflow-wrap: anywhere; }
 .workspace-layout-detail { display: inline; }
