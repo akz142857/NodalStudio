@@ -25,8 +25,8 @@
 /* Keep the sheet and actions anchored while switching tabs or testing. */
 section.connection-dialog {
   width: min(760px, calc(var(--ds-viewport-width) - 32px));
-  height: min(590px, calc(var(--ds-viewport-height) - 32px));
-  max-height: none;
+  height: 680px;
+  max-height: calc(var(--ds-viewport-height) - 32px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -127,10 +127,11 @@ section.connection-dialog {
 @media (prefers-reduced-motion: reduce) { .connection-check-icon.is-spinning { animation: none; } }
 @media (max-height: 700px) {
   .connection-dialog-backdrop { padding-block: 10px; }
-  section.connection-dialog { height: min(590px, calc(var(--ds-viewport-height) - 20px)); padding-block: 14px; }
+  section.connection-dialog { max-height: calc(var(--ds-viewport-height) - 20px); padding-block: 14px; }
   .connection-dialog > .dialog-description { margin-bottom: 10px; }
   .connection-tabs { margin-bottom: 9px; }
   .connection-dialog .connection-panel > footer { margin-top: 8px; padding-top: 8px; }
+  .connection-footer-leading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 }
 @container connection-dialog (max-width: 550px) {
   .connection-dialog .connection-network-grid, .connection-security-content .connection-ssh-grid { grid-template-columns: minmax(0, 1fr) minmax(90px, .6fr); }
