@@ -30,10 +30,10 @@
 .secret-setting button { flex: 0 0 auto; white-space: nowrap; }
 @media (forced-colors: none) {
   .setting-range-control input { appearance: none; }
-  .setting-range-control input::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(to right, var(--ds-accent-fill) var(--setting-range-progress), var(--ds-border) var(--setting-range-progress)); }
+  .setting-range-control input::-webkit-slider-runnable-track { height: 4px; border-radius: var(--ds-radius-control); background: linear-gradient(to right, var(--ds-accent-fill) var(--setting-range-progress), var(--ds-border) var(--setting-range-progress)); }
   .setting-range-control input::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5px; border: 1px solid var(--ds-border); border-radius: 50%; background: var(--ds-text); }
-  .setting-range-control input::-moz-range-track { height: 4px; border-radius: 4px; background: var(--ds-border); }
-  .setting-range-control input::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--ds-accent-fill); }
+  .setting-range-control input::-moz-range-track { height: 4px; border-radius: var(--ds-radius-control); background: var(--ds-border); }
+  .setting-range-control input::-moz-range-progress { height: 4px; border-radius: var(--ds-radius-control); background: var(--ds-accent-fill); }
   .setting-range-control input::-moz-range-thumb { box-sizing: border-box; width: 14px; height: 14px; border: 1px solid var(--ds-border); border-radius: 50%; background: var(--ds-text); }
 }
 @container settings-content (max-width: 500px) {

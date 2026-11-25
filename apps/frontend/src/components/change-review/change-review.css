@@ -12,15 +12,15 @@
 .review-list span { font-size:.9em; opacity:.8; } .review-detail { min-width:0; }
 .review-detail h3 { margin-top:0; font-size: var(--ds-text-heading); overflow-wrap: anywhere; } .review-evidence { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--ds-space-4); }
 .review-detail label { color: var(--ds-secondary); font-size: var(--ds-text-control); }
-.review-evidence > div { min-width:0; padding:10px; border:1px solid var(--ds-border); border-radius:8px; }
+.review-evidence > div { min-width:0; padding:10px; border:1px solid var(--ds-border); border-radius:var(--ds-radius-menu); }
 .review-evidence-tree { margin:4px 0; overflow-wrap:anywhere; } .review-evidence-tree > div { padding:4px 0; }
 .review-evidence-tree dt { font-weight:600; opacity:.8; } .review-evidence-tree dd { margin:3px 0 6px 8px; }
 .review-value,.review-preview-text { white-space:pre-wrap; overflow-wrap:anywhere; }
 .review-detail textarea,.review-start textarea { width:100%; box-sizing:border-box; }
-.review-reason { border-inline-start:3px solid #be851b; padding-inline-start:12px; }
+.review-reason { border-inline-start:3px solid var(--ds-warning); padding-inline-start:12px; }
 .review-events { padding-inline-start:20px; } .review-events li { margin-bottom:18px; overflow-wrap:anywhere; }
 .review-events time { display:block; opacity:.7; } .review-restart { margin-top:24px; }
-.review-dialog { color:inherit; background:var(--ds-surface,Canvas); max-width:560px; width:calc(100% - 64px); border:1px solid var(--ds-border); border-radius:12px; padding:24px; }
+.review-dialog { color:inherit; background:var(--ds-surface,Canvas); max-width:560px; width:calc(100% - 64px); border:1px solid var(--ds-border); border-radius:var(--ds-radius-dialog); padding:24px; }
 .review-dialog::backdrop { background:rgb(0 0 0 / .4); }
 @container(max-width:900px) { .review-evidence { grid-template-columns:1fr; } .review-columns { grid-template-columns:minmax(160px,210px) minmax(0,1fr); } }
 @container(max-width:650px) { .review-columns { grid-template-columns:1fr; } .review-list { max-height:180px; } }

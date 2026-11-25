@@ -127,6 +127,10 @@ pub async fn connect(options: &MySqlConnectionOptions) -> Result<MySqlPool, MySq
 }
 
 /// Connects a bounded pool for short-lived desktop sessions.
+///
+/// # Errors
+///
+/// Returns an error when the connection options are invalid or the server cannot be reached.
 pub async fn connect_reusable(
     options: &MySqlConnectionOptions,
 ) -> Result<MySqlPool, MySqlAdapterError> {
@@ -135,7 +139,7 @@ pub async fn connect_reusable(
         .max_connections(options.max_connections)
         .acquire_timeout(options.connect_timeout)
         .idle_timeout(Duration::from_secs(90))
-        .max_lifetime(Duration::from_secs(120))
+        .max_lifetime(Duration::from_mins(2))
         .test_before_acquire(false)
         .before_acquire(|connection, metadata| {
             Box::pin(async move {

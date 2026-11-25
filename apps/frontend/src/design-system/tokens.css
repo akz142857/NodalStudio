@@ -12,6 +12,19 @@
   --ds-text-caption: max(11px, .846rem);
   --ds-text-title: 1.538rem;
   --ds-text-heading: 1.077rem;
+  --ds-text-subheading: 1.231rem;
+  --ds-text-lead: 1.385rem;
+  --ds-text-display: 2rem;
+  --ds-text-hero: 3.231rem;
+  /* Glyphs inside fixed-size count/status badges; everything else stays at caption or larger. */
+  --ds-text-badge: 9px;
+  /* Canvas text lives inside zoomed nodes whose geometry is laid out in px, so it
+     stays in px and scales with canvas zoom instead of the UI font size. */
+  --ds-canvas-text-xs: 8px;
+  --ds-canvas-text-sm: 9px;
+  --ds-canvas-text-base: 10px;
+  --ds-canvas-text-md: 11px;
+  --ds-canvas-text-lg: 12px;
   --ds-weight-normal: 400;
   --ds-weight-medium: 500;
   --ds-weight-emphasis: 600;
@@ -23,8 +36,10 @@
   --ds-space-5: 20px;
   --ds-space-6: 24px;
   --ds-space-8: 32px;
+  --ds-radius-small: 3px;
   --ds-radius-control: 6px;
   --ds-radius-group: 10px;
+  --ds-radius-pill: 999px;
   --ds-control-height: max(28px, 2.154rem);
   --ds-row-height: 52px;
   --ds-motion-fast: 120ms;
@@ -47,6 +62,8 @@
   --ds-glass-filter: none;
   --ds-shadow-popover: 0 6px 20px #0005;
   --ds-shadow-dialog: 0 12px 40px #0004;
+  --ds-shadow-raised: 0 2px 8px #0002;
+  --ds-shadow-floating: 0 4px 16px #0002, 0 1px 3px #0001;
   --ds-overlay: #0005;
   --ds-layer-settings: 80;
   --ds-layer-popover: 100;

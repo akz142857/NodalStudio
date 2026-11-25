@@ -1,0 +1,46 @@
+/* Document defaults and native control resets. */
+:root {
+  /* Viewport units do not shrink with CSS zoom; keep shell and dialogs in view. */
+  --ds-viewport-height: calc(100vh / var(--ui-scale, 1));
+  --ds-viewport-width: calc(100vw / var(--ui-scale, 1));
+  font-family: var(--ds-font-ui);
+  color: var(--ds-text);
+  background: var(--ds-window);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  font-size: var(--ui-font-size, 13px);
+  color-scheme:
+    var(--ds-color-scheme);
+  accent-color:
+    var(--ds-accent-fill);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* Native and otherwise unstyled controls share the application palette. */
+:where(button, input, select, textarea) {
+  color: var(--ds-text);
+  background-color: var(--ds-control);
+  border-color: var(--ds-border);
+}
+:where(input, textarea)::placeholder { color: var(--ds-tertiary); opacity: 1; }
+::selection { color: var(--ds-selection-text); background: var(--ds-selection); }

@@ -103,6 +103,7 @@ impl ConnectionSessions {
         context.sign().as_ref().try_into().expect("SHA-256 digest")
     }
 
+    #[allow(clippy::too_many_lines)]
     pub async fn open(
         &self,
         profile: &DataSourceProfile,

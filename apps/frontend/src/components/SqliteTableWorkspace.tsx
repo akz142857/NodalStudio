@@ -372,7 +372,12 @@ export function SqliteTableWorkspace({ platform, target, binding, activeTable, p
   return (
     <section className="table-data-workspace ds-surface" aria-label={t("tableData.workspace")}>
       <header className="table-data-toolbar">
-        <h2 title={target.table}>{target.table}</h2>
+        <div className="table-data-heading">
+          <h2 title={target.table}>{target.table}</h2>
+          <span className="table-data-mode" data-mode={editing ? "write" : "read"} title={t(editing ? "tableData.writeModeHint" : "tableData.readModeHint")}>
+            {t(editing ? "tableData.writeMode" : "tableData.readMode")}
+          </span>
+        </div>
         <div className="table-data-actions table-data-controls">
           <button type="button" aria-expanded={!pendingView && filterOpen} aria-controls={filterId} disabled={pendingView || saving}
             data-filter-active={Boolean(filter)} onClick={() => setFilterOpen(!filterOpen)}>

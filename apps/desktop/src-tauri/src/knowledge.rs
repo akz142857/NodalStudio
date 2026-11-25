@@ -325,7 +325,7 @@ mod tests {
             .await
             .unwrap();
         let app = AppState {
-            sessions: Default::default(),
+            sessions: crate::connection_sessions::ConnectionSessions::default(),
             store,
             ai_limiter: Arc::new(tokio::sync::Semaphore::new(840)),
             snapshot_captures: Arc::default(),

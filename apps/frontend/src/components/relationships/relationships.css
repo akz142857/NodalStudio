@@ -32,7 +32,7 @@
 .relationship-inspector .relationship-actions button { padding: 4px 10px; border-color: var(--ds-border); color: var(--ds-text); background: var(--ds-control); }
 .relationship-inspector .relationship-actions .ds-primary { border-color: var(--ds-accent-fill); color: var(--ds-on-accent); background: var(--ds-accent-fill); }
 .relationship-inspector .relationship-actions .danger { margin-left: auto; color: var(--ds-danger); }
-.ds-surface.relationship-delete-dialog { width: min(420px, calc(var(--ds-viewport-width) - 32px)); max-height: calc(var(--ds-viewport-height) - 32px); margin: auto; padding: var(--ds-space-5); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: 0 20px 60px #0005; overflow: auto; overflow-wrap: anywhere; }
+.ds-surface.relationship-delete-dialog { width: min(420px, calc(var(--ds-viewport-width) - 32px)); max-height: calc(var(--ds-viewport-height) - 32px); margin: auto; padding: var(--ds-space-5); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-group); background: var(--ds-surface); box-shadow: var(--ds-shadow-dialog); overflow: auto; overflow-wrap: anywhere; }
 .relationship-delete-dialog[open] { display: grid; gap: var(--ds-space-4); }
 .relationship-delete-dialog::backdrop { background: var(--ds-overlay); }
 .relationship-delete-dialog > p { font-size: var(--ds-text-control); color: var(--ds-secondary); }

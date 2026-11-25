@@ -1,5 +1,3 @@
-import { ChangeReviewWorkspace } from "./components/change-review/ChangeReviewWorkspace";
-import { OntologyWorkspace } from "./components/ontology/OntologyWorkspace";
 import { useOntologyDefinitions } from "./components/ontology/use-ontology-definitions";
 import { findDocumentObject } from "./components/object-document-model";
 import { ObjectDocument, ObjectDocumentProperties } from "./components/ObjectDocument";
@@ -44,7 +42,9 @@ import { QuickQueryDock } from "./components/query/QuickQueryDock";
 import { tablePreviewSql } from "./components/query/query-format";
 import { clearQuerySessions } from "./components/query/query-state";
 import { clearSavedQueries, deleteNamedQuery, listSavedQueries, saveNamedQuery, type SavedQuery } from "./components/query/saved-queries";
-import { searchSchema, type SchemaSearchResult } from "./graph/schema-search";
+import type { SchemaSearchResult } from "./graph/schema-search";
+import { GlobalSearch } from "./components/GlobalSearch";
+import { createSchemaSearchStore, DeferredSearchQuery } from "./components/schema-search-store";
 import { domainMembershipAddition } from "./graph/table-selection";
 import { collectModelTableChanges, modelTableKey } from "./graph/model-table-changes";
 import { getPlatform } from "./platform";
@@ -75,6 +75,8 @@ import { UpdateBanner } from "./components/settings/UpdateBanner";
 const platform = getPlatform();
 const SettingsPage = lazy(() => import("./components/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const QueryPage = lazy(() => import("./components/query/QueryPage").then((module) => ({ default: module.QueryPage })));
+const ChangeReviewWorkspace = lazy(() => import("./components/change-review/ChangeReviewWorkspace").then((module) => ({ default: module.ChangeReviewWorkspace })));
+const OntologyWorkspace = lazy(() => import("./components/ontology/OntologyWorkspace").then((module) => ({ default: module.OntologyWorkspace })));
 const DdlImportPanel = lazy(() => import("./components/DdlImportPanel").then((module) => ({ default: module.DdlImportPanel })));
 
 type ViewMode = "explore" | "ontology" | "database" | "query" | "changes";
@@ -141,11 +143,10 @@ export function App() {
   const [ontologySelection, setOntologySelection] = useState<{ sourceId: string; id: string }>();
   const [ontologyReviewSelection, setOntologyReviewSelection] = useState<{ sourceId: string; id: string }>();
   const [changesView, setChangesView] = useState<"list" | "diagram">("list");
-  const [query, setQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchStore] = useState(createSchemaSearchStore);
+  const { setQuery, setOpen: setSearchOpen } = searchStore.getState();
   const [relationshipSearch, setRelationshipSearch] = useState<{ snapshot: DatabaseSnapshot; mode: ViewMode; table: TableDefinition; question: string }>();
   const [explainRequest, setExplainRequest] = useState(0);
-  const [activeSearchResult, setActiveSearchResult] = useState(0);
   const [objectDocument, setObjectDocument] = useState<{ snapshot: DatabaseSnapshot; key: ObjectKey }>();
   const [databaseObjectSelection, setDatabaseObjectSelection] = useState<{ sourceId: string; key: ObjectKey; definition: boolean }>();
   const [selectedTable, setSelectedTable] = useState<TableDefinition>();
@@ -175,7 +176,7 @@ export function App() {
     if (activeSemanticSession.current !== semanticSession || (view && view.sourceId !== snapshot?.sourceId)) return;
     setSavedView(view); setQuery(""); setLocateRequest(undefined);
     if (snapshot) { try { if (view && !view.id.startsWith("domain:")) localStorage.setItem(`nodalstudio:last-view:${snapshot.sourceId}`, view.id); else localStorage.removeItem(`nodalstudio:last-view:${snapshot.sourceId}`); } catch { /* Optional navigation preference; layout persistence is authoritative. */ } }
-  }, [semanticSession, snapshot]);
+  }, [semanticSession, setQuery, snapshot]);
   const refreshOperation = useOperation(snapshot?.sourceId ?? "no-source");
   const runRefresh = refreshOperation.run;
   const refreshState = refreshOperation.busy ? "refreshing" : refreshOperation.state?.phase === "error" ? "error" : "idle";
@@ -208,10 +209,9 @@ export function App() {
     setToolsOpen(false);
     setNoticesOpen(false);
     setCommandPaletteOpen(true);
-  }, []);
+  }, [setSearchOpen]);
   const workspaceTools = useRef<HTMLDivElement>(null);
   const workspaceToolsId = useId();
-  const searchListId = useId();
   const [queryDraftSeed, setQueryDraftSeed] = useState<QueryDraftSeed>();
   const [openQueryRequest, setOpenQueryRequest] = useState<OpenQueryRequest>();
   const [savedQueryCatalog, setSavedQueryCatalog] = useState<{ sourceId: string; queries: SavedQuery[] }>();
@@ -247,7 +247,8 @@ export function App() {
     queryKey: ["connection-folder-status"],
     queryFn: () => platform.getConnectionFolderStatus(),
     enabled: runtime.data?.kind === "desktop",
-    refetchInterval: 5_000,
+    // Hidden windows already pause polling; an unfocused but visible window polls slowly.
+    refetchInterval: () => document.hasFocus() ? 5_000 : 30_000,
     retry: false,
   });
   const [connectionFolderMergeError, setConnectionFolderMergeError] = useState<ConnectionSyncErrorMessage>();
@@ -367,20 +368,12 @@ export function App() {
     }
   }, [translate]);
 
-  const schemaSearchResults = useMemo(() => searchSchema(snapshot, query, 10, {
+  const searchContext = useMemo(() => ({
     includeComments: Boolean(settings.source?.ai.includeComments),
     semantics: semanticsSettledSnapshot === snapshot
       ? { domainGroups: semantics.domainGroups, knowledge: settings.source?.ai.includeConfirmedSemantics ? semantics.knowledge : undefined }
       : undefined,
-  }), [query, snapshot, semantics, semanticsSettledSnapshot, settings.source]);
-  const showSearchResults = searchOpen && Boolean(query.trim());
-  const searchIndex = Math.min(activeSearchResult, Math.max(0, schemaSearchResults.length - 1));
-  const selectedSearchResult = schemaSearchResults[searchIndex];
-  const searchMatch = selectedSearchResult?.match;
-  const activeSearchOption = showSearchResults && selectedSearchResult ? `${searchListId}-${searchIndex}` : undefined;
-  useEffect(() => {
-    if (activeSearchOption) document.getElementById(activeSearchOption)?.scrollIntoView?.({ block: "nearest" });
-  }, [activeSearchOption, query]);
+  }), [snapshot, semantics, semanticsSettledSnapshot, settings.source]);
   useEffect(() => {
     if (!toolsOpen) return;
     const closeOutside = (event: PointerEvent) => {
@@ -400,7 +393,7 @@ export function App() {
       searchInputRef.current?.focus();
       searchInputRef.current?.select();
     });
-  }, [setPreflightOpen]);
+  }, [setPreflightOpen, setSearchOpen]);
 
   const locateTable = useCallback((table: TableDefinition) => {
     if (!snapshot) return;
@@ -416,7 +409,7 @@ export function App() {
     setColumnFocus(undefined);
     setLocateRequest({ sourceId: snapshot.sourceId, snapshotId: snapshot.id,
       nodeId: `${table.key.schema}.${table.key.name}`, revision: ++locateRevision.current });
-  }, [snapshot, setPreflightOpen]);
+  }, [snapshot, setPreflightOpen, setQuery, setSearchOpen]);
   const locateSearchResult = useCallback((result: SchemaSearchResult) => locateTable(result.table), [locateTable]);
   const revealModelTableChanges = useCallback(() => {
     setRightPanel((panel) => ({ ...panel, expanded: true }));
@@ -1037,7 +1030,7 @@ export function App() {
     setQueryDraftSeed(undefined);
     setOpenQueryRequest({ id: Date.now(), sourceId, sql: tablePreviewSql(table, 100, snapshot?.database.databaseType) });
     setMode("query");
-  }, [querySupported, snapshot?.database.databaseType, sourceId, setPreflightOpen]);
+  }, [querySupported, snapshot?.database.databaseType, sourceId, setPreflightOpen, setSearchOpen]);
 
   function draftFromContext(seed: Omit<QueryDraftSeed, "id">) {
     if (seed.sourceId !== snapshot?.sourceId || seed.snapshotId !== snapshot.id) return;
@@ -1052,7 +1045,7 @@ export function App() {
   function showRelatedTables(table: TableDefinition) {
     if (!snapshot) return;
     setSearchOpen(false);
-    setRelationshipSearch({ snapshot, mode, table, question: query.trim() });
+    setRelationshipSearch({ snapshot, mode, table, question: searchStore.getState().query.trim() });
   }
 
   function openSearchResultInQuery(table: TableDefinition) {
@@ -1062,7 +1055,7 @@ export function App() {
       openTableInQuery(table);
       return;
     }
-    draftFromContext({ sourceId: snapshot.sourceId, snapshotId: snapshot.id, question: query.trim(),
+    draftFromContext({ sourceId: snapshot.sourceId, snapshotId: snapshot.id, question: searchStore.getState().query.trim(),
       root: table.key, tables: [table.key], domainId: null });
   }
 
@@ -1291,88 +1284,10 @@ export function App() {
             },
           ]}
         />
-        <div className="global-search" onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false);
-        }} onKeyDown={(event) => {
-          if (event.key !== "Escape" || !showSearchResults || event.target === searchInputRef.current) return;
-          event.preventDefault();
-          searchInputRef.current?.focus();
-          setSearchOpen(false);
-        }}>
-          <ActionIcon name="search" />
-          <input
-            ref={searchInputRef}
-            type="search"
-            role="combobox"
-            aria-label={t("navigation.searchSchema")}
-            autoComplete="off"
-            aria-autocomplete="list"
-            aria-expanded={showSearchResults && schemaSearchResults.length > 0}
-            aria-controls={showSearchResults && schemaSearchResults.length > 0 ? searchListId : undefined}
-            aria-activedescendant={activeSearchOption}
-            placeholder={t("navigation.searchTableFieldOrTerm")}
-            value={query}
-            onFocus={() => setSearchOpen(true)}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setActiveSearchResult(0);
-              setSearchOpen(true);
-            }}
-            onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing) return;
-              if (event.key === "Escape") {
-                if (!showSearchResults) return;
-                event.preventDefault();
-                setSearchOpen(false);
-                setQuery("");
-              } else if (event.key === "ArrowDown" && schemaSearchResults.length) {
-                event.preventDefault();
-                setActiveSearchResult(showSearchResults ? (searchIndex + 1) % schemaSearchResults.length : 0);
-                setSearchOpen(true);
-              } else if (event.key === "ArrowUp" && schemaSearchResults.length) {
-                event.preventDefault();
-                setActiveSearchResult(showSearchResults ? (searchIndex - 1 + schemaSearchResults.length) % schemaSearchResults.length : schemaSearchResults.length - 1);
-                setSearchOpen(true);
-              } else if (event.key === "Enter" && showSearchResults && selectedSearchResult) {
-                event.preventDefault();
-                locateSearchResult(selectedSearchResult);
-              }
-            }}
-            disabled={!snapshot}
-          />
-          {showSearchResults ? <div className="global-search-panel ds-surface">
-            {snapshot ? <div className="global-search-scope">{t("navigation.searchInDatabase", { value0: snapshot.database.name })}</div> : null}
-            <div className="global-search-results" id={searchListId} role={schemaSearchResults.length ? "listbox" : "status"} aria-label={t("navigation.schemaSearchResults")}>
-            {schemaSearchResults.length ? schemaSearchResults.map((result, index) => <button
-              type="button"
-              role="option"
-              id={`${searchListId}-${index}`}
-              tabIndex={-1}
-              aria-selected={index === searchIndex}
-              key={`${result.schema}.${result.table.key.name}`}
-              onPointerEnter={() => setActiveSearchResult(index)}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => locateSearchResult(result)}
-            >
-              <strong>{result.table.key.name}</strong>
-              <span>{result.schema}{result.matchingColumns.length ? ` · ${result.matchingColumns.slice(0, 3).join(", ")}` : ""}</span>
-            </button>) : <p>{t("navigation.noMatchingTablesOrFields")}</p>}
-            </div>
-            {selectedSearchResult ? <div className="global-search-context">
-              <p>{searchMatch
-                ? t(searchMatch.expanded ? "navigation.searchExpansionMatch" : "navigation.searchMetadataMatch", {
-                  value0: [t(`navigation.searchEvidence.${searchMatch.basis}`), searchMatch.column].filter(Boolean).join(" "),
-                  value1: searchMatch.terms.join(", "),
-                })
-                : t(selectedSearchResult.nameMatch ? "navigation.searchNameMatch" : "navigation.searchFieldMatch")}</p>
-              {runtime.data?.kind === "desktop" && !historyPreview && <div className="global-search-actions">
-                <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => showRelatedTables(selectedSearchResult.table)}>{t("navigation.showRelatedTables")}</button>
-                {querySupported && snapshot && discoveryLatest.data?.[0]?.id === snapshot.id
-                  ? <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => openSearchResultInQuery(selectedSearchResult.table)}>{t("navigation.useSearchResultInQuery")}</button> : null}
-              </div>}
-            </div> : null}
-          </div> : null}
-        </div>
+        <GlobalSearch store={searchStore} inputRef={searchInputRef} snapshot={snapshot} context={searchContext} t={t}
+          showActions={runtime.data?.kind === "desktop" && !historyPreview}
+          canOpenInQuery={Boolean(querySupported && snapshot && discoveryLatest.data?.[0]?.id === snapshot.id)}
+          onLocate={locateSearchResult} onShowRelated={showRelatedTables} onOpenInQuery={openSearchResultInQuery} />
         <div className="runtime-actions" role="group" aria-label={t("navigation.applicationTools")}>
           <div className="workspace-tools" ref={workspaceTools} data-open={toolsOpen || undefined}
             onBlur={(event) => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setToolsOpen(false); }}
@@ -1583,7 +1498,7 @@ export function App() {
               if (table) locateSearchResult({ schema: key.schema, table, matchingColumns: [] });
             }} /> : null}
           {mode === "changes" && reviewView === "review" && snapshot ? (
-            runtime.data?.kind === "desktop" && !historyPreview ? <ChangeReviewWorkspace platform={platform} sourceId={snapshot.sourceId} revision={JSON.stringify([snapshot.id, activeProfile?.updatedAt, reviewRefresh, semantics])} onChanged={refreshSemantics} onRefresh={() => void refreshActive()}
+            runtime.data?.kind === "desktop" && !historyPreview ? <Suspense fallback={<div className="workspace-loading" role="status">{t("navigation.loadingWorkspace")}</div>}><ChangeReviewWorkspace platform={platform} sourceId={snapshot.sourceId} revision={JSON.stringify([snapshot.id, activeProfile?.updatedAt, reviewRefresh, semantics])} onChanged={refreshSemantics} onRefresh={() => void refreshActive()}
               onOntologyClosed={() => void queryClient.resetQueries({ queryKey: ontologyDefinitionsKey({ sourceId: snapshot.sourceId }) })}
               snapshot={ontologyRequiresNewerMySql ? undefined : ontologySnapshot} initialItemKey={ontologyReviewSelection?.sourceId === snapshot.sourceId ? `ontology:${ontologyReviewSelection.id}` : undefined}
               onOpenOntology={ontologySnapshot ? (id) => {
@@ -1593,16 +1508,16 @@ export function App() {
               const table = snapshot.schemas.flatMap(s => s.tables).find(t => t.key.schema === key.schema && (t.key.name === key.name || key.name.startsWith(`${t.key.name}.`)));
               if (table) locateSearchResult({ schema: table.key.schema, table, matchingColumns: [] });
               return Boolean(table);
-            }} /> : <p>{i18n.locale === "zh-CN" ? "请返回桌面应用中的最新数据库模型进行复核。" : "Return to the latest connected desktop model to review changes."}</p>
+            }} /></Suspense> : <p>{i18n.locale === "zh-CN" ? "请返回桌面应用中的最新数据库模型进行复核。" : "Return to the latest connected desktop model to review changes."}</p>
           ) : mode === "ontology" ? (
-            ontologySnapshot && !ontologyRequiresNewerMySql ? <OntologyWorkspace key={ontologySnapshot.sourceId} platform={platform} snapshot={ontologySnapshot}
+            ontologySnapshot && !ontologyRequiresNewerMySql ? <Suspense fallback={<div className="workspace-loading" role="status">{t("navigation.loadingWorkspace")}</div>}><OntologyWorkspace key={ontologySnapshot.sourceId} platform={platform} snapshot={ontologySnapshot}
               initialDefinitionId={ontologyDefinitionId} refreshing={refreshState === "refreshing"} onRefresh={() => void refreshActive()}
               onViewChanges={(id) => { setOntologyReviewSelection({ sourceId: ontologySnapshot.sourceId, id }); setReviewView("review"); setMode("changes"); }} onOpenQuery={(draft, target) => {
                 if (!querySupported || draft.sourceId !== ontologySnapshot.sourceId || draft.snapshotId !== ontologySnapshot.id) return;
                 setQueryDraftSeed(undefined);
                 setOpenQueryRequest({ id: Date.now(), sourceId: draft.sourceId, sql: draft.sql, kind: "ontology", ontology: { draft, target } });
                 setMode("query");
-              }} /> : <EmptyState title={t(ontologyRequiresNewerMySql ? "ontology.mysqlVersionRequired" : "ontology.unavailable")} />
+              }} /></Suspense> : <EmptyState title={t(ontologyRequiresNewerMySql ? "ontology.mysqlVersionRequired" : "ontology.unavailable")} />
           ) : mode === "database" ? (
             snapshot && databaseDocument ? <ObjectDocument key={JSON.stringify([snapshot.sourceId, databaseDocument.key])} snapshot={snapshot}
               object={databaseDocument} backLabel={t(databaseDocument.key.kind === "view" && querySupported && !historyPreview ? "objects.openViewData" : "navigation.database")}
@@ -1663,50 +1578,52 @@ export function App() {
             />
           ) : snapshot ? (
             <div className="object-canvas-host" style={documentVisible || preflightOpen ? { visibility: "hidden" } : undefined} inert={documentVisible || preflightOpen || Boolean(activeRelationshipSearch)}>
-            <WorkspaceCanvas
-              onOpenHistory={mode === "explore" ? () => {
-                setRightPanel((panel) => ({ ...panel, expanded: true }));
-                window.dispatchEvent(new Event("nodalstudio:inspect-history"));
-              } : undefined}
-              latestSnapshotId={discoveryLatest.data?.[0]?.id}
-              refreshState={refreshState}
-              interactionPaused={preflightOpen || ddlPreviewOpen || documentVisible || Boolean(activeRelationshipSearch)}
-              platform={platform}
-              runtimeKind={runtime.data?.kind}
-              snapshot={snapshot}
-              query={query}
-              changeSet={mode === "changes" ? changeSet : undefined}
-              modelTableChanges={modelTableChanges}
-              onSelectTable={inspectTable}
-              selectedTable={selectedTable}
-              locateRequest={mode === "explore" ? locateRequest : undefined}
-              onLocateComplete={finishLocate}
-              navigationReady={semanticsSettledSnapshot === snapshot}
-              semantics={semantics}
-              onAddTablesToDomain={runtime.data?.kind === "desktop" && mode === "explore" && semanticsSnapshot === snapshot ? addTablesToDomain : undefined}
-              savedView={savedView}
-              temporaryViewKind={historyPreview ? "historical" : undefined}
-              temporaryViewLabel={historyPreview ? t("navigation.historicalSnapshot") : undefined}
-              onApplyView={!historyPreview ? applyView : undefined}
-              onSaveView={!historyPreview ? saveModelView : undefined}
-              onDeleteView={!historyPreview ? deleteModelView : undefined}
-              onSaveLayout={saveCanvasLayout}
-              layoutLoaded={semanticsSnapshot === snapshot}
-              canvasSettings={settings.app.canvas}
-              layoutWorkerTimeoutMs={settings.app.advanced.layoutWorkerTimeoutMs}
-              highContrastRelations={settings.app.appearance.highContrastRelations}
-              colorBlindPalette={settings.app.appearance.colorBlindPalette}
-              renderDegradeThreshold={settings.app.advanced.renderDegradeThreshold}
-              onOpenQuery={querySupported ? openTableInQuery : undefined}
-              onValidateLogicalRelationship={runtime.data?.kind === "desktop" ? (input) => platform.validateLogicalRelationship(input) : undefined}
-              onCreateLogicalRelationship={runtime.data?.kind === "desktop" ? createLogicalRelationship : undefined}
-              onUpdateLogicalRelationship={runtime.data?.kind === "desktop" ? updateLogicalRelationship : undefined}
-              onDeleteLogicalRelationship={runtime.data?.kind === "desktop" ? deleteLogicalRelationship : undefined}
-              onIgnoreRelationshipInference={runtime.data?.kind === "desktop" ? ignoreRelationshipInference : undefined}
-              onRestoreRelationshipInference={runtime.data?.kind === "desktop" ? restoreRelationshipInference : undefined}
-              relationshipBatchApi={runtime.data?.kind === "desktop" ? relationshipBatchApi : undefined}
-              onClearSearch={() => setQuery("")}
-            />
+            <DeferredSearchQuery store={searchStore}>{(query) => (
+              <WorkspaceCanvas
+                onOpenHistory={mode === "explore" ? () => {
+                  setRightPanel((panel) => ({ ...panel, expanded: true }));
+                  window.dispatchEvent(new Event("nodalstudio:inspect-history"));
+                } : undefined}
+                latestSnapshotId={discoveryLatest.data?.[0]?.id}
+                refreshState={refreshState}
+                interactionPaused={preflightOpen || ddlPreviewOpen || documentVisible || Boolean(activeRelationshipSearch)}
+                platform={platform}
+                runtimeKind={runtime.data?.kind}
+                snapshot={snapshot}
+                query={query}
+                changeSet={mode === "changes" ? changeSet : undefined}
+                modelTableChanges={modelTableChanges}
+                onSelectTable={inspectTable}
+                selectedTable={selectedTable}
+                locateRequest={mode === "explore" ? locateRequest : undefined}
+                onLocateComplete={finishLocate}
+                navigationReady={semanticsSettledSnapshot === snapshot}
+                semantics={semantics}
+                onAddTablesToDomain={runtime.data?.kind === "desktop" && mode === "explore" && semanticsSnapshot === snapshot ? addTablesToDomain : undefined}
+                savedView={savedView}
+                temporaryViewKind={historyPreview ? "historical" : undefined}
+                temporaryViewLabel={historyPreview ? t("navigation.historicalSnapshot") : undefined}
+                onApplyView={!historyPreview ? applyView : undefined}
+                onSaveView={!historyPreview ? saveModelView : undefined}
+                onDeleteView={!historyPreview ? deleteModelView : undefined}
+                onSaveLayout={saveCanvasLayout}
+                layoutLoaded={semanticsSnapshot === snapshot}
+                canvasSettings={settings.app.canvas}
+                layoutWorkerTimeoutMs={settings.app.advanced.layoutWorkerTimeoutMs}
+                highContrastRelations={settings.app.appearance.highContrastRelations}
+                colorBlindPalette={settings.app.appearance.colorBlindPalette}
+                renderDegradeThreshold={settings.app.advanced.renderDegradeThreshold}
+                onOpenQuery={querySupported ? openTableInQuery : undefined}
+                onValidateLogicalRelationship={runtime.data?.kind === "desktop" ? (input) => platform.validateLogicalRelationship(input) : undefined}
+                onCreateLogicalRelationship={runtime.data?.kind === "desktop" ? createLogicalRelationship : undefined}
+                onUpdateLogicalRelationship={runtime.data?.kind === "desktop" ? updateLogicalRelationship : undefined}
+                onDeleteLogicalRelationship={runtime.data?.kind === "desktop" ? deleteLogicalRelationship : undefined}
+                onIgnoreRelationshipInference={runtime.data?.kind === "desktop" ? ignoreRelationshipInference : undefined}
+                onRestoreRelationshipInference={runtime.data?.kind === "desktop" ? restoreRelationshipInference : undefined}
+                relationshipBatchApi={runtime.data?.kind === "desktop" ? relationshipBatchApi : undefined}
+                onClearSearch={() => setQuery("")}
+              />
+            )}</DeferredSearchQuery>
             </div>
           ) : (
             <>

@@ -9,7 +9,7 @@ export interface SchemaSearchResult {
   nameMatch?: boolean;
 }
 
-interface SearchContext {
+export interface SearchContext {
   includeComments: boolean;
   semantics?: Pick<SemanticBundle, "domainGroups" | "knowledge">;
 }

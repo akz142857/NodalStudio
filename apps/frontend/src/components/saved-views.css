@@ -3,14 +3,14 @@
 .saved-views-controller { display: contents; }
 .model-workspace-header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; flex: none; position: relative; z-index: 30; padding: 9px 14px; border-bottom: 1px solid var(--ds-separator); background: var(--ds-sidebar); color: var(--ds-text); }
 .model-workspace-title { flex: 1 1 170px; min-width: 0; }
-.model-workspace-title h2, .model-workspace-title select { font: 600 14px var(--ds-font-ui); color: var(--ds-text); margin: 0; }
-.model-workspace-title select { width: auto; max-width: 100%; min-height: 27px; padding: 2px 22px 2px 0; border: 0; border-radius: 4px; background-color: transparent; text-overflow: ellipsis; }
+.model-workspace-title h2, .model-workspace-title select { font: 600 var(--ds-text-heading) var(--ds-font-ui); color: var(--ds-text); margin: 0; }
+.model-workspace-title select { width: auto; max-width: 100%; min-height: 27px; padding: 2px 22px 2px 0; border: 0; border-radius: var(--ds-radius-control); background-color: transparent; text-overflow: ellipsis; }
 .model-workspace-title option { background: var(--ds-surface); color: var(--ds-text); }
-.model-workspace-subtitle { display: flex; align-items: center; gap: 4px; color: var(--ds-secondary); font-size: 11px; min-width: 0; }
+.model-workspace-subtitle { display: flex; align-items: center; gap: 4px; color: var(--ds-secondary); font-size: var(--ds-text-caption); min-width: 0; }
 .model-workspace-subtitle > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-workspace-subtitle > span:not(:first-child) { flex: none; }
 .model-workspace-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-left: auto; }
-.model-workspace-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 30px; min-height: 30px; padding: 5px 7px; border: 0; border-radius: 6px; background: transparent; color: var(--ds-secondary); font: 12px var(--ds-font-ui); }
+.model-workspace-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 30px; min-height: 30px; padding: 5px 7px; border: 0; border-radius: var(--ds-radius-control); background: transparent; color: var(--ds-secondary); font: var(--ds-text-control) var(--ds-font-ui); }
 .model-workspace-actions .workspace-select-button { margin: 0 5px; }
 .model-workspace-actions button:hover:not(:disabled) { color: var(--ds-text); background: var(--ds-hover); }
 .model-workspace-actions button[aria-pressed="true"], .model-workspace-actions button[aria-expanded="true"] { background: var(--ds-selection); color: var(--ds-selection-text); }
@@ -19,28 +19,28 @@
 .model-workspace-actions .diagram-toolbar-popover { right: 0; left: auto; width: min(240px, calc(100vw - 32px)); padding: 5px; }
 .model-workspace-actions .diagram-toolbar-popover button { justify-content: flex-start; color: var(--ds-text); width: 100%; }
 .model-workspace-actions .diagram-toolbar-popover hr { border: 0; border-top: 1px solid var(--ds-separator); width: 100%; margin: 3px 0; }
-.workspace-refresh-status { font-size: 11px; color: var(--ds-secondary); }
+.workspace-refresh-status { font-size: var(--ds-text-caption); color: var(--ds-secondary); }
 .workspace-refresh-status[role="alert"] { color: var(--ds-danger); }
-.workspace-layout-status { order: 3; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; flex: none; min-height: 26px; padding: 5px 14px; border-top: 1px solid var(--ds-separator); background: var(--ds-sidebar); color: var(--ds-secondary); font-size: 11px; }
+.workspace-layout-status { order: 3; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; flex: none; min-height: 26px; padding: 5px 14px; border-top: 1px solid var(--ds-separator); background: var(--ds-sidebar); color: var(--ds-secondary); font-size: var(--ds-text-caption); }
 .workspace-layout-status[data-phase="error"] { color: var(--ds-danger); }
-.workspace-layout-status button, .workspace-history-banner button { color: var(--ds-accent); background: transparent; font: inherit; border: 0; padding: 4px 6px; border-radius: 4px; }
+.workspace-layout-status button, .workspace-history-banner button { color: var(--ds-accent); background: transparent; font: inherit; border: 0; padding: 4px 6px; border-radius: var(--ds-radius-control); }
 .workspace-layout-status button:hover, .workspace-history-banner button:hover { background: var(--ds-hover); }
-.workspace-history-banner, .workspace-view-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; flex: none; padding: 7px 14px; border-bottom: 1px solid var(--ds-separator); color: var(--ds-secondary); background: var(--ds-sidebar); font-size: 12px; }
-.workspace-view-notice { justify-content: flex-start; font-size: 11px; }
-.saved-view-dialog { box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 48px)); overflow: auto; padding: 22px; border: 1px solid var(--ds-border); border-radius: 12px; color: var(--ds-text); background: var(--ds-surface); box-shadow: 0 18px 64px #0005; font: 13px var(--ds-font-ui); }
-.saved-view-dialog::backdrop { background: #0005; }
-.saved-view-editor h2 { font-size: 16px; line-height: 1.4; margin: 0 0 18px; }
+.workspace-history-banner, .workspace-view-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; flex: none; padding: 7px 14px; border-bottom: 1px solid var(--ds-separator); color: var(--ds-secondary); background: var(--ds-sidebar); font-size: var(--ds-text-control); }
+.workspace-view-notice { justify-content: flex-start; font-size: var(--ds-text-caption); }
+.saved-view-dialog { box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 48px)); overflow: auto; padding: 22px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-dialog); color: var(--ds-text); background: var(--ds-surface); box-shadow: var(--ds-shadow-dialog); font: var(--ds-text-body) var(--ds-font-ui); }
+.saved-view-dialog::backdrop { background: var(--ds-overlay); }
+.saved-view-editor h2 { font-size: var(--ds-text-subheading); line-height: 1.4; margin: 0 0 18px; }
 .saved-view-editor > label { display: flex; align-items: center; gap: 12px; }
 .saved-view-editor input:not([type="checkbox"]) { flex: 1; min-width: 0; }
-.saved-view-editor p { color: var(--ds-secondary); font-size: 12px; line-height: 1.5; }
+.saved-view-editor p { color: var(--ds-secondary); font-size: var(--ds-text-control); line-height: 1.5; }
 .saved-view-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .saved-view-member-search { margin: 12px 0 4px; }
-.saved-view-member-search span { flex: none; color: var(--ds-secondary); font-size: 11px; }
+.saved-view-member-search span { flex: none; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
 .workspace-clear-selection svg { width: 14px; height: 14px; }
 .saved-view-members { display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow: auto; padding: 8px 0; }
 .saved-view-members label { display: flex; align-items: start; gap: 8px; overflow-wrap: anywhere; }
 .saved-view-members input { width: auto; flex: none; }
-.saved-view-dialog button, .saved-view-dialog input:not([type="checkbox"]), .saved-views-toolbar button, .saved-views-toolbar select { padding: 6px 9px; border: 1px solid var(--ds-border); border-radius: 6px; background: var(--ds-field); color: var(--ds-text); font: inherit; }
+.saved-view-dialog button, .saved-view-dialog input:not([type="checkbox"]), .saved-views-toolbar button, .saved-views-toolbar select { padding: 6px 9px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); background: var(--ds-field); color: var(--ds-text); font: inherit; }
 .saved-view-dialog button[type="submit"] { color: var(--ds-on-accent); background: var(--ds-accent-fill); border-color: var(--ds-accent-fill); }
 .saved-view-dialog button:disabled { opacity: .45; }
 .saved-view-dialog [role="alert"], .model-workspace-actions .diagram-toolbar-popover .workspace-destructive, .saved-view-dialog .workspace-destructive { color: var(--ds-danger); }

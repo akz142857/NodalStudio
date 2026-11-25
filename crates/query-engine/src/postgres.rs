@@ -23,7 +23,7 @@ impl Drop for ReadSession {
     }
 }
 
-/// Executes one validated query in a PostgreSQL read-only transaction.
+/// Executes one validated query in a `PostgreSQL` read-only transaction.
 ///
 /// # Errors
 /// Returns a public-safe validation, connection, database, timeout, cancellation or size error.

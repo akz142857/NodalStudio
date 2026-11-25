@@ -21,6 +21,8 @@ services:
       DATABASE_URL: postgres://nodalstudio:local-cloud-only@cloud-db:5432/nodalstudio_cloud
       BIND_ADDRESS: 0.0.0.0:8080
       BOOTSTRAP_SECRET: local-development-bootstrap-secret-change-me
+      # nginx in the web service overwrites X-Real-IP with the real peer address.
+      TRUST_PROXY_HEADERS: "1"
     depends_on:
       cloud-db:
         condition: service_healthy

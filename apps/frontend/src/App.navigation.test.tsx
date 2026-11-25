@@ -601,8 +601,10 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
     const resize = editor.getByRole("separator", { name: "Resize row panel" });
     expect(resize).toHaveAttribute("aria-valuenow", "336");
     fireEvent.keyDown(resize, { key: "ArrowLeft" });
+    expect(editor.getByText("Read-only")).toHaveAttribute("data-mode", "read");
     fireEvent.click(editor.getByRole("button", { name: "Edit data" }));
     expect(await editor.findByRole("textbox", { name: "label" })).toHaveValue("first");
+    expect(editor.getByText("Editing")).toHaveAttribute("data-mode", "write");
     expect(resize).toHaveAttribute("aria-valuenow", "352");
     expect(editor.getByRole("combobox", { name: "label value type" })).toHaveClass("ds-select");
     fireEvent.change(editor.getByRole("textbox", { name: "label" }), { target: { value: "updated" } });

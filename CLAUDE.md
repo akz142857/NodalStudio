@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Nodal Studio is a local-first "living blueprint" for database schemas: it introspects PostgreSQL/MySQL (read-only, metadata only), renders an ER model, tracks structural change history, layers user-authored semantics (domains, annotations, logical relationships) on top of the physical model, runs bounded read-only queries, and offers AI-assisted explanations — all without ever reading application row data. It ships as a Tauri 2 desktop app, with an optional cloud sync / read-only-share stack (Axum API + Postgres + a web viewer served from the same frontend bundle).
+Nodal Studio is a local-first "living blueprint" for database schemas: it introspects PostgreSQL/MySQL (read-only, metadata only), renders an ER model, tracks structural change history, layers user-authored semantics (domains, annotations, logical relationships) on top of the physical model, runs bounded read-only queries, and offers AI-assisted explanations. The schema-understanding layer (introspection, history, semantics, AI context, cloud/Git export) never reads application row data. Separately, the desktop app has explicit, user-initiated data tools — table browsing and row counts, native-file data export, staged SQLite row editing, and creating a database from a server connection — which never run implicitly and never feed row data into AI, cloud or Git. It ships as a Tauri 2 desktop app, with an optional cloud sync / read-only-share stack (Axum API + Postgres + a web viewer served from the same frontend bundle).
 
 The product/engineering scope is [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md); implementation evidence is tracked in [docs/IMPLEMENTATION_STATUS.md](./docs/IMPLEMENTATION_STATUS.md); the Git-collaboration file format is [docs/GIT_WORKSPACE.md](./docs/GIT_WORKSPACE.md).
 
@@ -13,7 +13,7 @@ The product/engineering scope is [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md); i
 Combined pnpm + Cargo workspace:
 
 - `apps/frontend` — React 19 + Vite + TypeScript UI (runs standalone in a browser as the cloud web viewer, or embedded in Tauri).
-- `apps/desktop/src-tauri` — Tauri shell. `src/lib.rs` (~5k lines) is the entire Tauri command surface: it imports every domain crate and exposes ~79 `#[tauri::command]` functions via a single `generate_handler!` call near the bottom (~line 4739). Its unit tests live in the `mod tests` block at the end of the same file.
+- `apps/desktop/src-tauri` — Tauri shell. `src/lib.rs` (~2.9k lines) holds `AppState`, connection/snapshot plumbing, the remaining core commands and the single `generate_handler!` call in `run()`. Domain command groups live in `src/commands/` (`query`, `settings`, `cloud`, `semantics`, `relationships`, `ai`, `git_workspace`, `git_merge`, `backup`, `storage`, `credentials`); each starts with `use crate::*;` and is glob-imported back into the crate root, so commands and helpers resolve by bare name. Feature modules alongside (`connection_sync`, `database_export`, `table_ddl`, …) contribute further commands — ~134 `#[tauri::command]` functions in total. Unit tests live in the `mod tests` block at the end of `lib.rs` and in the `*_tests.rs` modules.
 - `apps/cloud-api` — Axum service for metadata-only schema sync and read-only share links (Postgres, sqlx migrations in `apps/cloud-api/migrations`).
 - `crates/*` — pure-Rust domain crates shared by the desktop app and the cloud API.
 - `infrastructure/` — docker-compose for the cloud stack, the MySQL fixture, and the Postgres integration-test fixture.
@@ -29,7 +29,7 @@ pnpm install
 pnpm dev                 # vite dev server (port 1420) for the web frontend alone
 pnpm dev:desktop         # tauri dev — full desktop app
 pnpm typecheck           # tsc -b --pretty false
-pnpm lint                # eslint . --max-warnings 0
+pnpm lint                # eslint . --max-warnings 0 && stylelint (design-token rules)
 pnpm test                # vitest run
 pnpm build:web           # tsc -b && vite build
 ```
@@ -45,7 +45,10 @@ Rust (toolchain pinned to 1.95 by `rust-toolchain.toml`; CI requires exactly 1.9
 
 ```bash
 cargo fmt --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
+# CI also lints the mutually exclusive desktop feature sets separately:
+cargo clippy -p nodalstudio-desktop --all-targets --features updater-smoke-test -- -D warnings
+cargo clippy -p nodalstudio-desktop --all-targets --features mac-app-store -- -D warnings
 cargo test --workspace                    # unit tests across every crate
 cargo test -p schema-diff                 # single crate
 cargo test -p schema-diff some_test_name  # single test
@@ -112,13 +115,15 @@ When changing a shared type, walk the downstream crates via `Cargo.toml` `[depen
 - **`platform/`** — the key abstraction. `NodalStudioPlatform` (`types.ts`, ~500 lines in) is implemented by both `tauri-platform.ts` (invokes Tauri commands) and `web-platform.ts` (talks to the cloud API / plain browser). `getPlatform()` in `index.ts` picks at runtime via `isTauri()`. **New features needing backend data must extend the interface and both implementations** — do not call `invoke()` directly from a component.
 - **`components/`** — one file per panel (`SchemaCanvas.tsx`, `HistoryPanel.tsx`, `ProvenancePanel.tsx`, `GitWorkspacePanel.tsx`, `CloudSyncPanel.tsx`, `AiAssistant.tsx`, `ConnectionPanel.tsx`, `SettingsPage.tsx`, …), with feature subfolders `query/` (CodeMirror SQL editor, result grid, history) and `relationships/`. Most files have a co-located `*.test.tsx`.
 - **`graph/`** — ER/system-map graph construction and layout decoupled from React: `schema-graph.ts`, `schema-search.ts`, `relationship-interaction.ts`, `layout-components.ts`, and `elk-layout.ts` (ELK.js) run inside `layout.worker.ts` (a Web Worker, since layout is CPU-heavy).
-- State: Zustand + TanStack Query; graph rendering: `@xyflow/react`; SQL editing: CodeMirror 6.
+- State: TanStack Query for backend data; `App.tsx` still owns most workspace state in `useState`. High-frequency UI state belongs in per-App Zustand stores (see `components/schema-search-store.ts`: created with `createStore` in `App`, subscribed with selectors by the components that render it) so keystrokes don't re-render the whole workspace. Graph rendering: `@xyflow/react`; SQL editing: CodeMirror 6.
+- Styles: `src/styles.css` is only an ordered `@import` list of `src/styles/*.css` sections (order is cascade order; `late-overrides.css` must stay last). Use the `--ds-*` tokens from `design-system/tokens.css` for font sizes, radii, shadows and colors — stylelint rejects literal values. Canvas node text uses the px-based `--ds-canvas-text-*` tokens because it scales with canvas zoom.
 
 ## Privacy/architecture invariants worth preserving
 
 Load-bearing product guarantees, not incidental behavior:
 
-- Introspection is metadata-only: no application table rows are ever read via introspection, and no DDL is executed against a connected database.
+- Introspection is metadata-only: no application table rows are ever read via introspection, and introspection/refresh never executes DDL.
+- Anything that writes to a database (SQLite row saves, `CREATE DATABASE` from a server connection) happens only from an explicit user action in a clearly marked write mode; never add implicit or background writes.
 - Database credentials are never stored in SQLite; they go through the OS keychain (`keyring` crate).
 - Cloud publishing is opt-in and recursively strips credential/row-data fields before anything leaves the desktop app.
 - The `.nodalstudio/` Git export excludes snapshot bodies, canvas layouts, credentials, cloud tokens, local IDs, and row data — it is reviewable team knowledge, not an alternative source of truth for the schema.

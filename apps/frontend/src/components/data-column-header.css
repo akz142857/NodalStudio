@@ -37,7 +37,7 @@
 
 .data-column-sort-direction {
   color: var(--ds-accent);
-  font: 12px/1 var(--ds-font-ui);
+  font: var(--ds-text-control)/1 var(--ds-font-ui);
 }
 
 .data-column-actions > .data-column-menu-trigger {
@@ -49,10 +49,10 @@
   min-width: 20px;
   padding: 0 3px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--ds-radius-control);
   background: transparent;
   color: var(--ds-secondary);
-  font: 12px/1 var(--ds-font-ui);
+  font: var(--ds-text-control)/1 var(--ds-font-ui);
 }
 
 .data-column-actions > .data-column-menu-trigger:is(:hover, :focus-visible) { background: var(--ds-hover); }
@@ -91,7 +91,7 @@
   max-width: min(24rem, calc(var(--ds-viewport-width) - 12px));
   padding: 6px 10px;
   border: 1px solid var(--ds-border);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-menu);
   background: var(--ds-control);
   color: var(--ds-text);
   box-shadow: var(--ds-shadow-popover);

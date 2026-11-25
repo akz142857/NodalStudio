@@ -18,9 +18,13 @@ async fn main() {
         .await
         .expect("cloud API bind failed");
     let bootstrap_secret = std::env::var("BOOTSTRAP_SECRET").ok();
+    let trust_proxy_headers = std::env::var("TRUST_PROXY_HEADERS").is_ok_and(|value| value == "1");
+    let state = CloudState::new(pool)
+        .with_bootstrap_secret(bootstrap_secret)
+        .with_trusted_proxy_headers(trust_proxy_headers);
     axum::serve(
         listener,
-        router(CloudState::new(pool).with_bootstrap_secret(bootstrap_secret)),
+        router(state).into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
     .await
     .expect("cloud API failed");
