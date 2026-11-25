@@ -7,7 +7,16 @@ context, and schema history without reading application data.
 The desktop application connects to PostgreSQL or MySQL, and opens local SQLite files, with read-only metadata
 queries, renders an ER model, records structural changes without reading table
 data, and lets teams add model-only logical relationships that never create
-database constraints. Its unified Settings control center manages persistence,
+database constraints.
+
+**Data boundary.** Schema understanding — introspection, history, semantics, AI
+context, Git export and Cloud sync — is metadata-only and never reads or ships
+table rows. The desktop app also offers explicit data tools that you invoke
+yourself: browsing a table, row counts, exporting data to a local file, staged
+editing of local SQLite tables (shown in a marked *Editing* mode and saved in one
+transaction), and creating a database from a server connection. These tools
+never run in the background, and their row data never reaches AI providers,
+Cloud or the `.nodalstudio/` Git export. Its unified Settings control center manages persistence,
 visualization, Git, AI, Cloud, privacy, credentials, policies, and Web Viewer
 capability boundaries.
 
@@ -245,7 +254,9 @@ the local Compose stack uses the explicitly documented development value in its
 configuration. Enter that secret in desktop Settings to create the first account
 and team. Share links default to seven days and can be listed, rotated, or revoked
 from Settings. Production deployments must replace the development secret and
-terminate HTTPS in front of the stack.
+terminate HTTPS in front of the stack. The API rate-limits each client address;
+set `TRUST_PROXY_HEADERS=1` only when a reverse proxy overwrites `X-Real-IP`
+(the bundled nginx does), otherwise every client shares the proxy's address.
 
 ## Export PostgreSQL data
 

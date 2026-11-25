@@ -332,6 +332,7 @@ pub(super) async fn open_server_database(
     open_database(input, &state).await
 }
 
+#[allow(clippy::too_many_lines)]
 async fn open_database(
     input: DatabaseInput,
     state: &AppState,
@@ -486,6 +487,7 @@ mod tests {
     }
 
     #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+    #[allow(clippy::items_after_statements, clippy::too_many_lines)]
     async fn exercise_server_loopback(engine: DatabaseType) {
         use crate::{
             KEYRING_SERVICE, LocalSnapshotStore, delete_secret, prepare_connection_test,
@@ -513,7 +515,7 @@ mod tests {
             .parse::<u16>()
             .unwrap();
         let state = AppState {
-            sessions: Default::default(),
+            sessions: crate::connection_sessions::ConnectionSessions::default(),
             store: LocalSnapshotStore::open("sqlite::memory:").await.unwrap(),
             ai_limiter: Arc::new(Semaphore::new(1)),
             snapshot_captures: Arc::default(),

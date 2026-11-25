@@ -24,10 +24,10 @@
 .ddl-session .ddl-diagnostics { flex-shrink: 0; margin: 0; border: 0; border-top: 1px solid var(--ds-separator); border-radius: 0; padding: var(--ds-space-3) var(--ds-space-4); background: var(--ds-sidebar); }
 .ddl-diagnostics-content { max-height: 25vh; overflow: auto; padding-top: var(--ds-space-3); }
 .ddl-diagnostics-content code { overflow-wrap: anywhere; }
-.ddl-import-dialog, .ddl-discard-dialog { padding: 0; margin: auto; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-surface, 12px); background: var(--ds-surface); color: var(--ds-text); box-shadow: 0 20px 70px #0005; pointer-events: auto; }
+.ddl-import-dialog, .ddl-discard-dialog { padding: 0; margin: auto; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-dialog); background: var(--ds-surface); color: var(--ds-text); box-shadow: var(--ds-shadow-dialog); pointer-events: auto; }
 .ddl-import-dialog { width: min(760px, calc(var(--ds-viewport-width) - 48px)); max-width: calc(var(--ds-viewport-width) - 48px); max-height: calc(var(--ds-viewport-height) - 48px); }
 .ddl-import-dialog[open] { display: flex; flex-direction: column; }
-.ddl-import-dialog::backdrop, .ddl-discard-dialog::backdrop { background: #0006; }
+.ddl-import-dialog::backdrop, .ddl-discard-dialog::backdrop { background: var(--ds-overlay); }
 .ddl-import-dialog > header { padding: var(--ds-space-5); border-bottom: 1px solid var(--ds-separator); }
 .ddl-import-dialog > header p { margin-top: var(--ds-space-2); }
 .ddl-import-content { min-height: 0; overflow: auto; padding: var(--ds-space-5); display: grid; gap: var(--ds-space-3); }

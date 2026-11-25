@@ -49,7 +49,7 @@ async fn fixture(endpoint: &str) -> (AppState, TableInput, DataSourceSettings) {
     };
     (
         AppState {
-            sessions: Default::default(),
+            sessions: crate::connection_sessions::ConnectionSessions::default(),
             store,
             ai_limiter: Arc::new(Semaphore::new(840)),
             snapshot_captures: Arc::default(),

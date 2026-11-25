@@ -1,15 +1,15 @@
 .schema-canvas-surface { container-type: size; container-name: canvas; }
-.schema-canvas-surface .react-flow__panel.react-flow__minimap { bottom: 16px; right: 16px; margin: 0; border: 1px solid var(--ds-border); border-radius: 8px; overflow: hidden; background: var(--ds-surface); box-shadow: 0 2px 8px #0002; }
+.schema-canvas-surface .react-flow__panel.react-flow__minimap { bottom: 16px; right: 16px; margin: 0; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-menu); overflow: hidden; background: var(--ds-surface); box-shadow: var(--ds-shadow-raised); }
 .schema-canvas-surface .react-flow__minimap-mask { stroke: var(--ds-secondary); stroke-width: 1px; vector-effect: non-scaling-stroke; }
 .schema-canvas-surface .react-flow__panel.react-flow__attribution.bottom { left: 0; right: auto; }
-.canvas-command-toggle-state { margin-left: auto; color: var(--ds-secondary); font-size: 11px; }
-.canvas-command-dock { position: absolute; z-index: 25; bottom: 42px; left: 16px; right: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; font: 12px var(--ds-font-ui); color: var(--ds-text); }
+.canvas-command-toggle-state { margin-left: auto; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.canvas-command-dock { position: absolute; z-index: 25; bottom: 42px; left: 16px; right: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; font: var(--ds-text-control) var(--ds-font-ui); color: var(--ds-text); }
 .canvas-command-dock [hidden] { display: none !important; }
 .canvas-command-popover, .canvas-command-popover button { box-sizing: border-box; }
-.canvas-command-bar, .canvas-command-restore { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px; width: fit-content; max-width: 100%; padding: 5px; border: 1px solid var(--ds-border); border-radius: 12px; background: var(--ds-surface); box-shadow: 0 4px 16px #0002, 0 1px 3px #0001; pointer-events: auto; }
+.canvas-command-bar, .canvas-command-restore { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px; width: fit-content; max-width: 100%; padding: 5px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-dialog); background: var(--ds-surface); box-shadow: var(--ds-shadow-floating); pointer-events: auto; }
 .canvas-command-bar { background: var(--ds-glass-fill); border-color: var(--ds-glass-edge); -webkit-backdrop-filter: var(--ds-glass-filter); backdrop-filter: var(--ds-glass-filter); }
-.canvas-command-dock button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 6px 9px; border: 0; border-radius: 7px; font: inherit; line-height: 1.3; color: var(--ds-text); background: transparent; cursor: pointer; }
-.canvas-command-dock .canvas-selection-tools button { border: 0; background: transparent; padding: 6px 9px; border-radius: 7px; }
+.canvas-command-dock button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 6px 9px; border: 0; border-radius: var(--ds-radius-control); font: inherit; line-height: 1.3; color: var(--ds-text); background: transparent; cursor: pointer; }
+.canvas-command-dock .canvas-selection-tools button { border: 0; background: transparent; padding: 6px 9px; border-radius: var(--ds-radius-control); }
 .canvas-command-bar .create-view-action { color: var(--ds-accent); }
 .canvas-command-dock button:hover:not(:disabled) { background: var(--ds-hover); }
 .canvas-command-dock button:active:not(:disabled) { background: var(--ds-selected-control); }
@@ -17,17 +17,17 @@
 .canvas-command-dock button:disabled { opacity: .4; cursor: default; }
 .canvas-command-dock svg { flex: none; width: var(--ds-icon-size); height: var(--ds-icon-size); }
 .canvas-command-dock .canvas-command-restore { background: var(--ds-surface); border: 1px solid var(--ds-border); padding: 7px 10px; }
-.canvas-command-count { padding: 0 8px; color: var(--ds-secondary); white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
+.canvas-command-count { padding: 0 8px; color: var(--ds-secondary); white-space: nowrap; font-size: var(--ds-text-caption); font-variant-numeric: tabular-nums; }
 .canvas-command-navigation { border-left: 1px solid var(--ds-separator); padding-left: 4px; }
 .canvas-command-navigation .react-flow__controls { position: static; display: flex; flex-direction: row; margin: 0; padding: 0; box-shadow: none; border: 0; border-radius: 0; background: transparent; transform: none; }
 .canvas-command-navigation .react-flow__controls-button { width: 32px; height: 32px; border: 0; padding: 8px; box-sizing: border-box; background: transparent; }
 .canvas-command-navigation .react-flow__controls-button svg { max-width: var(--ds-icon-size); max-height: var(--ds-icon-size); fill: none; }
 .canvas-command-navigation .react-flow__controls-button[aria-pressed="true"] { color: var(--ds-selection-text); background: var(--ds-selection); }
-.canvas-command-popover { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: 320px; max-width: 100%; max-height: var(--canvas-tools-height, 440px); overflow-y: auto; overscroll-behavior: contain; pointer-events: auto; padding: 8px; border: 1px solid var(--ds-border); border-radius: 12px; background: var(--ds-surface); box-shadow: 0 8px 32px #0003; }
+.canvas-command-popover { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: 320px; max-width: 100%; max-height: var(--canvas-tools-height, 440px); overflow-y: auto; overscroll-behavior: contain; pointer-events: auto; padding: 8px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-dialog); background: var(--ds-surface); box-shadow: var(--ds-shadow-popover); }
 .canvas-command-popover header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 5px 6px; border-bottom: 1px solid var(--ds-separator); margin-bottom: 4px; }
 .canvas-command-popover header strong { font-weight: 500; }
 .canvas-command-popover header button svg { transform: rotate(180deg); }
-.canvas-command-section-label, .canvas-command-popover .diagram-selected-count { display: block; padding: 8px 9px 4px; color: var(--ds-secondary); font-size: 11px; font-weight: 400; }
+.canvas-command-section-label, .canvas-command-popover .diagram-selected-count { display: block; padding: 8px 9px 4px; color: var(--ds-secondary); font-size: var(--ds-text-caption); font-weight: 400; }
 .canvas-command-popover .canvas-command-row, .canvas-command-popover .diagram-layout-tools > button, .canvas-command-popover .workspace-clear-selection, .canvas-command-popover .diagram-toolbar-menu > button { width: 100%; justify-content: flex-start; text-align: left; }
 .canvas-command-popover .diagram-toolbar-menu > button span { margin-left: auto; }
 .canvas-command-popover .canvas-selection-tools, .canvas-command-popover .diagram-layout-tools { display: flex; flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 1px; margin: 0; padding: 0; border: 0; background: transparent; }
@@ -36,18 +36,18 @@
 .canvas-command-popover .diagram-toolbar-inline { position: static; width: 100%; }
 .canvas-command-popover .diagram-toolbar-inline > .diagram-toolbar-popover { position: static; width: auto; max-width: none; max-height: none; min-width: 0; margin: 3px 0 5px 8px; padding: 3px 0 3px 8px; border: 0; border-left: 1px solid var(--ds-separator); border-radius: 0; box-shadow: none; background: transparent; display: flex; flex-direction: column; gap: 3px; }
 .canvas-command-popover .diagram-toolbar-inline .diagram-toolbar-popover button { justify-content: flex-start; text-align: left; white-space: normal; }
-.canvas-command-popover select { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--ds-border); border-radius: 5px; background: var(--ds-field); color: var(--ds-text); font: inherit; }
+.canvas-command-popover select { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); background: var(--ds-field); color: var(--ds-text); font: inherit; }
 .canvas-command-relationships { margin-top: 6px; padding-top: 4px; border-top: 1px solid var(--ds-separator); }
 .canvas-command-relationships > h3 { margin: 0; font-weight: 500; }
 .canvas-command-popover .canvas-command-manage { width: 100%; margin-top: 4px; justify-content: flex-start; text-align: left; }
 .canvas-command-manage > svg:last-child { margin-left: auto; }
-.canvas-command-filter { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 7px 9px; border-radius: 6px; cursor: pointer; }
+.canvas-command-filter { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 7px 9px; border-radius: var(--ds-radius-control); cursor: pointer; }
 .canvas-command-filter:hover { background: var(--ds-hover); }
 .canvas-command-filter input { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--ds-accent-fill); }
 .canvas-command-filter strong { display: block; font-weight: 500; line-height: 20px; }
-.canvas-command-filter small { display: block; margin-top: 2px; color: var(--ds-secondary); font-size: 11px; line-height: 16px; }
-.canvas-command-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; min-height: 20px; padding: 0 5px; border-radius: 6px; background: var(--ds-subtle); color: var(--ds-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
-.canvas-command-status, .canvas-command-context { max-width: 100%; padding: 5px 10px; border: 1px solid var(--ds-border); border-radius: 8px; background: var(--ds-surface); color: var(--ds-secondary); }
+.canvas-command-filter small { display: block; margin-top: 2px; color: var(--ds-secondary); font-size: var(--ds-text-caption); line-height: 16px; }
+.canvas-command-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; min-height: 20px; padding: 0 5px; border-radius: var(--ds-radius-control); background: var(--ds-subtle); color: var(--ds-secondary); font-size: var(--ds-text-caption); font-variant-numeric: tabular-nums; }
+.canvas-command-status, .canvas-command-context { max-width: 100%; padding: 5px 10px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-menu); background: var(--ds-surface); color: var(--ds-secondary); }
 .canvas-command-context { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; pointer-events: auto; }
 .canvas-command-context > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-command-context button { min-height: 26px; color: var(--ds-accent); }

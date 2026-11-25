@@ -29,12 +29,12 @@
 
 .inspector-surface :where(input[type="checkbox"], input[type="radio"]) { min-height: 0; accent-color: var(--ds-accent); }
 .inspector-view { --inspector-inset: var(--ds-space-4); padding: var(--inspector-inset); background: var(--ds-sidebar); }
-.inspector-view :is(h2, h3, h4) { margin: 0; color: var(--ds-text); font-size: 1rem; font-weight: 600; line-height: 1.4; }
+.inspector-view :is(h2, h3, h4) { margin: 0; color: var(--ds-text); font-size: var(--ds-text-body); font-weight: 600; line-height: 1.4; }
 .inspector-view p { margin: 0; color: var(--ds-secondary); font-size: var(--ds-text-body); line-height: 1.5; }
 .inspector-view strong { font-weight: 600; }
 .inspector-view :is(small, .ai-policy, .ai-result small, .ai-evidence-kind) { color: var(--ds-tertiary); font-size: var(--ds-text-caption); line-height: 1.5; }
 .inspector-view :is(label, .ai-depth) { display: grid; gap: 5px; color: var(--ds-secondary); font-size: var(--ds-text-control); }
-.inspector-view :is(button, input, textarea, select) { min-width: 0; max-width: 100%; border: 1px solid var(--ds-border); border-radius: 6px; color: var(--ds-text); font: inherit; font-size: var(--ds-text-control); line-height: 1.4; }
+.inspector-view :is(button, input, textarea, select) { min-width: 0; max-width: 100%; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); font: inherit; font-size: var(--ds-text-control); line-height: 1.4; }
 .inspector-view :is(input, textarea, select) { width: 100%; padding: 5px 8px; background: var(--ds-field); }
 .inspector-view :is(input, select, button) { min-height: var(--ds-control-height); }
 .inspector-view .search-select-anchor input { padding-inline-end: 30px; }
@@ -58,11 +58,11 @@
   background: var(--ds-sidebar);
 }
 .inspector-view .inspector-context { display: block; margin-bottom: 3px; color: var(--ds-tertiary); font-size: var(--ds-text-caption); }
-.inspector-view .inspector-title { font-size: 1.308rem; line-height: 1.3; overflow-wrap: anywhere; }
+.inspector-view .inspector-title { font-size: var(--ds-text-lead); line-height: 1.3; overflow-wrap: anywhere; }
 .inspector-view .inspector-segments { position: static; margin: 12px 0 0; padding: 0; background: transparent; }
-.inspector-view .segmented { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 2px; border: 1px solid var(--ds-separator); background: var(--ds-field); border-radius: 7px; }
+.inspector-view .segmented { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 2px; border: 1px solid var(--ds-separator); background: var(--ds-field); border-radius: var(--ds-radius-control); }
 .inspector-view .segmented button { min-height: var(--ds-control-height-small); padding: 3px 4px; border: 0; color: var(--ds-secondary); background: transparent; font-size: var(--ds-text-control); font-weight: 500; white-space: nowrap; }
-.inspector-view .segmented button.active { color: var(--ds-text); background: var(--ds-selected-control); box-shadow: 0 1px 3px #0002; }
+.inspector-view .segmented button.active { color: var(--ds-text); background: var(--ds-selected-control); box-shadow: var(--ds-shadow); }
 .inspector-view .segmented button:not(.active):hover { color: var(--ds-text); background: var(--ds-hover); }
 .inspector-view .inspector-body { display: grid; gap: var(--ds-space-4); min-width: 0; }
 .inspector-view .inspector-body :where(button, input, select, textarea, summary, [tabindex]) { scroll-margin-block-start: 112px; }
@@ -79,18 +79,18 @@
 
 .inspector-view .table-structure { display: grid; gap: 18px; min-width: 0; }
 .inspector-view .inspector-comment { margin: 0; color: var(--ds-secondary); }
-.inspector-view .snapshot-summary { display: grid; gap: 0; margin: 0; padding: 3px 10px; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-surface); }
+.inspector-view .snapshot-summary { display: grid; gap: 0; margin: 0; padding: 3px 10px; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-menu); background: var(--ds-surface); }
 .inspector-view .snapshot-summary > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 7px 0; }
 .inspector-view .snapshot-summary > div + div { border-top: 1px solid var(--ds-separator); }
 .inspector-view .snapshot-summary :is(dt, dd) { color: var(--ds-secondary); font-size: var(--ds-text-control); }
 .inspector-view .snapshot-summary dd { margin: 0; color: var(--ds-text); text-align: right; white-space: normal; overflow-wrap: anywhere; }
 .inspector-view .inspector-query-button { width: auto; margin: 0; }
-.inspector-view :is(.inspector-columns, .inspector-list) { display: grid; gap: 0; margin: 0; padding: 0; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-surface); list-style: none; }
+.inspector-view :is(.inspector-columns, .inspector-list) { display: grid; gap: 0; margin: 0; padding: 0; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-menu); background: var(--ds-surface); list-style: none; }
 .inspector-view :is(.inspector-columns > div, .inspector-list li) { display: grid; gap: 4px; min-width: 0; padding: 10px; border-radius: 0; background: transparent; }
 .inspector-view :is(.inspector-columns > div + div, .inspector-list li + li) { border-top: 1px solid var(--ds-separator); }
 .inspector-view .inspector-columns > div > span { flex-wrap: wrap; gap: 5px; }
 .inspector-view :is(.inspector-columns strong, .inspector-list strong) { min-width: 0; overflow: visible; font-size: var(--ds-text-control); overflow-wrap: anywhere; }
-.inspector-view .inspector-columns b { padding: 1px 4px; border: 1px solid var(--ds-separator); color: var(--ds-secondary); background: var(--ds-window); font-size: .769rem; font-weight: 600; line-height: 1.2; }
+.inspector-view .inspector-columns b { padding: 1px 4px; border: 1px solid var(--ds-separator); color: var(--ds-secondary); background: var(--ds-window); font-size: var(--ds-text-caption); font-weight: 600; line-height: 1.2; }
 .inspector-view :is(.inspector-columns small, .inspector-list span) { color: var(--ds-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--ds-text-caption); line-height: 1.5; overflow-wrap: anywhere; }
 .inspector-view .inspector-columns p { font-size: var(--ds-text-control); }
 .inspector-view .inspector-columns > [data-column-focus="true"] { background: color-mix(in srgb, var(--ds-accent) 14%, var(--ds-surface)); box-shadow: inset 3px 0 var(--ds-accent); }
@@ -102,7 +102,7 @@
 .inspector-view .knowledge-review button { margin: 0; justify-self: start; }
 .inspector-view .knowledge-review .knowledge-review { padding: 0; border: 0; }
 .inspector-view .knowledge-review p:empty, .inspector-view .ai-policy:empty { display: none; }
-.inspector-view .knowledge-comparison { gap: 12px; padding: 10px; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-surface); }
+.inspector-view .knowledge-comparison { gap: 12px; padding: 10px; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-menu); background: var(--ds-surface); }
 .inspector-view .knowledge-comparison strong { display: block; margin-bottom: 5px; font-size: var(--ds-text-control); }
 .inspector-view .knowledge-panel .section-heading button { padding: 3px 8px; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
 .inspector-view .semantic-create { gap: 14px; padding: 0; border: 0; background: transparent; }
@@ -115,11 +115,11 @@
 .inspector-view .saved-view-list button { align-items: baseline; text-align: left; }
 .inspector-view .saved-view-list span { color: var(--ds-secondary); white-space: nowrap; font-size: var(--ds-text-caption); }
 
-.inspector-view .inspector-disclosure > summary { color: var(--ds-text); font-size: 1rem; font-weight: 600; }
+.inspector-view .inspector-disclosure > summary { color: var(--ds-text); font-size: var(--ds-text-body); font-weight: 600; }
 .inspector-view summary { padding: 3px 0; color: var(--ds-secondary); cursor: pointer; }
 .inspector-view details[open] > summary { margin-bottom: 8px; }
 .inspector-view .provenance-panel { gap: 10px; }
-.inspector-view .risk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-separator); }
+.inspector-view .risk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-menu); background: var(--ds-separator); }
 .inspector-view .risk-grid > div { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 6px; padding: 8px; border-radius: 0; color: var(--ds-secondary); background: var(--ds-surface); }
 .inspector-view .risk-grid strong { color: var(--ds-secondary); font-size: var(--ds-text-heading); font-variant-numeric: tabular-nums; }
 .inspector-view .risk-grid [data-risk="high"] strong { color: var(--ds-danger); }
@@ -166,13 +166,13 @@
 .inspector-view .ai-question-presets button { padding: 7px 9px; border-color: var(--ds-separator); background: var(--ds-surface); text-align: left; }
 .inspector-view .ai-scope { gap: 5px; }
 .inspector-view .ai-scope button { justify-self: start; }
-.inspector-view :is(.ai-preview, .ai-result, .ai-evidence-source, .inspector-empty-state) { display: grid; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-surface); }
+.inspector-view :is(.ai-preview, .ai-result, .ai-evidence-source, .inspector-empty-state) { display: grid; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-menu); background: var(--ds-surface); }
 .inspector-view .inspector-empty-state > button { justify-self: start; margin-top: 2px; }
 .inspector-view :is(.ai-result ul, .ai-preview ul) { padding-left: 18px; color: var(--ds-secondary); font-size: var(--ds-text-control); }
 .inspector-view :is(.ai-claim, .candidate-annotation) { border-color: var(--ds-separator); }
 .inspector-view .ai-claim { display: grid; gap: 8px; }
-.inspector-view .table-understanding h4 { margin: 0; font-size: 1rem; }
-.inspector-view pre { margin: 0; padding: 8px; max-height: 240px; overflow: auto; border-radius: 5px; color: var(--ds-secondary); background: var(--ds-field); font: var(--ds-text-caption)/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inspector-view .table-understanding h4 { margin: 0; font-size: var(--ds-text-body); }
+.inspector-view pre { margin: 0; padding: 8px; max-height: 240px; overflow: auto; border-radius: var(--ds-radius-control); color: var(--ds-secondary); background: var(--ds-field); font: var(--ds-text-caption)/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .inspector-view .ai-evidence-list { margin: 8px 0; padding-left: 18px; }
 .inspector-view .historical-selection-note { margin-top: 6px; font-size: var(--ds-text-caption); }
 .inspector-view.inspector-empty { display: grid; align-content: start; gap: 8px; }
@@ -181,7 +181,7 @@
   .inspector-view { --inspector-inset: var(--ds-space-3); }
   .inspector-view .segmented button { font-size: var(--ds-text-caption); padding-inline: 2px; }
   .inspector-view .risk-grid > div { padding: 6px; gap: 4px; }
-  .inspector-view .risk-grid span { font-size: .769rem; }
+  .inspector-view .risk-grid span { font-size: var(--ds-text-caption); }
   .inspector-view .annotation-heading { flex-wrap: wrap; }
 }
 
@@ -201,7 +201,7 @@
 .inspector-view .ai-task-panel { font-size: var(--ds-text-body); gap: 16px; }
 .inspector-view .ai-task-panel :is(.ai-composer, .ai-answer) { display: grid; min-width: 0; gap: 10px; }
 .inspector-view .ai-task-panel .ai-answer { padding-bottom: 16px; border-bottom: 1px solid var(--ds-separator); }
-.inspector-view .ai-task-panel .ai-asked-question { padding: 8px 10px; color: var(--ds-secondary); background: var(--ds-field); border-radius: 6px; }
+.inspector-view .ai-task-panel .ai-asked-question { padding: 8px 10px; color: var(--ds-secondary); background: var(--ds-field); border-radius: var(--ds-radius-control); }
 .inspector-view .ai-task-panel .ai-answer-summary { color: var(--ds-text); font-size: var(--ds-text-heading); line-height: 1.65; white-space: pre-wrap; }
 .inspector-view .ai-task-panel :is(.ai-supporting-points, .ai-answer-gaps ul) { margin: 0; padding-left: 18px; color: var(--ds-secondary); }
 .inspector-view .ai-task-panel li + li { margin-top: 6px; }

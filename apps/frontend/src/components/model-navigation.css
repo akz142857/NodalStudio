@@ -3,9 +3,9 @@
 .model-navigation { flex: 1; align-content: start; min-width: 0; gap: 8px; --tree-row-height: 29px; }
 .model-navigation [hidden] { display: none !important; }
 .source-navigation-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 0 2px; }
-.model-navigation .source-navigation-heading h2 { min-width: 0; margin: 0; font: 600 11px/16px var(--ds-font-ui); color: var(--ds-secondary); }
-.source-navigation-heading button { display: flex; align-items: center; gap: 3px; padding: 3px 7px; min-height: 26px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); background: transparent; font: 400 11px/16px var(--ds-font-ui); cursor: pointer; }
-.source-navigation-heading button > span { font-size: 14px; line-height: 16px; color: var(--ds-secondary); }
+.model-navigation .source-navigation-heading h2 { min-width: 0; margin: 0; font: 600 var(--ds-text-caption)/16px var(--ds-font-ui); color: var(--ds-secondary); }
+.source-navigation-heading button { display: flex; align-items: center; gap: 3px; padding: 3px 7px; min-height: 26px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); background: transparent; font: 400 var(--ds-text-caption)/16px var(--ds-font-ui); cursor: pointer; }
+.source-navigation-heading button > span { font-size: var(--ds-text-heading); line-height: 16px; color: var(--ds-secondary); }
 .source-navigation-heading button:hover:not(:disabled) { background: var(--ds-hover); }
 .source-navigation-current { min-width: 0; }
 .source-navigation-picker {
@@ -61,9 +61,9 @@
 .model-navigation :is(.tree-row-type, .tree-row-schema) > svg:not(.tree-twisty) { width: var(--ds-icon-size); height: var(--ds-icon-size); flex: none; color: var(--ds-accent); }
 .model-navigation .tree-node-type { margin-left: 10px; }
 .model-navigation .tree-row-object { margin-left: 22px; }
-.model-navigation .tree-row small { padding-right: 3px; font-size: 10px; }
-.data-source-menu { position: fixed; z-index: 2000; box-sizing: border-box; display: flex; flex-direction: column; width: 300px; padding: 6px; overflow: hidden; border: 1px solid var(--ds-border); border-radius: 9px; color: var(--ds-text); background: var(--ds-surface); box-shadow: var(--ds-shadow-popover); font-family: var(--ds-font-ui); }
-.data-source-menu-heading { flex: none; padding: 4px 8px 8px; color: var(--ds-secondary); font: 500 11px/16px var(--ds-font-ui); }
+.model-navigation .tree-row small { padding-right: 3px; font-size: var(--ds-text-caption); }
+.data-source-menu { position: fixed; z-index: 2000; box-sizing: border-box; display: flex; flex-direction: column; width: 300px; padding: 6px; overflow: hidden; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-menu); color: var(--ds-text); background: var(--ds-surface); box-shadow: var(--ds-shadow-popover); font-family: var(--ds-font-ui); }
+.data-source-menu-heading { flex: none; padding: 4px 8px 8px; color: var(--ds-secondary); font: 500 var(--ds-text-caption)/16px var(--ds-font-ui); }
 .data-source-menu-list { position: relative; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 :is(.data-source-menu-list, .data-source-menu-actions) > button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 0; border-radius: var(--ds-radius-control); background: transparent; color: var(--ds-text); text-align: left; cursor: pointer; }
 .data-source-menu-list > button + button { margin-top: 3px; }
@@ -71,28 +71,28 @@
 .data-source-menu-list > button[aria-checked="true"] { background: var(--ds-selection); color: var(--ds-selection-text); }
 :is(.data-source-menu-list, .data-source-menu-actions) > button > svg { flex: none; width: 17px; height: 17px; color: var(--ds-secondary); }
 .data-source-menu-actions { flex: none; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--ds-border); }
-.data-source-menu-actions > button { min-height: 32px; padding: 7px 10px; font: 400 12px/18px var(--ds-font-ui); }
+.data-source-menu-actions > button { min-height: 32px; padding: 7px 10px; font: 400 var(--ds-text-control)/18px var(--ds-font-ui); }
 .data-source-menu-label { flex: 1; min-width: 0; }
 .data-source-menu-label strong, .data-source-menu-label > span, .data-source-menu-label small { display: block; overflow-wrap: anywhere; }
-.data-source-menu-label strong { font: 500 13px/18px var(--ds-font-ui); }
-.data-source-menu-label > span, .data-source-menu-label small { margin-top: 3px; color: var(--ds-secondary); font: 400 11px/15px var(--ds-font-ui); }
-.data-source-menu-check { flex: none; width: 14px; visibility: hidden; font-size: 14px; }
+.data-source-menu-label strong { font: 500 var(--ds-text-body)/18px var(--ds-font-ui); }
+.data-source-menu-label > span, .data-source-menu-label small { margin-top: 3px; color: var(--ds-secondary); font: 400 var(--ds-text-caption)/15px var(--ds-font-ui); }
+.data-source-menu-check { flex: none; width: 14px; visibility: hidden; font-size: var(--ds-text-heading); }
 .data-source-menu-list > button[aria-checked="true"] .data-source-menu-check { visibility: visible; }
 .model-navigation .schema-object-search { margin: 4px 0 10px; }
 .model-navigation .schema-object-search input { border-color: transparent; background: var(--ds-subtle); }
 .model-navigation .navigation-section-title { padding: 4px 6px; margin: 8px 0 3px; color: var(--ds-tertiary); font-size: var(--ds-text-caption); font-weight: 500; }
 .model-view-navigation { margin-bottom: 14px; min-width: 0; }
-.model-view-navigation button { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 29px; padding: 5px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--ds-secondary); text-align: left; font: var(--ds-text-control)/var(--ds-leading) var(--ds-font-ui); cursor: pointer; }
+.model-view-navigation button { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 29px; padding: 5px 7px; border: 0; border-radius: var(--ds-radius-control); background: transparent; color: var(--ds-secondary); text-align: left; font: var(--ds-text-control)/var(--ds-leading) var(--ds-font-ui); cursor: pointer; }
 .model-view-navigation button svg { width: 15px; height: 15px; flex: none; }
 .model-view-navigation button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-view-navigation button:hover:not(:disabled) { background: var(--ds-hover); }
 .model-view-navigation button[aria-current] { background: var(--ds-selection); color: var(--ds-selection-text); box-shadow: var(--ds-selection-indicator); font-weight: var(--ds-weight-emphasis); }
 .model-view-navigation button:disabled { opacity: .45; cursor: default; }
-.model-view-navigation p { margin: 5px 7px; font-size: 10px; color: var(--ds-secondary); }
+.model-view-navigation p { margin: 5px 7px; font-size: var(--ds-text-caption); color: var(--ds-secondary); }
 
 .connection-manager { width: min(540px, calc(100vw - 48px)); max-height: calc(100vh - 48px); box-sizing: border-box; padding: var(--ds-dialog-padding); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-dialog); color: var(--ds-text); background: var(--ds-surface); box-shadow: var(--ds-shadow-dialog); }
 .connection-manager::backdrop { background: var(--ds-overlay); }
-.connection-manager h2 { margin: 0 0 16px; font-size: 16px; }
+.connection-manager h2 { margin: 0 0 16px; font-size: var(--ds-text-subheading); }
 .connection-manager-heading, .connection-manager-tools {
   display: flex;
   flex-wrap: wrap;
@@ -269,7 +269,7 @@
 .schema-object-menu > hr { height: 1px; margin: 5px 7px; border: 0; background: var(--ds-border); }
 .schema-menu-surface { display: contents; }
 .schema-object-menu > button[aria-haspopup="menu"] { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.schema-menu-chevron { font-size: 16px; line-height: 1; }
+.schema-menu-chevron { font-size: var(--ds-text-subheading); line-height: 1; }
 
 .connection-sync-shortcut { align-self: flex-start; margin-top: var(--ds-space-2); }
 .connection-sync-dialog { width: min(630px, calc(100vw - 48px)); }

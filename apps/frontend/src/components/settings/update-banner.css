@@ -11,16 +11,16 @@
 .app-update-icon { display: grid; place-items: center; flex: none; color: var(--ds-accent); }
 .app-update-icon svg { width: 20px; height: 20px; }
 .app-update-copy { display: grid; gap: 3px; flex: 1; min-width: 0; }
-.app-update-copy strong { font-size: 13px; overflow-wrap: anywhere; }
-.app-update-copy > span { color: var(--ds-secondary); font-size: 12px; }
+.app-update-copy strong { font-size: var(--ds-text-body); overflow-wrap: anywhere; }
+.app-update-copy > span { color: var(--ds-secondary); font-size: var(--ds-text-control); }
 .app-update-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .app-update-actions button, .notification-update-action {
   min-height: 32px;
   padding: 6px 12px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--ds-radius-control);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ds-text-control);
   cursor: pointer;
 }
 .app-update-actions .app-update-open { background: var(--ds-accent-fill); color: var(--ds-on-accent); font-weight: 600; }

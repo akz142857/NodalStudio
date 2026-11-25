@@ -1,0 +1,276 @@
+/* Schema canvas surface, table node chrome and comparison diagram. */
+.table-node {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-control);
+  color: var(--ds-text);
+  background: var(--ds-surface);
+  box-shadow: 0 8px 24px rgb(31 37 48 / 10%);
+  font-size: var(--node-font-size, 12px);
+}
+
+/* React Flow's controls, both minimap renderers, and the diagram use one palette. */
+.schema-canvas-flow {
+  --xy-background-color: var(--ds-canvas);
+  --xy-background-pattern-dots-color: var(--ds-canvas-grid);
+  --xy-controls-button-background-color: var(--ds-control);
+  --xy-controls-button-background-color-hover: var(--ds-hover);
+  --xy-controls-button-color: var(--ds-text);
+  --xy-controls-button-color-hover: var(--ds-text);
+  --xy-controls-button-border-color: var(--ds-separator);
+  --xy-minimap-background-color: var(--ds-surface);
+  --xy-minimap-node-background-color: var(--ds-minimap-node);
+  --xy-minimap-mask-background-color: var(--ds-minimap-mask);
+  --xy-minimap-mask-stroke-color: var(--ds-border);
+  --xy-selection-background-color: color-mix(in srgb, var(--ds-accent) 12%, transparent);
+  --xy-selection-border: 1px solid var(--ds-accent);
+  --xy-attribution-background-color: var(--ds-surface);
+}
+.schema-canvas-flow .react-flow__attribution a { color: var(--ds-secondary); }
+.schema-canvas-flow .react-flow__minimap-node.selected { fill: var(--ds-accent); }
+
+.schema-canvas-flow .react-flow__pane,
+.schema-canvas-flow .react-flow__pane.draggable,
+.schema-canvas-flow .react-flow__pane.selection {
+  cursor: grab !important;
+}
+
+.schema-canvas-flow .react-flow__pane.dragging {
+  cursor: grabbing !important;
+}
+
+.schema-canvas-flow .react-flow__node,
+.schema-canvas-flow .react-flow__node.selectable,
+.schema-canvas-flow .react-flow__node.draggable,
+.schema-canvas-flow .react-flow__node.draggable.dragging {
+  overflow: visible !important;
+  cursor: default !important;
+}
+
+.schema-canvas-flow .table-node,
+.schema-canvas-flow .react-flow__handle {
+  cursor: default !important;
+}
+
+.schema-canvas-flow.space-pan-mode .react-flow__node,
+.schema-canvas-flow.space-pan-mode .react-flow__node * {
+  cursor: grab !important;
+}
+
+.schema-canvas-flow.space-pan-mode .react-flow__pane.dragging,
+.schema-canvas-flow.space-pan-mode .react-flow__node:active,
+.schema-canvas-flow.space-pan-mode .react-flow__node:active * {
+  cursor: grabbing !important;
+}
+
+.table-resize-line {
+  border-color: var(--ds-accent) !important;
+  z-index: 8;
+}
+
+.table-resize-line::after {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--ds-surface);
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-accent-fill);
+  box-shadow: 0 0 0 1px rgb(37 99 235 / 35%);
+  content: "";
+}
+
+.table-resize-line.top::after,
+.table-resize-line.bottom::after {
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.table-resize-line.left::after,
+.table-resize-line.right::after {
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.table-resize-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border: 1px solid var(--ds-surface) !important;
+  border-radius: var(--ds-radius-small) !important;
+  background: var(--ds-accent-fill) !important;
+  box-shadow: 0 0 0 1px rgb(37 99 235 / 35%);
+  z-index: 9;
+}
+
+.table-node[data-selected="true"] {
+  border-color: var(--ds-accent);
+  box-shadow: 0 0 0 2px rgb(57 124 229 / 22%);
+}
+
+.table-node[data-relationship-highlighted="true"] {
+  border-color: var(--ds-accent);
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 24%);
+}
+
+.table-column[data-relationship-column="true"] {
+  background: var(--ds-selection);
+  box-shadow: inset 3px 0 var(--ds-accent);
+}
+
+.table-node[data-change="added"] {
+  border-color: var(--ds-positive);
+  box-shadow: 0 0 0 2px rgb(56 168 91 / 18%);
+}
+
+.table-node[data-change="modified"] {
+  border-color: var(--ds-warning);
+  box-shadow: 0 0 0 2px rgb(228 168 58 / 18%);
+}
+
+.table-node[data-change="deleted"] { border: 2px dashed var(--ds-danger); box-shadow: 0 0 0 2px rgb(196 62 72 / 12%); }
+.table-node[data-change="deleted"] header { background: var(--ds-danger-soft); }
+.table-node[data-change="deleted"] header > strong { text-decoration: line-through; }
+.comparison-badge { display: inline-block; flex: 0 0 auto; padding: 2px 4px; border-radius: var(--ds-radius-small); font-size: var(--ds-canvas-text-sm); line-height: 1.4; font-style: normal; font-weight: 600; white-space: nowrap; text-transform: capitalize; }
+.comparison-badge[data-change="added"] { color: var(--ds-positive); background: var(--ds-positive-soft); }
+.comparison-badge[data-change="modified"] { color: var(--ds-warning); background: var(--ds-warning-soft); }
+.comparison-badge[data-change="deleted"] { color: var(--ds-danger); background: var(--ds-danger-soft); }
+.table-node header > .comparison-badge { margin-left: auto; }
+.table-column .comparison-badge { margin-left: 5px; font-size: var(--ds-canvas-text-xs); }
+.table-column[data-change="added"] { background: var(--ds-positive-soft); box-shadow: inset 3px 0 var(--ds-positive); }
+.table-column[data-change="modified"] { background: var(--ds-warning-soft); box-shadow: inset 3px 0 var(--ds-warning); }
+.table-column[data-change="deleted"] { background: var(--ds-danger-soft); box-shadow: inset 3px 0 var(--ds-danger); border-bottom-style: dashed; }
+.table-column[data-change="deleted"] .column-type { color: var(--ds-danger); }
+.table-node[data-selected="true"][data-change] { outline: 2px solid var(--ds-accent); outline-offset: 3px; }
+.table-node[data-relationship-highlighted="true"][data-change] { outline: 2px solid var(--ds-accent); outline-offset: 3px; }
+.react-flow__node.selectable:focus-visible > .table-node {
+  outline: var(--ds-focus-ring);
+  outline-offset: var(--ds-focus-inset);
+}
+.react-flow__edge.selectable:focus-visible .react-flow__edge-path {
+  filter: drop-shadow(0 0 2px var(--ds-focus-color));
+}
+.schema-changes-diagram { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.diagram-comparison-context { flex: 0 0 auto; padding: 10px 16px; color: var(--ds-text); background: var(--ds-sidebar); border-bottom: 1px solid var(--ds-border); font-size: var(--ds-text-caption); }
+.diagram-change-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.diagram-comparison-context p { margin: 8px 0 0; color: var(--ds-secondary); font-size: var(--ds-text-caption); line-height: 1.5; }
+.diagram-comparison-context button, .diagram-unavailable button { padding: 5px 8px; margin-left: 8px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); background: var(--ds-control); }
+.comparison-canvas { position: relative; display: grid; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.diagram-unavailable { flex: 1; padding: 20px; }
+.historical-selection-note { padding: 7px; color: var(--ds-danger); background: var(--ds-danger-soft); border-radius: var(--ds-radius-control); font-size: var(--ds-text-caption); }
+.diagram-export-actions { position: absolute; z-index: 15; top: 12px; right: 12px; display: flex; align-items: flex-end; flex-direction: column; gap: 5px; max-width: min(480px, calc(100% - 24px)); font-size: var(--ds-text-caption); }
+.diagram-export-actions > div { display: flex; gap: 5px; }
+.diagram-export-actions button { padding: 6px 9px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); background: var(--ds-control); }
+.diagram-export-actions button:disabled { opacity: .5; cursor: default; }
+.diagram-export-actions > span { padding: 7px 9px; border-radius: var(--ds-radius-control); color: var(--ds-text); background: var(--ds-sidebar); overflow-wrap: anywhere; }
+.diagram-export-actions > [role="alert"] { color: var(--ds-danger); }
+.schema-changes-diagram[data-color-blind="true"] .comparison-badge[data-change="added"] { color: var(--ds-relation-accessible-blue); background: var(--ds-accent-soft); }
+.schema-changes-diagram[data-color-blind="true"] .comparison-badge[data-change="deleted"] { color: var(--ds-relation-accessible-orange); background: var(--ds-warning-soft); }
+.schema-changes-diagram[data-color-blind="true"] :is(.table-node, .table-column)[data-change="added"] { border-color: var(--ds-relation-accessible-blue); }
+.schema-changes-diagram[data-color-blind="true"] .table-column[data-change="added"] { box-shadow: inset 3px 0 var(--ds-relation-accessible-blue); }
+.schema-changes-diagram[data-color-blind="true"] :is(.table-node, .table-column)[data-change="deleted"] { border-color: var(--ds-relation-accessible-orange); }
+.schema-changes-diagram[data-color-blind="true"] .table-column[data-change="deleted"] { box-shadow: inset 3px 0 var(--ds-relation-accessible-orange); }
+
+.table-node header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ds-border);
+  background: var(--ds-subtle);
+}
+
+/* Domain groups own the header tint and a full-height stripe. Both are derived
+   from --domain-color so any user-picked colour stays readable, and neither
+   touches border-color or box-shadow, which already signal selection, change
+   status and relationship highlighting. */
+.table-node[data-domain]::before {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  background: var(--domain-color);
+  content: "";
+}
+
+.table-node[data-domain] header {
+  padding-left: 14px;
+  border-bottom-color: color-mix(in srgb, var(--domain-color) 55%, var(--ds-surface));
+  background: color-mix(in srgb, var(--domain-color) 22%, var(--ds-surface));
+}
+
+.table-node[data-domain] header span {
+  color: var(--ds-secondary);
+}
+
+.large-model-mode .table-node[data-domain]::before {
+  width: 4px;
+}
+
+.table-node header span {
+  color: var(--ds-secondary);
+  font-size: var(--ds-canvas-text-sm);
+  text-transform: uppercase;
+}
+
+.table-node header strong {
+  overflow: hidden;
+  font-size: var(--ds-canvas-text-lg);
+  text-overflow: ellipsis;
+}
+
+.table-node-actions {
+  position: relative;
+  margin-left: auto;
+}
+
+.table-node-actions > button {
+  padding: 0 3px;
+  border: 0;
+  color: var(--ds-tertiary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.table-node-actions [role="menu"] {
+  position: absolute;
+  z-index: 30;
+  top: 22px;
+  right: -4px;
+  width: max-content;
+  padding: 4px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-control);
+  background: var(--ds-surface);
+  box-shadow: 0 8px 24px rgb(32 40 52 / 18%);
+}
+
+.table-node-actions [role="menu"] button {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--ds-radius-control);
+  color: var(--ds-text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.table-node-actions [role="menu"] button:hover { background: var(--ds-selection); }
+
+.inspector-query-button {
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--ds-accent);
+  border-radius: var(--ds-radius-control);
+  color: var(--ds-on-accent);
+  background: var(--ds-accent-fill);
+}
+
+/* Query is intentionally a compact read-only workspace, not a database IDE. */

@@ -8,7 +8,7 @@
   background: var(--ds-sidebar);
 }
 .model-table-change-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; overflow-wrap: anywhere; }
-.model-table-change-heading span, .model-table-change-values dt { color: var(--ds-secondary); font-size: 11px; }
+.model-table-change-heading span, .model-table-change-values dt { color: var(--ds-secondary); font-size: var(--ds-text-caption); }
 .model-table-change-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 6px 0 0; }
 .model-table-change-values dd { margin: 2px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .model-table-property-changes > div { margin-block-start: 8px; }

@@ -1,0 +1,160 @@
+/* Relationship dialogs, target picker and validation states. */
+.relationship-dialog-backdrop {
+  position: absolute;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(15 23 42 / 34%);
+}
+
+.relationship-dialog {
+  display: grid;
+  width: min(520px, calc(100% - 48px));
+  gap: 13px;
+  padding: 18px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-dialog);
+  color: var(--ds-text);
+  background: var(--ds-sidebar);
+  box-shadow: 0 22px 70px rgb(0 0 0 / 38%);
+}
+
+.relationship-dialog header,
+.relationship-dialog footer,
+.relationship-dialog dl div,
+.relationship-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.relationship-dialog header p {
+  margin: 0 0 4px;
+  color: var(--ds-logical);
+  font-size: var(--ds-text-caption);
+  letter-spacing: .08em;
+}
+
+.relationship-dialog h2 { margin: 0; font-size: var(--ds-text-lead); }
+.relationship-dialog header > button { border: 0; color: var(--ds-secondary); background: transparent; font-size: var(--ds-text-title); }
+.relationship-dialog dl { display: grid; gap: 6px; margin: 0; padding: 10px; border-radius: var(--ds-radius-control); background: var(--ds-window); }
+.relationship-dialog dt { color: var(--ds-tertiary); font-size: var(--ds-text-caption); }
+.relationship-dialog dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--ds-text-caption); }
+.relationship-dialog label { display: grid; gap: 6px; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.relationship-dialog input:not([type="checkbox"]),
+.relationship-dialog select,
+.relationship-dialog textarea { width: 100%; box-sizing: border-box; padding: 8px 9px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); background: var(--ds-field); }
+.relationship-dialog .relationship-mismatch { display: flex; align-items: center; color: var(--ds-warning); }
+.relationship-validation { margin: 0; padding: 9px 9px 9px 27px; border-radius: var(--ds-radius-control); color: var(--ds-warning); background: var(--ds-warning-soft); font-size: var(--ds-text-caption); }
+.relationship-validation[data-valid="true"] { color: var(--ds-positive); background: var(--ds-positive-soft); }
+.relationship-error { margin: 0; color: var(--ds-danger); font-size: var(--ds-text-caption); }
+.relationship-dialog footer { justify-content: flex-end; }
+.relationship-dialog footer button,
+.relationship-actions button,
+.relationship-context-menu button,
+.relationship-pick-hint button { padding: 7px 10px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); background: var(--ds-control); }
+.relationship-dialog footer button[type="submit"] { border-color: var(--ds-logical-fill); color: var(--ds-on-accent); background: var(--ds-logical-fill); }
+.relationship-dialog footer button:disabled { opacity: .45; }
+
+.relationship-context-menu {
+  position: fixed;
+  z-index: 75;
+  display: grid;
+  min-width: 210px;
+  padding: 5px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-menu);
+  background: var(--ds-sidebar);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 34%);
+}
+
+.relationship-context-menu button { border-color: transparent; text-align: left; background: transparent; }
+.relationship-context-menu button:hover { background: var(--ds-hover); }
+
+.relationship-pick-hint {
+  position: absolute;
+  z-index: 12;
+  top: 14px;
+  left: 50%;
+  padding: 8px 10px;
+  border: 1px solid var(--ds-logical);
+  border-radius: var(--ds-radius-menu);
+  color: var(--ds-logical);
+  background: var(--ds-logical-soft);
+  box-shadow: 0 6px 20px rgb(76 29 149 / 16%);
+  font-size: var(--ds-text-caption);
+  transform: translateX(-50%);
+}
+
+.relationship-pick-hint button { margin-left: 8px; padding: 3px 7px; color: var(--ds-on-accent); background: var(--ds-logical-fill); }
+
+.relationship-target-picker {
+  position: absolute;
+  z-index: 72;
+  top: 14px;
+  left: 50%;
+  display: grid;
+  width: min(510px, calc(100% - 40px));
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid var(--ds-logical);
+  border-radius: var(--ds-radius-menu);
+  color: var(--ds-text);
+  background: var(--ds-surface);
+  box-shadow: 0 12px 36px rgb(76 29 149 / 20%);
+  transform: translateX(-50%);
+}
+
+.relationship-target-picker header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.relationship-target-picker header > div { display: grid; gap: 2px; }
+.relationship-target-picker header span { color: var(--ds-logical); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--ds-text-caption); }
+.relationship-target-picker header button { border: 0; color: var(--ds-logical); background: transparent; }
+.relationship-target-picker > input { padding: 8px 9px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color:
+    var(--ds-text); background:
+    var(--ds-field); }
+.relationship-target-picker > div[role="listbox"] { display: grid; max-height: 260px; overflow: auto; }
+.relationship-target-picker div[role="listbox"] button { display: flex; justify-content: space-between; gap: 10px; padding: 7px 8px; border: 0; border-radius: var(--ds-radius-control); color: var(--ds-text); background: transparent; text-align: left; }
+.relationship-target-picker div[role="listbox"] button:hover { background: var(--ds-logical-soft); }
+.relationship-target-picker div[role="listbox"] button small { color: var(--ds-warning); }
+.relationship-target-picker div[role="listbox"] button[data-compatible="true"] small { color: var(--ds-positive); }
+.relationship-target-picker > p,
+.relationship-target-picker div[role="listbox"] p { margin: 0; padding: 5px 2px; color: var(--ds-tertiary); font-size: var(--ds-text-caption); }
+
+@media (max-width: 640px) {
+  .connection-dialog-backdrop { padding: 8px; }
+  .connection-dialog { width: calc(var(--ds-viewport-width) - 16px); max-height: calc(var(--ds-viewport-height) - 16px); padding: 16px; }
+  .connection-identity-grid,
+  .connection-access-grid { grid-template-columns: minmax(0, 1fr); }
+  .connection-database-field,
+  .connection-credential-note { grid-column: auto; }
+  .connection-section-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .connection-security-setting { align-items: stretch; flex-direction: column; gap: 10px; }
+  .connection-security-setting > label { width: 100%; }
+  .connection-live-action { align-items: stretch; flex-direction: column; gap: 10px; }
+  .connection-live-action > button { width: 100%; }
+  .connection-dialog footer { align-items: stretch; flex-direction: column-reverse; }
+  .connection-footer-actions { justify-content: flex-end; }
+
+}
+
+.relationship-action-error {
+  position: absolute;
+  z-index: 95;
+  top: 14px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--ds-danger);
+  border-radius: var(--ds-radius-control);
+  color: var(--ds-danger);
+  background: var(--ds-danger-soft);
+  box-shadow: 0 8px 24px rgb(120 24 42 / 16%);
+  font-size: var(--ds-text-caption);
+  transform: translateX(-50%);
+}
+
+.relationship-action-error button { border: 0; color: var(--ds-danger); background: transparent; text-decoration: underline; }

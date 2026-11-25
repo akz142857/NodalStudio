@@ -77,19 +77,34 @@
 }
 
 .table-data-title { min-width: 0; }
+.table-data-heading { display: flex; min-width: 0; align-items: center; gap: var(--ds-space-2); }
+.table-data-mode {
+  flex: none;
+  padding: 1px var(--ds-space-2);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-pill);
+  color: var(--ds-secondary);
+  font-size: var(--ds-text-caption);
+  font-weight: var(--ds-weight-medium);
+}
+.table-data-mode[data-mode="write"] {
+  border-color: color-mix(in srgb, var(--ds-warning) 55%, transparent);
+  color: var(--ds-warning);
+  background: var(--ds-warning-soft);
+}
 .table-data-title small { color: var(--ds-secondary); }
 .table-data-controls {
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--ds-border);
-  border-radius: 22px;
+  border-radius: var(--ds-radius-pill);
   background: var(--ds-sidebar);
 }
 
 .table-data-controls > button {
   padding-inline: 10px;
   border-color: transparent;
-  border-radius: 18px;
+  border-radius: var(--ds-radius-pill);
   background: transparent;
 }
 .table-data-actions > button[aria-expanded="true"],
@@ -108,7 +123,7 @@
   margin: 10px 14px;
   padding: 9px 10px;
   border: 1px solid var(--ds-border);
-  border-radius: 14px;
+  border-radius: var(--ds-radius-dialog);
   background: var(--ds-sidebar);
 }
 
@@ -199,11 +214,11 @@
 .schema-object-menu.data-column-sort-menu {
   width: max-content;
   min-width: 172px;
-  border-radius: 13px;
+  border-radius: var(--ds-radius-group);
   background: var(--ds-sidebar);
 }
 
-.schema-object-menu.data-column-sort-menu > button { border-radius: 8px; }
+.schema-object-menu.data-column-sort-menu > button { border-radius: var(--ds-radius-menu); }
 .schema-object-menu.data-column-sort-menu > button[role="menuitem"] { padding-inline-start: 27px; }
 
 .table-data-controls, .schema-object-menu.data-column-sort-menu {
@@ -366,7 +381,7 @@
 .table-data-fields h3 {
   margin: 0;
   color: var(--ds-text);
-  font-size: 14px;
+  font-size: var(--ds-text-heading);
   overflow-wrap: anywhere;
 }
 
@@ -406,7 +421,7 @@
   border-collapse: separate;
   border-spacing: 0;
   text-align: left;
-  font-size: 12px;
+  font-size: var(--ds-text-control);
 }
 
 .table-data-grid :is(th, td) {
@@ -430,7 +445,7 @@
   display: block;
   color: var(--ds-tertiary);
   font-weight: 400;
-  font-size: 10px;
+  font-size: var(--ds-text-caption);
 }
 
 .table-data-cell-value, .table-data-row-status {

@@ -28,14 +28,14 @@
   content: "";
   flex: 1;
   block-size: 2px;
-  border-radius: 2px;
+  border-radius: var(--ds-radius-small);
   background: currentColor;
 }
 
 .quick-query-drop-guide > span {
   padding: 2px var(--ds-space-2);
   border: 1px solid currentColor;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: var(--ds-sidebar);
 }
 
@@ -52,7 +52,7 @@
   max-block-size: 100%;
   pointer-events: auto;
   border: 1px solid var(--ds-glass-edge);
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: var(--ds-glass-fill);
   box-shadow: var(--ds-shadow-popover);
   -webkit-backdrop-filter: var(--ds-glass-filter);

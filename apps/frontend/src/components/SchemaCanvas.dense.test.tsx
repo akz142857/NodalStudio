@@ -13,7 +13,13 @@ import { useExportTableDetail } from "./CanvasInteractionContext";
 import * as exporter from "../graph/diagram-export";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-const canvasStyles = readFileSync(resolve("src/styles.css"), "utf8").replace(/^@import[^\n]*\n/, "");
+// Inline the global stylesheet's section files; design-system imports stay out as before.
+const canvasStyles = readFileSync(resolve("src/styles.css"), "utf8")
+  .split("\n")
+  .map((line) => /^@import "\.\/(styles\/[\w-]+\.css)";$/.exec(line))
+  .filter((match) => match !== null)
+  .map((match) => readFileSync(resolve("src", match[1]), "utf8"))
+  .join("\n");
 
 const probe = vi.hoisted(() => ({ store: undefined as ReturnType<typeof useStoreApi<TableNode>> | undefined, fitView: vi.fn().mockResolvedValue(true) }));
 vi.mock("./TableNode", () => ({ TableNode: memo(function TestNode({ id, data }: NodeProps<TableNode>) {

@@ -388,7 +388,7 @@ async fn failed_candidate_introspection_does_not_replace_profile_or_invalidate_c
     settings.refresh.connection_timeout_seconds = 1;
     store.save_data_source_settings(&settings).await.unwrap();
     let state = AppState {
-        sessions: Default::default(),
+        sessions: crate::connection_sessions::ConnectionSessions::default(),
         store,
         ai_limiter: Arc::new(tokio::sync::Semaphore::new(840)),
         snapshot_captures: Arc::default(),

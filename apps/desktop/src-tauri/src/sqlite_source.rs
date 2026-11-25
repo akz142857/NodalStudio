@@ -519,7 +519,7 @@ mod tests {
             .unwrap();
         store.save_data_source(profile).await.unwrap();
         AppState {
-            sessions: Default::default(),
+            sessions: crate::connection_sessions::ConnectionSessions::default(),
             store,
             ai_limiter: std::sync::Arc::new(tokio::sync::Semaphore::new(840)),
             snapshot_captures: std::sync::Arc::default(),

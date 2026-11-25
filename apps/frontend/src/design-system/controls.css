@@ -66,7 +66,7 @@
   margin: 0;
   padding: 2px;
   border: 1px solid var(--ds-border);
-  border-radius: 12px;
+  border-radius: var(--ds-radius-dialog);
   background: var(--ds-control);
   cursor: pointer;
   transition: background-color var(--ds-motion-fast);

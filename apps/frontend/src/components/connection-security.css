@@ -1,26 +1,26 @@
 .connection-security-options { display: grid; gap: 12px; margin-top: 14px; }
-.connection-security-disclosure, .connection-ssh-section { border: 1px solid var(--ds-separator); border-radius: 10px; background: var(--ds-field); overflow: hidden; }
+.connection-security-disclosure, .connection-ssh-section { border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-group); background: var(--ds-field); overflow: hidden; }
 .connection-security-disclosure > summary { padding: 12px 14px; }
-.connection-security-options summary { cursor: pointer; font-size: 12px; font-weight: 500; }
+.connection-security-options summary { cursor: pointer; font-size: var(--ds-text-control); font-weight: 500; }
 .connection-security-options summary > span { margin-left: 8px; color: var(--ds-tertiary); font-weight: 400; }
 .connection-security-content { display: grid; gap: 12px; padding: 0 14px 14px; }
-.connection-security-content p { margin: 0; font-size: 11px; color: var(--ds-secondary); line-height: 1.5; }
+.connection-security-content p { margin: 0; font-size: var(--ds-text-caption); color: var(--ds-secondary); line-height: 1.5; }
 .connection-security-content > details { border-top: 1px solid var(--ds-separator); padding-top: 12px; }
 .connection-security-content > details[open] { display: grid; gap: 10px; }
 .connection-security-content > details[open] > :not(summary) { margin-top: 10px; }
-.connection-file-field > label { font-size: 12px; }
+.connection-file-field > label { font-size: var(--ds-text-control); }
 .connection-file-field > div { display: flex; gap: 8px; margin-top: 6px; }
-.connection-file-field input { flex: 1; min-width: 0; font-size: 12px; }
-.connection-file-field button { flex: none; padding: 5px 10px; font-size: 12px; }
+.connection-file-field input { flex: 1; min-width: 0; font-size: var(--ds-text-control); }
+.connection-file-field button { flex: none; padding: 5px 10px; font-size: var(--ds-text-control); }
 .connection-security-content .connection-file-help { margin-top: 6px; }
 .connection-ssh-server-identity { border-top: 1px solid var(--ds-separator); padding-top: 12px; }
 .connection-file-field [role="alert"] { color: var(--ds-danger); margin-top: 6px; }
 .connection-dialog .connection-panel label.connection-ssh-toggle, .connection-ssh-section .connection-ssh-toggle { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; }
 .connection-dialog .connection-ssh-toggle input[type="checkbox"], .connection-ssh-toggle input[type="checkbox"] { appearance: auto; width: 15px; height: 15px; min-height: 0; padding: 0; margin: 0; accent-color: var(--ds-accent); flex: none; }
 .connection-ssh-toggle span { display: grid; gap: 3px; }
-.connection-ssh-toggle strong { font-size: 12px; font-weight: 500; }
-.connection-ssh-toggle small { color: var(--ds-secondary); font-size: 11px; }
-.connection-panel .connection-file-field button { color: var(--ds-text); background: var(--ds-control); border: 1px solid var(--ds-border); border-radius: 7px; }
+.connection-ssh-toggle strong { font-size: var(--ds-text-control); font-weight: 500; }
+.connection-ssh-toggle small { color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.connection-panel .connection-file-field button { color: var(--ds-text); background: var(--ds-control); border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); }
 .connection-panel .connection-file-field button:hover:not(:disabled) { background: var(--ds-hover); }
 /* Keep the sheet and actions anchored while switching tabs or testing. */
 section.connection-dialog {
@@ -31,25 +31,25 @@ section.connection-dialog {
   flex-direction: column;
   overflow: hidden;
   padding: 20px;
-  border-radius: 14px;
+  border-radius: var(--ds-radius-dialog);
   background: var(--ds-surface);
   container: connection-dialog / inline-size;
 }
 .connection-dialog > header { flex: none; align-items: flex-start; }
-.connection-dialog h2 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.35; letter-spacing: -.015em; }
-.connection-dialog > .dialog-description { flex: none; margin: 5px 32px 14px 0; font-size: 12px; color: var(--ds-secondary); line-height: 1.5; }
+.connection-dialog h2 { margin: 0; font-size: var(--ds-text-lead); font-weight: 600; line-height: 1.35; letter-spacing: -.015em; }
+.connection-dialog > .dialog-description { flex: none; margin: 5px 32px 14px 0; font-size: var(--ds-text-control); color: var(--ds-secondary); line-height: 1.5; }
 .connection-dialog > .connection-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0; }
-.connection-dialog .connection-panel label { display: grid; gap: 6px; color: var(--ds-secondary); font-size: 12px; font-weight: 500; }
-.connection-dialog .connection-panel input, .connection-dialog .connection-panel select { height: 32px; border-radius: 6px; font-size: 13px; font-weight: 400; }
-.connection-dialog .connection-panel button { min-height: 30px; padding: 5px 12px; border: 1px solid var(--ds-border); border-radius: 6px; color: var(--ds-text); background: var(--ds-control); font-size: 12px; font-weight: 500; line-height: 1.4; cursor: pointer; }
+.connection-dialog .connection-panel label { display: grid; gap: 6px; color: var(--ds-secondary); font-size: var(--ds-text-control); font-weight: 500; }
+.connection-dialog .connection-panel input, .connection-dialog .connection-panel select { height: 32px; border-radius: var(--ds-radius-control); font-size: var(--ds-text-body); font-weight: 400; }
+.connection-dialog .connection-panel button { min-height: 30px; padding: 5px 12px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); background: var(--ds-control); font-size: var(--ds-text-control); font-weight: 500; line-height: 1.4; cursor: pointer; }
 .connection-dialog .connection-panel button:hover:not(:disabled) { background: var(--ds-hover); }
 .connection-dialog .connection-panel button:disabled { cursor: default; }
 .connection-dialog .connection-panel .connection-primary-button { border-color: var(--ds-accent-fill); color: var(--ds-on-accent); background: var(--ds-accent-fill); }
 .connection-dialog .connection-panel .connection-primary-button:hover:not(:disabled) { background: var(--ds-accent-hover); }
 .connection-dialog .connection-panel .connection-primary-button:disabled { border-color: var(--ds-border); color: var(--ds-tertiary); background: var(--ds-control); opacity: 1; }
-.connection-tabs { display: flex; gap: 2px; flex: none; align-self: flex-start; padding: 2px; margin-bottom: 12px; border-radius: 7px; background: var(--ds-control); }
+.connection-tabs { display: flex; gap: 2px; flex: none; align-self: flex-start; padding: 2px; margin-bottom: 12px; border-radius: var(--ds-radius-control); background: var(--ds-control); }
 .connection-dialog .connection-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 80px; min-height: 28px; padding: 4px 12px; border: 0; background: transparent; color: var(--ds-secondary); }
-.connection-dialog .connection-tabs button[aria-selected="true"] { background: var(--ds-selected-control); color: var(--ds-text); box-shadow: 0 1px 3px #0002, inset 0 0 0 1px var(--ds-border); }
+.connection-dialog .connection-tabs button[aria-selected="true"] { background: var(--ds-selected-control); color: var(--ds-text); box-shadow: var(--ds-shadow), inset 0 0 0 1px var(--ds-border); }
 .connection-tab-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ds-positive); }
 .connection-dialog-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px; scrollbar-width: thin; }
 .connection-tab-panel[hidden], .connection-form-section[hidden] { display: none; }
@@ -61,12 +61,12 @@ section.connection-dialog {
 .connection-network-grid .connection-name-field { grid-column: span 2; }
 .connection-network-grid .connection-database-field { grid-column: auto; }
 .connection-dialog .connection-section-heading { margin: 0; }
-.connection-dialog .connection-section-heading strong { font-size: 12px; font-weight: 500; }
-.connection-dialog .connection-keychain-status { padding: 0; border: 0; background: transparent; color: var(--ds-secondary); font-size: 11px; font-weight: 400; }
+.connection-dialog .connection-section-heading strong { font-size: var(--ds-text-control); font-weight: 500; }
+.connection-dialog .connection-keychain-status { padding: 0; border: 0; background: transparent; color: var(--ds-secondary); font-size: var(--ds-text-caption); font-weight: 400; }
 .connection-dialog .connection-keychain-status::before { display: none; }
 .connection-tab-panel .connection-security-setting { margin: 0 0 14px; padding: 0; border: 0; }
 .connection-tab-panel .connection-security-options { margin: 0; }
-.connection-dialog .connection-credential-note { padding: 0; background: transparent; font-size: 11px; color: var(--ds-secondary); line-height: 1.5; }
+.connection-dialog .connection-credential-note { padding: 0; background: transparent; font-size: var(--ds-text-caption); color: var(--ds-secondary); line-height: 1.5; }
 .connection-security-content .connection-ssh-grid { grid-template-columns: minmax(0, 1fr) 90px minmax(0, .7fr) minmax(0, .9fr); }
 .connection-ssh-key-fields { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; gap: 12px; }
 .connection-ssh-password { display: grid; gap: 7px; }
@@ -75,35 +75,35 @@ section.connection-dialog {
 .sqlite-file-picker { display: flex; gap: 8px; align-items: center; }
 .sqlite-file-picker input { flex: 1; min-width: 0; text-overflow: ellipsis; }
 .sqlite-file-picker button { flex: none; }
-.connection-dialog .connection-field-help { margin: 0; color: var(--ds-secondary); font-size: 11px; line-height: 1.5; }
+.connection-dialog .connection-field-help { margin: 0; color: var(--ds-secondary); font-size: var(--ds-text-caption); line-height: 1.5; }
 .connection-tls-action { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .connection-tls-action > p { flex: 1 1 230px; }
-.connection-tls-guidance { padding: 7px 10px; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-field); }
+.connection-tls-guidance { padding: 7px 10px; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-menu); background: var(--ds-field); }
 .connection-test-action { margin-top: 8px; }
 .connection-dialog-feedback .connection-test-action .connection-test-detail { margin: 0; }
 .sqlite-file-access { margin-top: 10px; }
-.sqlite-file-access > summary { width: fit-content; cursor: pointer; color: var(--ds-secondary); font-size: 12px; font-weight: 500; }
+.sqlite-file-access > summary { width: fit-content; cursor: pointer; color: var(--ds-secondary); font-size: var(--ds-text-control); font-weight: 500; }
 .sqlite-file-access > div { display: grid; gap: 10px; padding-top: 10px; }
-.sqlite-file-access p, .sqlite-file-access small { margin: 0; color: var(--ds-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.sqlite-file-access p, .sqlite-file-access small { margin: 0; color: var(--ds-secondary); font-size: var(--ds-text-caption); line-height: 1.5; overflow-wrap: anywhere; }
 .sqlite-file-access button { justify-self: start; }
 .connection-dialog .connection-live-action { margin: 16px 0 0; padding: 12px 0 0; }
-.connection-dialog .connection-live-action strong { font-size: 12px; font-weight: 500; }
-.connection-dialog .connection-live-action span { font-size: 11px; line-height: 1.5; }
+.connection-dialog .connection-live-action strong { font-size: var(--ds-text-control); font-weight: 500; }
+.connection-dialog .connection-live-action span { font-size: var(--ds-text-caption); line-height: 1.5; }
 .connection-dialog-feedback { flex: none; min-width: 0; max-height: min(45%, 210px); overflow: auto; overscroll-behavior: contain; }
 .connection-dialog .connection-panel > footer { flex: none; flex-direction: row; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--ds-separator); align-items: flex-end; gap: 12px; }
 .connection-dialog footer button { min-width: 0; white-space: nowrap; }
 .connection-footer-leading { display: grid; gap: 12px; justify-items: start; }
 .connection-footer-actions { display: flex; gap: 8px; }
-.connection-dialog .connection-panel .delete-source-button { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--ds-danger); font-size: 11px; }
-.connection-danger-action > span { font-size: 10px; color: var(--ds-secondary); }
+.connection-dialog .connection-panel .delete-source-button { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--ds-danger); font-size: var(--ds-text-caption); }
+.connection-danger-action > span { font-size: var(--ds-text-caption); color: var(--ds-secondary); }
 /* The feedback stays above the action row for every tab. */
-.connection-test-status { padding: 9px 12px; margin-top: 8px; border: 1px solid var(--ds-separator); border-radius: 8px; background: var(--ds-field); }
+.connection-test-status { padding: 9px 12px; margin-top: 8px; border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-menu); background: var(--ds-field); }
 .connection-test-heading, .connection-test-heading > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .connection-test-heading { justify-content: space-between; flex-wrap: wrap; min-height: 20px; }
-.connection-test-heading strong { color: var(--ds-text); font-size: 12px; font-weight: 600; }
+.connection-test-heading strong { color: var(--ds-text); font-size: var(--ds-text-control); font-weight: 600; }
 .connection-test-meta { flex-wrap: wrap; }
-.connection-test-disabled { padding: 1px 6px; border: 1px solid var(--ds-border); border-radius: 999px; color: var(--ds-secondary); font-size: 11px; }
-.connection-test-version { color: var(--ds-secondary); font-size: 11px; overflow-wrap: anywhere; }
+.connection-test-disabled { padding: 1px 6px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-pill); color: var(--ds-secondary); font-size: var(--ds-text-caption); }
+.connection-test-version { color: var(--ds-secondary); font-size: var(--ds-text-caption); overflow-wrap: anywhere; }
 .connection-check-icon { width: 16px; height: 16px; flex: none; }
 .connection-test-status [data-tone="success"] { color: var(--ds-positive); }
 .connection-test-status [data-tone="error"] { color: var(--ds-danger); }
@@ -117,10 +117,10 @@ section.connection-dialog {
 .connection-test-check:first-child .connection-check-track::before, .connection-test-check:last-child .connection-check-track::after { visibility: hidden; }
 .connection-test-check[data-tone="success"]:has(+ .connection-test-check[data-tone="success"]) .connection-check-track::after,
 .connection-test-check[data-tone="success"] + .connection-test-check[data-tone="success"] .connection-check-track::before { background: var(--ds-positive); }
-.connection-check-label { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 5px; padding-inline: 4px; overflow-wrap: anywhere; font-size: 11px; line-height: 15px; }
+.connection-check-label { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 5px; padding-inline: 4px; overflow-wrap: anywhere; font-size: var(--ds-text-caption); line-height: 15px; }
 .connection-check-label span { color: var(--ds-secondary); }
 .connection-check-label strong { font-weight: 600; }
-.connection-dialog-feedback .connection-test-detail, .connection-dialog-feedback .connection-test-hint { color: var(--ds-secondary); font-size: 11px; line-height: 1.45; margin: 6px 0 0; overflow-wrap: anywhere; }
+.connection-dialog-feedback .connection-test-detail, .connection-dialog-feedback .connection-test-hint { color: var(--ds-secondary); font-size: var(--ds-text-caption); line-height: 1.45; margin: 6px 0 0; overflow-wrap: anywhere; }
 .connection-test-status[data-compact] .connection-test-detail { margin-left: 24px; }
 .connection-check-icon.is-spinning { animation: connection-spin 1s linear infinite; }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
