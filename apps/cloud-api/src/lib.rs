@@ -1,15 +1,16 @@
 //! Axum API for metadata-only schema synchronization and read-only sharing.
 
 use std::{
-    collections::{BTreeSet, VecDeque},
+    collections::{BTreeSet, HashMap, VecDeque},
+    net::{IpAddr, SocketAddr},
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, State},
-    http::{HeaderMap, Request, StatusCode},
+    extract::{ConnectInfo, DefaultBodyLimit, Path, State},
+    http::{HeaderMap, HeaderValue, Request, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -24,15 +25,58 @@ use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Row};
 use tokio::sync::Mutex;
 use tower::limit::ConcurrencyLimitLayer;
-use tower_http::timeout::TimeoutLayer;
+use tower_http::{compression::CompressionLayer, timeout::TimeoutLayer};
 use uuid::Uuid;
+
+/// Requests one client address may make per rate window.
+const CLIENT_REQUESTS_PER_WINDOW: u32 = 600;
+/// Ceiling across all clients, so many addresses cannot exhaust the pool together.
+const GLOBAL_REQUESTS_PER_WINDOW: u32 = 6_000;
+const RATE_WINDOW: Duration = Duration::from_mins(1);
+/// Share views refresh `last_access_at` at most this often, keeping reads read-only.
+const SHARE_ACCESS_RESOLUTION: chrono::TimeDelta = chrono::TimeDelta::minutes(1);
 
 #[derive(Clone)]
 pub struct CloudState {
     pool: PgPool,
     bootstrap_secret: Arc<Mutex<Option<String>>>,
     bootstrap_attempts: Arc<Mutex<VecDeque<Instant>>>,
-    request_attempts: Arc<Mutex<VecDeque<Instant>>>,
+    request_window: Arc<std::sync::Mutex<RateWindow>>,
+    trust_proxy_headers: bool,
+}
+
+/// Fixed-window request counters keyed by client address; reset wholesale each window
+/// so memory stays bounded by the number of clients seen in one minute.
+struct RateWindow {
+    started: Instant,
+    total: u32,
+    clients: HashMap<Option<IpAddr>, u32>,
+}
+
+impl RateWindow {
+    fn new(now: Instant) -> Self {
+        Self {
+            started: now,
+            total: 0,
+            clients: HashMap::new(),
+        }
+    }
+
+    fn admit(&mut self, client: Option<IpAddr>, now: Instant) -> bool {
+        if now.duration_since(self.started) >= RATE_WINDOW {
+            *self = Self::new(now);
+        }
+        if self.total >= GLOBAL_REQUESTS_PER_WINDOW {
+            return false;
+        }
+        let count = self.clients.entry(client).or_default();
+        if *count >= CLIENT_REQUESTS_PER_WINDOW {
+            return false;
+        }
+        *count += 1;
+        self.total += 1;
+        true
+    }
 }
 
 impl CloudState {
@@ -41,13 +85,22 @@ impl CloudState {
             pool,
             bootstrap_secret: Arc::new(Mutex::new(None)),
             bootstrap_attempts: Arc::new(Mutex::new(VecDeque::new())),
-            request_attempts: Arc::new(Mutex::new(VecDeque::new())),
+            request_window: Arc::new(std::sync::Mutex::new(RateWindow::new(Instant::now()))),
+            trust_proxy_headers: false,
         }
     }
 
     #[must_use]
     pub fn with_bootstrap_secret(mut self, secret: Option<String>) -> Self {
         self.bootstrap_secret = Arc::new(Mutex::new(secret.filter(|value| value.len() >= 24)));
+        self
+    }
+
+    /// Identifies clients by the `X-Real-IP` header instead of the socket peer.
+    /// Enable only behind a reverse proxy that overwrites that header.
+    #[must_use]
+    pub fn with_trusted_proxy_headers(mut self, trust: bool) -> Self {
+        self.trust_proxy_headers = trust;
         self
     }
 }
@@ -196,6 +249,7 @@ pub fn router(state: CloudState) -> Router {
         )
         .route("/v1/projects/{project_id}/audit", get(list_project_audit))
         .route("/v1/view/{share_token}", get(view_shared_bundle))
+        .layer(CompressionLayer::new())
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
@@ -214,20 +268,32 @@ async fn enforce_request_rate(
     request: Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let now = Instant::now();
-    let mut attempts = state.request_attempts.lock().await;
-    while attempts
-        .front()
-        .is_some_and(|attempt| now.duration_since(*attempt) >= Duration::from_mins(1))
-    {
-        attempts.pop_front();
-    }
-    if attempts.len() >= 600 {
+    let client = client_address(&request, state.trust_proxy_headers);
+    let admitted = state
+        .request_window
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .admit(client, Instant::now());
+    if !admitted {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
-    attempts.push_back(now);
-    drop(attempts);
     Ok(next.run(request).await)
+}
+
+fn client_address<B>(request: &Request<B>, trust_proxy_headers: bool) -> Option<IpAddr> {
+    if trust_proxy_headers
+        && let Some(address) = request
+            .headers()
+            .get("x-real-ip")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.trim().parse().ok())
+    {
+        return Some(address);
+    }
+    request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ConnectInfo(address)| address.ip())
 }
 
 async fn health() -> &'static str {
@@ -713,17 +779,74 @@ async fn rotate_share(
 async fn view_shared_bundle(
     State(state): State<CloudState>,
     Path(share_token): Path<String>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
     let row = sqlx::query(
-        "UPDATE project_shares s SET last_access_at = now() FROM project_bundles b \
-         WHERE b.project_id = s.project_id AND s.token_hash = $1 AND s.permission = 'viewer' \
-           AND s.revoked_at IS NULL AND s.expires_at > now() RETURNING b.payload",
+        "SELECT s.id, s.last_access_at, b.version, b.fingerprint FROM project_shares s \
+         JOIN project_bundles b ON b.project_id = s.project_id \
+         WHERE s.token_hash = $1 AND s.permission = 'viewer' \
+           AND s.revoked_at IS NULL AND s.expires_at > now()",
     )
     .bind(hash_token(&share_token))
     .fetch_optional(&state.pool)
     .await?
     .ok_or_else(|| ApiError::not_found("Share link not found or expired."))?;
-    Ok(Json(row.get("payload")))
+    let share_id = row.get::<Uuid, _>("id");
+    let last_access = row.get::<Option<DateTime<Utc>>, _>("last_access_at");
+    if last_access.is_none_or(|at| Utc::now() - at >= SHARE_ACCESS_RESOLUTION) {
+        sqlx::query(
+            "UPDATE project_shares SET last_access_at = now() WHERE id = $1 \
+             AND (last_access_at IS NULL OR last_access_at < now() - interval '1 minute')",
+        )
+        .bind(share_id)
+        .execute(&state.pool)
+        .await?;
+    }
+    let etag = bundle_etag(row.get("version"), row.get("fingerprint"));
+    // Revalidate on every view so a revoked or expired link stops working immediately.
+    let cache_headers = [
+        (header::ETAG, etag.clone()),
+        (
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("private, no-cache"),
+        ),
+    ];
+    if headers
+        .get(header::IF_NONE_MATCH)
+        .is_some_and(|candidate| candidate == etag)
+    {
+        return Ok((StatusCode::NOT_MODIFIED, cache_headers).into_response());
+    }
+    let payload = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT payload FROM project_bundles b JOIN project_shares s ON s.project_id = b.project_id \
+         WHERE s.id = $1",
+    )
+    .bind(share_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::not_found("Share link not found or expired."))?;
+    Ok((cache_headers, Json(payload)).into_response())
+}
+
+fn bundle_etag(version: i64, fingerprint: &str) -> HeaderValue {
+    let tag: String = fingerprint
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .take(32)
+        .collect();
+    HeaderValue::from_str(&format!("\"{version}-{tag}\""))
+        .unwrap_or_else(|_| HeaderValue::from_static("\"unversioned\""))
+}
+
+/// Compares secrets through their digests so timing does not reveal a matching prefix.
+fn secrets_match(supplied: &str, expected: &str) -> bool {
+    let supplied = Sha256::digest(supplied.as_bytes());
+    let expected = Sha256::digest(expected.as_bytes());
+    supplied
+        .iter()
+        .zip(expected.iter())
+        .fold(0u8, |difference, (left, right)| difference | (left ^ right))
+        == 0
 }
 
 async fn authorize_bootstrap(state: &CloudState, headers: &HeaderMap) -> Result<(), ApiError> {
@@ -750,7 +873,7 @@ async fn authorize_bootstrap(state: &CloudState, headers: &HeaderMap) -> Result<
     }
     attempts.push_back(now);
     drop(attempts);
-    if supplied != expected {
+    if !secrets_match(supplied, &expected) {
         return Err(ApiError::unauthorized("Bootstrap secret is invalid."));
     }
     configured.take();
@@ -997,6 +1120,62 @@ mod tests {
             compute_sync_bundle_fingerprint(&bundle).expect("fingerprint"),
             first
         );
+    }
+
+    #[test]
+    fn rate_window_limits_each_client_independently() {
+        let start = Instant::now();
+        let mut window = RateWindow::new(start);
+        let noisy = Some(IpAddr::from([10, 0, 0, 1]));
+        let quiet = Some(IpAddr::from([10, 0, 0, 2]));
+        for _ in 0..CLIENT_REQUESTS_PER_WINDOW {
+            assert!(window.admit(noisy, start));
+        }
+        assert!(!window.admit(noisy, start));
+        assert!(window.admit(quiet, start));
+        assert!(window.admit(noisy, start + RATE_WINDOW));
+    }
+
+    #[test]
+    fn rate_window_enforces_a_global_ceiling() {
+        let start = Instant::now();
+        let mut window = RateWindow::new(start);
+        for client in 0..GLOBAL_REQUESTS_PER_WINDOW {
+            assert!(window.admit(Some(IpAddr::from(client.to_be_bytes())), start));
+        }
+        assert!(!window.admit(Some(IpAddr::from([192, 0, 2, 1])), start));
+    }
+
+    #[test]
+    fn proxy_address_is_used_only_when_trusted() {
+        let mut request = Request::get("/health")
+            .header("x-real-ip", "203.0.113.9")
+            .body(())
+            .unwrap();
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 9000))));
+        assert_eq!(
+            client_address(&request, false),
+            Some(IpAddr::from([127, 0, 0, 1]))
+        );
+        assert_eq!(
+            client_address(&request, true),
+            Some(IpAddr::from([203, 0, 113, 9]))
+        );
+    }
+
+    #[test]
+    fn secrets_compare_by_value() {
+        assert!(secrets_match("same-secret", "same-secret"));
+        assert!(!secrets_match("same-secret", "same-secreT"));
+        assert!(!secrets_match("short", "same-secret"));
+    }
+
+    #[test]
+    fn bundle_etag_changes_with_version_and_fingerprint() {
+        assert_eq!(bundle_etag(3, "sha256:ab-cd"), "\"3-sha256abcd\"");
+        assert_ne!(bundle_etag(3, "abc"), bundle_etag(4, "abc"));
     }
 
     #[tokio::test]

@@ -190,6 +190,45 @@ async fn cloud_conflicts_and_share_lifecycle_are_enforced() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    let view = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/view/{share_token}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let etag = view.headers()["etag"].clone();
+    assert_eq!(view.headers()["cache-control"], "private, no-cache");
+    let revalidated = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/view/{share_token}"))
+                .header("if-none-match", etag)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(revalidated.status(), StatusCode::NOT_MODIFIED);
+    let (status, shares) = request(
+        app.clone(),
+        "GET",
+        &share_path,
+        Some(token),
+        None,
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        shares
+            .as_array()
+            .and_then(|shares| shares.iter().find(|share| share["id"] == share_id))
+            .is_some_and(|share| !share["lastAccessAt"].is_null()),
+        "share views record their last access"
+    );
     let (status, _) = request(
         app.clone(),
         "DELETE",
