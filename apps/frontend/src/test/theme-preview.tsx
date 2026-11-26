@@ -40,6 +40,7 @@ const platform = {
     const abort = () => { clearInterval(timer); reject(Object.assign(new Error("Cancelled"), { stage: "cancelled", sshConnected: false })); };
     options?.signal?.addEventListener("abort", abort, { once: true });
   }),
+  listRecentSnapshotIds: () => Promise.resolve([reportSnapshot.id]),
   listSnapshots: () => Promise.resolve([{ id: reportSnapshot.id, sourceId: reportSnapshot.sourceId, capturedAt: reportSnapshot.capturedAt, fingerprint: reportSnapshot.fingerprint, databaseName: reportSnapshot.database.name, schemaCount: reportSnapshot.schemas.length, tableCount: reportSnapshot.schemas.reduce((n,s) => n+s.tables.length,0) }]),
   prepareDiscovery: (input: DiscoveryInput) => { const preview = discoveryPreview(input); previews.set(preview.requestId, preview); return Promise.resolve(preview); },
   runDiscovery: (id: string) => { const result = discoveryResult(previews.get(id)!); result.answer = { terms: [], meanings: [], rankings: [], interpretations: [], readingOrder: [], unknowns: [], sqlDraft: { sql: "SELECT o.id, o.total\nFROM public.orders AS o\nWHERE o.total > 50\nLIMIT 100;", explanation: "Lists order IDs and totals above 50. Synthetic preview only.", assumptions: ["Amount is interpreted using the stored total column."], clarification: [] } }; return Promise.resolve(result); },

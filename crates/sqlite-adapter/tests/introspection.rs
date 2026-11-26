@@ -161,7 +161,7 @@ async fn references_use_catalog_spelling_and_view_trigger_identity() {
     )
     .await
     .unwrap();
-    writer.execute("CREATE TABLE Parents(ParentID INTEGER PRIMARY KEY); CREATE TABLE Children(childID INTEGER CONSTRAINT child_parent REFERENCES parents(parentid) DEFERRABLE INITIALLY DEFERRED); CREATE VIEW Visible AS SELECT * FROM Children; CREATE TRIGGER forward INSTEAD OF INSERT ON Visible BEGIN SELECT 1; END;").await.unwrap();
+    writer.execute("CREATE TABLE Parents(ParentID INTEGER PRIMARY KEY); CREATE TABLE Children(childID INTEGER CONSTRAINT child_parent REFERENCES parents(parentid) DEFERRABLE INITIALLY DEFERRED); CREATE TABLE OtherChildren(childID INTEGER REFERENCES PARENTS); CREATE VIEW Visible AS SELECT * FROM Children; CREATE TRIGGER forward INSTEAD OF INSERT ON Visible BEGIN SELECT 1; END;").await.unwrap();
     writer.close().await.unwrap();
     let mut reader = sqlite_adapter::connect(&path).await.unwrap();
     let snapshot = sqlite_adapter::inspect_schema(&mut reader, Uuid::new_v4(), "references.db")
@@ -178,6 +178,14 @@ async fn references_use_catalog_spelling_and_view_trigger_identity() {
     assert_eq!(fk.referenced_columns, ["ParentID"]);
     assert_eq!(fk.name, "child_parent");
     assert!(fk.deferrable && fk.initially_deferred);
+    let other_fk = &schema
+        .tables
+        .iter()
+        .find(|t| t.key.name == "OtherChildren")
+        .unwrap()
+        .foreign_keys[0];
+    assert_eq!(other_fk.referenced_table, "Parents");
+    assert_eq!(other_fk.referenced_columns, ["ParentID"]);
     assert_eq!(
         schema.programs[0].table.as_ref().unwrap().kind,
         schema_model::ObjectKind::View

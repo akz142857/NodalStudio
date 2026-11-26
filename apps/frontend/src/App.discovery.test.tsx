@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { getPlatform, type CaptureSnapshotResult, type SnapshotSummary } from "./platform";
+import { getPlatform, type CaptureSnapshotResult } from "./platform";
 import type { SchemaCanvasProps } from "./components/SchemaCanvas";
 import { reportSemantics, reportSnapshot } from "./test/schema-report-fixture";
 import { discoverySettings } from "./test/discovery-fixture";
@@ -21,7 +21,7 @@ function mount(latestId = reportSnapshot.id) {
   vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "desktop", label: "Discovery runtime", version: "test" });
   vi.spyOn(platform, "getSettings").mockResolvedValue(discoverySettings());
   vi.spyOn(platform, "getSemantics").mockResolvedValue(reportSemantics);
-  vi.spyOn(platform, "listSnapshots").mockResolvedValue([{ id: latestId } as SnapshotSummary]);
+  vi.spyOn(platform, "listRecentSnapshotIds").mockResolvedValue([latestId]);
   const save = vi.spyOn(platform, "saveLayout");
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);
   return { save };

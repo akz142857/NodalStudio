@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { App } from './App';
-import { getPlatform, type CaptureSnapshotResult, type SnapshotSummary, type SemanticBundle } from './platform';
+import { getPlatform, type CaptureSnapshotResult, type SemanticBundle } from './platform';
 import type { SchemaCanvasProps } from './components/SchemaCanvas';
 import { reportSnapshot } from './test/schema-report-fixture';
 import { tableAiSettings, tableAiPreview, tableAiResult } from './test/table-ai-fixture';
@@ -17,7 +17,7 @@ it.each(['manual', 'model', 'return-to-a', 'reload-order'] as const)('isolates l
  vi.spyOn(platform,'getRuntimeInfo').mockResolvedValue({kind:'desktop',label:'Review runtime',version:'test'});
  vi.spyOn(platform,'getSettings').mockImplementation((source)=>{const settings=tableAiSettings();settings.source!.sourceId=source??'source-a';return Promise.resolve(settings);});
  const semantics=vi.spyOn(platform,'getSemantics').mockImplementation(async(source)=>{if(source==='source-a'&&++aCalls===2)return new Promise(r=>{resolveOld=r;});return bundle(source, source==='source-b'?'Source B original note':entry==='reload-order'&&aCalls>2?'Source A newer note':'Source A original note');});
- vi.spyOn(platform,'listSnapshots').mockImplementation((source)=>Promise.resolve([{id:source==='source-b'?'snapshot-b':'snapshot-a'} as SnapshotSummary]));
+ vi.spyOn(platform,'listRecentSnapshotIds').mockImplementation((source)=>Promise.resolve([source==='source-b'?'snapshot-b':'snapshot-a']));
  vi.spyOn(platform,'prepareKnowledgeDraft').mockResolvedValue({id:'draft-a',sourceId:'source-a',snapshotId:'snapshot-a',target:reportSnapshot.schemas[0].tables[1].key,oldDescription:'Source A original note',draftText:'Source A confirmed note',expiresAt:new Date(Date.now()+300000).toISOString(),basis:{tables:[],relationships:[],notes:[]},origin:{kind:'manualReview',evidence:{},requestId:null,provider:null,model:null,generatedAt:null}});
  vi.spyOn(platform,'prepareTableExplanation').mockResolvedValue({...tableAiPreview,sourceId:'source-a',snapshotId:'snapshot-a',expiresAt:new Date(Date.now()+300000).toISOString()});
  vi.spyOn(platform,'runTableExplanation').mockResolvedValue({...tableAiResult,sourceId:'source-a',snapshotId:'snapshot-a'});

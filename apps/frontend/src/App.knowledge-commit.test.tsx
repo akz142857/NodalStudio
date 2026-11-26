@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, it, expect, vi } from 'vitest';
 import { App } from './App';
-import { getPlatform, type CaptureSnapshotResult, type SnapshotSummary, type SemanticBundle, type ObjectAnnotation } from './platform';
+import { getPlatform, type CaptureSnapshotResult, type SemanticBundle, type ObjectAnnotation } from './platform';
 import type { SchemaCanvasProps } from './components/SchemaCanvas';
 import { reportSnapshot, reportSemantics } from './test/schema-report-fixture';
 import { discoverySettings } from './test/discovery-fixture';
@@ -19,7 +19,7 @@ it('refreshes committed confirmation after switching away from the editing segme
   vi.spyOn(platform,'getSettings').mockResolvedValue(settings);
   vi.spyOn(platform,'updateAppSettings').mockResolvedValue(settings);
   const reads=vi.spyOn(platform,'getSemantics').mockImplementation((sourceId)=>Promise.resolve(sourceId===reportSnapshot.sourceId?structuredClone(bundle):{annotations:[],orphanedAnnotations:[],domainGroups:[],savedViews:[],layout:null,logicalRelationships:[],ignoredRelationshipInferences:[],knowledge:[]}));
-  vi.spyOn(platform,'listSnapshots').mockImplementation((source)=>Promise.resolve([{id:source==='source-b'?'snapshot-b':reportSnapshot.id} as SnapshotSummary]));
+  vi.spyOn(platform,'listRecentSnapshotIds').mockImplementation((source)=>Promise.resolve([source==='source-b'?'snapshot-b':reportSnapshot.id]));
   vi.spyOn(platform,'prepareKnowledgeDraft').mockResolvedValue({id:'draft-a',sourceId:reportSnapshot.sourceId,snapshotId:reportSnapshot.id,target:key,oldDescription:'quasarzephyr',draftText:'Current confirmed note',expiresAt:new Date(Date.now()+300000).toISOString(),basis:{tables:[],relationships:[],notes:[]},origin:{kind:'manualReview',evidence:{},requestId:null,provider:null,model:null,generatedAt:null}});
   let finish!:()=>void;
   const confirm=vi.spyOn(platform,'confirmKnowledgeDraft').mockImplementation(()=>new Promise<ObjectAnnotation>(resolve=>{finish=()=>{
@@ -50,7 +50,7 @@ it.each(['annotation-return', 'confirmation-return', 'confirmation-other'] as co
   vi.spyOn(platform,'getSettings').mockResolvedValue(settings);
   vi.spyOn(platform,'updateAppSettings').mockResolvedValue(settings);
   const reads=vi.spyOn(platform,'getSemantics').mockImplementation((sourceId)=>Promise.resolve(sourceId===reportSnapshot.sourceId?structuredClone(bundle):{annotations:[],orphanedAnnotations:[],domainGroups:[],savedViews:[],layout:null,logicalRelationships:[],ignoredRelationshipInferences:[],knowledge:[]}));
-  vi.spyOn(platform,'listSnapshots').mockImplementation((source)=>Promise.resolve([{id:source==='source-b'?'snapshot-b':reportSnapshot.id} as SnapshotSummary]));
+  vi.spyOn(platform,'listRecentSnapshotIds').mockImplementation((source)=>Promise.resolve([source==='source-b'?'snapshot-b':reportSnapshot.id]));
   vi.spyOn(platform,'prepareKnowledgeDraft').mockResolvedValue({id:'draft-a',sourceId:reportSnapshot.sourceId,snapshotId:reportSnapshot.id,target:key,oldDescription:'quasarzephyr',draftText:'Current confirmed note',expiresAt:new Date(Date.now()+300000).toISOString(),basis:{tables:[],relationships:[],notes:[]},origin:{kind:'manualReview',evidence:{},requestId:null,provider:null,model:null,generatedAt:null}});
   let finish!:()=>void;
   const save=vi.spyOn(platform,entry==='annotation-return'?'saveAnnotation':'confirmKnowledgeDraft').mockImplementation(()=>new Promise<ObjectAnnotation>(resolve=>{finish=()=>{

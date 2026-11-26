@@ -46,7 +46,7 @@ const captureResult = {
 function platformMock(overrides: Partial<NodalStudioPlatform> = {}): NodalStudioPlatform {
   return {
     listDataSources: vi.fn().mockResolvedValue([profile]),
-    listSnapshots: vi.fn().mockResolvedValue([{ id: "snapshot-1", sourceId: profile.id }]),
+    listRecentSnapshotIds: vi.fn().mockResolvedValue(["snapshot-1"]),
     getSnapshot: vi.fn().mockResolvedValue(captureResult.snapshot),
     testPostgresConnection: vi.fn().mockResolvedValue(connectionResult),
     saveDataSource: vi.fn().mockResolvedValue(profile),
@@ -438,15 +438,18 @@ describe("ConnectionPanel", () => {
     expect(screen.queryByText("Model for archive-source")).not.toBeInTheDocument();
   });
 
-  it("announces catalog loading and the target database while retaining the current workspace until success", async () => {
+  it("keeps the database list selectable during refresh and retains the current workspace until a switch succeeds", async () => {
     const server = { ...profile, id: "progress-server", displayName: "Shared server", database: "" };
     const current = { ...profile, id: "progress-current", serverSourceId: server.id };
     const target = { ...current, id: "progress-target", database: "reporting" };
     const capture = { ...captureResult, snapshot: { ...captureResult.snapshot, sourceId: target.id } };
     let finishCatalog!: (databases: string[]) => void;
+    let finishCatalogRefresh!: (databases: string[]) => void;
     let failOpen!: (reason: Error) => void;
     const databases = [target.database, ...Array.from({ length: 42 }, (_, index) => `archive_${index}`), current.database];
-    const listServerDatabases = vi.fn().mockImplementationOnce(() => new Promise<string[]>((resolve) => { finishCatalog = resolve; })).mockResolvedValue(databases);
+    const listServerDatabases = vi.fn()
+      .mockImplementationOnce(() => new Promise<string[]>((resolve) => { finishCatalog = resolve; }))
+      .mockImplementationOnce(() => new Promise<string[]>((resolve) => { finishCatalogRefresh = resolve; }));
     const openServerDatabase = vi.fn<NodalStudioPlatform["openServerDatabase"]>()
       .mockImplementationOnce(() => new Promise((_, reject) => { failOpen = reject; }))
       .mockResolvedValue({ profile: target, capture });
@@ -472,7 +475,12 @@ describe("ConnectionPanel", () => {
     expect(screen.getByText(`Model for ${current.id}`)).toBeVisible();
 
     fireEvent.keyDown(picker, { key: "Enter" });
-    fireEvent.click(await screen.findByRole("option", { name: target.database }));
+    expect(listServerDatabases).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("option", { name: target.database })).toBeVisible();
+    expect(screen.getByRole("listbox")).not.toHaveAttribute("aria-busy");
+    await act(async () => { finishCatalogRefresh(["recent_database", ...databases]); await Promise.resolve(); });
+    expect(screen.getByRole("option", { name: "recent_database" })).toBeVisible();
+    fireEvent.click(screen.getByRole("option", { name: target.database }));
     expect(await screen.findByText(`Model for ${target.id}`)).toBeVisible();
     expect(picker).toHaveValue(target.database);
     expect(screen.queryByText("Opening reporting…")).not.toBeInTheDocument();
@@ -511,11 +519,11 @@ describe("ConnectionPanel", () => {
     const database = { ...profile, id: "edit-database", displayName: "Linked Flow", serverSourceId: server.id };
     const updatedServer = { ...server, host: "new.example.test", updatedAt: "2026-07-19T00:00:00Z" };
     const capture = { ...captureResult, snapshot: { ...captureResult.snapshot, sourceId: database.id } };
-    const listSnapshots = vi.fn();
+    const listRecentSnapshotIds = vi.fn();
     const listServerDatabases = vi.fn().mockResolvedValue([database.database]);
     const openServerDatabase = vi.fn().mockResolvedValue({ profile: { ...database, host: updatedServer.host }, capture });
     const { onSnapshot } = renderWorkspace(platformMock({
-      listDataSources: vi.fn().mockResolvedValue([server, database]), listSnapshots, listServerDatabases, openServerDatabase,
+      listDataSources: vi.fn().mockResolvedValue([server, database]), listRecentSnapshotIds, listServerDatabases, openServerDatabase,
       testPostgresConnection: vi.fn().mockResolvedValue({ ...connectionResult, database: { ...connectionResult.database, name: "" } }),
       saveDataSource: vi.fn().mockResolvedValue(updatedServer),
     }), database.id);
@@ -534,7 +542,7 @@ describe("ConnectionPanel", () => {
     expect(await screen.findByText(`Model for ${database.id}`)).toBeVisible();
     expect(listServerDatabases).toHaveBeenCalledWith(server.id);
     expect(openServerDatabase).toHaveBeenCalledExactlyOnceWith(server.id, database.database, updatedServer.updatedAt);
-    expect(listSnapshots).not.toHaveBeenCalled();
+    expect(listRecentSnapshotIds).not.toHaveBeenCalled();
     expect(onSnapshot).toHaveBeenCalledWith(capture);
   });
 
@@ -599,8 +607,8 @@ describe("ConnectionPanel", () => {
   });
 
   it("keeps object search and group state across same-source snapshot refresh without reopening it", async () => {
-    const listSnapshots = vi.fn(), getSnapshot = vi.fn(), capturePostgresSnapshot = vi.fn();
-    const platform = platformMock({ listSnapshots, getSnapshot, capturePostgresSnapshot }), onSnapshot = vi.fn();
+    const listRecentSnapshotIds = vi.fn(), getSnapshot = vi.fn(), capturePostgresSnapshot = vi.fn();
+    const platform = platformMock({ listRecentSnapshotIds, getSnapshot, capturePostgresSnapshot }), onSnapshot = vi.fn();
     const model = { ...reportSnapshot, sourceId: profile.id, schemas: [reportSnapshot.schemas[0]] };
     const panel = (snapshot = model) => <ConnectionPanel enabled activeSourceId={profile.id} platform={platform}
       onSnapshot={onSnapshot} defaultDatabaseType="mySql" defaultSslMode="prefer">
@@ -618,7 +626,7 @@ describe("ConnectionPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear object search" }));
     expect(screen.getByRole("button", { name: /Tables/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: /^customers/ })).toBeVisible();
-    expect(listSnapshots).not.toHaveBeenCalled();
+    expect(listRecentSnapshotIds).not.toHaveBeenCalled();
     expect(getSnapshot).not.toHaveBeenCalled();
     expect(capturePostgresSnapshot).not.toHaveBeenCalled();
     expect(onSnapshot).not.toHaveBeenCalled();
@@ -626,8 +634,8 @@ describe("ConnectionPanel", () => {
 
   it("opens a newly selected source and keeps its content visible independently of editing", async () => {
     const other = { ...profile, id: "source-2", displayName: "Other" };
-    const listSnapshots = vi.fn().mockResolvedValue([{ id: "other-snapshot", sourceId: other.id }]);
-    const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listSnapshots,
+    const listRecentSnapshotIds = vi.fn().mockResolvedValue(["other-snapshot"]);
+    const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listRecentSnapshotIds,
       getSnapshot: vi.fn().mockResolvedValue({ ...captureResult.snapshot, sourceId: other.id }) });
     const onSnapshot = vi.fn();
     const panel = (id: string) => <ConnectionPanel enabled activeSourceId={id} platform={platform}
@@ -640,7 +648,7 @@ describe("ConnectionPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Connection: Flow" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: /^Other/ }));
     await waitFor(() => expect(onSnapshot).toHaveBeenCalledOnce());
-    expect(listSnapshots).toHaveBeenCalledWith(other.id);
+    expect(listRecentSnapshotIds).toHaveBeenCalledWith(other.id);
     rerender(panel(other.id));
     expect(screen.getByRole("textbox", { name: "Source content" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Add database" }));
@@ -703,7 +711,7 @@ describe("ConnectionPanel", () => {
 
   it("opens the connection editor to create a missing schema snapshot", async () => {
     const verifyAndRefreshDataSource = vi.fn().mockResolvedValue({ profile, connection: connectionResult, capture: captureResult });
-    const platform = platformMock({ listSnapshots: vi.fn().mockResolvedValue([]), verifyAndRefreshDataSource });
+    const platform = platformMock({ listRecentSnapshotIds: vi.fn().mockResolvedValue([]), verifyAndRefreshDataSource });
     const { onSnapshot } = renderPanel(platform, null);
     fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
     fireEvent.click(screen.getByRole("menuitemradio"));
@@ -722,17 +730,17 @@ describe("ConnectionPanel", () => {
   });
 
   it("opens the saved snapshot without reconnecting to the database", async () => {
-    const listSnapshots = vi.fn().mockResolvedValue([{ id: "snapshot-1", sourceId: profile.id }]);
+    const listRecentSnapshotIds = vi.fn().mockResolvedValue(["snapshot-1"]);
     const getSnapshot = vi.fn().mockResolvedValue(captureResult.snapshot);
     const capturePostgresSnapshot = vi.fn();
-    const platform = platformMock({ listSnapshots, getSnapshot, capturePostgresSnapshot });
+    const platform = platformMock({ listRecentSnapshotIds, getSnapshot, capturePostgresSnapshot });
     const { onSnapshot } = renderPanel(platform, null);
 
     fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
     expect(screen.getByRole("menuitemradio")).toHaveAttribute("aria-checked", "false");
     fireEvent.click(screen.getByRole("menuitemradio", { name: /^Flow/ }));
 
-    await waitFor(() => expect(listSnapshots).toHaveBeenCalledWith(profile.id));
+    await waitFor(() => expect(listRecentSnapshotIds).toHaveBeenCalledWith(profile.id));
     expect(getSnapshot).toHaveBeenCalledWith("snapshot-1");
     expect(capturePostgresSnapshot).not.toHaveBeenCalled();
     expect(onSnapshot).toHaveBeenCalledWith({ snapshot: captureResult.snapshot, stored: false, changeSet: null });
@@ -828,8 +836,8 @@ describe("ConnectionPanel", () => {
   it("deletes a source and its local data after confirmation", async () => {
     const clearCredentials = vi.fn().mockResolvedValue(undefined);
     const deleteSourceData = vi.fn().mockResolvedValue(4);
-    const listSnapshots = vi.fn();
-    const platform = platformMock({ clearCredentials, deleteSourceData, listSnapshots });
+    const listRecentSnapshotIds = vi.fn();
+    const platform = platformMock({ clearCredentials, deleteSourceData, listRecentSnapshotIds });
     const { onSnapshot, onSourceDeleted } = renderWorkspace(platform);
     await editCurrentConnection();
     fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
@@ -847,14 +855,14 @@ describe("ConnectionPanel", () => {
     expect(screen.queryByRole("button", { name: "Connection: Flow" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /No database connected/ })).toBeVisible();
     expect(onSnapshot).not.toHaveBeenCalled();
-    expect(listSnapshots).not.toHaveBeenCalled();
+    expect(listRecentSnapshotIds).not.toHaveBeenCalled();
   });
 
   it("opens the remaining saved model after deleting the current source", async () => {
     const remaining = { ...profile, id: "source-2", database: "warehouse", displayName: "Flow" };
     const snapshot = { ...captureResult.snapshot, sourceId: remaining.id };
-    const listSnapshots = vi.fn().mockResolvedValue([{ id: "remaining-snapshot" }]), capturePostgresSnapshot = vi.fn();
-    const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, remaining]), getSnapshot: vi.fn().mockResolvedValue(snapshot), listSnapshots, capturePostgresSnapshot });
+    const listRecentSnapshotIds = vi.fn().mockResolvedValue(["remaining-snapshot"]), capturePostgresSnapshot = vi.fn();
+    const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, remaining]), getSnapshot: vi.fn().mockResolvedValue(snapshot), listRecentSnapshotIds, capturePostgresSnapshot });
     const { onSnapshot, onSourceDeleted } = renderWorkspace(platform);
     await editCurrentConnection();
     fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
@@ -863,7 +871,7 @@ describe("ConnectionPanel", () => {
     expect(screen.getByText("Model for source-2")).toBeVisible();
     expect(onSourceDeleted).toHaveBeenCalledExactlyOnceWith(profile.id);
     expect(onSnapshot).toHaveBeenCalledExactlyOnceWith({ snapshot, stored: false, changeSet: null });
-    expect(listSnapshots).toHaveBeenCalledExactlyOnceWith(remaining.id);
+    expect(listRecentSnapshotIds).toHaveBeenCalledExactlyOnceWith(remaining.id);
     expect(capturePostgresSnapshot).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Connection: Flow" }));
     expect(screen.getAllByRole("menuitemradio")).toHaveLength(1);
@@ -874,7 +882,7 @@ describe("ConnectionPanel", () => {
     const remaining = { ...profile, id: "source-2", database: "warehouse" };
     const platform = platformMock({
       listDataSources: vi.fn().mockResolvedValue([profile, remaining]),
-      listSnapshots: vi.fn().mockRejectedValueOnce(new Error("Local snapshot unavailable")).mockResolvedValue([{ id: "remaining-snapshot" }]),
+      listRecentSnapshotIds: vi.fn().mockRejectedValueOnce(new Error("Local snapshot unavailable")).mockResolvedValue(["remaining-snapshot"]),
       getSnapshot: vi.fn().mockResolvedValue({ ...captureResult.snapshot, sourceId: remaining.id }),
     });
     renderWorkspace(platform);
@@ -898,10 +906,10 @@ describe("ConnectionPanel", () => {
     Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function(this: HTMLDialogElement) { this.open = false; } });
     try {
       const other = { ...profile, id: "other", database: "warehouse", displayName: "Other" };
-      const listSnapshots = vi.fn();
+      const listRecentSnapshotIds = vi.fn();
       const clearCredentials = vi.fn().mockResolvedValue(undefined);
       const deleteSourceData = vi.fn().mockRejectedValueOnce(new Error("Local storage unavailable")).mockResolvedValue(1);
-      const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listSnapshots, clearCredentials, deleteSourceData });
+      const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listRecentSnapshotIds, clearCredentials, deleteSourceData });
       const { onSnapshot, onSourceDeleted } = renderWorkspace(platform);
       await screen.findByRole("button", { name: "Connection: Flow" });
       fireEvent.contextMenu(screen.getByRole("region", { name: "Data sources" }));
@@ -937,7 +945,7 @@ describe("ConnectionPanel", () => {
       expect(screen.getByRole("button", { name: "Connection: Flow" })).toBeVisible();
       expect(screen.getByText("Model for source-1")).toBeVisible();
       expect(onSnapshot).not.toHaveBeenCalled();
-      expect(listSnapshots).not.toHaveBeenCalled();
+      expect(listRecentSnapshotIds).not.toHaveBeenCalled();
     } finally {
       cleanup();
       Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
@@ -1050,8 +1058,8 @@ describe("database navigation actions", () => {
     const server = { ...profile, id: "server-to-delete", displayName: "Shared server", database: "" };
     const linked = { ...profile, id: "active-database", displayName: "Shared server · flow", serverSourceId: server.id };
     const deleteSourceData = vi.fn().mockResolvedValue(1);
-    const listSnapshots = vi.fn();
-    const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([linked, server, profile]), deleteSourceData, listSnapshots });
+    const listRecentSnapshotIds = vi.fn();
+    const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([linked, server, profile]), deleteSourceData, listRecentSnapshotIds });
     const { onSourceDeleted } = renderWorkspace(platform, linked.id);
     await editCurrentConnection(server.displayName);
     fireEvent.click(screen.getByRole("button", { name: "Delete data source" }));
@@ -1061,7 +1069,7 @@ describe("database navigation actions", () => {
     const picker = await screen.findByRole("button", { name: "Select connection" });
     expect(onSourceDeleted).toHaveBeenCalledWith(server.id);
     expect(deleteSourceData).toHaveBeenCalledExactlyOnceWith(server.id, expect.anything());
-    expect(listSnapshots).not.toHaveBeenCalled();
+    expect(listRecentSnapshotIds).not.toHaveBeenCalled();
     fireEvent.click(picker);
     const switcher = within(screen.getByRole("menu", { name: "Switch connection" }));
     expect(switcher.getAllByRole("menuitemradio")).toHaveLength(1);
@@ -1105,8 +1113,8 @@ describe("database navigation actions", () => {
     Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function(this: HTMLDialogElement) { this.open = false; } });
     try {
       const other = { ...profile, id: "other", displayName: "Warehouse", database: "warehouse" };
-      const listSnapshots = vi.fn().mockResolvedValue([{ id: "snapshot-1" }]), saveDataSource = vi.fn(), capturePostgresSnapshot = vi.fn();
-      const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listSnapshots, saveDataSource, capturePostgresSnapshot });
+      const listRecentSnapshotIds = vi.fn().mockResolvedValue(["snapshot-1"]), saveDataSource = vi.fn(), capturePostgresSnapshot = vi.fn();
+      const platform = platformMock({ listDataSources: vi.fn().mockResolvedValue([profile, other]), listRecentSnapshotIds, saveDataSource, capturePostgresSnapshot });
       const { onSnapshot } = renderPanel(platform, null);
       await screen.findByRole("button", { name: "Select connection" });
       const region = screen.getByRole("region", { name: "Data sources" });
@@ -1123,7 +1131,7 @@ describe("database navigation actions", () => {
       expect(manager.querySelectorAll('.connection-manager-row')).toHaveLength(1);
       fireEvent.click(screen.getByRole("button", { name: "Open Warehouse" }));
       await waitFor(() => expect(onSnapshot).toHaveBeenCalledOnce());
-      expect(listSnapshots).toHaveBeenCalledWith(other.id);
+      expect(listRecentSnapshotIds).toHaveBeenCalledWith(other.id);
       manage();
       fireEvent.click(within(screen.getByRole("dialog", { name: "Manage connections" })).getByRole("button", { name: "Edit Warehouse" }));
       expect(screen.getByRole("dialog", { name: "Edit Warehouse" })).toBeVisible();
@@ -1318,9 +1326,9 @@ describe("manual connection sync", () => {
       rows: [{ connection: incoming, action: "conflict", existing: { ...profile, ssh: null } }],
     });
     const importConnectionSync = vi.fn().mockResolvedValue([added]);
-    const listSnapshots = vi.fn();
+    const listRecentSnapshotIds = vi.fn();
     const testPostgresConnection = vi.fn();
-    const platform = platformMock({ pickWorkspacePath, previewConnectionSync, importConnectionSync, listSnapshots, testPostgresConnection });
+    const platform = platformMock({ pickWorkspacePath, previewConnectionSync, importConnectionSync, listRecentSnapshotIds, testPostgresConnection });
     renderPanel(platform, null);
     fireEvent.click(await screen.findByRole("button", { name: "Select connection" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Manage connections…" }));
@@ -1344,7 +1352,7 @@ describe("manual connection sync", () => {
     expect(within(result).getByRole("status")).toHaveTextContent("Added 1 connection.");
     expect(screen.getByLabelText("File passphrase")).toHaveValue("");
     expect(importConnectionSync).toHaveBeenCalledWith(file, passphrase, "preview-token");
-    expect(listSnapshots).not.toHaveBeenCalled();
+    expect(listRecentSnapshotIds).not.toHaveBeenCalled();
     expect(testPostgresConnection).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     const manager = screen.getByRole("dialog", { name: "Manage connections" });

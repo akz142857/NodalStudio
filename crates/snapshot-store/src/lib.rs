@@ -1542,6 +1542,25 @@ impl LocalSnapshotStore {
             .collect()
     }
 
+    /// Loads at most two snapshot IDs, newest first, without reading model payloads.
+    ///
+    /// # Errors
+    /// Returns an error when `SQLite` access fails or a stored identifier is invalid.
+    pub async fn list_recent_snapshot_ids(
+        &self,
+        source_id: Uuid,
+    ) -> Result<Vec<Uuid>, SnapshotStoreError> {
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT id FROM schema_snapshots WHERE source_id = ? ORDER BY captured_at DESC LIMIT 2",
+        )
+        .bind(source_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+        ids.iter()
+            .map(|id| Uuid::parse_str(id).map_err(SnapshotStoreError::from))
+            .collect()
+    }
+
     /// Loads every immutable snapshot for one source in capture order.
     ///
     /// # Errors
@@ -2641,6 +2660,44 @@ mod tests {
         let snapshots = store.list_snapshots(source_id).await.unwrap();
         assert_eq!(snapshots.len(), 1);
         assert_eq!(store.get_snapshot(first.id).await.unwrap(), Some(first));
+    }
+
+    #[tokio::test]
+    async fn recent_ids_are_bounded_by_source_and_do_not_decode_history() {
+        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
+        let source_id = Uuid::new_v4();
+        let mut first = snapshot(source_id, "first");
+        let mut second = snapshot(source_id, "second");
+        let third = snapshot(source_id, "third");
+        first.captured_at = third.captured_at - chrono::TimeDelta::seconds(2);
+        second.captured_at = third.captured_at - chrono::TimeDelta::seconds(1);
+        let other = snapshot(Uuid::new_v4(), "other");
+        for item in [&first, &second, &third, &other] {
+            assert!(store.save_snapshot(item).await.unwrap());
+        }
+        sqlx::query("UPDATE schema_snapshots SET payload_json = 'invalid JSON' WHERE id = ?")
+            .bind(first.id.to_string())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.list_recent_snapshot_ids(source_id).await.unwrap(),
+            [third.id, second.id]
+        );
+        assert_eq!(
+            store
+                .list_recent_snapshot_ids(other.source_id)
+                .await
+                .unwrap(),
+            [other.id]
+        );
+        assert!(
+            store
+                .list_recent_snapshot_ids(Uuid::new_v4())
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[tokio::test]

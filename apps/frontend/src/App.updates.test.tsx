@@ -32,7 +32,7 @@ function setup(options: { automatic?: boolean; offline?: boolean; web?: boolean;
   vi.spyOn(platform, "listDataSources").mockResolvedValue([]);
   const getSettings = vi.spyOn(platform, "getSettings").mockImplementation((id) => Promise.resolve(settings(id)));
   vi.spyOn(platform, "getSemantics").mockResolvedValue(reportSemantics);
-  vi.spyOn(platform, "listSnapshots").mockResolvedValue([]);
+  vi.spyOn(platform, "listRecentSnapshotIds").mockResolvedValue([]);
   const check = vi.spyOn(platform, "checkForUpdates").mockResolvedValue(available);
   vi.spyOn(platform, "getUpdateStatus").mockResolvedValue(available);
   const download = vi.spyOn(platform, "downloadUpdate").mockResolvedValue();

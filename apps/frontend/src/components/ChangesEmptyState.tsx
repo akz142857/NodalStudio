@@ -2,10 +2,10 @@ import { useI18n } from "../i18n";
 import type { DatabaseSnapshot } from "../platform";
 import { ActionIcon } from "./ActionIcon";
 
-export function ChangesEmptyState({ snapshot, desktop, snapshotCount, loading, error, refreshing, onHistory, onRefresh, onRetry }: {
+export function ChangesEmptyState({ snapshot, desktop, hasPreviousSnapshot, loading, error, refreshing, onHistory, onRefresh, onRetry }: {
   snapshot?: DatabaseSnapshot;
   desktop: boolean;
-  snapshotCount: number;
+  hasPreviousSnapshot: boolean;
   loading: boolean;
   error: boolean;
   refreshing: boolean;
@@ -18,13 +18,13 @@ export function ChangesEmptyState({ snapshot, desktop, snapshotCount, loading, e
     : !desktop ? bt("business.noComparisonIncludedInThisShare")
     : error ? bt("business.snapshotHistoryCouldNotBeLoaded")
     : loading ? bt("business.checkingSnapshotHistory")
-    : snapshotCount < 2 ? bt("business.yourFirstSnapshotIsTheStartingPoint")
+    : !hasPreviousSnapshot ? bt("business.yourFirstSnapshotIsTheStartingPoint")
     : bt("business.chooseTwoSnapshotsToCompare");
   const message = !snapshot ? bt("business.openASavedDatabaseFromTheSidebarChangesCompares")
     : !desktop ? bt("business.openThisDatabaseInTheDesktopAppToBrowse")
     : error ? bt("business.yourCurrentModelIsStillAvailableRetryLoadingHistory")
     : loading ? bt("business.lookingForSavedVersionsOfThisDatabase")
-    : snapshotCount < 2 ? bt("business.thereIsNoEarlierVersionToCompareYetRefresh")
+    : !hasPreviousSnapshot ? bt("business.thereIsNoEarlierVersionToCompareYetRefresh")
     : bt("business.openHistoryAndSelectABeforeAndAfterVersion");
   return <section className="changes-empty-state" aria-label={bt("business.schemaChanges")}>
     <span className="changes-empty-icon"><ActionIcon name="history" /></span>

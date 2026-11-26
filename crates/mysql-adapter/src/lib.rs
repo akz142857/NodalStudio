@@ -225,7 +225,7 @@ async fn load_tables(
     connection: &mut sqlx::MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let rows = sqlx::query("SELECT TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment FROM information_schema.tables WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME").fetch_all(&mut *connection).await?;
+    let rows = sqlx::query("SELECT TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment FROM information_schema.tables WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'").fetch_all(&mut *connection).await?;
     for row in rows {
         schema.tables.push(TableDefinition {
             sqlite: None,
@@ -240,6 +240,11 @@ async fn load_tables(
             comment: non_empty(row.try_get("table_comment")?),
         });
     }
+    // Catalog order follows the server collation. Use Rust's string order for
+    // repeated table lookups while assembling the rest of the snapshot.
+    schema
+        .tables
+        .sort_unstable_by(|a, b| a.key.name.cmp(&b.key.name));
     Ok(())
 }
 
@@ -300,29 +305,61 @@ async fn load_foreign_keys(
     connection: &mut sqlx::MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let rows = sqlx::query("SELECT k.TABLE_NAME AS table_name, k.CONSTRAINT_NAME AS constraint_name, k.COLUMN_NAME AS column_name, k.REFERENCED_TABLE_SCHEMA AS referenced_table_schema, k.REFERENCED_TABLE_NAME AS referenced_table_name, k.REFERENCED_COLUMN_NAME AS referenced_column_name, r.UPDATE_RULE AS update_rule, r.DELETE_RULE AS delete_rule FROM information_schema.key_column_usage k JOIN information_schema.referential_constraints r ON r.CONSTRAINT_SCHEMA=k.CONSTRAINT_SCHEMA AND r.CONSTRAINT_NAME=k.CONSTRAINT_NAME WHERE k.TABLE_SCHEMA=DATABASE() AND k.REFERENCED_TABLE_NAME IS NOT NULL ORDER BY k.TABLE_NAME,k.CONSTRAINT_NAME,k.ORDINAL_POSITION").fetch_all(&mut *connection).await?;
+    // Fetch each catalog once. Joining these views on the server can scan
+    // the referential constraints repeatedly as the number of keys grows.
+    let rules = sqlx::query(
+        "SELECT TABLE_NAME, CONSTRAINT_NAME, UPDATE_RULE, DELETE_RULE
+         FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ?",
+    )
+    .bind(&schema.name)
+    .fetch_all(&mut *connection)
+    .await?;
+    let mut rules_by_key = BTreeMap::new();
+    for row in rules {
+        rules_by_key.insert(
+            (
+                row.try_get::<String, _>("TABLE_NAME")?,
+                row.try_get::<String, _>("CONSTRAINT_NAME")?,
+            ),
+            (
+                parse_action(row.try_get("UPDATE_RULE")?)?,
+                parse_action(row.try_get("DELETE_RULE")?)?,
+            ),
+        );
+    }
+    let rows = sqlx::query(
+        "SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_SCHEMA,
+                REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+         FROM information_schema.KEY_COLUMN_USAGE
+         WHERE TABLE_SCHEMA = ? AND REFERENCED_TABLE_NAME IS NOT NULL
+         ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION",
+    )
+    .bind(&schema.name)
+    .fetch_all(&mut *connection)
+    .await?;
     let mut grouped: BTreeMap<(String, String), ForeignKeyDefinition> = BTreeMap::new();
     for row in rows {
-        let table: String = row.try_get("table_name")?;
-        let name: String = row.try_get("constraint_name")?;
-        let entry = grouped
-            .entry((table, name.clone()))
-            .or_insert(ForeignKeyDefinition {
-                name,
-                columns: vec![],
-                referenced_schema: row.try_get("referenced_table_schema")?,
-                referenced_table: row.try_get("referenced_table_name")?,
-                referenced_columns: vec![],
-                on_update: parse_action(&row.try_get::<String, _>("update_rule")?)?,
-                on_delete: parse_action(&row.try_get::<String, _>("delete_rule")?)?,
-                match_type: MatchType::Simple,
-                deferrable: false,
-                initially_deferred: false,
-            });
-        entry.columns.push(row.try_get("column_name")?);
+        let key = (row.try_get("TABLE_NAME")?, row.try_get("CONSTRAINT_NAME")?);
+        let Some(&(on_update, on_delete)) = rules_by_key.get(&key) else {
+            continue;
+        };
+        let name = key.1.clone();
+        let entry = grouped.entry(key).or_insert(ForeignKeyDefinition {
+            name,
+            columns: vec![],
+            referenced_schema: row.try_get("REFERENCED_TABLE_SCHEMA")?,
+            referenced_table: row.try_get("REFERENCED_TABLE_NAME")?,
+            referenced_columns: vec![],
+            on_update,
+            on_delete,
+            match_type: MatchType::Simple,
+            deferrable: false,
+            initially_deferred: false,
+        });
+        entry.columns.push(row.try_get("COLUMN_NAME")?);
         entry
             .referenced_columns
-            .push(row.try_get("referenced_column_name")?);
+            .push(row.try_get("REFERENCED_COLUMN_NAME")?);
     }
     for ((table, _), key) in grouped {
         table_mut(schema, &table)?.foreign_keys.push(key);
@@ -431,11 +468,11 @@ fn table_mut<'a>(
     schema: &'a mut SchemaDefinition,
     name: &str,
 ) -> Result<&'a mut TableDefinition, MySqlAdapterError> {
-    schema
+    let index = schema
         .tables
-        .iter_mut()
-        .find(|table| table.key.name == name)
-        .ok_or_else(|| MySqlAdapterError::UnknownTable(name.into()))
+        .binary_search_by(|table| table.key.name.as_str().cmp(name))
+        .map_err(|_| MySqlAdapterError::UnknownTable(name.into()))?;
+    Ok(&mut schema.tables[index])
 }
 fn non_empty(value: String) -> Option<String> {
     (!value.trim().is_empty()).then_some(value)

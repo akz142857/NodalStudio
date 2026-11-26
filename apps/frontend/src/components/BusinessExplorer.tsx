@@ -46,8 +46,8 @@ function ExplorerSession({ snapshot, semantics, settings, platform, desktop, ini
   useEffect(() => {
     if (!desktop) return;
     let active = true;
-    void platform.listSnapshots(snapshot.sourceId).then((items) => {
-      if (active) setLatest(items[0]?.id === snapshot.id);
+    void platform.listRecentSnapshotIds(snapshot.sourceId).then(([latestId]) => {
+      if (active) setLatest(latestId === snapshot.id);
     }).catch(() => { if (active) setLatestError(eventBt("business.unableToVerifyTheLatestSnapshotAIIsUnavailable")); });
     return () => { active = false; };
   }, [desktop, platform, snapshot.id, snapshot.sourceId, eventBt]);

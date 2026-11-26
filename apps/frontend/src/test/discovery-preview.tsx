@@ -16,7 +16,7 @@ export function Preview() {
   const platform = useMemo(() => {
     const previews = new Map<string, DiscoveryPreview>();
     return {
-      listSnapshots: () => Promise.resolve([{ id: reportSnapshot.id }]),
+      listRecentSnapshotIds: () => Promise.resolve([reportSnapshot.id]),
       prepareDiscovery: (input: DiscoveryInput) => { const preview = discoveryPreview(input, settings); previews.set(preview.requestId, preview); return Promise.resolve(preview); },
       runDiscovery: (id: string) => { const preview = previews.get(id); if (!preview) return Promise.reject(new Error("Preview cancelled.")); return new Promise((resolve) => window.setTimeout(() => resolve(discoveryResult(preview)), 650)); },
       cancelDiscovery: (id: string) => { previews.delete(id); return Promise.resolve(); },

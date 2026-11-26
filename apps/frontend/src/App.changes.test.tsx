@@ -131,16 +131,15 @@ describe("App schema changes", () => {
   it("restores the latest change badge from saved model snapshots", async () => {
     const platform = getPlatform();
     vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "desktop", label: "Desktop runtime", version: "test" });
-    vi.spyOn(platform, "listSnapshots").mockResolvedValue([fixture.after, fixture.before].map((snapshot) => ({
-      id: snapshot.id, sourceId: snapshot.sourceId, capturedAt: snapshot.capturedAt, fingerprint: snapshot.fingerprint,
-      databaseName: "app", schemaCount: snapshot.schemas.length, tableCount: snapshot.schemas.length,
-    })));
+    const listHistory = vi.spyOn(platform, "listSnapshots");
+    vi.spyOn(platform, "listRecentSnapshotIds").mockResolvedValue([fixture.after.id, fixture.before.id]);
     const compare = vi.spyOn(platform, "compareSnapshots").mockResolvedValue(fixture.changeSet);
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);
     await screen.findByText("Desktop runtime");
     fireEvent.click(screen.getByRole("button", { name: "Open stored fixture" }));
     expect(await screen.findByRole("button", { name: "public.orders · added" })).toBeVisible();
     expect(compare).toHaveBeenCalledExactlyOnceWith("before", "after");
+    expect(listHistory).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -247,6 +246,7 @@ describe("App schema changes", () => {
     const platform = getPlatform();
     vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "desktop", label: "Desktop runtime", version: "test" });
     vi.spyOn(platform, "getSnapshot").mockImplementation((id) => Promise.resolve(id === "before" ? fixture.before : fixture.after));
+    vi.spyOn(platform, "listRecentSnapshotIds").mockResolvedValue([fixture.after.id, fixture.before.id]);
     vi.spyOn(platform, "listSnapshots").mockResolvedValue([fixture.after, fixture.before].map((snapshot) => ({
       id: snapshot.id, sourceId: snapshot.sourceId, capturedAt: snapshot.capturedAt, fingerprint: snapshot.fingerprint,
       databaseName: "app", schemaCount: snapshot.schemas.length, tableCount: snapshot.schemas.length,

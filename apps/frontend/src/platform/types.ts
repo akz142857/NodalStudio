@@ -670,6 +670,7 @@ export interface NodalStudioPlatform {
   verifyAndRefreshDataSource(input: SaveDataSourceInput): Promise<VerifyAndRefreshDataSourceResult>;
   capturePostgresSnapshot(sourceId: string, trigger?: "manual" | "background"): Promise<CaptureSnapshotResult>;
   listSnapshots(sourceId: string): Promise<SnapshotSummary[]>;
+  listRecentSnapshotIds(sourceId: string): Promise<string[]>;
   getSnapshot(snapshotId: string): Promise<DatabaseSnapshot>;
   compareSnapshots(beforeSnapshotId: string, afterSnapshotId: string): Promise<SchemaChangeSet>;
   executeReadonlyQuery(input: ExecuteReadonlyQueryInput, onRegistered?: () => void): Promise<QueryExecutionResult>;

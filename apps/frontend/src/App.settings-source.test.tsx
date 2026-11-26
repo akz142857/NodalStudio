@@ -10,7 +10,6 @@ import {
   type AppSettings,
   type CaptureSnapshotResult,
   type EffectiveSettings,
-  type SnapshotSummary,
 } from "./platform";
 import { reportSemantics, reportSnapshot } from "./test/schema-report-fixture";
 
@@ -57,7 +56,7 @@ function mount() {
   vi.spyOn(platform, "getSettings").mockImplementation((sourceId) => Promise.resolve(effectiveSettings(sourceId)));
   vi.spyOn(platform, "listDataSources").mockResolvedValue([]);
   vi.spyOn(platform, "getSemantics").mockResolvedValue(reportSemantics);
-  vi.spyOn(platform, "listSnapshots").mockImplementation((sourceId) => Promise.resolve([{ id: sourceId === "source-b" ? snapshotB.id : snapshotA.id } as SnapshotSummary]));
+  vi.spyOn(platform, "listRecentSnapshotIds").mockImplementation((sourceId) => Promise.resolve([sourceId === "source-b" ? snapshotB.id : snapshotA.id]));
   vi.spyOn(platform, "updateAppSettings").mockImplementation((app) => new Promise<EffectiveSettings>((resolve, reject) => pending.push({ app, resolve, reject })));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);
   return pending;

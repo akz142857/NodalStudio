@@ -145,6 +145,7 @@ describe("App capability integration", () => {
     expect(database).toHaveAttribute("aria-pressed", "true");
   });
   it.each([1, 2])("shows the MySQL history comparison empty state with %s saved versions", async (count) => {
+    vi.spyOn(getPlatform(), "listRecentSnapshotIds").mockResolvedValue(Array.from({ length: count }, (_, i) => `snapshot-${i}`));
     vi.spyOn(getPlatform(), "listSnapshots").mockResolvedValue(Array.from({ length: count }, (_, i) => ({
       id: `snapshot-${i}`, sourceId: "mysql", capturedAt: reportSnapshot.capturedAt,
       fingerprint: `${i}`, databaseName: reportSnapshot.database.name, schemaCount: 1, tableCount: 3,

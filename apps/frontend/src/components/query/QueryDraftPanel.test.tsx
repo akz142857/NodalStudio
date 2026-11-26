@@ -14,7 +14,7 @@ function setup(databaseType: "postgreSql" | "mySql" | "sqlite" = "postgreSql") {
   const draftSql = databaseType === "mySql" ? "SELECT o.`id`, o.`total` FROM `public`.`orders` AS o LIMIT 100;" : sql;
   const previews = new Map<string, DiscoveryPreview>();
   const mocks = {
-    listSnapshots: vi.fn().mockResolvedValue([{ id: reportSnapshot.id }]), listQueryHistory: vi.fn().mockResolvedValue([]),
+    listRecentSnapshotIds: vi.fn().mockResolvedValue([reportSnapshot.id]), listQueryHistory: vi.fn().mockResolvedValue([]),
     prepareDiscovery: vi.fn().mockImplementation((input: DiscoveryInput) => { const p = discoveryPreview(input); p.context.dialect = databaseType; previews.set(p.requestId, p); return Promise.resolve(p); }),
     runDiscovery: vi.fn().mockImplementation((id: string) => { const p = previews.get(id)!; const r = discoveryResult(p); r.answer = { terms: [], meanings: [], rankings: [], interpretations: [], readingOrder: [], unknowns: [], sqlDraft: { sql: draftSql, explanation: "Lists order IDs and totals.", assumptions: [], clarification: [] } }; return Promise.resolve(r); }),
     cancelDiscovery: vi.fn().mockResolvedValue(undefined),
@@ -90,7 +90,7 @@ describe("SQL drafting", () => {
     expect(screen.getByPlaceholderText(followEn)).toHaveValue("只取前 5 行");
     fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
     expect(screen.getByPlaceholderText(initialEn)).toHaveValue("");
-    await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled());
     expect(p.mocks.prepareDiscovery).not.toHaveBeenCalled();
     expect(p.mocks.runDiscovery).not.toHaveBeenCalled();
     expect(p.mocks.executeReadonlyQuery).not.toHaveBeenCalled();
@@ -152,7 +152,7 @@ describe("SQL drafting", () => {
     fireEvent.change(question, { target: { value: "" } });
     expect(question).toHaveValue("");
     expect(screen.getByRole("button", { name: "Send follow-up" })).toBeDisabled();
-    await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled());
   });
   it("preserves both authoring modes and suppresses execution while composing a question", async () => {
     const p = setup();
@@ -169,7 +169,7 @@ describe("SQL drafting", () => {
     fireEvent.keyDown(screen.getByRole("tab", { name: "SQL editor" }), { key: "ArrowRight" });
     expect(screen.getByRole("tab", { name: "Draft query" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByLabelText("Question")).toHaveValue("My revised question");
-    await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled());
   });
   it("starts with a question, prepares matching context and sends once after explicit submit, including StrictMode", async () => {
     const p = setup();
@@ -250,7 +250,7 @@ describe("SQL drafting", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("outside the configured AI scope"); expect(screen.queryByRole("button", { name: "Send request" })).toBeNull();
     p.settings.app.privacy.offlineMode = true; view.rerender(<QueryDraftPanel {...p} seed={seed} onUseSql={vi.fn()} onOpenSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Open AI settings" })).toBeVisible(); expect(p.mocks.prepareDiscovery).not.toHaveBeenCalled();
-    await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled());
   });
   it("does not reuse an archived SQL action after relationship evidence changes", async () => {
     const p = setup();
@@ -275,7 +275,7 @@ describe("SQL drafting", () => {
     fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
     expect(question).toHaveValue("");
     expect(screen.queryByText(seed.question)).toBeNull();
-    await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled());
   });
 });
 

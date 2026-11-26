@@ -23,15 +23,23 @@ pub(crate) async fn validated_logical_relationships(
     store: &LocalSnapshotStore,
     source_id: Uuid,
 ) -> Result<Vec<LogicalRelationship>, String> {
+    let snapshot = store
+        .latest_snapshot(source_id)
+        .await
+        .map_err(safe_store_error)?;
+    validate_logical_relationships_for_snapshot(store, source_id, snapshot.as_ref()).await
+}
+
+pub(crate) async fn validate_logical_relationships_for_snapshot(
+    store: &LocalSnapshotStore,
+    source_id: Uuid,
+    snapshot: Option<&DatabaseSnapshot>,
+) -> Result<Vec<LogicalRelationship>, String> {
     let mut relationships = store
         .list_logical_relationships(source_id)
         .await
         .map_err(safe_store_error)?;
-    if let Some(snapshot) = store
-        .latest_snapshot(source_id)
-        .await
-        .map_err(safe_store_error)?
-    {
+    if let Some(snapshot) = snapshot {
         let all = relationships.clone();
         for relationship in &mut relationships {
             if relationship.status == LogicalRelationshipStatus::Disabled {
@@ -39,7 +47,7 @@ pub(crate) async fn validated_logical_relationships(
             }
             let previous = relationship.status;
             relationship.status = validate_relationship_against_snapshot(
-                &snapshot,
+                snapshot,
                 &all,
                 &relationship.source,
                 &relationship.target,

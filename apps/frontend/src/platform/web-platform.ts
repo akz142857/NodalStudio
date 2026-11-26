@@ -235,6 +235,10 @@ export class WebPlatform implements NodalStudioPlatform {
     return Promise.resolve([]);
   }
 
+  listRecentSnapshotIds(): Promise<string[]> {
+    return Promise.resolve([]);
+  }
+
   getSnapshot(snapshotId: string): Promise<DatabaseSnapshot> {
     if (this.bundle?.snapshot?.id === snapshotId) return Promise.resolve(this.bundle.snapshot);
     return Promise.reject(new Error("Snapshot is not available in this shared view."));

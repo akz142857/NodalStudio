@@ -99,6 +99,7 @@ function platformMock(compareSnapshots: NodalStudioPlatform["compareSnapshots"])
     verifyAndRefreshDataSource: vi.fn(),
     capturePostgresSnapshot: vi.fn(),
     listSnapshots: vi.fn().mockResolvedValue(summaries),
+    listRecentSnapshotIds: vi.fn(),
     getSnapshot: vi.fn().mockResolvedValue(snapshot),
     compareSnapshots,
     executeReadonlyQuery: vi.fn(),

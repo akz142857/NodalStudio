@@ -1579,6 +1579,18 @@ async fn list_snapshots(
 }
 
 #[tauri::command]
+async fn list_recent_snapshot_ids(
+    input: SourceInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<Uuid>, String> {
+    state
+        .store
+        .list_recent_snapshot_ids(input.source_id)
+        .await
+        .map_err(safe_store_error)
+}
+
+#[tauri::command]
 async fn get_snapshot(
     input: SnapshotInput,
     state: State<'_, AppState>,
@@ -1682,10 +1694,19 @@ async fn get_semantics(
     input: SourceInput,
     state: State<'_, AppState>,
 ) -> Result<SemanticBundle, String> {
+    let snapshot = state
+        .store
+        .latest_snapshot(input.source_id)
+        .await
+        .map_err(safe_store_error)?;
     // Derived relationship status can invalidate knowledge. Refresh it before reading
     // description/confirmation pairs, which must come from one storage transaction.
-    let logical_relationships =
-        validated_logical_relationships(&state.store, input.source_id).await?;
+    let logical_relationships = validate_logical_relationships_for_snapshot(
+        &state.store,
+        input.source_id,
+        snapshot.as_ref(),
+    )
+    .await?;
     let (annotations, knowledge) = state
         .store
         .annotation_knowledge(input.source_id)
@@ -1706,12 +1727,7 @@ async fn get_semantics(
         .get_layout(input.source_id, None)
         .await
         .map_err(safe_store_error)?;
-    let (annotations, orphaned_annotations, domain_groups) = if let Some(snapshot) = state
-        .store
-        .latest_snapshot(input.source_id)
-        .await
-        .map_err(safe_store_error)?
-    {
+    let (annotations, orphaned_annotations, domain_groups) = if let Some(snapshot) = snapshot {
         let result = reattach_semantics(&snapshot, annotations, groups);
         (
             result.attached_annotations,
@@ -2413,6 +2429,7 @@ pub fn run() {
                 delete_query_history,
                 clear_query_history,
                 list_snapshots,
+                list_recent_snapshot_ids,
                 get_snapshot,
                 compare_snapshots,
                 compare_environment_snapshots,

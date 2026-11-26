@@ -244,6 +244,10 @@ export class TauriPlatform implements NodalStudioPlatform {
     return invoke<SnapshotSummary[]>("list_snapshots", { input: { sourceId } });
   }
 
+  listRecentSnapshotIds(sourceId: string): Promise<string[]> {
+    return invoke<string[]>("list_recent_snapshot_ids", { input: { sourceId } });
+  }
+
   getSnapshot(snapshotId: string): Promise<DatabaseSnapshot> {
     return invoke<DatabaseSnapshot>("get_snapshot", { input: { snapshotId } });
   }

@@ -32,7 +32,7 @@ function setup(autoConnect = false) {
   const listSources = vi.spyOn(platform, "listDataSources").mockResolvedValue([{ id: saved.sourceId } as DataSourceProfile]);
   const readSettings = vi.spyOn(platform, "getSettings").mockImplementation((id) => Promise.resolve(settings(id)));
   vi.spyOn(platform, "getSemantics").mockResolvedValue(reportSemantics);
-  vi.spyOn(platform, "listSnapshots").mockResolvedValue([{ id: saved.id, sourceId: saved.sourceId, capturedAt: saved.capturedAt, fingerprint: saved.fingerprint, databaseName: saved.database.name, schemaCount: saved.schemas.length, tableCount: 3 }]);
+  vi.spyOn(platform, "listRecentSnapshotIds").mockResolvedValue([saved.id]);
   const read = vi.spyOn(platform, "getSnapshot").mockResolvedValue(saved);
   const capture = vi.spyOn(platform, "capturePostgresSnapshot").mockResolvedValue({ snapshot: saved, stored: false, changeSet: null });
   const mount = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>);

@@ -267,17 +267,17 @@ export function App() {
     settings.app.updates);
   const updateNotificationsEnabled = settings.app.notifications.updateAvailable && !isQuietHours(settings.app.notifications);
   const showUpdateBanner = Boolean(availableUpdate && updateNotificationsEnabled && dismissedUpdate !== availableUpdate);
-  const discoveryLatest = useQuery({
-    queryKey: ["discovery-latest-snapshot", snapshot?.sourceId, snapshot?.id],
-    queryFn: () => platform.listSnapshots(snapshot!.sourceId),
+  const recentSnapshots = useQuery({
+    queryKey: ["recent-snapshot-ids", snapshot?.sourceId, snapshot?.id],
+    queryFn: () => platform.listRecentSnapshotIds(snapshot!.sourceId),
     enabled: runtime.data?.kind === "desktop" && !!snapshot,
   });
   const capturedModelChanges = !historyPreview && snapshot && changeSet?.afterSnapshotId === snapshot.id ? changeSet : undefined;
-  const previousModelSnapshot = snapshot && discoveryLatest.data?.[0]?.id === snapshot.id ? discoveryLatest.data[1] : undefined;
+  const previousModelSnapshotId = snapshot && recentSnapshots.data?.[0] === snapshot.id ? recentSnapshots.data[1] : undefined;
   const storedModelChanges = useQuery({
-    queryKey: ["model-table-changes", snapshot?.sourceId, previousModelSnapshot?.id, snapshot?.id],
-    queryFn: () => platform.compareSnapshots(previousModelSnapshot!.id, snapshot!.id),
-    enabled: mode === "explore" && !historyPreview && !capturedModelChanges && Boolean(previousModelSnapshot),
+    queryKey: ["model-table-changes", snapshot?.sourceId, previousModelSnapshotId, snapshot?.id],
+    queryFn: () => platform.compareSnapshots(previousModelSnapshotId!, snapshot!.id),
+    enabled: mode === "explore" && !historyPreview && !capturedModelChanges && Boolean(previousModelSnapshotId),
     networkMode: "always",
     refetchOnWindowFocus: false,
     staleTime: Infinity,
@@ -749,11 +749,10 @@ export function App() {
           if (isCurrent()) handleCapture(result);
         } else {
           // Reopening a workspace is a local read. Live introspection is opt-in.
-          const snapshots = await platform.listSnapshots(candidate.profile.id);
+          const [latestId] = await platform.listRecentSnapshotIds(candidate.profile.id);
           if (!isCurrent()) return;
-          const latest = snapshots[0];
-          if (!latest) throw new Error(translate("navigation.noSavedModelIsAvailableEditTheConnection"));
-          const saved = await platform.getSnapshot(latest.id);
+          if (!latestId) throw new Error(translate("navigation.noSavedModelIsAvailableEditTheConnection"));
+          const saved = await platform.getSnapshot(latestId);
           if (isCurrent()) handleCapture({ snapshot: saved, stored: false, changeSet: null });
         }
       })
@@ -1024,9 +1023,9 @@ export function App() {
   async function returnToLatestModel() {
     if (!snapshot) return;
     const session = semanticSession;
-    const summaries = await platform.listSnapshots(snapshot.sourceId);
-    if (!summaries[0]) return;
-    const latest = await platform.getSnapshot(summaries[0].id);
+    const [latestId] = await platform.listRecentSnapshotIds(snapshot.sourceId);
+    if (!latestId || activeSemanticSession.current !== session) return;
+    const latest = await platform.getSnapshot(latestId);
     if (activeSemanticSession.current !== session) return;
     openLatestModel(latest);
   }
@@ -1098,7 +1097,7 @@ export function App() {
   }
 
   function openSearchResultInQuery(table: TableDefinition) {
-    if (!snapshot || !querySupported || historyPreview || discoveryLatest.data?.[0]?.id !== snapshot.id) return;
+    if (!snapshot || !querySupported || historyPreview || recentSnapshots.data?.[0] !== snapshot.id) return;
     if (snapshot.database.databaseType === "sqlite" || settings.app.privacy.offlineMode
       || !settings.source?.ai.enabled || settings.source.ai.provider !== "openAiCompatible") {
       openTableInQuery(table);
@@ -1339,7 +1338,7 @@ export function App() {
         />
         <GlobalSearch store={searchStore} inputRef={searchInputRef} snapshot={snapshot} context={searchContext} t={t}
           showActions={runtime.data?.kind === "desktop" && !historyPreview}
-          canOpenInQuery={Boolean(querySupported && snapshot && discoveryLatest.data?.[0]?.id === snapshot.id)}
+          canOpenInQuery={Boolean(querySupported && snapshot && recentSnapshots.data?.[0] === snapshot.id)}
           onLocate={locateSearchResult} onShowRelated={showRelatedTables} onOpenInQuery={openSearchResultInQuery} />
         <div className="runtime-actions" role="group" aria-label={t("navigation.applicationTools")}>
           <div className="workspace-tools" ref={workspaceTools} data-open={toolsOpen || undefined}
@@ -1619,11 +1618,11 @@ export function App() {
             </Suspense>
           ) : mode === "changes" && !changeSet ? (
             <ChangesEmptyState snapshot={snapshot} desktop={runtime.data?.kind === "desktop"}
-              snapshotCount={discoveryLatest.data?.length ?? 0} loading={discoveryLatest.isPending} error={discoveryLatest.isError}
+              hasPreviousSnapshot={Boolean(recentSnapshots.data?.[1])} loading={recentSnapshots.isPending} error={recentSnapshots.isError}
               refreshing={refreshState === "refreshing"}
               onHistory={() => { setRightPanel((panel) => ({ ...panel, expanded: true })); window.dispatchEvent(new Event("nodalstudio:inspect-history")); }}
               onRefresh={snapshot && !historyPreview ? () => { void refreshActive(); } : undefined}
-              onRetry={() => { void discoveryLatest.refetch(); }} />
+              onRetry={() => { void recentSnapshots.refetch(); }} />
           ) : mode === "changes" && changeSet && snapshot && changesView === "list" ? (
             <SchemaChangesPanel
               key={changeSet.id}
@@ -1640,7 +1639,7 @@ export function App() {
                   setRightPanel((panel) => ({ ...panel, expanded: true }));
                   window.dispatchEvent(new Event("nodalstudio:inspect-history"));
                 } : undefined}
-                latestSnapshotId={discoveryLatest.data?.[0]?.id}
+                latestSnapshotId={recentSnapshots.data?.[0]}
                 refreshState={refreshState}
                 interactionPaused={preflightOpen || ddlPreviewOpen || documentVisible || Boolean(activeRelationshipSearch)}
                 platform={platform}
@@ -1808,7 +1807,7 @@ export function App() {
                 if (activeSemanticSession.current === semanticSession) setSettings(next);
               }),
               refreshSemantics(),
-              snapshot ? discoveryLatest.refetch() : Promise.resolve(),
+              snapshot ? recentSnapshots.refetch() : Promise.resolve(),
             ]);
           }}
           onDataSourcesChanged={async () => {

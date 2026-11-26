@@ -53,7 +53,7 @@ describe("App layout persistence wiring", () => {
     const view = { id: "view-a", sourceId: reportSnapshot.sourceId, name: "Orders workspace", rootTableKeys: [reportSnapshot.schemas[0].tables[0].key], relationshipDepth: 0, updatedAt: "now" };
     getSemantics.mockResolvedValue({ ...reportSemantics, savedViews: [view] });
     const save = vi.spyOn(platform, "saveLayout").mockResolvedValue(undefined);
-    vi.spyOn(platform, "listSnapshots").mockResolvedValue([{ id: reportSnapshot.id, sourceId: reportSnapshot.sourceId, fingerprint: reportSnapshot.fingerprint, capturedAt: reportSnapshot.capturedAt, databaseName: reportSnapshot.database.name, schemaCount: 2, tableCount: 3 }]);
+    vi.spyOn(platform, "listRecentSnapshotIds").mockResolvedValue([reportSnapshot.id]);
     vi.spyOn(platform, "getSnapshot").mockResolvedValue(reportSnapshot);
     await screen.findByText("Desktop runtime");
     fireEvent.click(screen.getByRole("button", { name: "Capture layout source" }));

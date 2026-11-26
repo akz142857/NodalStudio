@@ -4,7 +4,7 @@ use schema_model::{
     ProgramDefinition, SchemaDefinition,
 };
 use sqlx::{MySqlConnection, Row};
-use std::fmt::Write;
+use std::{collections::BTreeMap, fmt::Write};
 
 pub async fn load(
     connection: &mut MySqlConnection,
@@ -199,19 +199,13 @@ async fn load_constraints(
     connection: &mut MySqlConnection,
     schema: &mut SchemaDefinition,
 ) -> Result<(), MySqlAdapterError> {
-    let has_checks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='information_schema' AND TABLE_NAME='CHECK_CONSTRAINTS'").fetch_one(&mut *connection).await?;
-    if has_checks > 0 {
-        let rows = sqlx::query("SELECT tc.TABLE_NAME AS table_name, tc.CONSTRAINT_NAME AS name, cc.CHECK_CLAUSE AS definition FROM information_schema.TABLE_CONSTRAINTS tc JOIN information_schema.CHECK_CONSTRAINTS cc ON cc.CONSTRAINT_SCHEMA=tc.CONSTRAINT_SCHEMA AND cc.CONSTRAINT_NAME=tc.CONSTRAINT_NAME WHERE tc.CONSTRAINT_SCHEMA=DATABASE() AND tc.CONSTRAINT_TYPE='CHECK'")
-        .fetch_all(&mut *connection).await?;
-        for row in rows {
-            let table: String = row.try_get("table_name")?;
-            if let Some(table) = schema.tables.iter_mut().find(|t| t.key.name == table) {
-                table.constraints.push(ConstraintDefinition {
-                    name: row.try_get("name")?,
-                    constraint_type: ConstraintType::Check,
-                    definition: row.try_get("definition")?,
-                });
-            }
+    for (table_name, name, definition) in read_checks(connection, &schema.name).await? {
+        if let Ok(table) = crate::table_mut(schema, &table_name) {
+            table.constraints.push(ConstraintDefinition {
+                name,
+                constraint_type: ConstraintType::Check,
+                definition,
+            });
         }
     }
     for table in &mut schema.tables {
@@ -227,4 +221,60 @@ async fn load_constraints(
         }
     }
     Ok(())
+}
+
+async fn read_checks(
+    connection: &mut MySqlConnection,
+    database: &str,
+) -> Result<Vec<(String, String, String)>, MySqlAdapterError> {
+    let columns: Vec<String> = sqlx::query_scalar(
+        "SELECT COLUMN_NAME FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = 'information_schema' AND TABLE_NAME = 'CHECK_CONSTRAINTS'",
+    )
+    .fetch_all(&mut *connection)
+    .await?;
+    if columns.is_empty() {
+        return Ok(Vec::new());
+    }
+    if columns
+        .iter()
+        .any(|column| column.eq_ignore_ascii_case("TABLE_NAME"))
+    {
+        // MariaDB includes the owning table and can reuse a check name on another table.
+        return Ok(sqlx::query_as(
+            "SELECT TABLE_NAME, CONSTRAINT_NAME, CHECK_CLAUSE
+             FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ?",
+        )
+        .bind(database)
+        .fetch_all(&mut *connection)
+        .await?);
+    }
+    // MySQL check names are unique within a schema, but their owning tables
+    // live in a separate catalog. Read both without a server-side nested loop.
+    let definitions: Vec<(String, String)> = sqlx::query_as(
+        "SELECT CONSTRAINT_NAME, CHECK_CLAUSE
+         FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ?",
+    )
+    .bind(database)
+    .fetch_all(&mut *connection)
+    .await?;
+    if definitions.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut definitions: BTreeMap<_, _> = definitions.into_iter().collect();
+    let owners: Vec<(String, String)> = sqlx::query_as(
+        "SELECT TABLE_NAME, CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
+         WHERE CONSTRAINT_SCHEMA = ? AND TABLE_SCHEMA = ? AND CONSTRAINT_TYPE = 'CHECK'",
+    )
+    .bind(database)
+    .bind(database)
+    .fetch_all(&mut *connection)
+    .await?;
+    Ok(owners
+        .into_iter()
+        .filter_map(|(table, name)| {
+            let definition = definitions.remove(&name)?;
+            Some((table, name, definition))
+        })
+        .collect())
 }

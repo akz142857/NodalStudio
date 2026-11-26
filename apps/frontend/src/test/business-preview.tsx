@@ -20,7 +20,7 @@ const params = new URLSearchParams(location.search);
 const profile: DataSourceProfile = { id: snapshot.sourceId, displayName: "Commerce demo", host: "localhost", port: 5432, database: "Commerce", username: "demo", databaseType: "postgreSql", sslMode: "verifyFull", createdAt: snapshot.capturedAt, updatedAt: snapshot.capturedAt };
 const history = [0, 1].map((i) => ({ id: i ? "baseline" : snapshot.id, sourceId: snapshot.sourceId, capturedAt: `2026-10-${13-i}T08:00:00Z`, fingerprint: `demo-${i}`, databaseName: "Commerce", schemaCount: 2, tableCount: 3 }));
 const platform = {
-  listDataSources: () => Promise.resolve([profile]), listSnapshots: () => Promise.resolve(history), getSnapshot: () => Promise.resolve(snapshot),
+  listDataSources: () => Promise.resolve([profile]), listSnapshots: () => Promise.resolve(history), listRecentSnapshotIds: () => Promise.resolve(history.slice(0, 2).map(({ id }) => id)), getSnapshot: () => Promise.resolve(snapshot),
   testPostgresConnection: () => Promise.resolve({ database: snapshot.database, sslActive: true, serverReadOnly: true }),
   listQueryHistory: () => Promise.resolve([]), cancelQuery: () => Promise.resolve(true),
   executeReadonlyQuery: () => Promise.resolve({ queryId: `preview-${Date.now()}`, columns: [{ name: "customer_id", databaseType: "int4" }, { name: "total", databaseType: "numeric" }], rows: [[{ kind: "number", value: 1001 }, { kind: "number", value: 128 }], [{ kind: "number", value: 1002 }, { kind: "number", value: 256 }]], rowCount: 2, durationMs: 4, truncated: false, notices: [] }),

@@ -102,7 +102,7 @@ describe("SchemaCanvas requested navigation", () => {
   });
 
   it("focuses the selected local node without changing the explicit AI root", async () => {
-    const platform = { listSnapshots: vi.fn().mockResolvedValue([{ id: reportSnapshot.id }]) } as unknown as NodalStudioPlatform;
+    const platform = { listRecentSnapshotIds: vi.fn().mockResolvedValue([reportSnapshot.id]) } as unknown as NodalStudioPlatform;
     const view = render(<BusinessExplorer snapshot={reportSnapshot} semantics={reportSemantics} settings={discoverySettings()} platform={platform} desktop onClose={vi.fn()} onLocate={vi.fn()} onExplain={vi.fn()} onOpenSettings={vi.fn()} />);
     const root = reportSnapshot.schemas[0].tables[0];
     const rootInput = screen.getByRole("combobox", { name: "Explicit root table" });

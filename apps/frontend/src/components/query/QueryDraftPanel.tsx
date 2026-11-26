@@ -86,7 +86,7 @@ function DraftPanel({ platform, snapshot, settings, semantics, seed, initialTabl
   }, [question]);
   useEffect(() => {
     let active = true;
-    void platform.listSnapshots(snapshot.sourceId).then((items) => { if (active) setLatest(items[0]?.id === snapshot.id); }).catch(() => { if (active) setSnapshotError(eventBt("business.unableToVerifyTheLatestSnapshotReopenDraftingTo")); });
+    void platform.listRecentSnapshotIds(snapshot.sourceId).then(([latestId]) => { if (active) setLatest(latestId === snapshot.id); }).catch(() => { if (active) setSnapshotError(eventBt("business.unableToVerifyTheLatestSnapshotReopenDraftingTo")); });
     return () => { active = false; };
   }, [platform, snapshot.sourceId, snapshot.id, eventBt]);
   const followLatest = useRef(true);

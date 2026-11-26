@@ -12,7 +12,7 @@ use sqlparser::{
     parser::Parser,
 };
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteRow};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use uuid::Uuid;
 
 /// Captures a consistent, bounded catalog in one read transaction.
@@ -46,11 +46,36 @@ pub async fn inspect_schema(
         sqlx::query("SELECT name,type,wr,strict FROM pragma_table_list WHERE schema='main'")
             .fetch_all(&mut *tx)
             .await?;
+    let table_info: BTreeMap<&str, _> = table_info
+        .iter()
+        .map(|row| (row.get("name"), row))
+        .collect();
+    // Index the catalog once. SQLite resolves identifiers case-insensitively,
+    // while the model preserves the spelling stored in the catalog.
+    let mut table_names = BTreeMap::new();
+    let mut index_definitions = BTreeMap::new();
+    let mut view_names = BTreeSet::new();
+    for row in &catalog {
+        let name: &str = row.try_get("name")?;
+        match row.try_get::<&str, _>("type")? {
+            "table" => {
+                table_names.insert(name.to_ascii_lowercase(), name);
+            }
+            "index" => {
+                index_definitions.insert(name, row);
+            }
+            "view" => {
+                view_names.insert(name.to_ascii_lowercase());
+            }
+            _ => {}
+        }
+    }
+    let mut foreign_key_targets: BTreeMap<String, Option<Vec<SqliteRow>>> = BTreeMap::new();
     let mut schema = SchemaDefinition::empty("main");
     let mut column_count = 0usize;
     for row in &catalog {
-        let name: String = row.try_get("name")?;
-        let kind: String = row.try_get("type")?;
+        let name: &str = row.try_get("name")?;
+        let kind: &str = row.try_get("type")?;
         if name.starts_with("sqlite_") {
             continue;
         }
@@ -67,10 +92,7 @@ pub async fn inspect_schema(
         } else if kind == "trigger" {
             let key = ObjectKey::new(ObjectKind::Trigger, "main", name);
             let target: String = row.try_get("tbl_name")?;
-            let target_kind = if catalog.iter().any(|entry| {
-                entry.get::<String, _>("type") == "view"
-                    && entry.get::<String, _>("name").eq_ignore_ascii_case(&target)
-            }) {
+            let target_kind = if view_names.contains(&target.to_ascii_lowercase()) {
                 ObjectKind::View
             } else {
                 ObjectKind::Table
@@ -91,16 +113,14 @@ pub async fn inspect_schema(
                 enabled: None,
             });
         } else if kind == "table" {
-            let info = table_info
-                .iter()
-                .find(|r| r.get::<String, _>("name") == name);
-            if info.is_some_and(|r| r.get::<String, _>("type") == "shadow") {
+            let info = table_info.get(name);
+            if info.is_some_and(|r| r.get::<&str, _>("type") == "shadow") {
                 continue;
             }
-            let virtual_table = info.is_some_and(|r| r.get::<String, _>("type") == "virtual");
+            let virtual_table = info.is_some_and(|r| r.get::<&str, _>("type") == "virtual");
             let strict = info.is_some_and(|r| r.get::<i64, _>("strict") != 0);
             let without_rowid = info.is_some_and(|r| r.get::<i64, _>("wr") != 0);
-            let mut table = TableDefinition::empty("main", &name);
+            let mut table = TableDefinition::empty("main", name);
             let mut metadata = SqliteTableMetadata {
                 definition,
                 strict,
@@ -111,7 +131,7 @@ pub async fn inspect_schema(
                 index_terms: BTreeMap::new(),
                 columns_unavailable: false,
             };
-            let columns = sqlx::query("SELECT cid,name,type,\"notnull\",dflt_value,pk,hidden FROM pragma_table_xinfo(?, 'main') ORDER BY cid").bind(&name).fetch_all(&mut *tx).await;
+            let columns = sqlx::query("SELECT cid,name,type,\"notnull\",dflt_value,pk,hidden FROM pragma_table_xinfo(?, 'main') ORDER BY cid").bind(name).fetch_all(&mut *tx).await;
             let columns = match columns {
                 Ok(rows) => rows,
                 Err(error) if virtual_table && missing_module(&error) => {
@@ -130,7 +150,7 @@ pub async fn inspect_schema(
             if column_count > 50_000 {
                 return Err(SqliteError::Limit);
             }
-            let indexes = sqlx::query("SELECT name,\"unique\",origin,partial FROM pragma_index_list(?, 'main') ORDER BY name").bind(&name).fetch_all(&mut *tx).await?;
+            let indexes = sqlx::query("SELECT name,\"unique\",origin,partial FROM pragma_index_list(?, 'main') ORDER BY name").bind(name).fetch_all(&mut *tx).await?;
             let mut pk: Vec<(i64, String)> = vec![];
             for col in &columns {
                 let name: String = col.try_get("name")?;
@@ -179,12 +199,8 @@ pub async fn inspect_schema(
             for idx in indexes {
                 let index_name: String = idx.try_get("name")?;
                 let details = sqlx::query("SELECT name,cid,\"desc\",coll,\"key\" FROM pragma_index_xinfo(?, 'main') ORDER BY seqno").bind(&index_name).fetch_all(&mut *tx).await?;
-                let ddl = catalog
-                    .iter()
-                    .find(|r| {
-                        r.get::<String, _>("name") == index_name
-                            && r.get::<String, _>("type") == "index"
-                    })
+                let ddl = index_definitions
+                    .get(index_name.as_str())
                     .and_then(|r| r.get::<Option<String>, _>("sql"));
                 let mut predicate = None;
                 let mut expressions = vec![];
@@ -233,7 +249,7 @@ pub async fn inspect_schema(
                     predicate,
                 });
             }
-            let fks = sqlx::query("SELECT id,seq,\"table\",\"from\",\"to\",on_update,on_delete FROM pragma_foreign_key_list(?, 'main') ORDER BY id,seq").bind(&name).fetch_all(&mut *tx).await?;
+            let fks = sqlx::query("SELECT id,seq,\"table\",\"from\",\"to\",on_update,on_delete FROM pragma_foreign_key_list(?, 'main') ORDER BY id,seq").bind(name).fetch_all(&mut *tx).await?;
             let mut groups: BTreeMap<i64, Vec<SqliteRow>> = BTreeMap::new();
             for fk in fks {
                 groups.entry(fk.get("id")).or_default().push(fk);
@@ -241,31 +257,34 @@ pub async fn inspect_schema(
             let mut fk_ids = BTreeMap::<String, usize>::new();
             for rows in groups.values() {
                 let first = &rows[0];
-                let declared_target: String = first.try_get("table")?;
-                // SQLite resolves identifiers case-insensitively, whereas snapshot object
-                // identities are exact. Store the catalog's spelling for graph consumers.
-                let target = catalog
-                    .iter()
-                    .find(|entry| {
-                        entry.get::<String, _>("type") == "table"
-                            && entry
-                                .get::<String, _>("name")
-                                .eq_ignore_ascii_case(&declared_target)
-                    })
-                    .map_or(declared_target, |entry| entry.get::<String, _>("name"));
-                let target_columns =
-                    sqlx::query("SELECT name,pk FROM pragma_table_xinfo(?, 'main') ORDER BY pk")
-                        .bind(&target)
+                let declared_target: &str = first.try_get("table")?;
+                let target_key = declared_target.to_ascii_lowercase();
+                let target = table_names
+                    .get(&target_key)
+                    .copied()
+                    .unwrap_or(declared_target);
+                // Reuse target metadata only within this read transaction. Retain
+                // the unavailable-module diagnostic for each referencing table.
+                let cached = match foreign_key_targets.entry(target_key) {
+                    Entry::Occupied(entry) => entry.into_mut(),
+                    Entry::Vacant(entry) => {
+                        let columns = sqlx::query(
+                            "SELECT name,pk FROM pragma_table_xinfo(?, 'main') ORDER BY pk",
+                        )
+                        .bind(target)
                         .fetch_all(&mut *tx)
                         .await;
-                let target_columns = match target_columns {
-                    Ok(columns) => columns,
-                    Err(error) if missing_module(&error) => {
-                        metadata.diagnostics.push(format!("Foreign key to {target}: target module unavailable; declared references are retained but cannot be verified."));
-                        vec![]
+                        entry.insert(match columns {
+                            Ok(columns) => Some(columns),
+                            Err(error) if missing_module(&error) => None,
+                            Err(error) => return Err(error.into()),
+                        })
                     }
-                    Err(error) => return Err(error.into()),
                 };
+                if cached.is_none() {
+                    metadata.diagnostics.push(format!("Foreign key to {target}: target module unavailable; declared references are retained but cannot be verified."));
+                }
+                let target_columns = cached.as_deref().unwrap_or_default();
                 let target_pk: Vec<_> = target_columns
                     .iter()
                     .filter(|column| column.get::<i64, _>("pk") > 0)
@@ -308,7 +327,7 @@ pub async fn inspect_schema(
                     name: derived_name,
                     columns: fields,
                     referenced_schema: "main".into(),
-                    referenced_table: target,
+                    referenced_table: target.into(),
                     referenced_columns,
                     on_update: action(&first.try_get::<String, _>("on_update")?),
                     on_delete: action(&first.try_get::<String, _>("on_delete")?),

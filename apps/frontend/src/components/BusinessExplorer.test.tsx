@@ -7,14 +7,14 @@ import { BusinessExplorer } from "./BusinessExplorer";
 const canvas = vi.hoisted(() => vi.fn<(props: import("./SchemaCanvas").SchemaCanvasProps) => void>());
 vi.mock("./SchemaCanvas", () => ({ SchemaCanvas: (props: import("./SchemaCanvas").SchemaCanvasProps) => { canvas(props); return <div aria-label="Temporary graph" />; } }));
 function props() {
-  const mocks = { listSnapshots: vi.fn().mockResolvedValue([{ id: reportSnapshot.id }]), prepareDiscovery: vi.fn(), runDiscovery: vi.fn(), cancelDiscovery: vi.fn().mockResolvedValue(undefined) };
+  const mocks = { listRecentSnapshotIds: vi.fn().mockResolvedValue([reportSnapshot.id]), prepareDiscovery: vi.fn(), runDiscovery: vi.fn(), cancelDiscovery: vi.fn().mockResolvedValue(undefined) };
   return { platform: mocks as unknown as NodalStudioPlatform, mocks, snapshot: reportSnapshot, semantics: reportSemantics, settings: discoverySettings(), desktop: true, onClose: vi.fn(), onLocate: vi.fn(), onExplain: vi.fn(), onOpenSettings: vi.fn() };
 }
 function search(value: string) { fireEvent.change(screen.getByLabelText("Business question"), { target: { value } }); fireEvent.click(screen.getByRole("button", { name: "Search locally" })); }
 describe("business exploration flow", () => {
   it("hands the business question and chosen table to Query without sending to AI", async () => {
     const p = props(); const onDraftQuery = vi.fn(); render(<BusinessExplorer {...p} onDraftQuery={onDraftQuery} />);
-    search("orders"); await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    search("orders"); await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled());
     fireEvent.click(screen.getAllByRole("button", { name: "Draft query" })[0]);
     expect(onDraftQuery).toHaveBeenCalledWith(expect.objectContaining({ question: "orders", sourceId: reportSnapshot.sourceId, snapshotId: reportSnapshot.id, domainId: null }));
     expect(p.mocks.prepareDiscovery).not.toHaveBeenCalled(); expect(p.mocks.runDiscovery).not.toHaveBeenCalled();
@@ -46,7 +46,7 @@ describe("business exploration flow", () => {
     expect(screen.getByText("public.customers ↔ public.orders ↔ archive.orders")).toBeVisible();
     expect(canvas.mock.lastCall![0].semantics?.logicalRelationships).toHaveLength(1);
     expect(screen.getByText("Physical FK")).toBeVisible(); expect(screen.getByText("Confirmed logical relationship · model only")).toBeVisible();
-    expect(p.settings.source!.ai.contextScope).toBe("oneHop"); await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    expect(p.settings.source!.ai.contextScope).toBe("oneHop"); await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled());
   });
   it("keeps local domain separate from explicitly selected AI domain and blocks CurrentTable ranking", async () => {
     const p = props(); p.settings.source!.ai.contextScope = "domain"; render(<BusinessExplorer {...p} />); search("orders");
@@ -54,23 +54,23 @@ describe("business exploration flow", () => {
     fireEvent.change(screen.getByLabelText("AI operation"), { target: { value: "rank" } });
     expect(screen.getByLabelText("AI send domain")).toHaveValue(""); expect(screen.queryByRole("button", { name: "Prepare discovery preview" })).toBeNull();
     expect(screen.queryByText("archive.orders", { selector: "h4" })).toBeNull();
-    await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled());
   });
   it("reports no result and offers ambiguity choices without network or invented objects", async () => {
     const p = props(); render(<BusinessExplorer {...p} />); search("account unknown_business");
     expect(screen.getByText(/No reliable local candidates/)).toBeVisible(); expect(screen.getByRole("button", { name: "Financial account" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Login identity" })); expect(screen.getByLabelText("Business question")).toHaveValue("account unknown_business login identity 登录");
-    expect(p.mocks.prepareDiscovery).not.toHaveBeenCalled(); await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    expect(p.mocks.prepareDiscovery).not.toHaveBeenCalled(); await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled());
   });
   it("renders five candidates initially and permits more without auto-ranking", async () => {
     const p = props(); const snapshot = structuredClone(reportSnapshot); snapshot.schemas[0].tables = Array.from({ length: 9 }, (_, i) => ({ ...snapshot.schemas[0].tables[1], key: { kind: "table", schema: "public", name: `orders_${i}` } })); snapshot.schemas[1].tables = [];
     render(<BusinessExplorer {...p} snapshot={snapshot} />); search("orders"); expect(screen.getAllByRole("button", { name: "Locate table" })).toHaveLength(5);
     fireEvent.click(screen.getByRole("button", { name: "Show more candidates" })); expect(screen.getAllByRole("button", { name: "Locate table" })).toHaveLength(9);
-    expect(p.mocks.runDiscovery).not.toHaveBeenCalled(); await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled());
+    expect(p.mocks.runDiscovery).not.toHaveBeenCalled(); await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled());
   });
   it("does not enable AI for a historical snapshot or restore previous question results after model changes", async () => {
-    const p = props(); p.mocks.listSnapshots.mockResolvedValue([{ id: "newer" }]); const view = render(<BusinessExplorer {...p} />); search("orders");
-    await waitFor(() => expect(p.mocks.listSnapshots).toHaveBeenCalled()); expect(screen.queryByRole("button", { name: "Prepare discovery preview" })).toBeNull();
+    const p = props(); p.mocks.listRecentSnapshotIds.mockResolvedValue(["newer"]); const view = render(<BusinessExplorer {...p} />); search("orders");
+    await waitFor(() => expect(p.mocks.listRecentSnapshotIds).toHaveBeenCalled()); expect(screen.queryByRole("button", { name: "Prepare discovery preview" })).toBeNull();
     view.rerender(<BusinessExplorer {...p} snapshot={{ ...reportSnapshot, id: "another-model" }} />); view.rerender(<BusinessExplorer {...p} />);
     expect(screen.getByLabelText("Business question")).toHaveValue(""); expect(screen.queryByRole("button", { name: "Locate table" })).toBeNull();
   });

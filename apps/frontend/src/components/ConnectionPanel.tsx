@@ -393,12 +393,11 @@ export function ConnectionPanel({ enabled, activeSourceId, initializingDatabase,
   }
 
   async function openSavedSnapshot(profile: DataSourceProfile) {
-    const snapshots = await platform.listSnapshots(profile.id);
-    const latest = snapshots[0];
-    if (!latest) {
+    const [latestId] = await platform.listRecentSnapshotIds(profile.id);
+    if (!latestId) {
       throw new MissingSchemaSnapshotError(bt("business.missingSchemaSnapshot", { value0: bt("business.verifyRefresh") }));
     }
-    const snapshot = await platform.getSnapshot(latest.id);
+    const snapshot = await platform.getSnapshot(latestId);
     (onOpenDatabase ?? onSnapshot)({ snapshot, stored: false, changeSet: null });
   }
 
@@ -414,7 +413,8 @@ export function ConnectionPanel({ enabled, activeSourceId, initializingDatabase,
   const loadDatabases = useCallback((server: DataSourceProfile): Promise<DatabaseCatalogResult> => {
     const key = serverKey(server);
     if (databaseRequest.current?.serverKey === key) return databaseRequest.current.result;
-    setDatabaseCatalog({ serverKey: key, state: "loading" });
+    setDatabaseCatalog((previous) => previous?.serverKey === key && previous.state === "ready"
+      ? previous : { serverKey: key, state: "loading" });
     const result = platform.listServerDatabases(server.id).then<DatabaseCatalogResult, DatabaseCatalogResult>(
       (databases) => ({ state: "ready", databases }),
       (reason: unknown) => ({ state: "error", failure: connectionFailure(reason) }),

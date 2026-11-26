@@ -67,7 +67,7 @@ function EditorSession({ platform, input, sourceId, label, chinese, onSaved }: E
 export function KnowledgeReview({ platform, snapshot, semantics, table, desktop, onRefresh }: { platform: NodalStudioPlatform; snapshot: DatabaseSnapshot; semantics: SemanticBundle; table?: TableDefinition; desktop: boolean; onRefresh: () => Promise<void> }) {
   const { t: bt, locale } = useI18n();
   const [latest, setLatest] = useState<string>(); const [limit, setLimit] = useState(10);
-  useEffect(() => { let active = true; if (desktop) void platform.listSnapshots(snapshot.sourceId).then((items) => { if (active) setLatest(items[0]?.id); }).catch(() => undefined); return () => { active = false; }; }, [desktop, platform, snapshot.sourceId, snapshot.id]);
+  useEffect(() => { let active = true; if (desktop) void platform.listRecentSnapshotIds(snapshot.sourceId).then(([latestId]) => { if (active) setLatest(latestId); }).catch(() => undefined); return () => { active = false; }; }, [desktop, platform, snapshot.sourceId, snapshot.id]);
   if (!desktop) return <p>{bt("businessSupport.sharedDescriptionsDoNotCarryLocalReviewProofConfirm")}</p>;
   if (latest !== snapshot.id) return <p>{bt("businessSupport.knowledgeReviewRequiresTheLatestLoadedSnapshot")}</p>;
   const states = semantics.knowledge ?? [];

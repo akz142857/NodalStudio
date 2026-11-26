@@ -52,7 +52,7 @@ describe("QueryPage", () => {
     const executeReadonlyQuery = vi.fn();
     const platform = {
       listQueryHistory: vi.fn().mockResolvedValue([]),
-      listSnapshots: vi.fn().mockResolvedValue([{ id: reportSnapshot.id }]),
+      listRecentSnapshotIds: vi.fn().mockResolvedValue([reportSnapshot.id]),
       draftOntologyLastMonth, prepareDiscovery, executeReadonlyQuery,
     } as unknown as NodalStudioPlatform;
     saveQuerySession(reportWorkspace, { ...loadQuerySession(reportWorkspace), draft: "SELECT 7;" });

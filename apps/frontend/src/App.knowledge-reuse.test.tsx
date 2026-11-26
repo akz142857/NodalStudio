@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, it, expect, vi } from 'vitest';
 import { App } from './App';
-import { getPlatform, type CaptureSnapshotResult, type SnapshotSummary, type SemanticBundle, type SaveLogicalRelationshipInput, type LogicalRelationship, type DomainGroup } from './platform';
+import { getPlatform, type CaptureSnapshotResult, type SemanticBundle, type SaveLogicalRelationshipInput, type LogicalRelationship, type DomainGroup } from './platform';
 import type { SchemaCanvasProps } from './components/SchemaCanvas';
 import { reportSnapshot, reportSemantics } from './test/schema-report-fixture';
 import { discoverySettings } from './test/discovery-fixture';
@@ -36,7 +36,7 @@ it.each(['manual', 'domain-race', 'create', 'update', 'delete', 'delete-missing'
   vi.spyOn(platform,'listSyncDiagnostics').mockResolvedValue([]);
   for(const method of ['createLogicalRelationship','updateLogicalRelationship'] as const) vi.spyOn(platform,method).mockImplementation(()=>{invalidate();return Promise.resolve({...relation,status:'active',origin:'manual',evidence:[],note:null,createdAt:'old',updatedAt:'new'} as LogicalRelationship);});
   vi.spyOn(platform,'deleteLogicalRelationship').mockImplementation(()=>{invalidate();return Promise.resolve(kind!=='delete-missing');});
-  vi.spyOn(platform,'listSnapshots').mockResolvedValue([{id:reportSnapshot.id} as SnapshotSummary]);
+  vi.spyOn(platform,'listRecentSnapshotIds').mockResolvedValue([reportSnapshot.id]);
   let finishGroup!: (group: DomainGroup) => void;
   vi.spyOn(platform,'saveDomainGroup').mockImplementation(()=>new Promise(resolve=>{finishGroup=resolve;}));
   const save=vi.spyOn(platform,'saveAnnotation').mockImplementation((input)=>{
