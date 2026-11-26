@@ -43,7 +43,7 @@ export function ObjectDocument({ snapshot, object, onClose, onSelect, onSelectTa
   </section>;
 }
 
-export function DefinitionReader({ value, wrap, dialect }: { value: string; wrap: boolean; dialect: "postgreSql" | "mySql" | "sqlite" }) {
+export function DefinitionReader({ value, wrap, dialect, selectedLine }: { value: string; wrap: boolean; dialect: "postgreSql" | "mySql" | "sqlite"; selectedLine?: number }) {
   const { t } = useI18n();
   const label = t("document.reader");
   const host = useRef<HTMLDivElement>(null);
@@ -61,6 +61,13 @@ export function DefinitionReader({ value, wrap, dialect }: { value: string; wrap
     view.current = editor;
     return () => { editor.destroy(); view.current = undefined; };
   }, [value, wrap, dialect, label]);
+  useEffect(() => {
+    const editor = view.current;
+    if (editor && selectedLine && selectedLine <= editor.state.doc.lines) {
+      const line = editor.state.doc.line(selectedLine);
+      editor.dispatch({ selection: { anchor: line.from, head: line.to }, effects: EditorView.scrollIntoView(line.from, { y: "center" }) });
+    }
+  }, [selectedLine, value, wrap, dialect, label]);
   const find = () => {
     const editor = view.current;
     if (!editor || !search) return;

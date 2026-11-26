@@ -1,0 +1,15 @@
+diff --git a/lib/resolve-module.cjs b/lib/resolve-module.cjs
+--- a/lib/resolve-module.cjs
++++ b/lib/resolve-module.cjs
+@@ -7,7 +7,10 @@
+ /* node:coverage ignore next 3 */
+ // @ts-ignore
+ // eslint-disable-next-line camelcase, no-undef
+-const nativeRequire = (typeof __non_webpack_require__ === "undefined") ? require : __non_webpack_require__;
++const nativeRequire = (typeof __non_webpack_require__ === "undefined") ?
++  // The browser build checks strings with built-in rules and has no Node resolver.
++  ((typeof require === "undefined") ? null : require) :
++  __non_webpack_require__;
+ 
+ /**
+  * @typedef RequireResolveOptions

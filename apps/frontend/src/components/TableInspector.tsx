@@ -1,3 +1,4 @@
+import { codeColumnKey } from "../platform/code-view";
 import { SchemaIndexDetails } from "./SchemaIndexDetails";
 import { TableCatalogDetails } from "./SchemaProgramDetails";
 import type { DatabaseSnapshot } from "../platform/types";
@@ -13,6 +14,7 @@ interface TableStructureProps {
   table: TableDefinition;
   snapshot?: DatabaseSnapshot;
   onOpenQuery?: (table: TableDefinition) => void;
+  onOpenCode?: (key: import("../platform").ObjectKey) => void;
   onShowColumnSource?: (name: string) => void;
   focusedEvidence?: TableAiEvidence;
 }
@@ -31,7 +33,7 @@ interface TableKnowledgeFormProps {
  * Split from the knowledge form because the inspector shows one or the other —
  * structure is read-only and comes from the snapshot, the form is authored.
  */
-export function TableStructure({ table, snapshot, onOpenQuery, columnFocus, focusedEvidence, onOpenObject, onShowColumnSource }: TableStructureProps) {
+export function TableStructure({ table, snapshot, onOpenQuery, columnFocus, focusedEvidence, onOpenObject, onShowColumnSource, onOpenCode }: TableStructureProps) {
   const { t: bt } = useI18n();
   const structure = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -66,6 +68,7 @@ export function TableStructure({ table, snapshot, onOpenQuery, columnFocus, focu
       <section className="inspector-section table-structure-columns">
         <div className="table-structure-columns-heading">
           <h3>{bt("business.columnsDetail")}</h3>
+          {onOpenCode && <button type="button" className="inspector-query-button" onClick={() => onOpenCode(table.key)}>{bt("codeView.related")}</button>}
           {onOpenQuery ? <button type="button" className="inspector-query-button" onClick={() => onOpenQuery(table)}>{bt("business.previewRowsInQuery")}</button> : null}
         </div>
         <div className="inspector-columns">
@@ -84,6 +87,7 @@ export function TableStructure({ table, snapshot, onOpenQuery, columnFocus, focu
                 </small>
                 {sqliteColumn && sqliteColumn.affinity !== column.formattedType.trim().toUpperCase() ? <small>{bt("sqlite.affinity")} · {sqliteColumn.affinity}</small> : null}
                 {sqliteColumn?.generationExpression ? <small>{sqliteColumn.generationMode ?? "VIRTUAL"} · {sqliteColumn.generationExpression}</small> : null}
+                {onOpenCode && <button type="button" aria-label={bt("codeView.findColumn", { name: column.name })} onClick={() => onOpenCode(codeColumnKey(table.key, column.name))}>{bt("codeView.related")}</button>}
                 {column.comment ? <p>{column.comment}</p> : null}
                 {onShowColumnSource ? <>
                   {column.identity ? <small>{bt("businessMeta.identity")}: {column.identity}</small> : null}

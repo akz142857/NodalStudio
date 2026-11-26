@@ -24,6 +24,8 @@
   background: var(--ds-sidebar);
 }
 
+.topbar[data-code-workspace] > .runtime-actions { grid-column: -2; justify-self: end; }
+
 .segmented {
   display: flex;
   padding: 3px;
@@ -79,7 +81,7 @@
   pointer-events: none;
 }
 
-.global-search input {
+.global-search :is(input, .code-toolbar-search) {
   width: 100%;
   padding: 8px 11px;
   border: 1px solid var(--ds-border);
@@ -88,6 +90,20 @@
   background: var(--ds-field);
   font-size: var(--ds-text-caption);
 }
+
+.global-search .code-toolbar-search {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px 0 32px;
+  color: var(--ds-tertiary);
+  text-align: start;
+  cursor: pointer;
+}
+.global-search .code-toolbar-search:hover { color: var(--ds-text); }
+.code-toolbar-search > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.code-toolbar-search > kbd { flex: none; color: var(--ds-secondary); font: inherit; }
 
 .global-search-panel {
   position: absolute;

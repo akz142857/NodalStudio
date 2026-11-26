@@ -56,6 +56,7 @@ pub enum SelectionKind {
     OpenBackup,
     SaveBackup,
     Repository,
+    CodeReviewFolder,
     OpenSqlite,
     SqliteDirectory,
     ConnectionSyncFolder,
@@ -79,14 +80,30 @@ pub async fn pick_workspace_path(
     app: tauri::AppHandle,
     kind: SelectionKind,
 ) -> Result<Option<String>, String> {
+    pick_workspace_path_from(app, kind, None).await
+}
+
+pub(crate) async fn pick_workspace_path_from(
+    app: tauri::AppHandle,
+    kind: SelectionKind,
+    initial_directory: Option<std::path::PathBuf>,
+) -> Result<Option<String>, String> {
     tokio::task::spawn_blocking(move || {
         let picker = app.dialog().file();
+        let picker = if let Some(directory) = initial_directory.filter(|path| path.is_absolute()) {
+            picker.set_directory(directory)
+        } else {
+            picker
+        };
         let result = match kind {
             SelectionKind::OpenSqlite => picker
                 .set_title("Choose SQLite database / 选择 SQLite 数据库")
                 .blocking_pick_file(),
             SelectionKind::SqliteDirectory => picker
                 .set_title("Allow SQLite WAL folder access / 授权 SQLite 所在文件夹")
+                .blocking_pick_folder(),
+            SelectionKind::CodeReviewFolder => picker
+                .set_title("Open project folder / 打开项目文件夹")
                 .blocking_pick_folder(),
             SelectionKind::Repository => picker
                 .set_title("Choose repository folder")
@@ -130,6 +147,7 @@ pub async fn pick_workspace_path(
                 if matches!(
                     kind,
                     SelectionKind::Repository
+                        | SelectionKind::CodeReviewFolder
                         | SelectionKind::OpenSqlite
                         | SelectionKind::SqliteDirectory
                 ) {

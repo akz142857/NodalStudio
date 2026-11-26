@@ -1,3 +1,4 @@
+import type { CodeQueryHandoff, CodeViewPlatform } from "./code-view";
 export interface DiagramExportInput {
   fileName: string;
   format: "svg" | "png";
@@ -16,6 +17,7 @@ export interface SchemaReportExportInput {
 }
 
 export interface RuntimeInfo {
+  localEslint?: boolean;
   distribution?: "community" | "macAppStore";
   kind: "desktop" | "web";
   label: string;
@@ -582,6 +584,7 @@ export interface ExecuteReadonlyQueryInput {
   rowLimit: number;
   timeoutMs: number;
   tableBrowse?: boolean;
+  projectHandoff?: CodeQueryHandoff;
 }
 
 export interface QueryColumn {
@@ -621,6 +624,8 @@ export interface QueryHistoryEntry {
 export interface QueryExportInput { locale?: "en" | "zh-CN"; result: QueryExecutionResult; format: "csv" | "json" | "xlsx"; selectedRows: number[] | null; protectFormulas: boolean }
 
 export interface NodalStudioPlatform {
+  readonly codeView?: CodeViewPlatform;
+  readonly codeReview?: import("./code-review").CodeReviewPlatform;
   listOntology(scope: import("./ontology-types").OntologyScope): Promise<import("./ontology-types").ConfirmedDefinition[]>;
   confirmOntology(input: import("./ontology-types").ConfirmOntologyInput): Promise<import("./ontology-types").ConfirmedDefinition>;
   saveOntologySample(input: import("./ontology-types").SaveOntologySampleInput): Promise<import("./ontology-types").ConfirmedDefinition>;

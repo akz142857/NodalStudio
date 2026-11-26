@@ -78,9 +78,10 @@ const SettingsPage = lazy(() => import("./components/SettingsPage").then((module
 const QueryPage = lazy(() => import("./components/query/QueryPage").then((module) => ({ default: module.QueryPage })));
 const ChangeReviewWorkspace = lazy(() => import("./components/change-review/ChangeReviewWorkspace").then((module) => ({ default: module.ChangeReviewWorkspace })));
 const OntologyWorkspace = lazy(() => import("./components/ontology/OntologyWorkspace").then((module) => ({ default: module.OntologyWorkspace })));
+const CodeReviewWorkspace = lazy(() => import("./components/code-view/CodeReviewWorkspace").then((module) => ({ default: module.CodeReviewWorkspace })));
 const DdlImportPanel = lazy(() => import("./components/DdlImportPanel").then((module) => ({ default: module.DdlImportPanel })));
 
-type ViewMode = "explore" | "ontology" | "database" | "query" | "changes";
+type ViewMode = "explore" | "ontology" | "database" | "query" | "changes" | "code";
 type OpenSqliteTable = { target: SqliteTableTarget; binding: string; key: string; retain?: boolean };
 type AppNotice = { id: string; title: string; message: string; createdAt: string; settingsCategory?: SettingsCategory };
 
@@ -186,6 +187,12 @@ export function App() {
   const runRefresh = refreshOperation.run;
   const refreshState = refreshOperation.busy ? "refreshing" : refreshOperation.state?.phase === "error" ? "error" : "idle";
   const [leftPanel, setLeftPanel] = useState(LEFT_PANEL_DEFAULT);
+  const [codeSidebarExpanded, setCodeSidebarExpanded] = useState(true);
+  const codeSidebarId = useId();
+  const [codeOutlineExpanded, setCodeOutlineExpanded] = useState(false);
+  const codeOutlineId = useId();
+  const leftSidebarToggle = useRef<HTMLButtonElement>(null);
+  const rightSidebarToggle = useRef<HTMLButtonElement>(null);
   const [rightPanel, restoreRightPanel] = useState(RIGHT_PANEL_DEFAULT);
   const rightPanelInteracted = useRef(false);
   const setRightPanel = useCallback((update: PanelPreference | ((current: PanelPreference) => PanelPreference)) => {
@@ -239,6 +246,7 @@ export function App() {
   const [databaseExport, setDatabaseExport] = useState<{ snapshot: DatabaseSnapshot; target: DatabaseExportTarget }>();
   const [showTableDdl, setShowTableDdl] = useState<string>();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const codeSearchAnchor = useRef<HTMLButtonElement>(null);
   const autoConnectAttempted = useRef(false);
   const startupRevision = useRef(0);
   const beginSourceOpen = useCallback(() => { startupRevision.current += 1; autoConnectAttempted.current = true; }, []);
@@ -335,7 +343,7 @@ export function App() {
     && !browsableTable.sqlite?.virtualTable && !browsableTable.sqlite?.columnsUnavailable
     ? sqliteEditors.find((editor) => editor.target.sourceId === snapshot?.sourceId
       && editor.binding === sqliteBinding && editor.target.table === browsableTable.key.name) : undefined;
-  const modelInspectorVisible = mode !== "database" && mode !== "ontology";
+  const modelInspectorVisible = mode !== "database" && mode !== "ontology" && mode !== "code";
   const ontologySnapshot = runtime.data?.kind === "desktop" && !historyPreview ? snapshot : undefined;
   const ontologyRequiresNewerMySql = ontologySnapshot && requiresNewerMySqlForOntology(ontologySnapshot.database);
   const queryOntologyScope = mode === "query" && ontologySnapshot && !ontologyRequiresNewerMySql
@@ -763,7 +771,7 @@ export function App() {
 
   useEffect(() => {
     if (!settingsLoaded || runtime.data?.kind !== "desktop" || !snapshot) return;
-    const lastViewMode = viewMode === "ontology" ? "explore" : viewMode;
+    const lastViewMode = viewMode === "ontology" || viewMode === "code" ? "explore" : viewMode;
     if (
       settings.app.general.lastSourceId === snapshot.sourceId &&
       settings.app.general.lastViewMode === lastViewMode
@@ -1173,22 +1181,39 @@ export function App() {
   const focusCanvasAvailable = canvasAvailable && Boolean(currentTable) && !activeRelationshipSearch;
   const toggleLeftSidebar = useCallback(() => setLeftPanel(value => ({ ...value, expanded: !value.expanded })), []);
   const toggleRightInspector = useCallback(() => {
-    if (preflightOpen) setPreflightDetailsExpanded(value => !value);
+    if (mode === "code") {
+      if (document.getElementById(codeOutlineId)?.contains(document.activeElement)) rightSidebarToggle.current?.focus();
+      setCodeOutlineExpanded((expanded) => !expanded);
+    } else if (preflightOpen) setPreflightDetailsExpanded(value => !value);
     else setRightPanel(value => ({ ...value, expanded: !value.expanded }));
-  }, [preflightOpen, setRightPanel]);
+  }, [codeOutlineId, mode, preflightOpen, setRightPanel]);
+  const hasCodeWorkspace = Boolean(platform.codeReview && runtime.data?.kind === "desktop");
+  const codeInspectorAvailable = mode === "code" && hasCodeWorkspace && typeof platform.codeReview?.documentOutline === "function"
+    && runtime.data?.distribution !== "macAppStore";
+  const codeInspectorLabel = codeOutlineExpanded ? "codeReview.hideInspector" : "codeReview.showInspector";
+  const rightSidebarAvailable = modelInspectorVisible || codeInspectorAvailable;
+  function openCodeReview() {
+    if (!hasCodeWorkspace) return;
+    setToolsOpen(false);
+    switchWorkspace("code");
+  }
+
   const commands: AppCommand<WorkspaceCommandId>[] = [
-    { id: "search", group: "view", icon: "search", label: t("navigation.searchSchema"), keywords: "find table column 搜索 查找 表 字段",
-      available: Boolean(snapshot), shortcut: appShortcut(bindings.focusSearch) },
+    { id: "search", group: "view", icon: "search", label: t(mode === "code" ? "codeReview.find" : "navigation.searchSchema"), keywords: "find code table column 搜索 查找 代码 表 字段",
+      available: mode === "code" || Boolean(snapshot), shortcut: appShortcut(bindings.focusSearch) },
     { id: "open-model", group: "view", icon: "canvas", label: t(modelLabel), keywords: "ER diagram 关系图",
       shortcut: modelShortcut },
     { id: "open-ontology", group: "view", icon: "relationships", label: t(ontologyLabel), keywords: "business definitions 业务口径",
       available: Boolean(ontologySnapshot), shortcut: ontologyShortcut },
     { id: "open-database", group: "view", icon: "database", label: t(databaseLabel), keywords: "browse table rows 浏览数据", shortcut: databaseShortcut },
     { id: "open-query", group: "view", icon: "viewer", label: t(queryLabel), keywords: "SQL editor 编辑器", available: !queryUnavailable, shortcut: queryShortcut },
+    { id: "open-code", group: "view", icon: "codeDocument", label: t("codeView.title"), keywords: "repository source SQL changes review 仓库 代码 审阅", available: hasCodeWorkspace },
     { id: "toggle-left", group: "view", icon: "list", label: t("navigation.toggleLeftSidebar"), keywords: "collapse expand sidebar 展开 收起 导航",
       shortcut: appShortcut(bindings.toggleLeftSidebar) },
-    { id: "toggle-right", group: "view", icon: "split", label: t("navigation.toggleRightInspector"), keywords: "collapse expand details 展开 收起 属性 右侧栏",
-      available: modelInspectorVisible, shortcut: appShortcut(bindings.toggleRightInspector) },
+    { id: "toggle-right", group: "view", icon: codeInspectorAvailable ? "sidebarRight" : "split", label: t(codeInspectorAvailable
+      ? codeInspectorLabel : "navigation.toggleRightInspector"),
+      keywords: "collapse expand details outline checks 展开 收起 属性 右侧栏 大纲 检查",
+      available: rightSidebarAvailable, shortcut: appShortcut(bindings.toggleRightInspector) },
     { id: "fit", group: "view", icon: "fit", label: t("navigation.fitERCanvas"), keywords: "zoom model 缩放 适应 完整",
       available: canvasAvailable, shortcut: appShortcut(bindings.fitCanvas) },
     { id: "view-all", group: "view", icon: "table", label: t("navigation.viewAllDatabaseTables"), keywords: "global overview exit focus 完整模型 退出聚焦", available: canvasAvailable },
@@ -1197,8 +1222,8 @@ export function App() {
     { id: "relayout", group: "view", icon: "canvas", label: t("navigation.reLayoutERCanvas"), keywords: "auto layout 整理 排列",
       available: canvasAvailable, shortcut: appShortcut(bindings.relayoutCanvas) },
     { id: "ddl-preview", group: "structure", icon: "import", label: t("navigation.openReadOnlyDDLPreview"), keywords: "SQL file clipboard PostgreSQL MySQL import 导入 文件 剪贴板" },
-    { id: "refresh", group: "structure", icon: "refresh", label: t("navigation.refreshSchema"), keywords: "database capture snapshot 数据库 快照 捕获",
-      available: refreshAvailable, shortcut: appShortcut(bindings.refreshSchema) },
+    { id: "refresh", group: "structure", icon: "refresh", label: t(mode === "code" ? "codeReview.refresh" : "navigation.refreshSchema"), keywords: "refresh project database snapshot 刷新 项目 数据库 快照",
+      available: mode === "code" || refreshAvailable, shortcut: appShortcut(bindings.refreshSchema) },
     { id: "preflight", group: "structure", icon: "preflight", label: t("navigation.openStructurePreflight"), keywords: "schema check validation PostgreSQL MySQL 检查 验证",
       available: Boolean(snapshot && !preflightOpen) },
     { id: "review", group: "structure", icon: "report", label: t("navigation.reviewChanges"), keywords: "change review ontology 变更 本体 口径",
@@ -1229,8 +1254,17 @@ export function App() {
       case "open-ontology": return switchWorkspace("ontology");
       case "open-database": return switchWorkspace("database");
       case "open-query": return switchWorkspace("query");
-      case "search": return openSchemaSearch();
-      case "toggle-left": return toggleLeftSidebar();
+      case "open-code": return openCodeReview();
+      case "search":
+        if (mode === "code") { window.dispatchEvent(new Event("nodalstudio:code-find")); return; }
+        return openSchemaSearch();
+      case "toggle-left":
+        if (mode === "code") {
+          if (document.getElementById(codeSidebarId)?.contains(document.activeElement)) leftSidebarToggle.current?.focus();
+          setCodeSidebarExpanded((expanded) => !expanded);
+          return;
+        }
+        return toggleLeftSidebar();
       case "toggle-right": return toggleRightInspector();
       case "fit": window.dispatchEvent(new Event("nodalstudio:fit-canvas")); return;
       case "view-all": window.dispatchEvent(new Event("nodalstudio:view-all-tables")); return;
@@ -1240,7 +1274,9 @@ export function App() {
         setSettingsOpen(false);
         setDdlPreviewOpen(true, commandPaletteTrigger.current);
         return;
-      case "refresh": void refreshActive(); return;
+      case "refresh":
+        if (mode === "code") { window.dispatchEvent(new Event("nodalstudio:code-refresh")); return; }
+        void refreshActive(); return;
       case "preflight": return setPreflightOpen(true);
       case "review": window.dispatchEvent(new Event("nodalstudio:change-review")); return;
       case "settings": return openSettings();
@@ -1258,6 +1294,11 @@ export function App() {
         if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
         if (event.key === "Enter" && target?.closest("button, a[href], summary, [role='button'], [role='tab'], [role='option']")) return;
       }
+      if (mode === "code" && platform.codeReview?.paths && matchesShortcut(event, "Mod+P")) {
+        event.preventDefault();
+        if (!event.repeat) window.dispatchEvent(new Event("nodalstudio:code-quick-open"));
+        return;
+      }
       if (matchesShortcut(event, COMMAND_PALETTE_SHORTCUT)) {
         event.preventDefault();
         if (!event.repeat) openCommandPalette();
@@ -1272,10 +1313,10 @@ export function App() {
       }
       const bindingsByCommand: [WorkspaceCommandId, string | undefined][] = [
         ["settings", bindings.openSettings],
-        ["search", snapshot ? bindings.focusSearch : undefined],
-        ["refresh", refreshAvailable ? bindings.refreshSchema : undefined],
+        ["search", mode === "code" || snapshot ? bindings.focusSearch : undefined],
+        ["refresh", mode === "code" || refreshAvailable ? bindings.refreshSchema : undefined],
         ["toggle-left", bindings.toggleLeftSidebar],
-        ["toggle-right", modelInspectorVisible ? bindings.toggleRightInspector : undefined],
+        ["toggle-right", rightSidebarAvailable ? bindings.toggleRightInspector : undefined],
         ["fit", canvasAvailable ? bindings.fitCanvas : undefined],
         ["focus-selected", focusCanvasAvailable ? bindings.focusSelectedTable : undefined],
         ["relayout", canvasAvailable ? bindings.relayoutCanvas : undefined],
@@ -1307,13 +1348,17 @@ export function App() {
   return (
     <I18nProvider value={i18n}>
     <main inert={ddlPreviewOpen || undefined} aria-hidden={ddlPreviewOpen || undefined} className={`app-shell${showUpdateBanner ? " has-update-banner" : ""}`}>
-      <header className="topbar" data-glass={runtime.data?.kind === "desktop" && appleKeyboard || undefined}>
+      <header className="topbar" data-code-workspace={mode === "code" || undefined} data-glass={runtime.data?.kind === "desktop" && appleKeyboard || undefined}>
         <HeaderSidebarToggle
           side="left"
-          expanded={leftPanel.expanded}
-          onToggle={() =>
-            setLeftPanel((current) => ({ ...current, expanded: !current.expanded }))
-          }
+          buttonRef={leftSidebarToggle}
+          expanded={mode === "code" ? codeSidebarExpanded : leftPanel.expanded}
+          controls={mode === "code" ? codeSidebarId : undefined}
+          label={mode === "code" ? t(codeSidebarExpanded ? "codeReview.hideSidebar" : "codeReview.showSidebar") : undefined}
+          onToggle={() => {
+            if (mode === "code") setCodeSidebarExpanded((expanded) => !expanded);
+            else setLeftPanel((current) => ({ ...current, expanded: !current.expanded }));
+          }}
         />
         <span className="visually-hidden" data-testid="runtime-badge"
           title={runtime.isPending ? t("navigation.detectingRuntime") : runtime.data?.label}>
@@ -1322,7 +1367,7 @@ export function App() {
         <Segmented
           label={t("navigation.viewMode")}
           value={viewMode}
-          onChange={switchWorkspace}
+          onChange={(next) => next === "code" ? openCodeReview() : switchWorkspace(next)}
           options={[
             { value: "explore", label: t("navigation.model"), ...workspaceShortcutHint(t(modelLabel), modelShortcut) },
             ...(ontologySnapshot ? [{ value: "ontology" as const, label: t("ontology.title"), ...workspaceShortcutHint(t(ontologyLabel), ontologyShortcut) }] : []),
@@ -1334,14 +1379,23 @@ export function App() {
               title: queryCapability.status === "supported" ? undefined : queryScope,
               ...workspaceShortcutHint(t(queryLabel), queryShortcut),
             },
+            ...(hasCodeWorkspace ? [{ value: "code" as const, label: t("codeView.title") }] : []),
           ]}
         />
-        <GlobalSearch store={searchStore} inputRef={searchInputRef} snapshot={snapshot} context={searchContext} t={t}
+        {mode === "code" ? platform.codeReview?.paths && <div className="global-search">
+          <ActionIcon name="search" />
+          <button ref={codeSearchAnchor} type="button" className="code-toolbar-search" aria-haspopup="dialog"
+            aria-keyshortcuts={`${appleKeyboard ? "Meta" : "Control"}+P`}
+            onClick={() => window.dispatchEvent(new Event("nodalstudio:code-quick-open"))}>
+            <span>{t(platform.codeReview.searchContent ? "codeReview.searchProject" : "codeReview.searchFiles")}</span>
+            <kbd aria-hidden="true">{formatCommandShortcut("Mod+P", appleKeyboard)}</kbd>
+          </button>
+        </div> : <GlobalSearch store={searchStore} inputRef={searchInputRef} snapshot={snapshot} context={searchContext} t={t}
           showActions={runtime.data?.kind === "desktop" && !historyPreview}
           canOpenInQuery={Boolean(querySupported && snapshot && recentSnapshots.data?.[0] === snapshot.id)}
-          onLocate={locateSearchResult} onShowRelated={showRelatedTables} onOpenInQuery={openSearchResultInQuery} />
+          onLocate={locateSearchResult} onShowRelated={showRelatedTables} onOpenInQuery={openSearchResultInQuery} />}
         <div className="runtime-actions" role="group" aria-label={t("navigation.applicationTools")}>
-          <div className="workspace-tools" ref={workspaceTools} data-open={toolsOpen || undefined}
+          {mode !== "code" && <div className="workspace-tools" ref={workspaceTools} data-open={toolsOpen || undefined}
             onBlur={(event) => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setToolsOpen(false); }}
             onKeyDown={(event) => {
               if (event.key !== "Escape" || !toolsOpen) return;
@@ -1362,9 +1416,9 @@ export function App() {
           {snapshot ? <IconButton menuLabel icon="preflight" label={t("navigation.structurePreflight")} aria-pressed={preflightOpen} onClick={() => setPreflightOpen(true)} description={t("navigation.checkTheEntireLoadedSnapshotWithDialectAware")} /> : null}
           {snapshot ? <SchemaReportExportAction key={snapshot.id} snapshot={snapshot} semantics={semanticsSnapshot === snapshot ? semantics : undefined} platform={platform} /> : null}
           </div>
-          </div>
-          {refreshOperation.state?.phase === "error" ? <div className="refresh-operation-result"><OperationFeedback label={t("navigation.snapshotRefresh")} state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel={t("navigation.retrySnapshotRefresh")} onDismiss={refreshOperation.dismiss} /></div> : null}
-          {snapshot && runtime.data?.kind === "desktop" ? (
+          </div>}
+          {mode !== "code" && refreshOperation.state?.phase === "error" ? <div className="refresh-operation-result"><OperationFeedback label={t("navigation.snapshotRefresh")} state={refreshOperation.state} onRetry={() => void refreshActive()} retryLabel={t("navigation.retrySnapshotRefresh")} onDismiss={refreshOperation.dismiss} /></div> : null}
+          {mode !== "code" && snapshot && runtime.data?.kind === "desktop" ? (
             <div className="refresh-tool">
               <IconButton
                 icon="refresh"
@@ -1404,12 +1458,13 @@ export function App() {
           </div>
           {noticesOpen ? <section className="notification-popover" aria-label={t("settings.notifications")}><header><strong>{t("settings.notifications")}</strong><button type="button" onClick={() => setNotices([])}>{t("navigation.clear")}</button></header>{notices.length ? notices.map((notice) => <article key={notice.id}><strong>{notice.title}</strong><p>{notice.message}</p><small>{i18n.formatDate(notice.createdAt, "local", { timeStyle: "medium" })}</small>{notice.settingsCategory ? <button type="button" className="notification-update-action" onClick={() => openSettings(notice.settingsCategory)}>{t("navigation.viewUpdate")}</button> : null}</article>) : <p>{t("navigation.noNotificationsDetail")}</p>}</section> : null}
         </div>
-        {modelInspectorVisible && <HeaderSidebarToggle
+        {rightSidebarAvailable && <HeaderSidebarToggle
           side="right"
-          expanded={preflightOpen ? preflightDetailsExpanded : rightPanel.expanded}
-          onToggle={() =>
-            preflightOpen ? setPreflightDetailsExpanded(value => !value) : setRightPanel((current) => ({ ...current, expanded: !current.expanded }))
-          }
+          buttonRef={rightSidebarToggle}
+          expanded={codeInspectorAvailable ? codeOutlineExpanded : preflightOpen ? preflightDetailsExpanded : rightPanel.expanded}
+          controls={codeInspectorAvailable && codeOutlineExpanded ? codeOutlineId : undefined}
+          label={codeInspectorAvailable ? t(codeInspectorLabel) : undefined}
+          onToggle={toggleRightInspector}
         />}
       </header>
 
@@ -1420,12 +1475,12 @@ export function App() {
         aria-label={t("navigation.nodalStudioWorkspace")}
         style={
           {
-            "--left-sidebar-width": `${leftPanel.expanded ? leftPanel.width : 0}px`,
+            "--left-sidebar-width": `${mode !== "code" && leftPanel.expanded ? leftPanel.width : 0}px`,
             "--right-sidebar-width": `${modelInspectorVisible && (preflightOpen ? preflightDetailsExpanded : rightPanel.expanded) ? rightPanel.width : 0}px`,
           } as CSSProperties
         }
       >
-        <aside className="sidebar" hidden={!leftPanel.expanded}>
+        <aside className="sidebar" hidden={!leftPanel.expanded || mode === "code"}>
           <ConnectionPanel
             key={`${settings.app.connectionDefaults.databaseEngine}:${settings.app.connectionDefaults.sslMode}`}
             enabled={runtime.data?.kind === "desktop"}
@@ -1495,7 +1550,7 @@ export function App() {
           <TableDdlDialog platform={platform} profile={countProfile} table={browsableTable} onClose={() => setShowTableDdl(undefined)} />
         )}
 
-        <SidebarRail
+        {mode !== "code" && <SidebarRail
           side="left"
           expanded={leftPanel.expanded}
           width={leftPanel.width}
@@ -1505,7 +1560,7 @@ export function App() {
           onToggle={() =>
             setLeftPanel((current) => ({ ...current, expanded: !current.expanded }))
           }
-        />
+        />}
 
         <section className={`canvas-placeholder${(snapshot && mode === "explore") || mode === "database" ? " database-workspace" : ""}${mode === "changes" ? " changes-workspace" : ""}`}>
           <div className="canvas-workspace-content" inert={Boolean(activeRelationshipSearch)}>
@@ -1563,6 +1618,15 @@ export function App() {
               if (table) locateSearchResult({ schema: table.key.schema, table, matchingColumns: [] });
               return Boolean(table);
             }} /></Suspense> : <p>{i18n.locale === "zh-CN" ? "请返回桌面应用中的最新数据库模型进行复核。" : "Return to the latest connected desktop model to review changes."}</p>
+          ) : mode === "code" ? (
+            hasCodeWorkspace && platform.codeReview ? <Suspense fallback={<div className="workspace-loading" role="status">{t("navigation.loadingWorkspace")}</div>}>
+              <CodeReviewWorkspace api={platform.codeReview} sidebarId={codeSidebarId} searchAnchor={codeSearchAnchor}
+                sidebarOpen={codeSidebarExpanded} setSidebarOpen={setCodeSidebarExpanded}
+                outlineId={codeOutlineId} outlineOpen={codeInspectorAvailable && codeOutlineExpanded}
+                eslintAvailability={!runtime.data?.localEslint ? "eslintUnavailable"
+                  : settings.app.privacy.offlineMode ? "eslintOffline" : "enabled"}
+                allowDefinitions={runtime.data?.distribution !== "macAppStore"} />
+            </Suspense> : null
           ) : mode === "ontology" ? (
             ontologySnapshot && !ontologyRequiresNewerMySql ? <Suspense fallback={<div className="workspace-loading" role="status">{t("navigation.loadingWorkspace")}</div>}><OntologyWorkspace key={ontologySnapshot.sourceId} platform={platform} snapshot={ontologySnapshot}
               initialDefinitionId={ontologyDefinitionId} refreshing={refreshState === "refreshing"} onRefresh={() => void refreshActive()}
@@ -1852,7 +1916,7 @@ export function App() {
   );
 }
 
-type WorkspaceCommandId = "open-model" | "open-ontology" | "open-database" | "open-query" | "search" | "toggle-left" | "toggle-right" | "fit" | "view-all" | "focus-selected"
+type WorkspaceCommandId = "open-model" | "open-ontology" | "open-database" | "open-query" | "open-code" | "search" | "toggle-left" | "toggle-right" | "fit" | "view-all" | "focus-selected"
   | "relayout" | "ddl-preview" | "refresh" | "preflight" | "review" | "settings" | "settings-git" | "settings-ai" | "capabilities";
 
 const COMMAND_PALETTE_SHORTCUT = "Mod+Shift+P";

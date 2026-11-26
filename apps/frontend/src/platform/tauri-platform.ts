@@ -1,3 +1,4 @@
+import type { CodeReviewPlatform } from "./code-review";
 import { Channel } from "@tauri-apps/api/core";
 import type { DatabaseExportProgress, DatabaseExportReceipt, DatabaseExportRequest } from "./database-export";
 import { invoke } from "./desktop-invoke";
@@ -69,6 +70,27 @@ import type {
 } from "./settings-types";
 
 export class TauriPlatform implements NodalStudioPlatform {
+  readonly codeReview: CodeReviewPlatform = {
+    current: () => invoke("get_code_review_project"),
+    choose: () => invoke("choose_code_review_project"),
+    changes: (projectId) => invoke("refresh_code_review", { projectId }),
+    directory: (projectId, path, compact) => invoke("list_code_review_directory", { projectId, path, compact }),
+    paths: (projectId) => invoke("list_code_review_paths", { projectId }),
+    searchContent: (projectId, query) => invoke("search_code_review_content", { projectId, query }),
+    file: (projectId, path, compareFile) => invoke("read_code_review_file", { projectId, path, compareFile }),
+    eslint: {
+      inspect: (projectId, path) => invoke("inspect_code_eslint", { projectId, path }),
+      approve: (projectId, path, toolId) => invoke("approve_code_eslint", { projectId, path, toolId }),
+      lint: (projectId, input) => invoke("run_code_eslint", { projectId, input }),
+      cancel: (projectId, requestId) => invoke("cancel_code_eslint", { projectId, requestId }),
+      revoke: (projectId) => invoke("revoke_code_eslint", { projectId }),
+    },
+    definition: (projectId, input) => invoke("find_code_definition", { projectId, input }),
+    documentHighlights: (projectId, input) => invoke("find_code_document_highlights", { projectId, input }),
+    documentOutline: (projectId, input) => invoke("get_code_document_outline", { projectId, input }),
+    definitionSource: (projectId, sourceId) => invoke("read_code_definition_source", { projectId, sourceId }),
+  };
+
   listOntology(scope: import("./ontology-types").OntologyScope): Promise<import("./ontology-types").ConfirmedDefinition[]> { return invoke("list_ontology", { scope }); }
   confirmOntology(input: import("./ontology-types").ConfirmOntologyInput): Promise<import("./ontology-types").ConfirmedDefinition> { return invoke("confirm_ontology", { input }); }
   saveOntologySample(input: import("./ontology-types").SaveOntologySampleInput): Promise<import("./ontology-types").ConfirmedDefinition> { return invoke("save_ontology_sample", { input }); }
@@ -259,7 +281,10 @@ export class TauriPlatform implements NodalStudioPlatform {
   }
 
   executeReadonlyQuery(input: ExecuteReadonlyQueryInput, receiveRegistration?: () => void): Promise<QueryExecutionResult> {
-    if (!receiveRegistration) return invoke<QueryExecutionResult>("execute_readonly_query", { input });
+    if (!receiveRegistration) {
+      const { projectHandoff, ...request } = input;
+      return invoke<QueryExecutionResult>("execute_readonly_query", projectHandoff ? { input: request, projectHandoff } : { input });
+    }
     const onRegistered = new Channel<null>();
     onRegistered.onmessage = receiveRegistration;
     return invoke<QueryExecutionResult>("execute_table_preview_query", { input, onRegistered });

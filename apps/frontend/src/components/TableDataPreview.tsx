@@ -1,3 +1,4 @@
+import { codeColumnKey } from "../platform/code-view";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useLayoutEffect, useMemo, useState } from "react";
 import { useI18n } from "../i18n";
@@ -19,12 +20,13 @@ import { useTableSort } from "./use-table-sort";
 import { useTablePagination } from "./use-table-pagination";
 import "./sqlite-table-workspace.css";
 
-export function TableDataPreview({ platform, snapshot, table, onShowDefinition, onShowDdl, connectionRevision, onCompleteTableRead, quickQuery }: {
+export function TableDataPreview({ platform, snapshot, table, onShowDefinition, onShowDdl, onOpenCode, connectionRevision, onCompleteTableRead, quickQuery }: {
   platform: NodalStudioPlatform;
   snapshot: DatabaseSnapshot;
   table: TableDefinition | ViewDefinition;
   onShowDefinition?: () => void;
   onShowDdl?: () => void;
+  onOpenCode?: (key: import("../platform").ObjectKey) => void;
   connectionRevision?: string;
   onCompleteTableRead?: (target: TableRowCountTarget, count: number) => void;
   quickQuery?: { result: QueryExecutionResult; sql: string; onReturn: () => void };
@@ -149,6 +151,12 @@ export function TableDataPreview({ platform, snapshot, table, onShowDefinition, 
       <header className="table-data-toolbar">
         <div className="table-data-title"><h2 title={qualifiedName}>{qualifiedName}</h2><small>{t(quickQuery ? "tableData.quickQueryResults" : "tableData.readOnlyPreview")}</small></div>
         <div className="table-data-actions table-data-controls">
+          {onOpenCode && <button type="button" onClick={() => onOpenCode(table.key)}>{t("codeView.related")}</button>}
+          {onOpenCode && "columns" in table && <select aria-label={t("codeView.references")} value="" onChange={(event) => {
+            if (event.target.value) onOpenCode(codeColumnKey(table.key, event.target.value));
+          }}><option value="">{t("business.columnsDetail")}</option>
+            {table.columns.map((column) => <option key={column.name} value={column.name}>{column.name}</option>)}
+          </select>}
           {onShowDefinition && <button type="button" onClick={onShowDefinition}>{t("document.definition")}</button>}
           {quickQuery ? <button type="button" onClick={quickQuery.onReturn}>{t("tableData.returnToData")}</button> :
             <button type="button" aria-expanded={filterOpen} aria-controls={filterId} data-filter-active={Boolean(filter)}

@@ -45,7 +45,7 @@
 .refresh-operation-result .operation-feedback { margin: 0; }
 
 /* Align navigation, search, and action groups to the header's control height. */
-.topbar .global-search input {
+.topbar .global-search :is(input, .code-toolbar-search) {
   height: var(--ds-toolbar-height);
   border: 1px solid var(--ds-separator);
   border-radius: var(--ds-radius-menu);

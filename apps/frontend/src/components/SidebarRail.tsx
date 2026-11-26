@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n";
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent, type Ref } from "react";
 import { ActionIcon } from "./ActionIcon";
 
 export type SidebarSide = "left" | "right";
@@ -14,7 +14,11 @@ type SidebarRailProps = {
   onToggle: () => void;
 };
 
-type HeaderSidebarToggleProps = Pick<SidebarRailProps, "side" | "expanded" | "onToggle">;
+type HeaderSidebarToggleProps = Pick<SidebarRailProps, "side" | "expanded" | "onToggle"> & {
+  buttonRef?: Ref<HTMLButtonElement>;
+  controls?: string;
+  label?: string;
+};
 
 const KEYBOARD_STEP = 16;
 const COLLAPSE_THRESHOLD = 72;
@@ -35,6 +39,9 @@ export function HeaderSidebarToggle({
   side,
   expanded,
   onToggle,
+  buttonRef,
+  controls,
+  label,
 }: HeaderSidebarToggleProps) {
   const { t } = useI18n();
 
@@ -42,11 +49,13 @@ export function HeaderSidebarToggle({
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       className={`header-sidebar-toggle header-sidebar-toggle-${side}`}
-      aria-label={t(expanded ? "navigation.sidebar.collapse" : "navigation.sidebar.expand", { panel: panelName })}
+      aria-label={label ?? t(expanded ? "navigation.sidebar.collapse" : "navigation.sidebar.expand", { panel: panelName })}
       aria-expanded={expanded}
-      title={t(expanded ? "navigation.sidebar.hide" : "navigation.sidebar.show", { panel: panelName })}
+      aria-controls={controls}
+      title={label ?? t(expanded ? "navigation.sidebar.hide" : "navigation.sidebar.show", { panel: panelName })}
       onClick={onToggle}
     >
       <ActionIcon name={side === "left" ? "sidebarLeft" : "sidebarRight"} />

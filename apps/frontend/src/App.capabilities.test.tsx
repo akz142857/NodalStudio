@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { getPlatform } from "./platform";
 import type { CaptureSnapshotResult } from "./platform";
-import type { ConnectionFolderStatus } from "./platform/types";
+import type { ConnectionFolderStatus, RuntimeInfo } from "./platform/types";
 import { reportSnapshot } from "./test/schema-report-fixture";
 import type { SchemaCanvasProps } from "./components/SchemaCanvas";
 vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot }: { onSnapshot: (result: CaptureSnapshotResult) => void }) => <>
@@ -12,9 +12,9 @@ vi.mock("./components/ConnectionPanel", () => ({ ConnectionPanel: ({ onSnapshot 
   <button type="button" onClick={() => onSnapshot({ snapshot: { ...reportSnapshot, id: "mysql", sourceId: "mysql", database: { ...reportSnapshot.database, databaseType: "mySql", version: "8.4" } }, stored: true, changeSet: null })}>Load MySQL fixture</button>
 </> }));
 vi.mock("./components/SchemaCanvas", () => ({ SchemaCanvas: ({ snapshot, onOpenQuery }: SchemaCanvasProps) => <button type="button" disabled={!onOpenQuery} onClick={() => onOpenQuery?.(snapshot.schemas[0].tables[0])}>Canvas query shortcut</button> }));
-async function mount(kind: "desktop" | "web") {
+async function mount(kind: "desktop" | "web", distribution?: RuntimeInfo["distribution"]) {
   const platform = getPlatform();
-  vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind, label: `${kind} capability test`, version: "test" });
+  vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind, distribution, label: `${kind} capability test`, version: "test" });
   vi.spyOn(platform, "loadSharedBundle").mockResolvedValue(null);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
@@ -36,6 +36,63 @@ describe("App capability integration", () => {
     expect(navigation.getByRole("button", { name: "Model" })).toHaveAttribute("aria-pressed", "true");
     expect(navigation.queryByRole("button", { name: "Changes" })).not.toBeInTheDocument();
   });
+  it("opens Code from the desktop navigation without a database and selects a project", async () => {
+    const platform = getPlatform();
+    const current = vi.fn().mockResolvedValue(null);
+    const project = { id: "project", key: "project-key", name: "review-fixture", baseline: null, git: "folder" };
+    const choose = vi.fn().mockResolvedValue(project);
+    const changes = vi.fn().mockResolvedValue({ files: [], limited: false });
+    const directory = vi.fn().mockResolvedValue({ entries: [], limited: false });
+    const paths = vi.fn().mockResolvedValue({ paths: [], limited: false });
+    const searchContent = vi.fn();
+    const documentOutline = vi.fn();
+    Object.defineProperty(platform, "codeReview", { configurable: true, value: { current, choose, changes, directory, paths, searchContent, documentOutline } });
+    try {
+      await mount("desktop");
+      const navigation = within(screen.getByRole("group", { name: "View mode" }));
+      const code = navigation.getByRole("button", { name: "Code" });
+      const headerToggle = screen.getByRole("button", { name: /collapse left sidebar/i });
+      fireEvent.click(code);
+      expect(code).toHaveAttribute("aria-pressed", "true");
+      expect(screen.queryByRole("combobox", { name: "Search schema" })).not.toBeInTheDocument();
+      await screen.findByRole("button", { name: "Open Folder…" });
+      const search = screen.getByRole("button", { name: "Search project files and content…" });
+      expect(search.closest("header.topbar")).toBeTruthy();
+      search.focus();
+      fireEvent.click(search);
+      const quickOpen = await screen.findByRole("combobox", { name: "Open File Quickly" });
+      expect(quickOpen).toHaveFocus();
+      expect(screen.getByRole("button", { name: "Project Content" })).toBeVisible();
+      expect(paths).toHaveBeenCalledWith(project.id);
+      fireEvent.keyDown(quickOpen, { key: "Escape" });
+      expect(search).toHaveFocus();
+      expect(screen.queryByRole("button", { name: "Open File Quickly" })).not.toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "review-fixture" })).toBeVisible();
+      expect(current).toHaveBeenCalledOnce();
+      expect(choose).toHaveBeenCalledOnce();
+      expect(directory).toHaveBeenCalledWith(project.id, "", "visible");
+      const sidebar = screen.getByRole("complementary", { name: "Project files" });
+      expect(screen.getByRole("button", { name: "Hide project sidebar" })).toBe(headerToggle);
+      expect(headerToggle).toHaveAttribute("aria-controls", sidebar.id);
+      fireEvent.click(headerToggle);
+      expect(screen.getByRole("button", { name: "Show project sidebar" })).toHaveAttribute("aria-expanded", "false");
+      expect(sidebar).not.toBeVisible();
+      fireEvent.click(headerToggle);
+      expect(sidebar).toBeVisible();
+      const outline = screen.getByRole("button", { name: "Show Code sidebar" });
+      expect(outline).toBe(outline.closest("header.topbar")?.lastElementChild);
+      fireEvent.click(outline);
+      const panel = screen.getByRole("complementary", { name: "Outline" });
+      expect(outline).toHaveAttribute("aria-controls", panel.id);
+      expect(outline).toHaveAttribute("aria-expanded", "true");
+      expect(outline).toHaveAccessibleName("Hide Code sidebar");
+      expect(documentOutline).not.toHaveBeenCalled();
+      fireEvent.click(outline);
+      expect(panel).not.toBeInTheDocument();
+    } finally {
+      Reflect.deleteProperty(platform, "codeReview");
+    }
+  });
   it("opens Cloud Sync directly from the desktop toolbar without a data source", async () => {
     await mount("desktop");
     const tools = within(screen.getByRole("group", { name: "Application tools" }));
@@ -45,6 +102,28 @@ describe("App capability integration", () => {
     expect(settings.getByRole("button", { name: "Cloud Sync" })).toHaveAttribute("aria-current", "page");
     expect(settings.getByRole("heading", { name: "Personal Connection Sync" })).toBeVisible();
     expect(window.location.hash).toBe("#/settings/cloud");
+  });
+  it("offers bottom Code Checks independently of the Mac App Store outline capability", async () => {
+    const platform = getPlatform();
+    const documentOutline = vi.fn();
+    Object.defineProperty(platform, "codeReview", { configurable: true, value: {
+      current: () => Promise.resolve({ id: "project", key: "folder", name: "Local folder", baseline: null, git: "folder" }),
+      changes: () => Promise.resolve({ files: [], limited: false }),
+      directory: () => Promise.resolve({ entries: [], limited: false }),
+      documentOutline,
+    } });
+    try {
+      await mount("desktop", "macAppStore");
+      fireEvent.click(screen.getByRole("button", { name: "Code" }));
+      await screen.findByRole("heading", { name: "Local folder" });
+      expect(screen.queryByRole("button", { name: "Show Code sidebar" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /^Show Checks/ }));
+      const panel = within(screen.getByRole("complementary", { name: "Checks" }));
+      expect(panel.getByRole("button", { name: "Check Current File" })).toBeDisabled();
+      expect(documentOutline).not.toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(platform, "codeReview");
+    }
   });
   it("updates the Cloud Sync badge as the folder status changes and removes it when healthy", async () => {
     vi.spyOn(getPlatform(), "getConnectionFolderStatus").mockResolvedValue({ ...folderStatus, folder: null, library: null, provider: null });

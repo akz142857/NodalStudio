@@ -71,6 +71,7 @@ mod database_server;
 mod file_access;
 pub use connection_security::run_askpass_helper;
 mod change_review;
+mod code_view;
 mod database_export;
 mod diagram_export;
 mod discovery;
@@ -167,6 +168,7 @@ async fn acquire_cloud_operation(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeInfo {
+    local_eslint: bool,
     distribution: &'static str,
     kind: &'static str,
     label: &'static str,
@@ -800,6 +802,7 @@ type CaptureSnapshotResult = snapshot_store::StoredSnapshotCapture;
 #[allow(clippy::needless_pass_by_value)]
 fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
     RuntimeInfo {
+        local_eslint: cfg!(all(target_os = "macos", not(feature = "mac-app-store"))),
         kind: "desktop",
         label: "Tauri desktop runtime",
         distribution: if purchase::IS_MAS {
@@ -2321,6 +2324,7 @@ pub fn run() {
         .manage(table_understanding::TableAiState::default())
         .manage(discovery::DiscoveryAiState::default())
         .manage(knowledge::KnowledgeDrafts::default())
+        .manage(code_view::review::ReviewState::default())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;
@@ -2402,6 +2406,27 @@ pub fn run() {
                 cancel_connection_test,
                 connection_security::pick_connection_file,
                 file_access::pick_workspace_path,
+                code_view::review::choose_code_review_project,
+                code_view::review::get_code_review_project,
+                code_view::review::refresh_code_review,
+                code_view::review::list_code_review_directory,
+                code_view::review::list_code_review_paths,
+                code_view::search::search_code_review_content,
+                code_view::review::read_code_review_file,
+                #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+                code_view::eslint::inspect_code_eslint,
+                #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+                code_view::eslint::approve_code_eslint,
+                #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+                code_view::eslint::run_code_eslint,
+                #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+                code_view::eslint::cancel_code_eslint,
+                #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+                code_view::eslint::revoke_code_eslint,
+                code_view::review::find_code_definition,
+                code_view::review::find_code_document_highlights,
+                code_view::review::get_code_document_outline,
+                code_view::review::read_code_definition_source,
                 connection_sync::export_connection_sync,
                 connection_sync::preview_connection_sync,
                 connection_sync::import_connection_sync,
@@ -2527,7 +2552,13 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("failed to build Nodal Studio desktop application")
-        .run(database_export::handle_app_event);
+        .run(|app, event| {
+            #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+            if matches!(event, tauri::RunEvent::Exit) {
+                code_view::eslint::close_on_exit(app);
+            }
+            database_export::handle_app_event(app, event);
+        });
 }
 
 mod commands;

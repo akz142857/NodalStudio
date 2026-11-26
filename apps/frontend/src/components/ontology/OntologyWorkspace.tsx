@@ -1,3 +1,4 @@
+import { codeColumnKey } from "../../platform/code-view";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "../../design-system/Button";
@@ -18,11 +19,12 @@ interface ScopeProps {
   snapshot: DatabaseSnapshot;
 }
 
-export function OntologyWorkspace({ platform, snapshot, initialDefinitionId, refreshing, onRefresh, onViewChanges, onOpenQuery }: ScopeProps & {
+export function OntologyWorkspace({ platform, snapshot, initialDefinitionId, refreshing, onRefresh, onViewChanges, onOpenQuery, onOpenCode }: ScopeProps & {
   initialDefinitionId?: string;
   refreshing: boolean;
   onRefresh: () => void;
   onViewChanges: (id: string) => void;
+  onOpenCode?: (key: import("../../platform").ObjectKey, definitionId: string) => void;
   onOpenQuery: (draft: OntologyQueryDraft, target: DefinitionRevision) => void;
 }) {
   const { t } = useI18n();
@@ -189,10 +191,10 @@ export function OntologyWorkspace({ platform, snapshot, initialDefinitionId, ref
           </div> : null}
           <p className="ontology-recipe">{t("ontology.recipe")}</p>
           <dl className="ontology-summary ontology-binding-summary">
-            <dt>{selected.definition.order.name}</dt><dd><code>{tableName(selected.definition.order.table)}.{selected.definition.order.idColumn}</code></dd>
-            <dt>{selected.definition.payment.name}</dt><dd><code>{tableName(selected.definition.payment.table)}.{selected.definition.payment.orderIdColumn}</code></dd>
-            <dt>{t("ontology.paymentStatus")}</dt><dd><code>{selected.definition.payment.statusColumn}</code> = <code>{selected.definition.payment.successValue}</code></dd>
-            <dt>{t("ontology.paymentTime")}</dt><dd><code>{selected.definition.payment.paidAtColumn}</code></dd>
+            <dt>{selected.definition.order.name}</dt><dd><code>{tableName(selected.definition.order.table)}.{selected.definition.order.idColumn}</code>{onOpenCode && <button type="button" aria-label={t("codeView.findColumn", { name: selected.definition.order.idColumn })} onClick={() => onOpenCode(codeColumnKey(selected.definition.order.table, selected.definition.order.idColumn), selected.id)}>{t("codeView.related")}</button>}</dd>
+            <dt>{selected.definition.payment.name}</dt><dd><code>{tableName(selected.definition.payment.table)}.{selected.definition.payment.orderIdColumn}</code>{onOpenCode && <button type="button" aria-label={t("codeView.findColumn", { name: selected.definition.payment.orderIdColumn })} onClick={() => onOpenCode(codeColumnKey(selected.definition.payment.table, selected.definition.payment.orderIdColumn), selected.id)}>{t("codeView.related")}</button>}</dd>
+            <dt>{t("ontology.paymentStatus")}</dt><dd><code>{selected.definition.payment.statusColumn}</code> = <code>{selected.definition.payment.successValue}</code>{onOpenCode && <button type="button" aria-label={t("codeView.findColumn", { name: selected.definition.payment.statusColumn })} onClick={() => onOpenCode(codeColumnKey(selected.definition.payment.table, selected.definition.payment.statusColumn), selected.id)}>{t("codeView.related")}</button>}</dd>
+            <dt>{t("ontology.paymentTime")}</dt><dd><code>{selected.definition.payment.paidAtColumn}</code>{onOpenCode && <button type="button" aria-label={t("codeView.findColumn", { name: selected.definition.payment.paidAtColumn })} onClick={() => onOpenCode(codeColumnKey(selected.definition.payment.table, selected.definition.payment.paidAtColumn), selected.id)}>{t("codeView.related")}</button>}</dd>
             {selected.definition.payment.timeStorage ? <>
               <dt>{t(snapshot.database.databaseType === "mySql" ? "ontology.storageTimeZone" : "ontology.timeStorage")}</dt>
               <dd>{t(`ontology.storage.${selected.definition.payment.timeStorage}`)}</dd>

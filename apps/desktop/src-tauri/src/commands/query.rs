@@ -7,8 +7,9 @@ use crate::*;
 pub(crate) async fn execute_readonly_query(
     input: ExecuteReadonlyQueryInput,
     state: State<'_, AppState>,
+    project_handoff: Option<crate::code_view::QueryHandoff>,
 ) -> Result<QueryExecutionResult, QueryCommandError> {
-    run_readonly_query(input, &state, None).await
+    run_readonly_query_with_handoff(input, &state, None, project_handoff).await
 }
 
 #[tauri::command]
@@ -25,6 +26,15 @@ pub(crate) async fn run_readonly_query(
     state: &AppState,
     on_registered: Option<tauri::ipc::Channel<()>>,
 ) -> Result<QueryExecutionResult, QueryCommandError> {
+    run_readonly_query_with_handoff(input, state, on_registered, None).await
+}
+
+async fn run_readonly_query_with_handoff(
+    input: ExecuteReadonlyQueryInput,
+    state: &AppState,
+    on_registered: Option<tauri::ipc::Channel<()>>,
+    project_handoff: Option<crate::code_view::QueryHandoff>,
+) -> Result<QueryExecutionResult, QueryCommandError> {
     let query_id = input.query_id;
     let request = ExecuteQueryRequest {
         query_id,
@@ -40,6 +50,11 @@ pub(crate) async fn run_readonly_query(
         .await
         .map_err(|_| query_command_error(query_id, QueryError::Connection))?
         .ok_or_else(|| query_command_error(query_id, QueryError::Connection))?;
+    if let Some(handoff) = &project_handoff {
+        crate::code_view::validate_query_handoff(state, &profile, handoff, &request.sql)
+            .await
+            .map_err(|message| query_command_error(query_id, QueryError::Validation(message)))?;
+    }
     if profile.database_type == DatabaseType::Sqlite {
         return sqlite_source::query(state, profile, input, request, on_registered).await;
     }
@@ -72,7 +87,15 @@ pub(crate) async fn run_readonly_query(
     }
     let state = state.clone();
     tokio::spawn(async move {
-        let result = run_network_query(&state, profile, input, request, cancellation).await;
+        let result = run_network_query(
+            &state,
+            profile,
+            input,
+            request,
+            cancellation,
+            project_handoff,
+        )
+        .await;
         state.active_queries.lock().await.remove(&query_id);
         result
     })
@@ -80,12 +103,13 @@ pub(crate) async fn run_readonly_query(
     .map_err(|_| query_command_error(query_id, QueryError::Internal))?
 }
 
-pub(crate) async fn run_network_query(
+async fn run_network_query(
     state: &AppState,
     profile: DataSourceProfile,
     input: ExecuteReadonlyQueryInput,
     request: ExecuteQueryRequest,
     cancellation: CancellationToken,
+    handoff: Option<crate::code_view::QueryHandoff>,
 ) -> Result<QueryExecutionResult, QueryCommandError> {
     let query_id = input.query_id;
     let started = std::time::Instant::now();
@@ -95,7 +119,23 @@ pub(crate) async fn run_network_query(
         () = cancellation.cancelled() => return Err(query_command_error(query_id, QueryError::Cancelled)),
         prepared = prepare_read_session(state, &profile, None) => prepared.map_err(|error| query_command_error(query_id, error))?,
     };
-    let result = execute_prepared_network_query(&session, &request, &cancellation).await;
+    let result = if let Some(handoff) = handoff {
+        crate::code_view::validate_query_handoff(state, &profile, &handoff, &request.sql)
+            .await
+            .map_err(|message| query_command_error(query_id, QueryError::Validation(message)))?;
+        let DatabasePool::MySql(pool) = &session.pool else {
+            return Err(query_command_error(query_id, QueryError::Connection));
+        };
+        query_engine::execute_mysql_query_for_database(
+            pool,
+            &request,
+            &cancellation,
+            handoff.database(),
+        )
+        .await
+    } else {
+        execute_prepared_network_query(&session, &request, &cancellation).await
+    };
 
     // Generated page SQL includes boundary values read from the table.
     if input.table_browse {

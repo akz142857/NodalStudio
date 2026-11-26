@@ -658,5 +658,65 @@
     "sha256": "6dc0e068dcf3a5bc8e054205b85b7720e1d49265bbc64bf515d2cf79197df69a",
     "revision": "340684d932b6126bed449fc1f4edca81776ad592",
     "note": ""
+  },
+  {
+    "ecosystem": "cargo",
+    "name": "libgit2-sys",
+    "version": "0.18.8+1.9.7",
+    "file": "cargo-libgit2-sys-0.18.8+1.9.7/AUTHORS-libgit2",
+    "url": "https://crates.io/api/v1/crates/libgit2-sys/0.18.8+1.9.7/download",
+    "sha256": "4dcad1137963b32d192da9771ca6055d84b20c41e6cd23bdfa6c47782d8a54f9",
+    "revision": "0.18.8+1.9.7",
+    "packagePath": "libgit2/AUTHORS"
+  },
+  {
+    "ecosystem": "cargo",
+    "name": "libgit2-sys",
+    "version": "0.18.8+1.9.7",
+    "file": "cargo-libgit2-sys-0.18.8+1.9.7/COPYING-LGPL-2.1",
+    "url": "https://crates.io/api/v1/crates/libgit2-sys/0.18.8+1.9.7/download",
+    "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+    "revision": "0.18.8+1.9.7",
+    "packagePath": "libgit2/deps/winhttp/COPYING.LGPL"
+  },
+  {
+    "ecosystem": "cargo",
+    "name": "libgit2-sys",
+    "version": "0.18.8+1.9.7",
+    "file": "cargo-libgit2-sys-0.18.8+1.9.7/COPYING-libgit2",
+    "url": "https://crates.io/api/v1/crates/libgit2-sys/0.18.8+1.9.7/download",
+    "sha256": "e0938121c0554985fe17196ac38fc590d149268e9c46e0c0e7a2eae1354fae71",
+    "revision": "0.18.8+1.9.7",
+    "packagePath": "libgit2/COPYING"
+  },
+  {
+    "ecosystem": "cargo",
+    "name": "libgit2-sys",
+    "version": "0.18.8+1.9.7",
+    "file": "cargo-libgit2-sys-0.18.8+1.9.7/LICENCE-pcre2.md",
+    "url": "https://crates.io/api/v1/crates/libgit2-sys/0.18.8+1.9.7/download",
+    "sha256": "197d8a73ffee0d6b09adba2f9c677b5f5aede24edf89258a68e48248d010d811",
+    "revision": "0.18.8+1.9.7",
+    "packagePath": "libgit2/deps/pcre2/LICENCE.md"
+  },
+  {
+    "ecosystem": "cargo",
+    "name": "libgit2-sys",
+    "version": "0.18.8+1.9.7",
+    "file": "cargo-libgit2-sys-0.18.8+1.9.7/LICENSE-llhttp",
+    "url": "https://crates.io/api/v1/crates/libgit2-sys/0.18.8+1.9.7/download",
+    "sha256": "ebca854e0134cd256d673627c20499f42577eb74bacf08b9f25b626a73c91277",
+    "revision": "0.18.8+1.9.7",
+    "packagePath": "libgit2/deps/llhttp/LICENSE-MIT"
+  },
+  {
+    "ecosystem": "cargo",
+    "name": "libz-sys",
+    "version": "1.1.33",
+    "file": "cargo-libz-sys-1.1.33/LICENSE-zlib",
+    "url": "https://crates.io/api/v1/crates/libz-sys/1.1.33/download",
+    "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
+    "revision": "1.1.33",
+    "packagePath": "src/zlib/LICENSE"
   }
 ]

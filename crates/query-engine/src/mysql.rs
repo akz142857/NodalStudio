@@ -15,6 +15,29 @@ pub async fn execute_mysql_query(
     request: &ExecuteQueryRequest,
     cancellation: &CancellationToken,
 ) -> Result<QueryExecutionResult, QueryError> {
+    execute(pool, request, cancellation, None).await
+}
+
+/// Executes a bounded SELECT after verifying the default database on the query's connection.
+///
+/// # Errors
+/// Returns a validation error when the connected database differs from the target,
+/// or any query execution error.
+pub async fn execute_mysql_query_for_database(
+    pool: &MySqlPool,
+    request: &ExecuteQueryRequest,
+    cancellation: &CancellationToken,
+    database: &str,
+) -> Result<QueryExecutionResult, QueryError> {
+    execute(pool, request, cancellation, Some(database)).await
+}
+
+async fn execute(
+    pool: &MySqlPool,
+    request: &ExecuteQueryRequest,
+    cancellation: &CancellationToken,
+    database: Option<&str>,
+) -> Result<QueryExecutionResult, QueryError> {
     request.validate_mysql()?;
     let started = Instant::now();
     let deadline = tokio::time::Instant::now() + Duration::from_millis(request.timeout_ms);
@@ -27,6 +50,17 @@ pub async fn execute_mysql_query(
     };
     let mut connection_id: Option<u64> = None;
     let operation = async {
+        if let Some(expected) = database {
+            let actual: Option<String> = sqlx::query_scalar("SELECT DATABASE()")
+                .fetch_one(&mut connection)
+                .await
+                .map_err(|error| map_database_error(&error))?;
+            if actual.as_deref() != Some(expected) {
+                return Err(QueryError::Validation(
+                    "The MySQL session is connected to a different database.".into(),
+                ));
+            }
+        }
         let setup = AssertSqlSafe(format!(
             "SELECT CONNECTION_ID(); SET SESSION sql_mode = TRIM(BOTH ',' FROM REPLACE(REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), ',ANSI_QUOTES,', ','), ',NO_BACKSLASH_ESCAPES,', ',')), SESSION max_execution_time = {}; START TRANSACTION READ ONLY",
             request.timeout_ms

@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 pub use guard::validate_read_only_sqlite;
 pub use guard::{validate_read_only_mysql, validate_read_only_postgres};
-pub use mysql::execute_mysql_query;
+pub use mysql::{execute_mysql_query, execute_mysql_query_for_database};
 pub use postgres::execute_postgres_query;
 pub use sqlite::execute_sqlite_query;
 
