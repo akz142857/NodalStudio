@@ -299,7 +299,7 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
     });
   };
 
-  const verify = useCallback(async (file: CheckedFile, snapshot: CheckRun) => {
+  const verify = useCallback(async (file: CheckedFile, snapshot: CheckRun, cachedMarkdownConfig?: Promise<string | null | undefined>) => {
     if (file.status !== "checked" || snapshot.id !== epoch.current || snapshot.projectId !== projectId
       || snapshot.baseline !== baseline || !mounted.current) return;
     try {
@@ -308,8 +308,9 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
       if (file.tool) {
         const tool = await eslint?.inspect(projectId, file.target.path, eslintExtensionSha(snapshot.extension));
         if (!tool?.approved || tool.context !== file.tool.context) throw new CheckError("stale");
-      } else if ((await readMarkdownConfig(api, projectId)).digest !== snapshot.configDigest) {
-        throw new CheckError("stale");
+      } else {
+        const digest = cachedMarkdownConfig ? await cachedMarkdownConfig : (await readMarkdownConfig(api, projectId)).digest;
+        if (digest !== snapshot.configDigest) throw new CheckError("stale");
       }
       if (mounted.current && epoch.current === snapshot.id) return latest;
     } catch {
@@ -319,7 +320,19 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
     }
   }, [api, baseline, eslint, projectId]);
 
-  return { run, currentFile, changedFiles, cancel, clearExtension, verify, filter, setFilter, consent, revoke,
+  const verifyAll = useCallback(async (snapshot: CheckRun, signal?: AbortSignal) => {
+    if (snapshot.status === "running" || snapshot.id !== epoch.current) return;
+    const hasMarkdown = snapshot.files.some((file) => file.status === "checked" && !file.tool);
+    const cachedConfig = hasMarkdown
+      ? readMarkdownConfig(api, projectId).then((config) => config.digest, () => undefined)
+      : undefined;
+    for (const file of snapshot.files) {
+      if (signal?.aborted || snapshot.id !== epoch.current) return;
+      if (file.status === "checked") await verify(file, snapshot, cachedConfig);
+    }
+  }, [api, projectId, verify]);
+
+  return { run, currentFile, changedFiles, cancel, clearExtension, verify, verifyAll, filter, setFilter, consent, revoke,
     eslintApproved: eslintApproval.builtin || Boolean(eslintApproval.extensionId),
     eslintAvailable: Boolean(eslint) };
 }

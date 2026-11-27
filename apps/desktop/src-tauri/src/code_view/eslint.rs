@@ -3,20 +3,20 @@
 mod vsix;
 
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fs::File,
     io::Read,
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     process::Stdio,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     time::Duration,
 };
 
 use rustix::process::{Pid, Signal, kill_process_group};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     process::{Child, Command},
@@ -97,6 +97,15 @@ impl EslintSession {
         }
     }
 
+    fn clear_pid(&self, id: Uuid) {
+        if let Ok(mut state) = self.0.lock()
+            && let Some(active) = state.active.as_mut()
+            && active.id == id
+        {
+            active.pid = None;
+        }
+    }
+
     #[cfg(feature = "code-extensions-preview")]
     pub(super) fn revoke_extension(&self) {
         if let Ok(mut state) = self.0.lock() {
@@ -131,12 +140,6 @@ impl Drop for RunGuard {
         {
             state.active = None;
         }
-    }
-}
-
-pub(crate) fn close_on_exit(app: &AppHandle) {
-    if let Ok(Some(project)) = app.state::<ReviewState>().current() {
-        project.eslint.close();
     }
 }
 
@@ -223,6 +226,43 @@ fn read_bounded(path: &Path, limit: usize) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+type DigestKey = (PathBuf, u64, u64, u64, i64, i64);
+
+fn cached_file_digest(
+    path: &Path,
+    limit: usize,
+    read_error: &'static str,
+) -> Result<[u8; 32], String> {
+    static CACHE: OnceLock<Mutex<HashMap<DigestKey, [u8; 32]>>> = OnceLock::new();
+    let meta = path.metadata().map_err(|_| read_error)?;
+    if !meta.is_file() || meta.len() > limit as u64 {
+        return Err(read_error.into());
+    }
+    let key = (
+        path.to_path_buf(),
+        meta.dev(),
+        meta.ino(),
+        meta.len(),
+        meta.ctime(),
+        meta.ctime_nsec(),
+    );
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(map) = cache.lock()
+        && let Some(digest) = map.get(&key)
+    {
+        return Ok(*digest);
+    }
+    let bytes = read_bounded(path, limit).map_err(|_| read_error)?;
+    let digest: [u8; 32] = Sha256::digest(&bytes).into();
+    if let Ok(mut map) = cache.lock() {
+        if map.len() >= 128 {
+            map.clear();
+        }
+        map.insert(key, digest);
+    }
+    Ok(digest)
+}
+
 fn project_file(path: &Path, root: &Path) -> Option<PathBuf> {
     path.canonicalize()
         .ok()
@@ -306,13 +346,11 @@ fn discover(project: &Project, path: &str) -> Result<Tool, String> {
     let mut identity = Sha256::new();
     identity.update(serde_json::to_vec(&(&node, &entry, &cwd, &config, stamp)).map_err(|_| TOOL)?);
     identity.update(Sha256::digest(manifest));
-    identity.update(Sha256::digest(read_bounded(&entry, MAX_INPUT)?));
+    identity.update(cached_file_digest(&entry, MAX_INPUT, TOOL)?);
     let tool_id = format!("{:x}", identity.finalize());
     let mut context = Sha256::new();
     context.update(&tool_id);
-    context.update(Sha256::digest(
-        read_bounded(&config, MAX_INPUT).map_err(|_| CONFIG)?,
-    ));
+    context.update(cached_file_digest(&config, MAX_INPUT, CONFIG)?);
     Ok(Tool {
         file,
         node,
@@ -511,12 +549,12 @@ fn start(
     id: Uuid,
     server_entry: Option<&Path>,
 ) -> Result<(Child, CancellationToken), String> {
-    let mut state = project.eslint.0.lock().map_err(|_| TOOL)?;
-    let active = state
-        .active
-        .as_mut()
-        .filter(|active| active.id == id)
-        .ok_or(CANCELLED)?;
+    {
+        let state = project.eslint.0.lock().map_err(|_| TOOL)?;
+        if state.active.as_ref().is_none_or(|active| active.id != id) {
+            return Err(CANCELLED.into());
+        }
+    }
     let mut command = Command::new(&tool.node);
     if let Some(server) = server_entry {
         command.arg(server).arg("--stdio");
@@ -542,10 +580,18 @@ fn start(
         .process_group(0)
         .kill_on_drop(true);
     let child = command.spawn().map_err(|_| TOOL)?;
-    active.pid = child
+    let pid = child
         .id()
-        .and_then(|id| i32::try_from(id).ok())
+        .and_then(|raw| i32::try_from(raw).ok())
         .and_then(Pid::from_raw);
+    let mut state = project.eslint.0.lock().map_err(|_| TOOL)?;
+    let Some(active) = state.active.as_mut().filter(|active| active.id == id) else {
+        if let Some(pid) = pid {
+            let _ = kill_process_group(pid, Signal::KILL);
+        }
+        return Err(CANCELLED.into());
+    };
+    active.pid = pid;
     Ok((child, active.cancellation.clone()))
 }
 
@@ -628,7 +674,12 @@ async fn bounded_output<R: AsyncRead + Unpin>(reader: R) -> Result<Vec<u8>, Stri
     Ok(bytes)
 }
 
-async fn communicate(mut child: Child, text: String) -> Result<(Option<i32>, Vec<u8>), String> {
+async fn communicate(
+    mut child: Child,
+    text: String,
+    project: &Project,
+    id: Uuid,
+) -> Result<(Option<i32>, Vec<u8>), String> {
     let mut stdin = child.stdin.take().ok_or(TOOL)?;
     let stdout = child.stdout.take().ok_or(TOOL)?;
     let stderr = child.stderr.take().ok_or(TOOL)?;
@@ -639,18 +690,22 @@ async fn communicate(mut child: Child, text: String) -> Result<(Option<i32>, Vec
             Err(_) => Err(TOOL.into()),
         }
     };
-    let wait = async { child.wait().await.map_err(|_| String::from(TOOL)) };
+    let wait = async {
+        let status = child.wait().await.map_err(|_| String::from(TOOL))?;
+        project.eslint.clear_pid(id);
+        Ok(status)
+    };
     let ((), out, _, status) =
         tokio::try_join!(send, bounded_output(stdout), bounded_output(stderr), wait)?;
     Ok((status.code(), out))
 }
 
 async fn watch_offline(app: &AppState) -> String {
-    loop {
-        tokio::time::sleep(Duration::from_millis(350)).await;
-        if let Err(reason) = check_settings(app).await {
-            return reason;
-        }
+    let mut rx = app.subscribe_offline();
+    if rx.wait_for(|offline| *offline).await.is_ok() {
+        OFFLINE.into()
+    } else {
+        std::future::pending::<String>().await
     }
 }
 
@@ -701,11 +756,16 @@ pub(crate) async fn run_code_eslint(
         return Err(TRUST.into());
     }
     #[cfg(feature = "code-extensions-preview")]
-    let server = tool
-        .extension
-        .as_ref()
-        .map(vsix::Server::stage)
-        .transpose()?;
+    let server = if let Some(extension) = &tool.extension {
+        let script = extension.script_bytes();
+        Some(
+            tokio::task::spawn_blocking(move || vsix::stage_script(&script))
+                .await
+                .map_err(|_| TOOL)??,
+        )
+    } else {
+        None
+    };
     #[cfg(feature = "code-extensions-preview")]
     let server_entry = server.as_ref().map(tempfile::NamedTempFile::path);
     #[cfg(not(feature = "code-extensions-preview"))]
@@ -716,7 +776,7 @@ pub(crate) async fn run_code_eslint(
         if let Some(server) = &tool.extension {
             return vsix::lint(child, &tool, server, text, limit).await;
         }
-        let (status, stdout) = communicate(child, text).await?;
+        let (status, stdout) = communicate(child, text, &project, id).await?;
         decode_output(status, &stdout, &tool.file, limit)
     };
     tokio::select! {

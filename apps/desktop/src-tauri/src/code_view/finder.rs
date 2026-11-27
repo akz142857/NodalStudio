@@ -199,6 +199,14 @@ fn clipboard_path(value: &NSString) -> Option<PathBuf> {
     path.is_absolute().then_some(path)
 }
 
+const MAX_PASTE_ENTRIES: usize = 10_000;
+const MAX_PASTE_BYTES: u64 = 512 * 1024 * 1024;
+
+struct CopyQuota {
+    remaining_entries: usize,
+    remaining_bytes: u64,
+}
+
 fn copy_into(source: &Path, destination: &Dir, destination_path: &Path) -> io::Result<()> {
     let name = source.file_name().ok_or(ErrorKind::InvalidInput)?;
     let parent = Dir::open_ambient_dir(
@@ -215,7 +223,11 @@ fn copy_into(source: &Path, destination: &Dir, destination_path: &Path) -> io::R
     destination.create_dir(&temporary)?;
     let staging = destination.open_dir_nofollow(&temporary)?;
     let result = (|| {
-        copy_entry(&parent, &staging, name, 0)?;
+        let mut quota = CopyQuota {
+            remaining_entries: MAX_PASTE_ENTRIES,
+            remaining_bytes: MAX_PASTE_BYTES,
+        };
+        copy_entry(&parent, &staging, name, 0, &mut quota)?;
         for attempt in 0..1000 {
             let candidate = copy_name(name, metadata.is_dir(), attempt);
             match rustix::fs::renameat_with(
@@ -236,20 +248,30 @@ fn copy_into(source: &Path, destination: &Dir, destination_path: &Path) -> io::R
     result
 }
 
-fn copy_entry(source: &Dir, destination: &Dir, name: &OsStr, depth: usize) -> io::Result<()> {
-    if depth > 128 {
+fn copy_entry(
+    source: &Dir,
+    destination: &Dir,
+    name: &OsStr,
+    depth: usize,
+    quota: &mut CopyQuota,
+) -> io::Result<()> {
+    if depth > 128 || name.eq_ignore_ascii_case(".git") {
         return Err(ErrorKind::InvalidInput.into());
     }
+    if quota.remaining_entries == 0 {
+        return Err(ErrorKind::FileTooLarge.into());
+    }
+    quota.remaining_entries -= 1;
     let metadata = source.symlink_metadata(name)?;
     if metadata.is_dir() {
         let folder = source.open_dir_nofollow(name)?;
         destination.create_dir(name)?;
         let output = destination.open_dir_nofollow(name)?;
         for entry in folder.entries()? {
-            copy_entry(&folder, &output, &entry?.file_name(), depth + 1)?;
+            copy_entry(&folder, &output, &entry?.file_name(), depth + 1, quota)?;
         }
     } else if metadata.is_file() {
-        let mut reader = source.open_with(
+        let reader = source.open_with(
             name,
             OpenOptions::new()
                 .read(true)
@@ -260,9 +282,17 @@ fn copy_entry(source: &Dir, destination: &Dir, name: &OsStr, depth: usize) -> io
         if !opened.is_file() {
             return Err(ErrorKind::InvalidInput.into());
         }
+        if opened.len() > quota.remaining_bytes {
+            return Err(ErrorKind::FileTooLarge.into());
+        }
         let mut writer =
             destination.open_with(name, OpenOptions::new().write(true).create_new(true))?;
-        io::copy(&mut reader, &mut writer)?;
+        let mut limited = io::Read::take(reader, quota.remaining_bytes.saturating_add(1));
+        let copied = io::copy(&mut limited, &mut writer)?;
+        if copied > quota.remaining_bytes {
+            return Err(ErrorKind::FileTooLarge.into());
+        }
+        quota.remaining_bytes -= copied;
         writer.set_permissions(cap_std::fs::Permissions::from_mode(
             opened.permissions().mode() & 0o777,
         ))?;
@@ -358,5 +388,18 @@ mod tests {
         let inside = Dir::open_ambient_dir(&nested, ambient_authority()).unwrap();
         assert!(copy_into(&source, &inside, &nested).is_err());
         assert_eq!(fs::read_dir(destination).unwrap().count(), 4);
+    }
+
+    #[test]
+    fn rejects_nested_git_directories_during_paste() {
+        let sandbox = tempfile::tempdir().unwrap();
+        let root = sandbox.path().canonicalize().unwrap();
+        let source = root.join("repo-copy");
+        let destination = root.join("destination");
+        fs::create_dir_all(source.join("nested/.git")).unwrap();
+        fs::write(source.join("nested/.git/HEAD"), "ref: refs/heads/main\n").unwrap();
+        fs::create_dir(&destination).unwrap();
+        let directory = Dir::open_ambient_dir(&destination, ambient_authority()).unwrap();
+        assert!(copy_into(&source, &directory, &destination).is_err());
     }
 }

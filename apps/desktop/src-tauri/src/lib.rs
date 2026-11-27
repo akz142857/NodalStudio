@@ -148,6 +148,31 @@ struct AppState {
     sessions: ConnectionSessions,
 }
 
+fn offline_watch_sender() -> &'static tokio::sync::watch::Sender<bool> {
+    static WATCH: std::sync::OnceLock<tokio::sync::watch::Sender<bool>> =
+        std::sync::OnceLock::new();
+    WATCH.get_or_init(|| tokio::sync::watch::channel(false).0)
+}
+
+impl AppState {
+    #[allow(clippy::unused_self)]
+    pub(crate) fn notify_offline(&self, offline: bool) {
+        let _ = offline_watch_sender().send_if_modified(|current| {
+            if *current == offline {
+                false
+            } else {
+                *current = offline;
+                true
+            }
+        });
+    }
+
+    #[allow(clippy::unused_self)]
+    pub(crate) fn subscribe_offline(&self) -> tokio::sync::watch::Receiver<bool> {
+        offline_watch_sender().subscribe()
+    }
+}
+
 async fn acquire_cloud_operation(
     state: &AppState,
     source_id: Uuid,
@@ -2356,6 +2381,9 @@ pub fn run() {
             .map_err(std::io::Error::other)?;
             let store =
                 tauri::async_runtime::block_on(LocalSnapshotStore::open_path(database_path))?;
+            let initial_offline = tauri::async_runtime::block_on(effective_settings(&store, None))
+                .is_ok_and(|settings| settings.app.privacy.offline_mode);
+            let _ = offline_watch_sender().send(initial_offline);
             let sessions = ConnectionSessions::default();
             sessions.start_reaper();
             app.manage(AppState {
@@ -2620,9 +2648,8 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to build Nodal Studio desktop application")
         .run(|app, event| {
-            #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
             if matches!(event, tauri::RunEvent::Exit) {
-                code_view::eslint::close_on_exit(app);
+                code_view::review::close_on_exit(app);
             }
             database_export::handle_app_event(app, event);
         });

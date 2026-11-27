@@ -207,12 +207,12 @@
   }
 
   .code-view-reader .object-definition-reader {
-    height: 45vh;
+    height: calc(var(--ds-viewport-height) * .45);
   }
 }
 
 .code-view-save-preview {
-  max-height: min(40vh, 300px);
+  max-height: min(calc(var(--ds-viewport-height) * .4), 300px);
   overflow: auto;
   white-space: pre-wrap;
 }

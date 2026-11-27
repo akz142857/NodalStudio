@@ -167,7 +167,7 @@ select.ds-select:disabled { opacity: .5; cursor: default; }
   .ontology-workspace .ontology-list .ontology-definition-row,
   .data-source-menu-actions > button
 ):focus-visible,
-:is(.command-results, .global-search-results, .relationship-target-picker, .relationship-search-results) [role="option"][aria-selected="true"] {
+:is(.command-results, .global-search-results, .relationship-target-picker, .relationship-search-results, .code-quick-open > ul, .code-content-results) [role="option"][aria-selected="true"] {
   outline: var(--ds-list-focus-outline);
   outline-offset: var(--ds-focus-inset);
   color: var(--ds-list-focus-text);

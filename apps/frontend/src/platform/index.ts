@@ -71,3 +71,4 @@ export type * from "./discovery-types";
 export { defaultAppSettings, defaultDataSourceSettings, defaultEffectiveSettings, defaultProjectSettings } from "./settings-defaults";
 
 export type * from "./knowledge-types";
+export type * from "./code-review";

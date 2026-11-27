@@ -186,9 +186,11 @@ pub(crate) async fn duplicate_data_source(
 
 #[tauri::command]
 pub(crate) async fn factory_reset(
+    app: tauri::AppHandle,
     input: FactoryResetInput,
     state: State<'_, AppState>,
     connection_folder: State<'_, connection_sync::folder::FolderRuntime>,
+    review: State<'_, code_view::review::ReviewState>,
 ) -> Result<u64, String> {
     if input.confirmation != "DELETE LOCAL DATA" {
         return Err("Factory reset requires the exact confirmation phrase.".into());
@@ -207,5 +209,18 @@ pub(crate) async fn factory_reset(
         delete_secret(CLOUD_KEYRING_SERVICE, profile.id)?;
         delete_secret(CLOUD_REFRESH_KEYRING_SERVICE, profile.id)?;
     }
-    state.store.factory_reset().await.map_err(safe_store_error)
+    code_view::review::reset_local_data(&app, &review).await;
+    #[cfg(all(
+        target_os = "macos",
+        feature = "code-extensions-preview",
+        not(feature = "mac-app-store")
+    ))]
+    code_view::extensions::remove_all_storage(&app).await;
+    let affected = state
+        .store
+        .factory_reset()
+        .await
+        .map_err(safe_store_error)?;
+    state.notify_offline(false);
+    Ok(affected)
 }

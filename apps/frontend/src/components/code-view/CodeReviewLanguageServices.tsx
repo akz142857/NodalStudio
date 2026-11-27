@@ -36,7 +36,7 @@ export function CodeReviewLanguageServices({ status, projectName, enable, enabli
         const { language, root, command, state, progress, lastTask } = workspace;
         const name = languageNames[language];
         const stage = progress?.message ?? progress?.title ?? t(`codeReview.languages.${state}`, { command });
-        return <li key={language} className="code-language-workspace">
+        return <li key={`${language}:${root}`} className="code-language-workspace">
           <div className="code-language-workspace-heading">
             <strong>{name}</strong>
             <span className="code-language-root" title={root || projectName}>{root || projectName}</span>

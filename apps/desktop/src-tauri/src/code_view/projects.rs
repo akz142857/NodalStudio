@@ -13,12 +13,30 @@ use super::files::RootIdentity;
 const STORAGE_UNAVAILABLE: &str = "codeReviewProjectListUnavailable";
 pub(super) const PROJECT_UNAVAILABLE: &str = "codeReviewSavedProjectUnavailable";
 
-#[derive(Default, Deserialize, Serialize)]
+const FORMAT_VERSION: u16 = 1;
+
+const fn default_format_version() -> u16 {
+    FORMAT_VERSION
+}
+
+#[derive(Deserialize, Serialize)]
 pub(super) struct ProjectCatalog {
+    #[serde(default = "default_format_version")]
+    format_version: u16,
     // Most recently selected first, including pinned projects.
     projects: Vec<SavedProject>,
     #[serde(default)]
     groups: Vec<SavedProjectGroup>,
+}
+
+impl Default for ProjectCatalog {
+    fn default() -> Self {
+        Self {
+            format_version: FORMAT_VERSION,
+            projects: Vec::new(),
+            groups: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -253,7 +271,7 @@ impl ProjectCatalog {
                 entry.root = root.to_path_buf();
                 if &entry.identity != identity {
                     entry.identity = identity.clone();
-                    entry.review_key = review_key.to_owned();
+                    review_key.clone_into(&mut entry.review_key);
                 }
                 entry
             },
@@ -274,10 +292,16 @@ impl ProjectCatalog {
         Ok(())
     }
 
-    pub(super) fn remove(&mut self, id: Uuid) -> Result<(), String> {
+    pub(super) fn remove(&mut self, id: Uuid) -> Result<SavedProject, String> {
         let position = self.position(id)?;
-        self.projects.remove(position);
-        Ok(())
+        Ok(self.projects.remove(position))
+    }
+
+    pub(super) fn roots(&self) -> Vec<PathBuf> {
+        self.projects
+            .iter()
+            .map(|entry| entry.root.clone())
+            .collect()
     }
 
     fn position(&self, id: Uuid) -> Result<usize, String> {

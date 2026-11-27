@@ -1,12 +1,19 @@
 import quickjs from "@jitl/quickjs-wasmfile-release-sync";
 import quickjsWasm from "@jitl/quickjs-wasmfile-release-sync/wasm?url";
-import { newQuickJSWASMModuleFromVariant, newVariant, shouldInterruptAfterDeadline } from "quickjs-emscripten-core";
-import { createOnigScanner, createOnigString, loadWASM } from "vscode-oniguruma";
-import onigWasm from "vscode-oniguruma/release/onig.wasm?url";
-import { INITIAL, parseRawGrammar, Registry } from "vscode-textmate";
+import { newQuickJSWASMModuleFromVariant, newVariant, shouldInterruptAfterDeadline, type QuickJSWASMModule } from "quickjs-emscripten-core";
 import { createVsixDocumentHost, installVsixWebPrimitives } from "./vsix-document-host";
 import type { CodeDefinitionPosition } from "../../platform/code-review";
-import type { ExtensionDiagnostic, ExtensionWorkerRequest, ExtensionWorkerResponse, SyntaxToken } from "./code-extension-runtime";
+import type { ExtensionDiagnostic, ExtensionWorkerRequest, ExtensionWorkerResponse } from "./code-extension-runtime";
+
+let quickjsModule: Promise<QuickJSWASMModule> | undefined;
+
+function ensureQuickJs(): Promise<QuickJSWASMModule> {
+  quickjsModule ??= newQuickJSWASMModuleFromVariant(newVariant(quickjs, { wasmLocation: quickjsWasm })).catch((error: unknown) => {
+    quickjsModule = undefined;
+    throw error;
+  });
+  return quickjsModule;
+}
 
 function position(value: unknown): CodeDefinitionPosition | undefined {
   if (!value || typeof value !== "object" || !("line" in value) || !("character" in value)) return;
@@ -15,7 +22,7 @@ function position(value: unknown): CodeDefinitionPosition | undefined {
     && typeof character === "number" && Number.isSafeInteger(character) && character >= 0) return { line, character };
 }
 
-function diagnosticReport(serialized: string, limit: number): ExtensionWorkerResponse {
+export function validateDiagnosticReport(serialized: string, limit: number): Extract<ExtensionWorkerResponse, { findings: ExtensionDiagnostic[] }> {
   if (serialized.length > 5 * 1024 * 1024) throw new Error("The diagnostic report is too large.");
   const report = JSON.parse(serialized) as { total?: unknown; findings?: unknown };
   if (!report || typeof report.total !== "number" || !Number.isSafeInteger(report.total)
@@ -35,7 +42,7 @@ function diagnosticReport(serialized: string, limit: number): ExtensionWorkerRes
 
 async function diagnostics(request: Extract<ExtensionWorkerRequest, { path: string }>): Promise<ExtensionWorkerResponse> {
   const { source, path, text, config, limit } = request;
-  const core = await newQuickJSWASMModuleFromVariant(newVariant(quickjs, { wasmLocation: quickjsWasm }));
+  const core = await ensureQuickJs();
   const runtime = core.newRuntime({
     memoryLimitBytes: 64 * 1024 * 1024, maxStackSizeBytes: 2 * 1024 * 1024,
     interruptHandler: shouldInterruptAfterDeadline(Date.now() + 4_500),
@@ -55,7 +62,7 @@ async function diagnostics(request: Extract<ExtensionWorkerRequest, { path: stri
       for (let step = 0; step < 128; step += 1) {
         vm.unwrapResult(runtime.executePendingJobs(2_000));
         const result = evaluate("__vsixResult()");
-        if (typeof result === "string") return diagnosticReport(result, limit);
+        if (typeof result === "string") return validateDiagnosticReport(result, limit);
         if (!evaluate("__vsixTick()")) break;
       }
       throw new Error("The extension did not publish diagnostics for this document.");
@@ -67,53 +74,8 @@ async function diagnostics(request: Extract<ExtensionWorkerRequest, { path: stri
   }
 }
 
-function tokenStyle(scopes: string[]): SyntaxToken["style"] | undefined {
-  for (const scope of [...scopes].reverse()) {
-    if (/^comment\b/.test(scope)) return "comment";
-    if (/^string\b/.test(scope)) return "string";
-    if (/^constant\.numeric\b/.test(scope)) return "number";
-    if (/^(keyword|storage)\b/.test(scope)) return "keyword";
-    if (/^variable\b/.test(scope)) return "variable";
-    if (/^(entity\.name\.type|support\.type)\b/.test(scope)) return "type";
-  }
-}
-
-async function syntax(source: Extract<ExtensionWorkerRequest["source"], { capability: "syntax" }>, text: string): Promise<ExtensionWorkerResponse> {
-  const response = await fetch(onigWasm);
-  if (!response.ok) throw new Error("Unable to load the TextMate tokenizer.");
-  await loadWASM(await response.arrayBuffer());
-  const registry = new Registry({
-    onigLib: Promise.resolve({ createOnigScanner, createOnigString }),
-    loadGrammar: (scope) => Promise.resolve(scope === source.scopeName ? parseRawGrammar(source.grammar, "syntax.json") : null),
-  });
-  try {
-    const grammar = await registry.loadGrammar(source.scopeName);
-    if (!grammar) throw new Error("Unable to load the extension's grammar.");
-    let state = INITIAL;
-    let offset = 0;
-    const tokens: SyntaxToken[] = [];
-    const deadline = performance.now() + 3_000;
-    for (const line of text.split("\n")) {
-      const parsed = grammar.tokenizeLine(line, state, 50);
-      if (parsed.stoppedEarly || performance.now() > deadline) throw new Error("The extension grammar took too long.");
-      state = parsed.ruleStack;
-      for (const token of parsed.tokens) {
-        const style = tokenStyle(token.scopes);
-        const end = Math.min(token.endIndex, line.length);
-        if (style && end > token.startIndex) tokens.push({ from: offset + token.startIndex, to: offset + end, style });
-        if (tokens.length >= 30_000) return { tokens };
-      }
-      offset += line.length + 1;
-    }
-    return { tokens };
-  } finally {
-    registry.dispose();
-  }
-}
-
-self.onmessage = ({ data }: MessageEvent<ExtensionWorkerRequest>) => {
-  void (data.path === undefined
-    ? syntax(data.source, data.text) : diagnostics(data))
+self.onmessage = ({ data }: MessageEvent<Extract<ExtensionWorkerRequest, { path: string }>>) => {
+  void diagnostics(data)
     .then((result) => self.postMessage(result))
     .catch((error: unknown) => self.postMessage({ error: String(error).slice(0, 400) } satisfies ExtensionWorkerResponse));
 };

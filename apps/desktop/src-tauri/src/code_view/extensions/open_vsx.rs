@@ -13,7 +13,7 @@ use super::{
     Capability, Extension, MAX_ARCHIVE, MAX_ENTRY, PackageSource, Receipt, ReviewState,
     UNSUPPORTED, capabilities, compatible_update, has_valid_id, install_staged, installation,
     installed_paths, newer, package_id, parse_manifest, replace_staged, stage_package,
-    with_storage,
+    with_storage_read,
 };
 use crate::{AppState, effective_settings};
 
@@ -242,20 +242,26 @@ fn api_url(segments: &[&str]) -> Url {
 }
 
 fn client() -> Result<Client, String> {
-    Client::builder()
-        .https_only(true)
-        .connect_timeout(Duration::from_secs(8))
-        .timeout(Duration::from_secs(35))
-        .user_agent(concat!("NodalStudio/", env!("CARGO_PKG_VERSION")))
-        .redirect(redirect::Policy::custom(|attempt| {
-            if attempt.previous().len() < 5 && allowed_url(attempt.url()) {
-                attempt.follow()
-            } else {
-                attempt.error("Unexpected Open VSX redirect")
-            }
-        }))
-        .build()
-        .map_err(|_| NETWORK.into())
+    static CLIENT: std::sync::OnceLock<Result<Client, ()>> = std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            Client::builder()
+                .https_only(true)
+                .connect_timeout(Duration::from_secs(8))
+                .timeout(Duration::from_secs(35))
+                .user_agent(concat!("NodalStudio/", env!("CARGO_PKG_VERSION")))
+                .redirect(redirect::Policy::custom(|attempt| {
+                    if attempt.previous().len() < 5 && allowed_url(attempt.url()) {
+                        attempt.follow()
+                    } else {
+                        attempt.error("Unexpected Open VSX redirect")
+                    }
+                }))
+                .build()
+                .map_err(|_| ())
+        })
+        .clone()
+        .map_err(|()| NETWORK.into())
 }
 
 async fn get(
@@ -347,17 +353,18 @@ async fn while_online<T>(
     request: impl Future<Output = Result<T, String>>,
 ) -> Result<T, String> {
     online(app).await?;
+    let mut offline_rx = app.subscribe_offline();
     let wait_for_offline = async {
-        loop {
-            tokio::time::sleep(Duration::from_millis(350)).await;
-            if let Err(reason) = online(app).await {
-                return reason;
-            }
+        if offline_rx.wait_for(|offline| *offline).await.is_ok() {
+            OFFLINE.into()
+        } else {
+            std::future::pending::<String>().await
         }
     };
     tokio::select! {
-        result = request => result,
+        biased;
         reason = wait_for_offline => Err(reason),
+        result = request => result,
     }
 }
 
@@ -439,7 +446,7 @@ pub(crate) async fn detail_code_open_vsx(
     .await?;
     let capability = compatibility.as_ref().map(|result| result.capability);
     let remote_version = record.version.clone();
-    let can_update = with_storage(handle, &state, project_id, move |root, key| {
+    let can_update = with_storage_read(handle, &state, project_id, move |root, key| {
         let path = root.join(id);
         if !path.exists() {
             return Ok(false);
@@ -470,11 +477,11 @@ pub(crate) async fn check_code_open_vsx_updates(
     project_id: Uuid,
 ) -> Result<CatalogUpdates, String> {
     online(&app).await?;
-    let installed = with_storage(handle, &state, project_id, |root, key| {
-        installed_paths(root)?
+    let installed = with_storage_read(handle, &state, project_id, |root, key| {
+        Ok(installed_paths(root)?
             .into_iter()
-            .map(|path| installation(&path, key))
-            .collect::<Result<Vec<_>, _>>()
+            .filter_map(|path| installation(&path, key).ok())
+            .collect::<Vec<_>>())
     })
     .await?;
     while_online(&app, async {
@@ -540,7 +547,12 @@ async fn download(client: &Client, input: &CatalogInstall) -> Result<(Vec<u8>, R
     let source = get(client, url, MAX_ARCHIVE, super::LIMIT)
         .await?
         .ok_or(UNAVAILABLE)?;
-    let sha256 = format!("{:x}", Sha256::digest(&source));
+    let (source, sha256) = tokio::task::spawn_blocking(move || {
+        let sha256 = format!("{:x}", Sha256::digest(&source));
+        (source, sha256)
+    })
+    .await
+    .map_err(|_| INTEGRITY)?;
     if sha256 != expected {
         return Err(INTEGRITY.into());
     }
@@ -562,31 +574,41 @@ pub(crate) async fn install_code_open_vsx(
     project_id: Uuid,
     input: CatalogInstall,
 ) -> Result<Extension, String> {
-    state.project(project_id)?;
+    let project = state.project(project_id)?;
     let (bytes, receipt) = while_online(&app, async { download(&client()?, &input).await }).await?;
     online(&app).await?;
-    with_storage(handle, &state, project_id, move |root, key| {
-        let (staged_package, incoming) = stage_package(root, &bytes, &receipt, key)?;
+    tokio::task::spawn_blocking(move || {
+        project.directory()?;
+        let root = super::storage(&handle)?;
+        let key = project.key();
+        let (staged_package, incoming) = stage_package(&root, &bytes, &receipt, key)?;
         if incoming.id != input.id || incoming.version != input.version {
             return Err(INTEGRITY.into());
         }
         if incoming.capability == Capability::Unsupported {
             return Err(UNSUPPORTED.into());
         }
+        let _lock = super::STORAGE_LOCK.write().map_err(|_| super::STORAGE)?;
         let destination = root.join(&incoming.id);
         if let Some(previous) = input.installed_sha256 {
-            return replace_staged(
+            let replaced = replace_staged(
                 staged_package.path(),
                 &destination,
                 key,
                 &incoming,
                 &previous,
-            );
+            )?;
+            if incoming.id == super::ESLINT_ID || incoming.capability == Capability::Eslint {
+                project.eslint.revoke_extension();
+            }
+            return Ok(replaced);
         }
-        install_staged(root, staged_package.path(), &destination)?;
+        install_staged(&root, staged_package.path(), &destination)?;
+        let _ = staged_package.keep();
         Ok(incoming)
     })
     .await
+    .map_err(|_| super::STORAGE)?
 }
 
 #[cfg(test)]

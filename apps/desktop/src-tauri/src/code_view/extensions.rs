@@ -6,7 +6,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Component, Path, PathBuf},
-    sync::Mutex,
+    sync::RwLock,
 };
 
 use rustix::fs::{CWD, RenameFlags, renameat_with};
@@ -29,7 +29,7 @@ const MAX_ARCHIVE: u64 = 32 * 1024 * 1024;
 const MAX_UNPACKED: u64 = 64 * 1024 * 1024;
 const MAX_ENTRY: u64 = 2 * 1024 * 1024;
 const MAX_INSTALLED: usize = 32;
-static STORAGE_LOCK: Mutex<()> = Mutex::new(());
+static STORAGE_LOCK: RwLock<()> = RwLock::new(());
 const ESLINT_ID: &str = "dbaeumer.vscode-eslint";
 const ESLINT_VERSION: &str = "3.0.34";
 const ESLINT_ARCHIVE_SHA256: &str =
@@ -371,6 +371,23 @@ fn storage(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+pub(crate) async fn remove_all_storage(app: &AppHandle) {
+    let Ok(path) = app
+        .path()
+        .app_data_dir()
+        .map(|dir| dir.join("code-extensions-preview"))
+    else {
+        return;
+    };
+    let _ = tokio::task::spawn_blocking(move || {
+        let Ok(_lock) = STORAGE_LOCK.write() else {
+            return;
+        };
+        let _ = fs::remove_dir_all(path);
+    })
+    .await;
+}
+
 pub(super) struct EslintServer {
     pub(super) entry: PathBuf,
     pub(super) script: Vec<u8>,
@@ -385,7 +402,7 @@ pub(super) fn eslint_server(
     if sha256 != ESLINT_ARCHIVE_SHA256 {
         return Err(CHANGED.into());
     }
-    let _lock = STORAGE_LOCK.lock().map_err(|_| STORAGE)?;
+    let _lock = STORAGE_LOCK.read().map_err(|_| STORAGE)?;
     let directory = storage(app)?.join(ESLINT_ID);
     let item = installation(&directory, key).map_err(|_| CHANGED)?;
     if item.capability != Capability::Eslint || !item.enabled || item.receipt.sha256 != sha256 {
@@ -436,8 +453,10 @@ fn install(root: &Path, archive_path: &Path, project_key: &str) -> Result<Extens
         source: PackageSource::Local,
     };
     let (stage, extension) = stage_package(root, &source, &receipt, project_key)?;
+    let _lock = STORAGE_LOCK.write().map_err(|_| STORAGE)?;
     let destination = root.join(&extension.id);
     install_staged(root, stage.path(), &destination)?;
+    let _ = stage.keep();
     Ok(extension)
 }
 
@@ -452,6 +471,7 @@ fn stage_package(
     let mut file = File::create(temp.path().join("installation.json")).map_err(|_| STORAGE)?;
     serde_json::to_writer(&mut file, receipt).map_err(|_| STORAGE)?;
     file.flush().map_err(|_| STORAGE)?;
+    file.sync_all().map_err(|_| STORAGE)?;
     let extension = installation(temp.path(), project_key)?;
     Ok((temp, extension))
 }
@@ -515,7 +535,7 @@ fn replace_staged(
     Ok(incoming)
 }
 
-async fn with_storage<T: Send + 'static>(
+async fn with_storage_read<T: Send + 'static>(
     app: AppHandle,
     state: &State<'_, ReviewState>,
     project_id: Uuid,
@@ -524,7 +544,23 @@ async fn with_storage<T: Send + 'static>(
     let project = state.project(project_id)?;
     tokio::task::spawn_blocking(move || {
         project.directory()?;
-        let _lock = STORAGE_LOCK.lock().map_err(|_| STORAGE)?;
+        let _lock = STORAGE_LOCK.read().map_err(|_| STORAGE)?;
+        operation(&storage(&app)?, project.key())
+    })
+    .await
+    .map_err(|_| STORAGE)?
+}
+
+async fn with_storage_write<T: Send + 'static>(
+    app: AppHandle,
+    state: &State<'_, ReviewState>,
+    project_id: Uuid,
+    operation: impl FnOnce(&Path, &str) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let project = state.project(project_id)?;
+    tokio::task::spawn_blocking(move || {
+        project.directory()?;
+        let _lock = STORAGE_LOCK.write().map_err(|_| STORAGE)?;
         operation(&storage(&app)?, project.key())
     })
     .await
@@ -537,11 +573,11 @@ pub(crate) async fn list_code_extensions(
     state: State<'_, ReviewState>,
     project_id: Uuid,
 ) -> Result<Vec<Extension>, String> {
-    with_storage(app, &state, project_id, |root, key| {
-        let mut items = installed_paths(root)?
+    with_storage_read(app, &state, project_id, |root, key| {
+        let mut items: Vec<_> = installed_paths(root)?
             .into_iter()
-            .map(|path| installation(&path, key))
-            .collect::<Result<Vec<_>, _>>()?;
+            .filter_map(|path| installation(&path, key).ok())
+            .collect();
         items.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(items)
     })
@@ -554,16 +590,18 @@ pub(crate) async fn install_code_extension(
     state: State<'_, ReviewState>,
     project_id: Uuid,
 ) -> Result<Option<Extension>, String> {
-    state.project(project_id)?;
+    let project = state.project(project_id)?;
     let Some(source) =
         pick_workspace_path_from(app.clone(), SelectionKind::CodeExtensionVsix, None).await?
     else {
         return Ok(None);
     };
-    with_storage(app, &state, project_id, move |root, key| {
-        install(root, Path::new(&source), key).map(Some)
+    tokio::task::spawn_blocking(move || {
+        project.directory()?;
+        install(&storage(&app)?, Path::new(&source), project.key()).map(Some)
     })
     .await
+    .map_err(|_| STORAGE)?
 }
 
 #[tauri::command]
@@ -578,8 +616,23 @@ pub(crate) async fn change_code_extension(
         return Err(INVALID.into());
     }
     let project = state.project(project_id)?;
-    with_storage(app, &state, project_id, move |root, key| {
-        let path = root.join(id);
+    with_storage_write(app, &state, project_id, move |root, key| {
+        let path = root.join(&id);
+        if matches!(action, ExtensionAction::Uninstall) {
+            let parsed = installation(&path, key).ok();
+            if path.exists() {
+                let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
+                fs::rename(&path, temp.path().join("removed")).map_err(|_| STORAGE)?;
+            }
+            if id == ESLINT_ID
+                || parsed
+                    .as_ref()
+                    .is_none_or(|item| item.capability == Capability::Eslint)
+            {
+                project.eslint.revoke_extension();
+            }
+            return Ok(None);
+        }
         let item = installation(&path, key)?;
         let enabled = path.join("enabled");
         let marker = enabled.join(key);
@@ -601,14 +654,7 @@ pub(crate) async fn change_code_extension(
                     project.eslint.revoke_extension();
                 }
             }
-            ExtensionAction::Uninstall => {
-                let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
-                fs::rename(path, temp.path().join("removed")).map_err(|_| STORAGE)?;
-                if item.capability == Capability::Eslint {
-                    project.eslint.revoke_extension();
-                }
-                return Ok(None);
-            }
+            ExtensionAction::Uninstall => unreachable!(),
         }
         installation(&path, key).map(Some)
     })
@@ -627,7 +673,7 @@ pub(crate) async fn prepare_code_extension(
     if !has_valid_id(&id) {
         return Err(INVALID.into());
     }
-    with_storage(app, &state, project_id, move |root, key| {
+    with_storage_read(app, &state, project_id, move |root, key| {
         let path = root.join(id);
         let item = installation(&path, key)?;
         if item.receipt.sha256 != sha256 {

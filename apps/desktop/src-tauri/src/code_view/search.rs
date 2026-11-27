@@ -1,5 +1,6 @@
-use std::{path::Path, sync::Mutex};
+use std::{collections::HashMap, path::Path, sync::Mutex};
 
+use cap_std::fs::Dir;
 use git2::{Status, StatusOptions, StatusShow};
 use regex::{Regex, RegexBuilder};
 use serde::Serialize;
@@ -7,10 +8,12 @@ use tauri::State;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use super::files::{Repository, review_relative_path};
+use super::files::{
+    MAX_FILE_BYTES, Repository, open_nested_directory, read_file, review_relative_path,
+};
 use super::review::{
     FileVersion, MAX_QUICK_OPEN_ENTRIES, Project, ProjectPaths, ReviewState, UNAVAILABLE,
-    indexed_paths, open_git, read_worktree, walk_project_paths,
+    indexed_paths, open_git, walk_project_paths,
 };
 
 const MAX_MATCHES: usize = 300;
@@ -141,6 +144,46 @@ fn matching_lines(text: &str, query: &Regex, budget: usize) -> impl Iterator<Ite
         .take(budget)
 }
 
+fn read_worktree_cached(
+    directory: &Repository,
+    dir_cache: &mut HashMap<String, Option<Dir>>,
+    relative: &str,
+) -> FileVersion {
+    let path = Path::new(relative);
+    let Some(file_name) = path.file_name() else {
+        return FileVersion::Unreadable;
+    };
+    let parent_key = path
+        .parent()
+        .and_then(Path::to_str)
+        .unwrap_or("")
+        .to_owned();
+    let folder = if parent_key.is_empty() {
+        Some(&directory.dir)
+    } else {
+        if dir_cache.len() >= 512 && !dir_cache.contains_key(&parent_key) {
+            dir_cache.clear();
+        }
+        dir_cache
+            .entry(parent_key)
+            .or_insert_with(|| open_nested_directory(&directory.dir, path.parent()?).ok())
+            .as_ref()
+    };
+    let Some(folder) = folder else {
+        return FileVersion::Missing;
+    };
+    match read_file(folder, Path::new(file_name), MAX_FILE_BYTES) {
+        Ok(text) if text.contains('\0') => FileVersion::Binary,
+        Ok(text) => FileVersion::Text(text),
+        Err(error) => match error.kind() {
+            std::io::ErrorKind::NotFound => FileVersion::Missing,
+            std::io::ErrorKind::FileTooLarge => FileVersion::TooLarge,
+            std::io::ErrorKind::InvalidData => FileVersion::Encoding,
+            _ => FileVersion::Unreadable,
+        },
+    }
+}
+
 fn search(
     project: &Project,
     query: &Regex,
@@ -154,11 +197,12 @@ fn search(
     };
     let mut remaining = MAX_MATCHES;
     let mut bytes = 0;
+    let mut dir_cache: HashMap<String, Option<Dir>> = HashMap::new();
     for path in paths.paths {
         if cancellation.is_cancelled() {
             return Err(UNAVAILABLE.into());
         }
-        let text = match read_worktree(&directory, Path::new(&path)) {
+        let text = match read_worktree_cached(&directory, &mut dir_cache, &path) {
             FileVersion::Text(text) => text,
             FileVersion::TooLarge | FileVersion::Unreadable => {
                 result.limited = true;

@@ -157,24 +157,41 @@ export function extensionFindings(text: string, before: CodeReviewVersion | null
   })));
 }
 
+let markdownWorker: Worker | null = null;
+let markdownQueue: Promise<void> = Promise.resolve();
+
 export function checkMarkdown(request: MarkdownRequest, signal: AbortSignal): Promise<MarkdownResponse> {
-  return new Promise((resolve, reject) => {
-    signal.throwIfAborted();
-    const worker = new Worker(new URL("./markdown-check.worker.ts", import.meta.url), { type: "module" });
-    const timeout = setTimeout(() => finish(() => reject(new CheckError("timeout"))), 5_000);
-    function abort() { finish(() => reject(signal.reason instanceof Error ? signal.reason : new DOMException("Check cancelled", "AbortError"))); }
-    function finish(complete: () => void) {
+  const task = markdownQueue.then(() => new Promise<MarkdownResponse>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason instanceof Error ? signal.reason : new DOMException("Check cancelled", "AbortError"));
+      return;
+    }
+    const worker = markdownWorker ?? (markdownWorker = new Worker(new URL("./markdown-check.worker.ts", import.meta.url), { type: "module" }));
+    let settled = false;
+    function finish(terminate: boolean, complete: () => void) {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
       signal.removeEventListener("abort", abort);
-      worker.terminate();
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.onmessageerror = null;
+      if (terminate) {
+        worker.terminate();
+        if (markdownWorker === worker) markdownWorker = null;
+      }
       complete();
     }
+    const timeout = setTimeout(() => finish(true, () => reject(new CheckError("timeout"))), 5_000);
+    function abort() { finish(true, () => reject(signal.reason instanceof Error ? signal.reason : new DOMException("Check cancelled", "AbortError"))); }
     signal.addEventListener("abort", abort, { once: true });
-    worker.onmessage = (event: MessageEvent<MarkdownResponse>) => finish(() => resolve(event.data));
-    const workerFailed = () => finish(() => reject(new CheckError("engine")));
+    worker.onmessage = (event: MessageEvent<MarkdownResponse>) => finish(false, () => resolve(event.data));
+    const workerFailed = () => finish(true, () => reject(new CheckError("engine")));
     worker.onerror = workerFailed;
     worker.onmessageerror = workerFailed;
     try { worker.postMessage(request); }
-    catch { finish(() => reject(new CheckError("engine"))); }
-  });
+    catch { finish(true, () => reject(new CheckError("engine"))); }
+  }));
+  markdownQueue = task.then(() => undefined, () => undefined);
+  return task;
 }

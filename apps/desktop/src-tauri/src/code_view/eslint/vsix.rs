@@ -46,15 +46,19 @@ impl Server {
         }
     }
 
-    pub(super) fn stage(&self) -> Result<tempfile::NamedTempFile, String> {
-        let mut file = tempfile::Builder::new()
-            .suffix(".cjs")
-            .tempfile()
-            .map_err(|_| TOOL)?;
-        file.write_all(&self.package.script).map_err(|_| TOOL)?;
-        file.flush().map_err(|_| TOOL)?;
-        Ok(file)
+    pub(super) fn script_bytes(&self) -> Vec<u8> {
+        self.package.script.clone()
     }
+}
+
+pub(super) fn stage_script(script: &[u8]) -> Result<tempfile::NamedTempFile, String> {
+    let mut file = tempfile::Builder::new()
+        .suffix(".cjs")
+        .tempfile()
+        .map_err(|_| TOOL)?;
+    file.write_all(script).map_err(|_| TOOL)?;
+    file.flush().map_err(|_| TOOL)?;
+    Ok(file)
 }
 
 pub(super) fn select_server(
