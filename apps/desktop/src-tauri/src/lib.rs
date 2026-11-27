@@ -73,6 +73,8 @@ pub use connection_security::run_askpass_helper;
 mod change_review;
 mod code_view;
 mod database_export;
+#[cfg(target_os = "macos")]
+mod desktop_menu;
 mod diagram_export;
 mod discovery;
 mod export_file;
@@ -2347,6 +2349,10 @@ fn safe_git_workspace_error(error: &git_workspace::GitWorkspaceError) -> String 
 /// Panics when Tauri cannot initialize the configured desktop runtime or local store.
 pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(desktop_menu::menu)
+        .on_menu_event(|app, event| desktop_menu::on_menu_event(app, &event));
     #[cfg(not(feature = "mac-app-store"))]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     builder
@@ -2458,6 +2464,30 @@ pub fn run() {
                 code_view::review::list_code_review_paths,
                 code_view::search::search_code_review_content,
                 code_view::review::read_code_review_file,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::python_debug::prepare_python_debug,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::python_debug::start_python_debug,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::python_debug::control_python_debug,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::python_debug::stop_python_debug,
                 #[cfg(all(
                     target_os = "macos",
                     feature = "code-extensions-preview",

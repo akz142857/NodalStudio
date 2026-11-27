@@ -2,7 +2,7 @@ import type { CodeQueryHandoff } from "../../platform/code-view";
 import { ProjectSqlSave } from "../code-view/ProjectSqlSave";
 import { normalizeQueryError, queryErrorMessages } from "../../i18n/query-errors";
 import { useI18n } from "../../i18n";
-import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useEffectEvent, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import type { CaptureSnapshotResult, DatabaseSnapshot, QueryExecutionResult, QueryHistoryEntry, NodalStudioPlatform } from "../../platform";
 import { matchingOntologyDefinitions, type ConfirmedDefinition, type DefinitionRevision, type OntologyQueryDraft } from "../../platform/ontology-types";
 import { ddlEngineNames, schemaDdlTargetKey, type SchemaDdlInput, type SchemaDdlReceipt, type SchemaDdlTarget } from "../../platform/schema-ddl";
@@ -15,6 +15,7 @@ import { QueryHistory } from "./QueryHistory";
 import { QueryResultGrid } from "./QueryResultGrid";
 import { legacyQueryWorkspaceKey, loadQuerySession, queryWorkspaceKey, recoverQueryDraft, resizedQueryResultHeight, saveQuerySession, unboundQueryWorkspaceKey, type DraftOrigin, type QuerySession, type QueryTab } from "./query-state";
 import { SqlEditor, type SqlEditorHandle } from "./SqlEditor";
+import { classifySqlExecution } from "./sql-validation";
 import { resolveCapability } from "../../platform/capabilities";
 import { SchemaDdlDialog } from "./SchemaDdlDialog";
 import type { SavedQuery, SaveQueryOutcome } from "./saved-queries";
@@ -117,6 +118,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   const [historyRecord, setHistoryRecord] = useState<{ sourceId: string; entries: QueryHistoryEntry[] }>({ sourceId, entries: [] });
   const history = desktopReady && historyRecord.sourceId === sourceId ? historyRecord.entries : [];
   const [executing, setExecuting] = useState(false);
+  const [executionSelection, setExecutionSelection] = useState<{ sessionKey: string; document: string; sql: string }>();
   const [ddlPreview, setDdlPreview] = useState<SchemaDdlInput>();
   const [applyingDdl, setApplyingDdl] = useState(false);
   const ddlInFlight = useRef(false);
@@ -130,6 +132,12 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
   const liveDdlTarget = !projectHandoff && session.origin?.kind !== "unavailable" && desktopReady && ddlTarget?.sourceId === sourceId && ddlTarget.databaseType === snapshot?.database.databaseType
     ? ddlTarget : undefined;
   const ddlEngine = liveDdlTarget && ddlEngineNames[liveDdlTarget.databaseType];
+  const dialect = snapshot?.database.databaseType ?? "postgreSql";
+  const primarySql = executionSelection?.sessionKey === sessionKey && executionSelection.document === session.draft.replace(/\r\n?/g, "\n")
+    ? executionSelection.sql : session.draft;
+  const executionKind = useMemo(() => classifySqlExecution(primarySql, dialect), [primarySql, dialect]);
+  const action = drafting || executing || executionKind === "query" || executionKind === "empty" ? "query"
+    : executionKind === "ddl" && liveDdlTarget ? "ddl" : "hint";
   const targetKey = liveDdlTarget && schemaDdlTargetKey(liveDdlTarget);
   const activeDdlPreview = ddlPreview && schemaDdlTargetKey(ddlPreview) === targetKey ? ddlPreview : undefined;
   const editorBlocked = Boolean(pendingOpen || choice || activeDdlPreview || applyingDdl);
@@ -182,13 +190,22 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
 
   async function run(sqlText: string) {
     if (!snapshot || !desktopReady || executing || activeQuery.current || ddlInFlight.current || activeDdlPreview || drafting || pendingOpen || choice) return;
-    if (!sqlText.trim()) {
-      setSession((current) => ({ ...current, message: bt("business.enterOneReadOnlySELECTStatementBeforeRunningThe"), activeTab: "message", outputCollapsed: false }));
-      editorRef.current?.focus();
-      return;
-    }
     if (session.origin?.kind === "unavailable" || (projectHandoff && (projectHandoff.sourceId !== sourceId || projectHandoff.snapshotId !== snapshot.id))) {
       setSession((current) => ({ ...current, outcome: "failed", message: bt("codeView.queryTargetError"), activeTab: "message", outputCollapsed: false }));
+      return;
+    }
+    const kind = classifySqlExecution(sqlText, dialect);
+    if (kind === "ddl" && liveDdlTarget) {
+      setDdlPreview({ ...liveDdlTarget, sql: sqlText });
+      return;
+    }
+    if (kind !== "query") {
+      const message = kind === "multiple" ? bt("queryExecution.multipleStatements")
+        : kind === "ddl" ? bt("queryExecution.ddlUnavailable")
+        : kind === "unsupported" ? bt(liveDdlTarget ? "queryExecution.unsupportedWithDdl" : "queryExecution.unsupported")
+        : bt(liveDdlTarget ? "queryExecution.enterStatement" : "business.enterOneReadOnlySELECTStatementBeforeRunningThe");
+      setSession((current) => ({ ...current, outcome: undefined, message, activeTab: "message", outputCollapsed: false }));
+      if (kind === "empty" || kind === "multiple") editorRef.current?.focus();
       return;
     }
     setAppliedDraft(undefined);
@@ -228,17 +245,6 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
 
   function showDdlMessage(message: string, outcome?: QuerySession["outcome"]) {
     setSession((current) => ({ ...current, result: undefined, outcome, message, activeTab: "message", outputCollapsed: false }));
-  }
-
-  function prepareDdl() {
-    if (!liveDdlTarget || drafting || pendingOpen || activeQuery.current || ddlInFlight.current) return;
-    const sql = editorRef.current?.getExecutableSql() ?? "";
-    if (!sql.trim()) {
-      showDdlMessage(bt("schemaDdl.enterStatement"));
-      editorRef.current?.focus();
-      return;
-    }
-    setDdlPreview({ ...liveDdlTarget, sql });
   }
 
   async function applyDdl(request: SchemaDdlInput) {
@@ -420,11 +426,14 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
     <header className="query-toolbar">
       <div className="query-source"><ActionIcon name="database" /><div><strong>{snapshot?.database.name ?? bt("business.queryDetail")}</strong><span>{snapshot ? `${snapshot.database.databaseType === "sqlite" ? "SQLite" : snapshot.database.databaseType === "postgreSql" ? "PostgreSQL" : "MySQL"} · ${snapshot.schemas.length === 1 ? bt("businessExtra.oneSchema") : bt("businessExtra.countSchemas", { count: snapshot.schemas.length })}` : bt("business.selectDatabase")}</span></div></div>
       <div className="query-toolbar-actions">
-
-        <span className="query-readonly" title={bt("business.queriesRunInAReadOnlyTransaction")}><ActionIcon name="shield" />{bt("business.readOnly")}</span>
-        <label className="query-limit">{bt("business.rowLimit")}<select value={[100, 500, 1000].includes(session.rowLimit) ? session.rowLimit : "custom"} onChange={(event) => setSession((current) => ({ ...current, rowLimit: event.target.value === "custom" ? 5000 : Number(event.target.value) }))}><option value={100}>100</option><option value={500}>500</option><option value={1000}>1,000</option><option value="custom">{bt("business.custom")}</option></select></label>
-        {![100, 500, 1000].includes(session.rowLimit) ? <label className="query-custom-limit"><input aria-label={bt("business.customRowLimit")} type="number" min={1} max={5000} value={session.rowLimit} onChange={(event) => setSession((current) => ({ ...current, rowLimit: Math.min(5000, Math.max(1, Number(event.target.value) || 1)) }))} /></label> : null}
-        <QueryRunControls executing={executing} disabled={!desktopReady || drafting || Boolean(pendingOpen || choice) || applyingDdl} onRun={() => void run(editorRef.current?.getExecutableSql() ?? "")} onRunCurrent={() => void run(editorRef.current?.getCurrentStatementSql() ?? "")} onStop={stopQuery} />
+        {action === "ddl" || applyingDdl ? <span className="query-schema-change"><ActionIcon name="warning" />{bt("queryExecution.schemaChange")}</span>
+          : action === "query" && <>
+            <span className="query-readonly" title={bt("business.queriesRunInAReadOnlyTransaction")}><ActionIcon name="shield" />{bt("business.readOnly")}</span>
+            <label className="query-limit">{bt("business.rowLimit")}<select value={[100, 500, 1000].includes(session.rowLimit) ? session.rowLimit : "custom"} onChange={(event) => setSession((current) => ({ ...current, rowLimit: event.target.value === "custom" ? 5000 : Number(event.target.value) }))}><option value={100}>100</option><option value={500}>500</option><option value={1000}>1,000</option><option value="custom">{bt("business.custom")}</option></select></label>
+            {![100, 500, 1000].includes(session.rowLimit) ? <label className="query-custom-limit"><input aria-label={bt("business.customRowLimit")} type="number" min={1} max={5000} value={session.rowLimit} onChange={(event) => setSession((current) => ({ ...current, rowLimit: Math.min(5000, Math.max(1, Number(event.target.value) || 1)) }))} /></label> : null}
+          </>}
+        <QueryRunControls action={action} executing={executing} disabled={!desktopReady || drafting || editorBlocked}
+          onRun={() => void run(editorRef.current?.getExecutableSql() ?? "")} onRunCurrent={() => void run(editorRef.current?.getCurrentStatementSql() ?? "")} onStop={stopQuery} />
       </div>
     </header>
     {!desktopReady && (snapshot || runtimeKind !== "desktop") ? <div className="query-runtime-notice">{runtimeKind === "web" ? bt("business.queryIsAvailableOnlyInTheDesktopAppThe") : capability.scope}</div> : null}
@@ -453,7 +462,7 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
         title={bt("savedQueries.renameNamed", { value0: savedQuery.name })} aria-label={bt("savedQueries.renameNamed", { value0: savedQuery.name })} onClick={openNameDialog}>
         <span>{savedQuery.name}</span><ActionIcon name="edit" />
       </button>}
-      {(Boolean(ontologyScopeKey && ontology?.entries.length) || (!drafting && (onSaveQuery || ddlEngine || onOpenProjectFile))) && <div className="query-editor-actions">
+      {(Boolean(ontologyScopeKey && ontology?.entries.length) || (!drafting && (onSaveQuery || onOpenProjectFile))) && <div className="query-editor-actions">
         {ontologyScopeKey && ontology?.entries.length ? <button type="button" className="query-editor-action"
           disabled={executing || editorBlocked} onClick={() => setOntologyChoice({ scopeKey: ontologyScopeKey })}>{bt("ontology.useDefinition")}</button> : null}
         {onSaveQuery && !drafting && <button type="button" className="query-editor-action query-save-action" disabled={!canSave}
@@ -464,8 +473,6 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
           <ProjectSqlSave key={sourceId} platform={platform} sourceId={sourceId} sql={session.draft} disabled={editorBlocked || executing}
             generatedFrom={session.origin?.kind === "ontology" && session.origin.sql === session.draft ? session.origin.target : undefined}
             onOpen={onOpenProjectFile} />}
-        {ddlEngine && !drafting && <button type="button" className="query-editor-action query-ddl-trigger" disabled={executing || editorBlocked}
-          onClick={prepareDdl}><ActionIcon name="codeDocument" /><span>{bt("schemaDdl.run", { value0: ddlEngine })}</span></button>}
       </div>}
     </div>
     {!drafting && saveName === undefined && saveFeedback && <div className="query-save-feedback" role={saveFeedback === "saved" ? "status" : "alert"}>
@@ -476,7 +483,12 @@ export function QueryPage({ platform, snapshot, runtimeKind, openRequest, onCons
       {session.origin?.kind === "project" && session.origin.sql !== session.draft ? ` · ${bt("codeView.edited")}` : ""}
     </small>}
     <div className="query-input-pane">
-      <div className="query-editor-pane" role="tabpanel" id={`${editorId}-sql-panel`} aria-labelledby={`${editorId}-sql`} hidden={drafting}><SqlEditor key={sessionKey} ref={editorRef} value={session.draft} snapshot={snapshot} onChange={(draft) => { setSaveFeedback(undefined); setSession((current) => ({ ...current, draft })); }} onRun={(sqlText) => void run(sqlText)} executing={executing} disabled={!desktopReady || Boolean(pendingOpen) || applyingDdl} ddlEngine={ddlEngine} onStop={stopQuery} /></div>
+      <div className="query-editor-pane" role="tabpanel" id={`${editorId}-sql-panel`} aria-labelledby={`${editorId}-sql`} hidden={drafting}>
+        <SqlEditor key={sessionKey} ref={editorRef} value={session.draft} snapshot={snapshot}
+          onChange={(draft) => { setSaveFeedback(undefined); setSession((current) => ({ ...current, draft })); }}
+          onSelectionChange={(selection) => setExecutionSelection(selection ? { ...selection, sessionKey } : undefined)}
+          onRun={(sqlText) => void run(sqlText)} executing={executing} disabled={!desktopReady || editorBlocked} ddlEngine={ddlEngine} onStop={stopQuery} />
+      </div>
       {canDraft && snapshot && settings && semantics ? <div className="query-draft-pane" role="tabpanel" id={`${editorId}-draft-panel`} aria-labelledby={`${editorId}-draft`} hidden={!drafting}><QueryDraftPanel platform={platform} snapshot={snapshot} settings={settings} semantics={semantics} seed={draftSeed} initialTable={selectedTable} execution={draftExecution?.sourceId === sourceId && draftExecution.snapshotId === snapshot.id ? draftExecution : undefined} onOpenSettings={() => onOpenAiSettings?.()} onResolveOntology={openMatchingOntology} ontologyLoading={ontology?.loading} onUseSql={(sql) => setGeneratedRequest({ sourceId, snapshotId: snapshot.id, sql, binding: draftBinding })} /></div> : null}
     </div>
     <div className="query-result-resizer" hidden={drafting} role="separator" aria-label={bt("business.resizeQueryResults")} aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={650} aria-valuenow={session.resultHeight} tabIndex={0} onMouseDown={beginResultResize} onKeyDown={(event) => {

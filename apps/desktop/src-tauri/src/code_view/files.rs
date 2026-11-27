@@ -16,21 +16,9 @@ const MAX_ENTRIES: usize = 8_000;
 #[derive(Clone, Deserialize, PartialEq, Eq, Hash, Serialize)]
 pub(super) struct RootIdentity(u64, u64);
 
-#[cfg_attr(unix, allow(clippy::unnecessary_wraps))]
-fn root_identity(metadata: &Metadata) -> io::Result<RootIdentity> {
-    #[cfg(unix)]
-    {
-        use cap_std::fs::MetadataExt;
-        Ok(RootIdentity(metadata.dev(), metadata.ino()))
-    }
-    #[cfg(windows)]
-    {
-        use cap_fs_ext::MetadataExt;
-        Ok(RootIdentity(
-            u64::from(metadata.volume_serial_number().ok_or_else(denied)?),
-            metadata.file_index().ok_or_else(denied)?,
-        ))
-    }
+fn root_identity(metadata: &Metadata) -> RootIdentity {
+    use cap_fs_ext::MetadataExt;
+    RootIdentity(metadata.dev(), metadata.ino())
 }
 
 pub(super) struct Repository {
@@ -104,7 +92,7 @@ impl Repository {
             .map_err(|_| "Open the repository folder again to restore access.")?;
         let identity = dir
             .dir_metadata()
-            .and_then(|meta| root_identity(&meta))
+            .map(|meta| root_identity(&meta))
             .map_err(|_| "Unable to identify the repository folder.")?;
         if expected.is_some_and(|expected| expected != &identity) {
             return Err("The repository folder changed. Choose it again.".into());

@@ -70,6 +70,7 @@
 .shortcut-list small { color: var(--ds-danger); }
 .settings-workspace-shortcut { grid-template-columns: minmax(0, 1fr) auto; }
 .settings-workspace-shortcut kbd { padding: 3px var(--ds-space-2); border: 1px solid var(--ds-separator); border-radius: var(--ds-radius-control); background: var(--ds-field); font: var(--ds-text-control) / var(--ds-leading) var(--ds-font-mono); }
+.settings-workspace-shortcut kbd + kbd { margin-inline-start: var(--ds-space-1); }
 .settings-no-results { display: grid; justify-items: center; gap: var(--ds-space-3); margin: 15vh auto; text-align: center; }
 .settings-no-results > svg { width: 28px; height: 28px; color: var(--ds-tertiary); }
 .settings-no-results h2 { font-size: var(--ds-text-heading); }

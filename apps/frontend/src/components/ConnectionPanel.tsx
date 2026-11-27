@@ -679,7 +679,12 @@ export function ConnectionPanel({ enabled, activeSourceId, initializingDatabase,
           <strong>{bt("business.noDatabaseConnected")}</strong>
           <span>{bt("business.createAConnectionToMapItsSchema")}</span>
         </button>
-        {enabled ? <Button className="connection-sync-shortcut" onClick={() => setManagerOpen("import")} disabled={pending}>{bt("connectionSync.open")}</Button> : null}
+        {enabled ? <div className="ds-surface connection-sync-shortcut">
+          <Button size="small" aria-haspopup="dialog" onClick={() => setManagerOpen("import")} disabled={pending}>
+            <ActionIcon name="refresh" />
+            <span>{bt("connectionSync.open")}</span>
+          </Button>
+        </div> : null}
       </>
       )}
 

@@ -520,7 +520,7 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
         .mockResolvedValueOnce({ kind: "refreshed", capture })
         .mockResolvedValueOnce({ kind: "refreshFailed", message: "Test refresh failure" })
         .mockResolvedValueOnce({ kind: "outcomeUnknown" });
-      const query = vi.spyOn(platform, "executeReadonlyQuery").mockRejectedValue("Read-only queries require SELECT.");
+      const query = vi.spyOn(platform, "executeReadonlyQuery");
       fireEvent.click(screen.getByRole("button", { name: `Load ${engine} fixture` }));
       fireEvent.click(screen.getByRole("button", { name: "Query" }));
       const workspace = await screen.findByRole("region", { name: "Query workspace" });
@@ -528,18 +528,19 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
       const editor = EditorView.findFromDOM(workspace.querySelector<HTMLElement>(".cm-editor")!)!;
       const selected = "CREATE TABLE ddl_example (id INTEGER PRIMARY KEY);";
       const documentSql = `SELECT 1;\n${selected}`;
-      act(() => editor.dispatch({
-        changes: { from: 0, to: editor.state.doc.length, insert: documentSql },
-        selection: { anchor: documentSql.indexOf("CREATE"), head: documentSql.length },
-      }));
-      fireEvent.click(within(workspace).getByRole("button", { name: /^Run (?:⌘R|Ctrl\+R)$/ }));
-      expect(await screen.findByText(/Read-only queries require SELECT/)).toBeVisible();
-      expect(query).toHaveBeenCalledWith(expect.objectContaining({ sql: selected }));
+      act(() => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: documentSql } }));
+      fireEvent.click(within(workspace).getByRole("button", { name: /^Check SQL/ }));
+      expect(await screen.findByText(/Select one SQL statement/)).toBeVisible();
+      expect(query).not.toHaveBeenCalled();
       expect(ddl).not.toHaveBeenCalled();
 
-      const review = () => fireEvent.click(within(workspace).getByRole("button", { name: `Run ${engine} DDL…` }));
+      act(() => editor.dispatch({ selection: { anchor: documentSql.indexOf("CREATE"), head: documentSql.length } }));
+      const review = () => fireEvent.click(within(workspace).getByRole("button", { name: /^Review Schema Change…/ }));
       const activeDialog = () => within(screen.getByRole("dialog", { name: `Confirm ${engine} schema change` }));
-      review();
+      expect(within(workspace).getByText("Schema change", { exact: true })).toBeVisible();
+      expect(within(workspace).queryByRole("combobox", { name: "Row limit" })).not.toBeInTheDocument();
+      expect(within(workspace).queryByRole("button", { name: `Run ${engine} DDL…` })).not.toBeInTheDocument();
+      fireEvent.keyDown(editor.contentDOM, { key: "r", metaKey: usesAppleKeyboard(), ctrlKey: !usesAppleKeyboard() });
       let dialog = activeDialog();
       const target = profile.databaseType === "sqlite" ? { filePath: profile.sqlite!.path }
         : { host: profile.host, port: profile.port, username: profile.username, database: profile.database, profileUpdatedAt: profile.updatedAt };
@@ -556,6 +557,7 @@ describe("App sidebar object navigation", { timeout: 45_000 }, () => {
       fireEvent.click(dialog.getByRole("button", { name: "Apply schema change" }));
       expect(await screen.findByText("Schema change committed. The model has been refreshed.")).toBeVisible();
       expect(ddl).toHaveBeenCalledExactlyOnceWith({ databaseType: profile.databaseType, sourceId: profile.id, ...target, sql: selected });
+      expect(query).not.toHaveBeenCalled();
       expect(screen.getByRole("button", { name: "Query" })).toHaveAttribute("aria-pressed", "true");
       const tree = within(screen.getByRole("region", { name: "Database structure" }));
       fireEvent.change(tree.getByRole("searchbox"), { target: { value: "ddl_example" } });

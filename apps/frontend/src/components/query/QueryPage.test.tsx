@@ -259,7 +259,7 @@ describe("QueryPage", () => {
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Query execution options" }));
-    expect(screen.getByRole("menuitem", { name: /^Run (?:⌘R|Ctrl\+R)$/ })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: /^Run Query (?:⌘R|Ctrl\+R)$/ })).toBeEnabled();
     fireEvent.keyDown(editor!, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: /Run/ }));
     await waitFor(() => expect(executeReadonlyQuery).toHaveBeenCalledWith(expect.objectContaining({ sql: "SELECT 1;", rowLimit: 100 })));
@@ -374,10 +374,11 @@ describe("QueryPage", () => {
     await act(async () => { finish(result); await Promise.resolve(); });
     act(() => { view.dispatch({ selection: { anchor: 0 } }); });
     fireEvent.keyDown(editor, { key: "Enter", metaKey: true });
-    await waitFor(() => expect(executeReadonlyQuery).toHaveBeenLastCalledWith(expect.objectContaining({ sql })));
-    await act(async () => { finish(result); await Promise.resolve(); });
+    expect(screen.getByText("Select one SQL statement or use Run Current Statement.")).toBeVisible();
+    expect(executeReadonlyQuery).toHaveBeenCalledTimes(2);
+    act(() => { view.dispatch({ selection: { anchor: 0, head: sql.indexOf("\n") } }); });
     fireEvent.click(screen.getByRole("button", { name: "Query execution options" }));
-    const runItem = screen.getByRole("menuitem", { name: /^Run (?:⌘R|Ctrl\+R)$/ });
+    const runItem = screen.getByRole("menuitem", { name: /^Run Query (?:⌘R|Ctrl\+R)$/ });
     expect(runItem).toHaveFocus();
     fireEvent.keyDown(runItem, { key: "ArrowDown" });
     expect(screen.getByRole("menuitem", { name: /Run Current Statement/ })).toHaveFocus();

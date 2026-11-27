@@ -100,6 +100,12 @@ pub(super) struct Project {
     pub(super) search: super::search::SearchSession,
     #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
     pub(super) eslint: super::eslint::EslintSession,
+    #[cfg(all(
+        target_os = "macos",
+        feature = "code-extensions-preview",
+        not(feature = "mac-app-store")
+    ))]
+    pub(super) debugger: super::python_debug::DebugSession,
 }
 
 #[derive(Default)]
@@ -274,6 +280,12 @@ impl ReviewSession {
             old.search.cancel();
             #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
             old.eslint.close();
+            #[cfg(all(
+                target_os = "macos",
+                feature = "code-extensions-preview",
+                not(feature = "mac-app-store")
+            ))]
+            old.debugger.close();
         }
     }
 }
@@ -344,6 +356,12 @@ impl Project {
             search: super::search::SearchSession::default(),
             #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
             eslint: super::eslint::EslintSession::default(),
+            #[cfg(all(
+                target_os = "macos",
+                feature = "code-extensions-preview",
+                not(feature = "mac-app-store")
+            ))]
+            debugger: super::python_debug::DebugSession::default(),
         })
     }
 

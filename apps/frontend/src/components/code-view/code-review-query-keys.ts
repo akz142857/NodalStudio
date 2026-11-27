@@ -20,4 +20,6 @@ export const codeReviewKeys = {
   outlines: (projectId: string) => ["code-review", projectId, "outline"] as const,
   outline: (projectId: string, path: string, updatedAt: number, mode: string) =>
     ["code-review", projectId, "outline", path, updatedAt, mode] as const,
+  pythonDebugLaunch: (projectId: string, path?: string) =>
+    ["code-review", projectId, "python-debug-launch", path ?? null] as const,
 };

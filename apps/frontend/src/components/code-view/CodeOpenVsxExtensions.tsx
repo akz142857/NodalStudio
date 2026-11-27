@@ -82,6 +82,7 @@ export function CodeOpenVsxDetails({ market, projectId, id, initialVersion, inst
   const release = detail.data;
   const compatibility = release?.capability === "diagnostics" ? "marketDiagnostics"
     : release?.capability === "eslint" ? "marketEslint"
+      : release?.capability === "pythonDebugger" ? "marketPythonDebugger"
       : release?.capability === "syntax" ? "marketSyntax"
         : release?.capability === "unsupported" ? "unsupportedStatus" : "marketUnknown";
   const upgrade = Boolean(installed && release?.canUpdate && installed.version !== release.version);

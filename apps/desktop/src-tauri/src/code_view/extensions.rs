@@ -1,5 +1,4 @@
-//! VSIX storage for the macOS preview. Extension code runs in the UI's
-//! isolated interpreter and never runs in the native process.
+//! VSIX storage and capability checks for the macOS preview.
 pub(crate) mod open_vsx;
 
 use std::{
@@ -37,6 +36,12 @@ const ESLINT_ARCHIVE_SHA256: &str =
 const ESLINT_SERVER: &str = "server/out/eslintServer.js";
 const ESLINT_SERVER_SHA256: &str =
     "baf39a57d3e04d63140a1d606b76042ccca304309846b2b0374c60d1caacbdb2";
+const PYTHON_DEBUGGER_ID: &str = "ms-python.debugpy";
+const PYTHON_DEBUGGER_VERSION: &str = "2026.6.0";
+const PYTHON_DEBUGGER_SHA256: &str =
+    "a5b8169877cbc836b997d7066e8dac164484c976df1c76cd6c0b0ef66a0163a2";
+const PYTHON_DEBUGGER_ARCHIVE: &str = "debugpy.vsix";
+const PYTHON_ADAPTER: &str = "extension/bundled/libs/debugpy/adapter";
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,11 +99,12 @@ struct Grammar {
     path: String,
 }
 
-#[derive(Clone, Copy, Serialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 enum Capability {
     Diagnostics,
     Eslint,
+    PythonDebugger,
     Syntax,
     Unsupported,
 }
@@ -252,6 +258,20 @@ fn usable_grammar<'a>(
 }
 
 fn capabilities(manifest: &Manifest, root: Option<&Path>) -> (Capability, Vec<Language>) {
+    if manifest.version == PYTHON_DEBUGGER_VERSION
+        && package_id(&manifest.publisher, &manifest.name).is_ok_and(|id| id == PYTHON_DEBUGGER_ID)
+        && manifest
+            .contributes
+            .debuggers
+            .as_array()
+            .is_some_and(|items| items.iter().any(|item| item["type"] == "debugpy"))
+        && root.is_none_or(|root| {
+            root.join("bundled/libs/debugpy/adapter/__main__.py")
+                .is_file()
+        })
+    {
+        return (Capability::PythonDebugger, Vec::new());
+    }
     if !manifest.extension_dependencies.is_empty() {
         return (Capability::Unsupported, Vec::new());
     }
@@ -305,6 +325,13 @@ fn installation(path: &Path, project_key: &str) -> Result<Extension, String> {
     if capability == Capability::Eslint && receipt.sha256 != ESLINT_ARCHIVE_SHA256 {
         capability = Capability::Unsupported;
     }
+    if capability == Capability::PythonDebugger
+        && (receipt.sha256 != PYTHON_DEBUGGER_SHA256
+            || !matches!(receipt.source, PackageSource::OpenVsx)
+            || !path.join(PYTHON_DEBUGGER_ARCHIVE).is_file())
+    {
+        capability = Capability::Unsupported;
+    }
     Ok(Extension {
         id,
         publisher: manifest.publisher,
@@ -321,6 +348,10 @@ fn installation(path: &Path, project_key: &str) -> Result<Extension, String> {
 }
 
 fn unpack(source: &[u8], target: &Path) -> Result<(), String> {
+    unpack_prefix(source, target, Path::new("extension"))
+}
+
+fn unpack_prefix(source: &[u8], target: &Path, prefix: &Path) -> Result<(), String> {
     let mut archive = ZipArchive::new(io::Cursor::new(source)).map_err(|_| INVALID)?;
     if archive.len() > 2048 {
         return Err(LIMIT.into());
@@ -337,7 +368,7 @@ fn unpack(source: &[u8], target: &Path) -> Result<(), String> {
         {
             return Err(INVALID.into());
         }
-        if !name.starts_with("extension") {
+        if !name.starts_with(prefix) {
             continue;
         }
         let path = target.join(name);
@@ -359,6 +390,27 @@ fn unpack(source: &[u8], target: &Path) -> Result<(), String> {
         remaining = remaining.checked_sub(actual).ok_or(LIMIT)?;
     }
     Ok(())
+}
+
+pub(super) fn python_adapter(app: &AppHandle, key: &str, target: &Path) -> Result<PathBuf, String> {
+    let archive = {
+        let _lock = STORAGE_LOCK.read().map_err(|_| STORAGE)?;
+        let directory = storage(app)?.join(PYTHON_DEBUGGER_ID);
+        let installed = installation(&directory, key).map_err(|_| DISABLED)?;
+        if installed.capability != Capability::PythonDebugger || !installed.enabled {
+            return Err(DISABLED.into());
+        }
+        bounded_file(&directory.join(PYTHON_DEBUGGER_ARCHIVE), MAX_ARCHIVE)?
+    };
+    if format!("{:x}", Sha256::digest(&archive)) != PYTHON_DEBUGGER_SHA256 {
+        return Err(CHANGED.into());
+    }
+    unpack_prefix(
+        &archive,
+        target,
+        Path::new("extension/bundled/libs/debugpy"),
+    )?;
+    Ok(target.join(PYTHON_ADAPTER))
 }
 
 fn storage(app: &AppHandle) -> Result<PathBuf, String> {
@@ -467,6 +519,10 @@ fn stage_package(
 ) -> Result<(tempfile::TempDir, Extension), String> {
     let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
     unpack(source, temp.path())?;
+    if matches!(receipt.source, PackageSource::OpenVsx) && receipt.sha256 == PYTHON_DEBUGGER_SHA256
+    {
+        fs::write(temp.path().join(PYTHON_DEBUGGER_ARCHIVE), source).map_err(|_| STORAGE)?;
+    }
     let mut file = File::create(temp.path().join("installation.json")).map_err(|_| STORAGE)?;
     serde_json::to_writer(&mut file, receipt).map_err(|_| STORAGE)?;
     file.flush().map_err(|_| STORAGE)?;
@@ -649,6 +705,9 @@ pub(crate) async fn change_code_extension(
             {
                 project.eslint.revoke_extension();
             }
+            if id == PYTHON_DEBUGGER_ID {
+                project.debugger.stop(None);
+            }
             return Ok(None);
         }
         let item = installation(&path, key)?;
@@ -669,6 +728,9 @@ pub(crate) async fn change_code_extension(
                 }
                 if item.capability == Capability::Eslint {
                     project.eslint.revoke_extension();
+                }
+                if item.capability == Capability::PythonDebugger {
+                    project.debugger.stop(None);
                 }
             }
             ExtensionAction::Uninstall => unreachable!(),
@@ -833,5 +895,74 @@ mod tests {
                 .version,
             "1.0.0"
         );
+    }
+
+    #[test]
+    fn python_debugger_capability_requires_pinned_version_source_and_digest() {
+        let mut archive = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default();
+        archive
+            .start_file("extension/package.json", options)
+            .unwrap();
+        serde_json::to_writer(
+            &mut archive,
+            &serde_json::json!({
+                "name": "debugpy",
+                "publisher": "ms-python",
+                "version": PYTHON_DEBUGGER_VERSION,
+                "engines": { "vscode": "^1.92.0" },
+                "extensionDependencies": ["ms-python.python"],
+                "contributes": { "debuggers": [{ "type": "debugpy" }] }
+            }),
+        )
+        .unwrap();
+        archive
+            .start_file(
+                "extension/bundled/libs/debugpy/adapter/__main__.py",
+                options,
+            )
+            .unwrap();
+        archive.write_all(b"print('adapter')\n").unwrap();
+        let bytes = archive.finish().unwrap().into_inner();
+
+        let root = tempfile::tempdir().unwrap();
+        let (_, pinned) = stage_package(
+            root.path(),
+            &bytes,
+            &Receipt {
+                file_name: "debugpy.vsix".into(),
+                sha256: PYTHON_DEBUGGER_SHA256.into(),
+                source: PackageSource::OpenVsx,
+            },
+            "project-a",
+        )
+        .unwrap();
+        assert_eq!(pinned.capability, Capability::PythonDebugger);
+
+        let (_, wrong_digest) = stage_package(
+            root.path(),
+            &bytes,
+            &Receipt {
+                file_name: "debugpy.vsix".into(),
+                sha256: "0".repeat(64),
+                source: PackageSource::OpenVsx,
+            },
+            "project-a",
+        )
+        .unwrap();
+        assert_eq!(wrong_digest.capability, Capability::Unsupported);
+
+        let (_, wrong_source) = stage_package(
+            root.path(),
+            &bytes,
+            &Receipt {
+                file_name: "debugpy.vsix".into(),
+                sha256: PYTHON_DEBUGGER_SHA256.into(),
+                source: PackageSource::Local,
+            },
+            "project-a",
+        )
+        .unwrap();
+        assert_eq!(wrong_source.capability, Capability::Unsupported);
     }
 }

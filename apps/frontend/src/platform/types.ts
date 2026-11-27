@@ -626,6 +626,7 @@ export interface QueryHistoryEntry {
 export interface QueryExportInput { locale?: "en" | "zh-CN"; result: QueryExecutionResult; format: "csv" | "json" | "xlsx"; selectedRows: number[] | null; protectFormulas: boolean }
 
 export interface NodalStudioPlatform {
+  onNativeCloseShortcut?(callback: (closeWindow: () => void) => void): Promise<() => void>;
   readonly codeView?: CodeViewPlatform;
   readonly codeReview?: import("./code-review").CodeReviewPlatform;
   listOntology(scope: import("./ontology-types").OntologyScope): Promise<import("./ontology-types").ConfirmedDefinition[]>;

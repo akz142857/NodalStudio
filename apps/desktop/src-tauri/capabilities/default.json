@@ -3,6 +3,6 @@
   "identifier": "main-window",
   "description": "Minimal permissions for the bundled Nodal Studio frontend.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-close"]
 }
 

@@ -1,7 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
 
-export type ReviewDock = "checks" | "note" | "languages";
+export type ReviewDock = "checks" | "note" | "languages" | "debug";
 
 export interface CodeReviewLayoutState {
   sidebarWidth: number;
@@ -16,7 +16,7 @@ export function createCodeReviewStore() {
   return createStore<CodeReviewLayoutState>((set) => ({
     sidebarWidth: 226,
     outlineWidth: 224,
-    dockSizes: { checks: 300, note: 270, languages: 225 },
+    dockSizes: { checks: 300, note: 270, languages: 225, debug: 330 },
     setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
     setOutlineWidth: (outlineWidth) => set({ outlineWidth }),
     setDockSize: (dock, height) => set((state) => ({

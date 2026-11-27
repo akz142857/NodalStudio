@@ -1,7 +1,7 @@
-import { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from "react";
+import { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from "react";
 import { sql } from "@codemirror/lang-sql";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, Text, type Extension } from "@codemirror/state";
 import { foldGutter, syntaxHighlighting } from "@codemirror/language";
 import { getChunks, goToNextChunk, goToPreviousChunk, uncollapseUnchanged, unifiedMergeView } from "@codemirror/merge";
 import { setDiagnostics, type Diagnostic } from "@codemirror/lint";
@@ -19,6 +19,9 @@ import type { CheckedFile } from "./use-code-review-checks";
 import { codeFileType, fileExtension, supportsCodeNavigation } from "./code-review-file-types";
 import { createCodeFindPanel } from "./code-review-find";
 import { codeReferenceHighlights } from "./code-review-references";
+import { sourceChangeGutter, sourceChanges, type SourceChange } from "./code-review-source-changes";
+import { trackReaderScopes, type ReaderScope } from "./code-review-sticky-scroll";
+import { pythonDebugSourceExtension, type PythonDebugSource } from "./python-debug-source";
 import { isCodeContextMenuKey, useCodeContextMenu } from "./use-code-context-menu";
 import type { ExtensionActivity } from "./CodeReviewExtensions";
 import { useExtensionSyntax } from "./use-extension-syntax";
@@ -105,7 +108,7 @@ function readerPhrases(t: Translate) {
   });
 }
 
-export function CodeReviewDraft({ title, text, onEdit, outline, dock, footer, readerRef }: {
+export function CodeReviewDraft({ title, text, onEdit, outline, dock, footer, readerRef, wrap = false }: {
   title: string;
   text: string;
   onEdit: (text: string) => void;
@@ -113,12 +116,14 @@ export function CodeReviewDraft({ title, text, onEdit, outline, dock, footer, re
   dock: ReactNode;
   footer: ReactNode;
   readerRef?: Ref<CodeReaderHandle>;
+  wrap?: boolean;
 }) {
   const { t } = useI18n();
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const phrases = useRef(new Compartment());
   const contentAttrs = useRef(new Compartment());
+  const wrapping = useRef(new Compartment());
   const draft = useRef({ text, onEdit, title, t });
   useLayoutEffect(() => { draft.current = { text, onEdit, title, t }; }, [text, onEdit, title, t]);
   useImperativeHandle(readerRef, () => ({
@@ -134,7 +139,7 @@ export function CodeReviewDraft({ title, text, onEdit, outline, dock, footer, re
       doc: draft.current.text,
       extensions: [
         attrsSlot.of(EditorView.contentAttributes.of({ "aria-label": draft.current.title, role: "textbox", spellcheck: "false" })),
-        phrasesSlot.of(readerPhrases(draft.current.t)), sourceTheme, lineNumbers(), history(), highlightActiveLine(),
+        phrasesSlot.of(readerPhrases(draft.current.t)), wrapping.current.of([]), sourceTheme, lineNumbers(), history(), highlightActiveLine(),
         search({ createPanel: createCodeFindPanel }), keymap.of([...readerSearchKeys, ...defaultKeymap, ...historyKeymap]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) draft.current.onEdit(update.state.doc.toString());
@@ -150,9 +155,10 @@ export function CodeReviewDraft({ title, text, onEdit, outline, dock, footer, re
       effects: [
         phrases.current.reconfigure(readerPhrases(t)),
         contentAttrs.current.reconfigure(EditorView.contentAttributes.of({ "aria-label": title, role: "textbox", spellcheck: "false" })),
+        wrapping.current.reconfigure(wrap ? EditorView.lineWrapping : []),
       ],
     });
-  }, [t, title]);
+  }, [t, title, wrap]);
   return <>
     <div className="code-review-reader-toolbar">
       <div className="code-review-reader-context"><span className="code-review-status-context">{t("codeReview.draftSession")}</span></div>
@@ -217,11 +223,13 @@ function expandCheckLine(view: EditorView, lineNumber: number) {
   }
 }
 
-export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, heading, fallbackCopy, footer, dock, comparison, readPosition, onPosition,
-  onDefinition, onReferences, onBack, arrival, onArrival, outline, checkResult, projectId = "", extensionsApi, extensions = noExtensions, onSyntaxActivity, readerRef }: {
+export function CodeReviewReader({ path, text, original, sourceBaseline, sourceFileChange, onCopy, viewSwitcher, heading, fallbackCopy, footer, dock, comparison, readPosition, onPosition,
+  onDefinition, onReferences, onBack, arrival, onArrival, outline, checkResult, projectId = "", extensionsApi, extensions = noExtensions, onSyntaxActivity, readerRef, debugSource, wrap = false }: {
   path: string;
   text: string;
   original?: string;
+  sourceBaseline?: string;
+  sourceFileChange?: "added" | "deleted";
   onCopy: (text: string) => void;
   viewSwitcher?: ReactNode;
   heading: ReactNode;
@@ -243,18 +251,28 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
   extensions?: CodeExtension[];
   onSyntaxActivity?: (path: string, activity: ExtensionActivity) => void;
   readerRef?: Ref<CodeReaderHandle>;
+  debugSource?: PythonDebugSource;
+  wrap?: boolean;
 }) {
   const { t } = useI18n();
   const host = useRef<HTMLDivElement>(null);
+  const sticky = useRef<HTMLElement>(null);
   const editor = useRef<EditorView | null>(null);
   const phrases = useRef(new Compartment());
   const contributedSyntax = useRef(new Compartment());
+  const sourceChangesSlot = useRef(new Compartment());
+  const debuggerSlot = useRef(new Compartment());
+  const wrapping = useRef(new Compartment());
   const translator = useRef(t);
   const location = useRef({ readPosition, onPosition, onDefinition, onReferences, onBack });
   const contextMenu = useCodeContextMenu();
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
+  const [scopes, setScopes] = useState<ReaderScope[]>([]);
   const normalizedText = useMemo(() => normalizeReviewText(text), [text]);
   const normalizedOriginal = useMemo(() => original === undefined ? undefined : normalizeReviewText(original), [original]);
+  const doc = useMemo(() => Text.of(normalizedText.split("\n")), [normalizedText]);
+  const changes = useMemo(() => sourceChanges(doc, sourceBaseline === undefined ? undefined : normalizeReviewText(sourceBaseline), sourceFileChange),
+    [doc, sourceBaseline, sourceFileChange]);
   const syntax = useExtensionSyntax(extensionsApi, extensions, projectId, path, normalizedText, onSyntaxActivity);
   const tokens = syntax?.tokens;
   const extension = fileExtension(path);
@@ -299,20 +317,31 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
       setCursor((prev) => prev.line === line.number && prev.column === head - line.from + 1
         ? prev : { line: line.number, column: head - line.from + 1 });
     };
+    let active = true;
+    const stickyScroll = trackReaderScopes((next) => {
+      if (!active) return;
+      setScopes((previous) => previous.length === next.length && previous.every((scope, index) =>
+        scope.from === next[index].from && scope.text === next[index].text) ? previous : next);
+    });
     const view = new EditorView({
       parent: host.current,
       scrollTo: saved?.length === document.length ? saved.scroll
         : selection ? EditorView.scrollIntoView(selection.head, { y: "center" }) : undefined,
       state: EditorState.create({
-        doc: document,
+        doc,
         selection,
         extensions: [
           EditorState.readOnly.of(true),
           phrasesSlot.of(readerPhrases(translator.current)),
           EditorView.editable.of(false),
           EditorView.contentAttributes.of({ "aria-label": path, "aria-readonly": "true", role: "textbox", tabindex: "0" }),
+          debuggerSlot.current.of([]),
+          wrapping.current.of([]),
           lineNumbers(),
           ...(normalizedOriginal === undefined ? [foldGutter(), highlightActiveLine(), highlightActiveLineGutter()] : []),
+          sourceChangesSlot.current.of([]),
+          stickyScroll,
+          EditorView.scrollMargins.of(() => ({ top: sticky.current?.offsetHeight ?? 0 })),
           EditorView.updateListener.of((update) => { if (update.selectionSet) updateCursor(update.state); }),
           search({ createPanel: createCodeFindPanel }),
           ...(highlightsAvailable ? [codeReferenceHighlights((position) =>
@@ -343,7 +372,6 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
     });
     editor.current = view;
     updateCursor(view.state);
-    let active = true;
     const alias = extension === "yml" ? "yaml"
       : ["pyw", "pyi"].includes(extension) ? "py"
       : ["cjs", "mjs"].includes(extension) ? "js"
@@ -354,12 +382,13 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
     }).catch(() => { /* The document remains readable as plain text. */ });
     return () => {
       active = false;
+      setScopes([]);
       const { anchor, head } = view.state.selection.main;
       remember({ anchor, head, length: view.state.doc.length, scroll: view.scrollSnapshot() });
       editor.current = null;
       view.destroy();
     };
-  }, [canNavigate, definitionAt, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+  }, [canNavigate, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
 
   useLayoutEffect(() => {
     editor.current?.dispatch({ effects: phrases.current.reconfigure(readerPhrases(t)) });
@@ -374,6 +403,21 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
     });
     view.dispatch({ effects: contributedSyntax.current.reconfigure(ranges.length ? EditorView.decorations.of(Decoration.set(ranges, true)) : []) });
   }, [canNavigate, definitionAt, extension, highlightsAvailable, normalizedOriginal, normalizedText, path, tokens]);
+
+  useLayoutEffect(() => {
+    const view = editor.current;
+    if (view) view.dispatch({ effects: sourceChangesSlot.current.reconfigure(changes.length ? sourceChangeGutter(changes) : []) });
+  }, [canNavigate, changes, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+
+  useLayoutEffect(() => {
+    const view = editor.current;
+    if (view) view.dispatch({ effects: debuggerSlot.current.reconfigure(debugSource ? pythonDebugSourceExtension(view.state, debugSource) : []) });
+  }, [canNavigate, debugSource, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+
+  useLayoutEffect(() => {
+    const view = editor.current;
+    if (view) view.dispatch({ effects: wrapping.current.reconfigure(wrap ? EditorView.lineWrapping : []) });
+  }, [canNavigate, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path, wrap]);
 
   useLayoutEffect(() => {
     const view = editor.current;
@@ -427,7 +471,41 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
     }
     view.focus();
     onArrival();
-  }, [arrival, normalizedText, onArrival]);
+  }, [arrival, changes, normalizedText, onArrival]);
+
+  function goToReaderLine(line: number, y: "center" | "start") {
+    const view = editor.current;
+    if (!view || line > view.state.doc.lines) return;
+    expandCheckLine(view, line);
+    const anchor = view.state.doc.line(line).from;
+    view.dispatch({ selection: { anchor }, effects: EditorView.scrollIntoView(anchor, { y }) });
+    view.focus();
+  }
+
+  function goToChange(direction: "previous" | "next") {
+    const view = editor.current;
+    if (!view) return;
+    if (normalizedOriginal !== undefined) {
+      (direction === "previous" ? goToPreviousChunk : goToNextChunk)(view);
+      return;
+    }
+    const line = view.state.doc.lineAt(view.state.selection.main.head).number;
+    const change = direction === "previous"
+      ? changes.slice().reverse().find((item) => item.from < line) ?? changes.at(-1)
+      : changes.find((item) => item.from > line) ?? changes[0];
+    if (change) goToReaderLine(change.from, "center");
+  }
+
+  function changeMarker(change: SourceChange) {
+    const lines = change.from === change.to ? String(change.from) : `${change.from}–${change.to}`;
+    const label = t(`codeReview.changeMarker.${change.kind}`, { lines });
+    const position = {
+      "--code-change-start": `${100 * (change.from - 1) / doc.lines}%`,
+      "--code-change-length": `${100 * (change.to - change.from + 1) / doc.lines}%`,
+    } as CSSProperties;
+    return <button key={`${change.kind}-${change.from}`} type="button" data-kind={change.kind} title={label} aria-label={label}
+      style={position} onClick={() => goToReaderLine(change.from, "center")} />;
+  }
 
   function showContextMenu(event: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) {
     const view = editor.current;
@@ -455,12 +533,15 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
         {heading}
       </div>
       <div className="code-review-reader-actions" role="group" aria-label={t("codeReview.readerActions")}>
-        {original !== undefined && original !== text && <div className="code-review-change-actions">
+        {(changes.length > 0 || (original !== undefined && original !== text)) && <div className="code-review-change-actions">
           <IconButton icon="chevronUp" className="code-review-tool" label={t("codeReview.previous")}
-            onClick={() => { if (editor.current) goToPreviousChunk(editor.current); }} />
+            onClick={() => goToChange("previous")} />
           <IconButton icon="chevronDown" className="code-review-tool" label={t("codeReview.next")}
-            onClick={() => { if (editor.current) goToNextChunk(editor.current); }} />
+            onClick={() => goToChange("next")} />
         </div>}
+        {debugSource && <IconButton icon="breakpoint" className="code-review-tool" data-code-breakpoint="" aria-pressed={debugSource.lines.includes(cursor.line)}
+          description={formatCommandShortcut(CODE_SHORTCUTS["debug-breakpoint"])}
+          label={t("codeReview.debug.breakpoint", { line: cursor.line })} onClick={() => debugSource.toggle(cursor.line)} />}
         <IconButton icon="search" className="code-review-tool" data-code-find="" label={t("codeReview.find")}
           onClick={() => { if (editor.current) openSearchPanel(editor.current); }} />
         <IconButton icon="copy" className="code-review-tool" label={t("codeReview.copy")} onClick={() => {
@@ -471,9 +552,20 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
       </div>
     </div>
     <div className="code-review-reader-body">
-      <div className="code-review-reader-host" ref={host}
-        onContextMenu={showContextMenu}
-        onKeyDown={(event) => { if (isCodeContextMenuKey(event)) showContextMenu(event); }} />
+      <div className="code-review-reader-frame">
+        <div className="code-review-reader-host" ref={host}
+          onContextMenu={showContextMenu}
+          onKeyDown={(event) => { if (isCodeContextMenuKey(event)) showContextMenu(event); }} />
+        {scopes.length > 0 && <nav ref={sticky} className="code-review-sticky-scopes" aria-label={t("codeReview.stickyScopes")}>
+          {scopes.map((scope) => <button type="button" key={scope.from} title={scope.text}
+            onClick={() => goToReaderLine(scope.line, "start")}>
+            <span aria-hidden="true">{scope.line}</span><code>{scope.text}</code>
+          </button>)}
+        </nav>}
+      </div>
+      {changes.length > 0 && <div className="code-review-change-overview" role="group" aria-label={t("codeReview.changeOverview")}>
+        {changes.map(changeMarker)}
+      </div>}
       {outline}
     </div>
     {contextMenu.surface}

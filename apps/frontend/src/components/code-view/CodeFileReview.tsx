@@ -17,6 +17,7 @@ import type { CheckedFile, DisplayedCheckTarget } from "./use-code-review-checks
 import { supportsCodeNavigation } from "./code-review-file-types";
 import { reviewHistory, reviewNoteDraft, saveReviewDraft, saveReviewNote, type ReviewNote } from "./code-review-notes";
 import { codeReviewKeys } from "./code-review-query-keys";
+import type { PythonDebugSource } from "./python-debug-source";
 
 const textFor = (version: CodeReviewVersion | null | undefined) => version?.state === "text" ? version.text : undefined;
 
@@ -30,7 +31,7 @@ function fileReviewStatus(history: ReviewNote[], evidence: string): NoteStatus {
 
 export function FileReview({ api, project, path, dependency, change, mode, baseline, readPosition, savePosition, onModeChange, onSaved, onRefresh, onCopy,
   onDefinition, allowLanguageTools, eslintAvailability, onBack, arrival, onArrival, showOutline, locateOutline, renderOutline, renderDock, renderStatus,
-  checkFiles, extensionsApi, extensions, onSyntaxActivity, readerRef }: {
+  checkFiles, extensionsApi, extensions, onSyntaxActivity, readerRef, debugSource, wrap }: {
   api: CodeReviewPlatform;
   project: CodeReviewProject;
   path: string;
@@ -60,6 +61,8 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   arrival?: DefinitionArrival;
   onArrival: (found?: boolean) => void;
   readerRef?: Ref<CodeReaderHandle>;
+  debugSource?: PythonDebugSource;
+  wrap?: boolean;
 }) {
   const { t } = useI18n();
   const client = useQueryClient();
@@ -160,12 +163,16 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   return <>
     {change?.previousPath && <p className="code-review-status">{t("codeReview.renamedFrom", { path: change.previousPath })}</p>}
     {diff || fullText !== undefined ? <CodeReviewReader path={displayPath} original={diff ? (original ?? "") : undefined}
+      sourceBaseline={!diff && change && !showingOriginal ? original : undefined}
+      sourceFileChange={!diff && change ? showingOriginal ? "deleted" : before?.state === "missing" ? "added" : undefined : undefined}
       text={readerText} onCopy={onCopy} viewSwitcher={viewSwitcher} heading={heading}
       fallbackCopy={after.state === "missing" && diff ? original : undefined} footer={status} dock={dock} comparison={comparison}
       readPosition={() => readPosition(positionKey)} onPosition={(position) => savePosition(positionKey, position)}
       onDefinition={onDefinition && !showingOriginal ? (gesture) => onDefinition(gesture, diff ? "diff" : "source") : undefined}
       onReferences={allowLanguageTools && liveSource && api.documentHighlights ? (position, text) => api.documentHighlights?.(project.id, { origin, position, text }) ?? Promise.resolve([]) : undefined}
       outline={inspector} checkResult={checkResult} readerRef={readerRef}
+      debugSource={!diff && !showingOriginal ? debugSource : undefined}
+      wrap={wrap}
       extensionsApi={dependency ? undefined : extensionsApi} extensions={extensions} projectId={project.id} onSyntaxActivity={onSyntaxActivity}
       onBack={onBack} arrival={safeArrival} onArrival={onArrival} />
       : <>{heading}<div className="code-review-reader-body">

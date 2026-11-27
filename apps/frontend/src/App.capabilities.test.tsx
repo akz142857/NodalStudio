@@ -51,10 +51,16 @@ describe("App capability integration", () => {
       await mount("desktop");
       const navigation = within(screen.getByRole("group", { name: "View mode" }));
       const code = navigation.getByRole("button", { name: "Code" });
+      fireEvent.keyDown(document.body, { key: "P", ctrlKey: true, shiftKey: true });
+      const palette = within(screen.getByRole("dialog", { name: "Command palette" }));
+      expect(palette.getByRole("option", { name: "Code Review" })).toBeVisible();
+      fireEvent.keyDown(palette.getByRole("combobox"), { key: "Escape" });
       const headerToggle = screen.getByRole("button", { name: /collapse left sidebar/i });
       fireEvent.click(code);
       expect(code).toHaveAttribute("aria-pressed", "true");
       expect(screen.queryByRole("combobox", { name: "Search schema" })).not.toBeInTheDocument();
+      const review = await screen.findByRole("region", { name: "Code Review" });
+      expect(await within(review).findByText("Code Review")).toBeVisible();
       await screen.findByRole("button", { name: "Open Folder…" });
       const search = screen.getByRole("button", { name: "Search project files and content…" });
       expect(search.closest("header.topbar")).toBeTruthy();
@@ -102,6 +108,39 @@ describe("App capability integration", () => {
     expect(settings.getByRole("button", { name: "Cloud Sync" })).toHaveAttribute("aria-current", "page");
     expect(settings.getByRole("heading", { name: "Personal Connection Sync" })).toBeVisible();
     expect(window.location.hash).toBe("#/settings/cloud");
+  });
+  it("routes the native Close shortcut to the active Code file and otherwise closes the window", async () => {
+    const platform = getPlatform();
+    let nativeClose: ((close: () => void) => void) | undefined;
+    const closeWindow = vi.fn();
+    const project = { id: "close-file", key: "close-file", name: "Keyboard project", baseline: null, git: "folder" };
+    Object.defineProperty(platform, "codeReview", { configurable: true, value: {
+      current: () => Promise.resolve(project),
+      changes: () => Promise.resolve({ files: [], limited: false }),
+      directory: () => Promise.resolve({ entries: [{ name: "main.py", path: "main.py", directory: false }], limited: false }),
+      file: () => Promise.resolve({ before: null, after: { state: "text", text: "pass" }, evidence: null, indexOnly: false }),
+    } });
+    Object.defineProperty(platform, "onNativeCloseShortcut", { configurable: true, value: (listener: typeof nativeClose) => {
+      nativeClose = listener;
+      return Promise.resolve(() => { nativeClose = undefined; });
+    } });
+    try {
+      await mount("desktop");
+      fireEvent.click(screen.getByRole("button", { name: "Code" }));
+      fireEvent.click(await screen.findByRole("button", { name: "main.py" }));
+      const files = await screen.findByRole("navigation", { name: "Open files" });
+      expect(within(files).getByRole("button", { name: "main.py" })).toBeVisible();
+      act(() => nativeClose?.(closeWindow));
+      expect(within(files).queryByRole("button", { name: "main.py" })).not.toBeInTheDocument();
+      act(() => nativeClose?.(closeWindow));
+      expect(closeWindow).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Model" }));
+      act(() => nativeClose?.(closeWindow));
+      expect(closeWindow).toHaveBeenCalledOnce();
+    } finally {
+      Reflect.deleteProperty(platform, "onNativeCloseShortcut");
+      Reflect.deleteProperty(platform, "codeReview");
+    }
   });
   it("offers bottom Code Checks independently of the Mac App Store outline capability", async () => {
     const platform = getPlatform();

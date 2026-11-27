@@ -18,6 +18,8 @@ import { CODE_SHORTCUTS, codeShortcutEvent, formatCommandShortcut, usesAppleKeyb
 import { CodeFileIcon, CodeReviewDraft, type CodeReaderHandle, type DefinitionArrival, type ReadingPosition } from "./CodeReviewReader";
 import { CodeProjectsPanel, CodeProjectSwitcher, type ProjectAction } from "./CodeProjectsPanel";
 import { CodeReviewChecks } from "./CodeReviewChecks";
+import { PythonDebugPanel } from "./PythonDebugPanel";
+import { usePythonDebug } from "./use-python-debug";
 import { CodeReviewLanguageServices } from "./CodeReviewLanguageServices";
 import { CodeReviewExtensions, type ExtensionActivity } from "./CodeReviewExtensions";
 import { DirectoryTree, FileViewOptions } from "./CodeDirectoryTree";
@@ -114,10 +116,12 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, allowExtensi
   extensionsOffline?: boolean;
   eslintAvailability?: EslintAvailability;
 } & CodeSidebarProps & CodeOutlineProps & CodeSearchProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const client = useQueryClient();
   const [layoutStore] = useState(createCodeReviewStore);
   const workspace = useRef<HTMLElement>(null);
+  const [projectFilter, setProjectFilter] = useState("");
+  const projectScrollTopRef = useRef(0);
   const project = useQuery({ queryKey: codeReviewKeys.current, queryFn: () => api.current(), retry: false, staleTime: Infinity });
   const library = api.projects;
   const finder = allowFinder ? api.finder : undefined;
@@ -197,7 +201,13 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, allowExtensi
       { label: t(intoParent ? "codeReview.files.pasteIntoFolder" : "codeReview.files.pasteItem"), run: () => void run("paste") },
     ];
   } : undefined;
-  const savedProjects = projects.data?.projects;
+  const catalogEntries = projects.data?.projects;
+  const savedProjects = useMemo(() => {
+    if (!catalogEntries) return undefined;
+    const collator = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
+    return [...catalogEntries].sort((a, b) => collator.compare(a.name, b.name)
+      || collator.compare(a.path, b.path) || a.id.localeCompare(b.id));
+  }, [locale, catalogEntries]);
   const openProjectList = () => {
     setShowProjects(true);
     setSidebarOpen(true);
@@ -228,6 +238,7 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, allowExtensi
     : <Button variant="primary" busy={managing} onClick={() => manage({ kind: "add" })}><ActionIcon name="folder" />{t("codeReview.openFolder")}</Button>;
   const missingProject = String(actionError) === "codeReviewSavedProjectUnavailable";
   const panel = library ? <CodeProjectsPanel projects={savedProjects ?? []} groups={projects.data?.groups ?? []} currentId={project.data?.savedProjectId}
+    filter={projectFilter} onFilterChange={setProjectFilter} scrollTopRef={projectScrollTopRef}
     finderActions={finderMenu ? (id) => finderMenu({ kind: "project", id }) : undefined}
     failedId={missingProject && action?.kind === "open" ? action.id : undefined} busy={managing}
     loading={projects.isPending} loadFailed={projects.isError} onRetry={() => { void projects.refetch(); }}
@@ -339,6 +350,9 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     queryFn: () => extensionsApi?.list(project.id) ?? Promise.resolve([]),
   });
   const extensions = extensionsApi ? extensionList.data ?? [] : [];
+  const pythonApi = extensionsApi ? api.pythonDebug : undefined;
+  const pythonReady = extensions.some((extension) => extension.capability === "pythonDebugger" && extension.enabled);
+  const python = usePythonDebug(pythonApi, project.id);
   const [syntaxActivity, setSyntaxActivity] = useState<{ path: string; activity: ExtensionActivity }>();
   const onSyntaxActivity = useCallback((path: string, activity: ExtensionActivity) => {
     setSyntaxActivity({ path, activity });
@@ -388,6 +402,8 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     if (next !== "projects") setSelectedView(next);
   }, [setShowProjects]);
   const [tabs, setTabs] = useState(remembered?.tabs);
+  const closedTabs = useRef<string[]>([]);
+  const [wordWrap, setWordWrap] = useState(false);
   const [selected, setSelected] = useState(remembered?.selected);
   const [drafts, setDrafts] = useState<ReadonlyMap<string, Draft>>(() => remembered?.drafts ?? new Map());
   const draftCount = useRef(remembered?.draftCount ?? 0);
@@ -438,6 +454,23 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   const change = changed.find((entry) => entry.path === active);
   const readingMode = (active && modes.get(active)) || (change ? "diff" : "source");
   const dependency = active ? externalFiles.get(active) : undefined;
+  const pythonFile = !dependency && !activeDraft && active?.endsWith(".py") ? active : undefined;
+  const pausedFrame = python.paused?.frames.find((frame) => frame.id === python.paused?.selected);
+  const pythonLines = pythonFile ? python.breakpoints[pythonFile] : undefined;
+  const pythonVerified = pythonFile ? python.verified[pythonFile] : undefined;
+  const pythonPausedLine = pythonFile && pausedFrame?.path === pythonFile ? pausedFrame.line : undefined;
+  const pythonToggle = python.toggle;
+  const debugSource = useMemo(() => (pythonApi && pythonReady && !extensionsOffline && pythonFile ? {
+    lines: pythonLines ?? [],
+    verified: pythonVerified ?? [],
+    paused: pythonPausedLine,
+    toggle: (line: number) => pythonToggle(pythonFile, line),
+  } : undefined), [extensionsOffline, pythonApi, pythonFile, pythonLines, pythonPausedLine, pythonReady, pythonToggle, pythonVerified]);
+  const openPausedFrame = useRef<(frame: { path: string; line: number }) => void>(() => {});
+  useEffect(() => {
+    const frame = python.paused?.frames.find((item) => item.id === python.paused?.selected);
+    if (frame?.path && frame.line >= 1) openPausedFrame.current({ path: frame.path, line: frame.line });
+  }, [python.paused]);
 
   const hasUnsavedDrafts = useMemo(() => [...drafts.values()].some((draft) => draft.text.length > 0), [drafts]);
   useEffect(() => {
@@ -605,11 +638,18 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     definitionVersion.current += 1;
     setDefinitionDialog(undefined);
     if (mode) setReadingMode(path, mode);
+    closedTabs.current = closedTabs.current.filter((closed) => closed !== path);
     setTabs(openTabs.includes(path) ? openTabs : [...openTabs, path]);
     setSelected(path);
     if (!path.startsWith("\0")) setRecentFiles((current) => [path, ...current.filter((file) => file !== path)].slice(0, 40));
     setNotice("");
   };
+  useLayoutEffect(() => {
+    openPausedFrame.current = (frame) => {
+      setArrival({ key: frame.path, destination: { position: { line: frame.line - 1, character: 0 } } });
+      open(frame.path, "source");
+    };
+  });
 
   const locateSearchHit = async (path: string, match: CodeSearchMatch) => {
     setView("search");
@@ -648,7 +688,8 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     detail.current?.querySelector<HTMLButtonElement>(`[data-review-dock-toggle="${dock}"]`)?.focus();
     setDock(undefined);
   };
-  const dockLabel = t(dock === "checks" ? "codeReview.checks.title" : dock === "languages" ? "codeReview.languages.title" : "codeReview.notes");
+  const dockLabel = t(dock === "checks" ? "codeReview.checks.title" : dock === "languages" ? "codeReview.languages.title"
+    : dock === "debug" ? "codeReview.debug.title" : "codeReview.notes");
   const renderDock: RenderDock = (current, note) => dock && (
     <CodeDockFrame layoutStore={layoutStore} dock={dock} dockId={dockId} dockLabel={dockLabel} onEscape={closeDock}>
       <header className="code-review-dock-header">
@@ -687,7 +728,15 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
           : changes.isFetching ? "loading" : changes.isError ? "git" : changed.length === 0 ? "clean" : undefined} />
         : dock === "languages" ? <CodeReviewLanguageServices status={languageQuery.data} projectName={project.name}
           enable={() => enableLanguages()} enabling={enablingLanguages} error={languageQuery.isError || enableLanguagesFailed} />
-          : note?.body ?? <p className="code-review-dock-empty">{t("codeReview.noteSelectChange")}</p>}
+        : dock === "debug" && pythonApi ? <PythonDebugPanel api={pythonApi} projectId={project.id} path={pythonFile}
+          ready={pythonReady} offline={extensionsOffline} debug={python} onExtensions={() => {
+            setView("extensions");
+            setSidebarOpen(true);
+          }} onFrame={(frame) => {
+            if (!frame.path || frame.line < 1) return;
+            setArrival({ key: frame.path, destination: { position: { line: frame.line - 1, character: 0 } } });
+            open(frame.path, "source");
+          }} /> : note?.body ?? <p className="code-review-dock-empty">{t("codeReview.noteSelectChange")}</p>}
     </CodeDockFrame>
   );
 
@@ -795,6 +844,8 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
       setDrafts(new Map(Array.from(drafts).filter(([path]) => !paths.includes(path))));
     }
     const closingActive = active !== undefined && paths.includes(active);
+    const closingFiles = paths.filter((path) => !path.startsWith("\0"));
+    closedTabs.current = [...closingFiles, ...closedTabs.current.filter((path) => !paths.includes(path))].slice(0, 40);
     if (closingActive) {
       definitionVersion.current += 1;
       setDefinitionDialog(undefined);
@@ -823,19 +874,75 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     setDrafts((current) => new Map(current).set(key, { number, text: "" }));
     open(key);
   };
-
-  const shortcutActions = useRef<Record<CodeShortcut, () => void | boolean>>({
-    "new-draft": () => undefined,
-    "project-search": () => false,
-    files: () => undefined,
-    checks: () => undefined,
-    "go-to-line": () => false,
-  });
+  const showDebugPanel = () => {
+    if (!pythonApi) return false;
+    setDock("debug");
+    if (pythonFile) setReadingMode(pythonFile, "source");
+    return true;
+  };
+  const selectRelativeTab = (offset: number) => {
+    if (!active || openTabs.length < 2) return false;
+    const next = openTabs[(openTabs.indexOf(active) + offset + openTabs.length) % openTabs.length];
+    pendingFocus.current = "tab";
+    open(next);
+    return true;
+  };
+  const shortcutActions = useRef<Partial<Record<CodeShortcut, () => void | boolean>>>({});
   useLayoutEffect(() => {
+    const showProjectView = (next: NavigatorView, available: boolean) => {
+      if (!available) return false;
+      setView(next);
+      setSidebarOpen(true);
+      return true;
+    };
+    const debugStep = (kind: "stepOver" | "stepIn" | "stepOut") => {
+      if (!pythonApi || python.mode !== "paused" || python.busy) return false;
+      python.control({ kind });
+      return true;
+    };
     shortcutActions.current = {
       "new-draft": newDraft,
+      "close-tab": () => { if (active) closeTabs([active]); },
+      "close-all-tabs": () => { if (openTabs.length) closeTabs(openTabs); },
+      "reopen-tab": () => {
+        const path = closedTabs.current.shift();
+        if (!path) return false;
+        pendingFocus.current = "tab";
+        open(path);
+        return true;
+      },
+      "next-tab": () => selectRelativeTab(1),
+      "previous-tab": () => selectRelativeTab(-1),
       "project-search": focusProjectSearch,
       files: browseFiles,
+      changes: () => showProjectView("changes", canCompare),
+      extensions: () => showProjectView("extensions", Boolean(extensionsApi)),
+      "debug-panel": showDebugPanel,
+      "debug-start": () => {
+        if (!pythonApi) return false;
+        if (python.mode === "paused" && !python.busy) python.control({ kind: "continue" });
+        else if (python.mode === "idle" || python.mode === "finished") {
+          const form = detail.current?.querySelector<HTMLFormElement>("[data-python-launch]");
+          if (form?.querySelector("button[type=submit]:not(:disabled)")) form.requestSubmit();
+          else showDebugPanel();
+        }
+        return true;
+      },
+      "debug-stop": () => {
+        if (!pythonApi) return false;
+        python.stop();
+        return true;
+      },
+      "debug-breakpoint": () => {
+        const trigger = detail.current?.querySelector<HTMLButtonElement>("[data-code-breakpoint]");
+        trigger?.click();
+        return Boolean(trigger);
+      },
+      "debug-step-over": () => debugStep("stepOver"),
+      "debug-step-in": () => debugStep("stepIn"),
+      "debug-step-out": () => debugStep("stepOut"),
+      "definition-back": () => { if (!back) return false; back(); return true; },
+      "word-wrap": () => { if (!active) return false; setWordWrap((wrap) => !wrap); return true; },
       checks: () => {
         if (dock === "checks") closeDock();
         else {
@@ -855,10 +962,13 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     };
   });
   useEffect(() => {
-    const shortcuts: CodeShortcut[] = ["new-draft", "project-search", "files", "checks", "go-to-line"];
+    const shortcuts = Object.keys(CODE_SHORTCUTS) as CodeShortcut[];
     const listeners = shortcuts.map((shortcut) => {
       const name = codeShortcutEvent(shortcut);
-      const run = (event: Event) => { if (shortcutActions.current[shortcut]() !== false) event.preventDefault(); };
+      const run = (event: Event) => {
+        const action = shortcutActions.current[shortcut];
+        if (action && action() !== false) event.preventDefault();
+      };
       window.addEventListener(name, run);
       return { name, run };
     });
@@ -930,7 +1040,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   };
   const activitiesAvailable: { view: NavigatorView; icon: ActionIconName }[] = [];
   if (projectsPanel) activitiesAvailable.push({ view: "projects", icon: "folder" });
-  activitiesAvailable.push({ view: "files", icon: "document" });
+  activitiesAvailable.push({ view: "files", icon: "documents" });
   if (api.searchContent) activitiesAvailable.push({ view: "search", icon: "search" });
   if (canCompare) activitiesAvailable.push({ view: "changes", icon: "git" });
   if (extensionsApi) activitiesAvailable.push({ view: "extensions", icon: "extensions" });
@@ -952,7 +1062,8 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
           {activitiesAvailable.map(({ view: target, icon }) => {
             const isActive = sidebarOpen && view === target;
             const count = target === "changes" ? changes.data?.files.length : undefined;
-            const shortcut = target === "files" ? CODE_SHORTCUTS.files : target === "search" ? CODE_SHORTCUTS["project-search"] : undefined;
+            const shortcut = target === "files" ? CODE_SHORTCUTS.files : target === "search" ? CODE_SHORTCUTS["project-search"]
+              : target === "changes" ? CODE_SHORTCUTS.changes : target === "extensions" ? CODE_SHORTCUTS.extensions : undefined;
             return <IconButton key={target} className="code-review-tool code-review-activity-button" icon={icon}
               label={count === undefined ? viewLabels[target] : t("codeReview.changes", { count })}
               description={shortcut ? formatCommandShortcut(shortcut) : undefined}
@@ -1065,11 +1176,19 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
                 </div>;
               })}
             </nav>
+            {pythonApi && <IconButton icon="play" className="code-review-tool" label={t("codeReview.debug.title")}
+              description={formatCommandShortcut(CODE_SHORTCUTS["debug-panel"])}
+              data-review-dock-toggle="debug" aria-expanded={dock === "debug"} aria-controls={dock === "debug" ? dockId : undefined}
+              onClick={() => {
+                if (dock === "debug") closeDock();
+                else showDebugPanel();
+              }} />}
             <IconButton icon="add" className="code-review-tool" label={t("codeReview.newDraft")}
               description={formatCommandShortcut(CODE_SHORTCUTS["new-draft"])}
               aria-keyshortcuts={usesAppleKeyboard() ? "Meta+N" : "Control+N"} onClick={newDraft} />
           </header>
           {active && activeDraft ? <CodeReviewDraft key={active} title={t("codeReview.draftTitle", { number: activeDraft.number })}
+            wrap={wordWrap}
             text={activeDraft.text} onEdit={(text) => setDrafts((current) => new Map(current).set(active, { ...activeDraft, text }))}
             outline={renderOutline()} dock={renderDock()} footer={renderStatus()} readerRef={readerRef} />
           : active ? <FileReview key={JSON.stringify([active, change?.evidence])}
@@ -1079,6 +1198,8 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
             checkFiles={checkRun?.status === "running" ? undefined : checkRun?.files}
             extensionsApi={extensionsApi} extensions={extensions} onSyntaxActivity={onSyntaxActivity}
             readerRef={readerRef}
+            wrap={wordWrap}
+            debugSource={debugSource}
             locateOutline={(position) => {
               setArrival({ key: active, destination: { position } });
               setReadingMode(active, "source");

@@ -199,6 +199,7 @@ export interface CodeReviewPlatform {
   file(projectId: string, path: string, compareFile: boolean): Promise<CodeReviewDocument>;
   eslint?: CodeEslintPlatform;
   extensions?: CodeExtensionPlatform;
+  pythonDebug?: PythonDebugPlatform;
   definition?(projectId: string, input: CodeDefinitionRequest): Promise<CodeDefinitionResult>;
   documentHighlights?(projectId: string, input: CodeSourcePosition): Promise<CodeDocumentHighlightRange[]>;
   documentOutline?(projectId: string, input: CodeDocumentOutlineRequest): Promise<CodeDocumentOutlineResult>;
@@ -230,7 +231,33 @@ export interface CodeExtensionLanguage {
   extensions: string[];
 }
 
-export type CodeExtensionCapability = "diagnostics" | "eslint" | "syntax" | "unsupported";
+export type CodeExtensionCapability = "diagnostics" | "eslint" | "pythonDebugger" | "syntax" | "unsupported";
+
+export interface PythonDebugFrame {
+  id: number;
+  name: string;
+  path: string | null;
+  source: string;
+  line: number;
+}
+
+export type PythonDebugEvent =
+  | { state: "running" }
+  | { state: "paused"; frames: PythonDebugFrame[]; selected: number | null; scopes: { name: string; variables: { name: string; value: string; type?: string }[] }[] }
+  | { state: "breakpoints"; path: string; lines: number[] }
+  | { state: "output"; text: string }
+  | { state: "finished"; error: string | null };
+
+export type PythonDebugAction = { kind: "continue" | "stepOver" | "stepIn" | "stepOut" }
+  | { kind: "frame"; id: number }
+  | { kind: "breakpoints"; path: string; lines: number[] };
+
+export interface PythonDebugPlatform {
+  prepare(projectId: string, path: string): Promise<{ root: string; program: string; interpreters: string[] }>;
+  start(projectId: string, id: string, input: { path: string; interpreter: string; cwd: string; args: string[]; breakpoints: Record<string, number[]> }, receive: (event: PythonDebugEvent) => void): Promise<void>;
+  control(projectId: string, id: string, action: PythonDebugAction): Promise<void>;
+  stop(projectId: string, id: string): Promise<void>;
+}
 
 export interface CodeExtension {
   id: string;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Button } from "../../design-system/Button";
 import { ModalSurface } from "../../design-system/ModalSurface";
 import { useI18n } from "../../i18n";
@@ -73,7 +73,8 @@ export function CodeProjectSwitcher({ projects, currentId, name, busy, onAction,
   </h2>;
 }
 
-export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy, loading, loadFailed, finderActions, onRetry, onAction, onActionAsync }: {
+export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy, loading, loadFailed, finderActions, onRetry, onAction, onActionAsync,
+  filter, onFilterChange, scrollTopRef }: {
   projects: readonly CodeSavedProject[];
   groups: readonly CodeSavedProjectGroup[];
   currentId: string | null | undefined;
@@ -85,9 +86,15 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
   onRetry: () => void;
   onAction: (action: ProjectAction) => void;
   onActionAsync?: (action: ProjectAction) => Promise<unknown>;
+  filter: string;
+  onFilterChange: (filter: string) => void;
+  scrollTopRef: RefObject<number>;
 }) {
   const { t } = useI18n();
-  const [filter, setFilter] = useState("");
+  const list = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (list.current && !loading && !loadFailed) list.current.scrollTop = scrollTopRef.current;
+  }, [scrollTopRef, loading, loadFailed]);
   const [menu, setMenu] = useState<{ title: string; anchor: HTMLButtonElement; actions: SchemaObjectMenuAction[]; groupId?: string; projectId?: string; panel?: boolean }>();
   const [editing, setEditing] = useState<{ group?: CodeSavedProjectGroup; value: string; error?: string }>();
   const contextMenu = useCodeContextMenu();
@@ -191,10 +198,15 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
       <div className="code-review-filter">
         <ActionIcon name="search" />
         <input type="search" data-code-project-filter aria-label={t("codeReview.projects.filter")} placeholder={t("codeReview.projects.filter")}
-          value={filter} onChange={(event) => setFilter(event.target.value)} />
+          value={filter} onChange={(event) => {
+            scrollTopRef.current = 0;
+            if (list.current) list.current.scrollTop = 0;
+            onFilterChange(event.target.value);
+          }} />
       </div>
     </div>}
-    <div className="code-project-list" aria-busy={busy || loading}
+    <div ref={list} className="code-project-list" aria-busy={busy || loading}
+      onScroll={(event) => { scrollTopRef.current = event.currentTarget.scrollTop; }}
       onContextMenu={(event) => { if (!busy && !loadFailed) contextMenu.show(event, t("codeReview.projects.title"), panelActions); }}>
       {loading ? <p role="status">{t("navigation.loadingWorkspace")}</p>
         : loadFailed ? <div className="code-project-empty">

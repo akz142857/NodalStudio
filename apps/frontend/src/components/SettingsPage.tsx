@@ -12,7 +12,7 @@ import { isSavedConnection, isServerConnection } from "../platform/database-serv
 import { useUpdateBlocker } from "../platform/update-guard";
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { ActionIcon, type ActionIconName } from "./ActionIcon";
-import { formatCommandShortcut, WORKSPACE_SHORTCUTS } from "./command-shortcuts";
+import { CODE_SHORTCUTS, formatCommandShortcut, usesAppleKeyboard, WORKSPACE_SHORTCUTS } from "./command-shortcuts";
 import { SettingsSection, SettingsGroup, ToggleRow, SelectRow, RangeRow, NumberRow, TextRow, SecretRow } from "./settings/SettingsControls";
 import "./settings/settings.css";
 import { CapabilitiesMatrix } from "./CapabilitiesMatrix";
@@ -64,6 +64,34 @@ const categoryIcons: Record<SettingsCategory, ActionIconName> = {
   notifications: "bell", shortcuts: "keyboard", updates: "info", capabilities: "grid", advanced: "sliders",
 };
 const categoryMessages = {"general":"settings.category.general","appearance":"settings.category.appearance","canvas":"settings.category.canvas","data-sources":"settings.category.data-sources","history":"settings.category.history","git":"settings.category.git","ai":"settings.category.ai","cloud":"settings.category.cloud","privacy":"settings.category.privacy","notifications":"settings.category.notifications","shortcuts":"settings.category.shortcuts","updates":"settings.category.updates","capabilities":"settings.category.capabilities","advanced":"settings.category.advanced"} as const;
+const codeShortcutRows = [
+  ["codeReview.menu.close", CODE_SHORTCUTS["close-tab"]],
+  ["codeReview.menu.closeAll", CODE_SHORTCUTS["close-all-tabs"]],
+  ["settings.codeShortcut.reopen", CODE_SHORTCUTS["reopen-tab"]],
+  ["settings.codeShortcut.next", CODE_SHORTCUTS["next-tab"]],
+  ["settings.codeShortcut.previous", CODE_SHORTCUTS["previous-tab"]],
+  ["codeReview.newDraft", CODE_SHORTCUTS["new-draft"]],
+  ["codeReview.quickOpen", "Mod+P"],
+  ["settings.codeShortcut.palette", "Mod+Shift+P", "F1"],
+  ["codeReview.projectFiles", CODE_SHORTCUTS.files],
+  ["navigation.toggleLeftSidebar", "Mod+B"],
+  ["codeReview.searchProject", CODE_SHORTCUTS["project-search"]],
+  ["codeReview.changesLabel", CODE_SHORTCUTS.changes],
+  ["codeReview.checks.title", CODE_SHORTCUTS.checks],
+  ["codeReview.goToLine", CODE_SHORTCUTS["go-to-line"]],
+  ["settings.codeShortcut.wrap", CODE_SHORTCUTS["word-wrap"]],
+  ["codeReview.definition", "F12"],
+] as const;
+const extensionShortcutRows = [
+  ["codeReview.extensions.title", CODE_SHORTCUTS.extensions],
+  ["codeReview.debug.title", CODE_SHORTCUTS["debug-panel"]],
+  ["settings.codeShortcut.startDebug", CODE_SHORTCUTS["debug-start"]],
+  ["settings.codeShortcut.breakpoint", CODE_SHORTCUTS["debug-breakpoint"]],
+  ["codeReview.debug.stepOver", CODE_SHORTCUTS["debug-step-over"]],
+  ["codeReview.debug.stepIn", CODE_SHORTCUTS["debug-step-in"]],
+  ["codeReview.debug.stepOut", CODE_SHORTCUTS["debug-step-out"]],
+  ["settings.codeShortcut.stopDebug", CODE_SHORTCUTS["debug-stop"]],
+] as const;
 const categoryAliases: Record<SettingsCategory, string> = {"general":"语言 主题 启动 日期 时间 language theme startup date time","appearance":"密度 字体 侧栏 详情 动效 对比度","canvas":"字段 外键 索引 关系 布局 注释","data-sources":"数据库 刷新 超时 连接","history":"快照 保留 备份 缓存 磁盘","git":"仓库 合并 冲突 指纹","ai":"提供方 模型 上下文 隐私 解释 回复 偏好 附加 指令 语言 详略 术语","cloud":"个人 连接 目录 团队 项目 同步 离线 队列 冲突","privacy":"诊断 令牌 密钥 凭据 日志 安全","notifications":"结构 变更 冲突 警告 免打扰","shortcuts":"键盘 命令 聚焦 刷新 侧栏","updates":"版本 更新 通道 许可证 日志","capabilities":"支持 范围 矩阵 查询 图 导出 预检 限制","advanced":"性能 实验 重置 恢复"};
 const navigationGroups = [
   { title: "settings.group.workspace", items: categories.slice(0, 5) },
@@ -687,6 +715,17 @@ function SettingsContent({
                   </label>;
                 })}</div>
               </SettingsGroup>
+              {runtime?.kind === "desktop" && <SettingsGroup title={t("settings.codeShortcuts")}>
+                {[
+                  ...codeShortcutRows,
+                  ["codeReview.definitionBack", usesAppleKeyboard() ? CODE_SHORTCUTS["definition-back"] : "Alt+ArrowLeft"] as const,
+                  ...(usesAppleKeyboard() ? [["settings.codeShortcut.closeWindow", "Mod+Shift+W"] as const] : []),
+                  ...(runtime.codeExtensionsPreview ? extensionShortcutRows : []),
+                ].filter(([label, ...keys]) => `${t(label)} ${keys.join(" ")}`.toLowerCase().includes(shortcutQuery.trim().toLowerCase()))
+                  .map(([label, ...keys]) => <div className="setting-row setting-static settings-workspace-shortcut" key={label}>
+                    <span>{t(label)}</span><span>{keys.map((key) => <kbd key={key}>{formatCommandShortcut(key)}</kbd>)}</span>
+                  </div>)}
+              </SettingsGroup>}
               <Button type="button" className="secondary-setting-action" onClick={() => void saveApp({ ...app, shortcuts: defaultAppSettings().shortcuts })}>{t("settings.resetShortcuts")}</Button>
             </SettingsSection>
           ) : null}

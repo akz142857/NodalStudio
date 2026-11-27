@@ -4,7 +4,7 @@ import { ObjectDocument, ObjectDocumentProperties } from "./components/ObjectDoc
 import { capabilityMessages } from "./i18n/capabilities";
 import { I18nProvider, useI18n, useEventTranslator } from "./i18n";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useEffectEvent, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ModelViewNavigation } from "./components/ModelViewNavigation";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { InspectorPanel } from "./components/InspectorPanel";
@@ -35,7 +35,7 @@ import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import { useSystemAccent } from "./design-system/system-accent";
 import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
-import { CODE_SHORTCUTS, codeShortcutEvent, formatCommandShortcut, QUERY_SAVE_SHORTCUT, usesAppleKeyboard, WORKSPACE_SHORTCUTS, type CodeShortcut } from "./components/command-shortcuts";
+import { CODE_SHORTCUTS, codeShortcutEvent, formatCommandShortcut, matchesCodeShortcut, QUERY_SAVE_SHORTCUT, usesAppleKeyboard, WORKSPACE_SHORTCUTS, type CodeShortcut } from "./components/command-shortcuts";
 import type { QueryDraftSeed } from "./components/query/QueryDraftPanel";
 import type { OpenQueryRequest } from "./components/query/QueryPage";
 import { QuickQueryDock } from "./components/query/QuickQueryDock";
@@ -1207,7 +1207,7 @@ export function App() {
       available: Boolean(ontologySnapshot), shortcut: ontologyShortcut },
     { id: "open-database", group: "view", icon: "database", label: t(databaseLabel), keywords: "browse table rows 浏览数据", shortcut: databaseShortcut },
     { id: "open-query", group: "view", icon: "viewer", label: t(queryLabel), keywords: "SQL editor 编辑器", available: !queryUnavailable, shortcut: queryShortcut },
-    { id: "open-code", group: "view", icon: "codeDocument", label: t("codeView.title"), keywords: "repository source SQL changes review 仓库 代码 审阅", available: hasCodeWorkspace },
+    { id: "open-code", group: "view", icon: "codeDocument", label: t("codeReview.title"), keywords: "repository source SQL changes review 仓库 代码 审阅", available: hasCodeWorkspace },
     { id: "toggle-left", group: "view", icon: "list", label: t("navigation.toggleLeftSidebar"), keywords: "collapse expand sidebar 展开 收起 导航",
       shortcut: appShortcut(bindings.toggleLeftSidebar) },
     { id: "toggle-right", group: "view", icon: codeInspectorAvailable ? "sidebarRight" : "split", label: t(codeInspectorAvailable
@@ -1285,21 +1285,48 @@ export function App() {
       case "capabilities": return openSettings("capabilities");
     }
   }
+  const codeChord = useRef(0);
+  function closeCodeTabs() {
+    const all = codeChord.current > performance.now();
+    codeChord.current = 0;
+    dispatchCodeShortcut(all ? "close-all-tabs" : "close-tab");
+  }
+  const nativeCloseShortcut = useEffectEvent((closeWindow: () => void) => {
+    if (mode !== "code") {
+      closeWindow();
+    } else if (!ddlPreviewOpen && !commandPaletteOpen && !document.querySelector("dialog[open], [aria-modal='true']")) {
+      closeCodeTabs();
+    }
+  });
+  useEffect(() => {
+    const unlisten = platform.onNativeCloseShortcut?.((closeWindow) => nativeCloseShortcut(closeWindow));
+    return () => { void unlisten?.then((dispose) => dispose(), () => {}); };
+  }, []);
+  useEffect(() => { codeChord.current = 0; }, [mode]);
+
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
       if (ddlPreviewOpen || commandPaletteOpen || event.defaultPrevented || event.isComposing) return;
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest("dialog[open], [aria-modal='true']")) return;
+      if (mode === "code" && matchesCodeShortcut(event, CODE_SHORTCUTS["close-tab"], appleKeyboard)) {
+        event.preventDefault();
+        if (!event.repeat) closeCodeTabs();
+        return;
+      }
+      if (mode === "code" && !["Meta", "Control", "Shift", "Alt"].includes(event.key)) codeChord.current = 0;
       if (!event.metaKey && !event.ctrlKey) {
-        if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+        const codeWhileEditing = mode === "code" && (/^F\d+$/.test(event.key) || matchesCodeShortcut(event, CODE_SHORTCUTS["word-wrap"], appleKeyboard));
+        if (!codeWhileEditing
+          && target?.closest("input, textarea, select, [contenteditable='true']")) return;
         if (event.key === "Enter" && target?.closest("button, a[href], summary, [role='button'], [role='tab'], [role='option']")) return;
       }
-      if (mode === "code" && platform.codeReview?.paths && matchesShortcut(event, "Mod+P")) {
+      if (mode === "code" && platform.codeReview?.paths && matchesCodeShortcut(event, "Mod+P", appleKeyboard)) {
         event.preventDefault();
         if (!event.repeat) window.dispatchEvent(new Event("nodalstudio:code-quick-open"));
         return;
       }
-      if (matchesShortcut(event, COMMAND_PALETTE_SHORTCUT)) {
+      if (matchesShortcut(event, COMMAND_PALETTE_SHORTCUT) || (mode === "code" && matchesCodeShortcut(event, "F1", appleKeyboard))) {
         event.preventDefault();
         if (!event.repeat) openCommandPalette();
         return;
@@ -1330,13 +1357,22 @@ export function App() {
         if (!event.repeat) runWorkspaceCommand(action[0]);
         return;
       }
+      if (mode === "code" && matchesCodeShortcut(event, "Mod+B", appleKeyboard)) {
+        event.preventDefault();
+        if (!event.repeat) runWorkspaceCommand("toggle-left");
+        return;
+      }
       if (mode !== "code" || event.repeat) return;
+      if (matchesCodeShortcut(event, "Mod+K", appleKeyboard)) {
+        codeChord.current = performance.now() + 1500;
+        event.preventDefault();
+        return;
+      }
       const codeShortcut = (Object.keys(CODE_SHORTCUTS) as CodeShortcut[]).find((shortcut) => {
-        const binding = CODE_SHORTCUTS[shortcut];
-        if (binding === "Ctrl+G") return event.ctrlKey && !event.metaKey && matchesShortcut(event, "Mod+G");
-        return platformModifier && matchesShortcut(event, binding);
+        if (shortcut === "definition-back" && !appleKeyboard) return matchesCodeShortcut(event, "Alt+ArrowLeft", false);
+        return matchesCodeShortcut(event, CODE_SHORTCUTS[shortcut], appleKeyboard);
       });
-      if (codeShortcut && !window.dispatchEvent(new Event(codeShortcutEvent(codeShortcut), { cancelable: true }))) {
+      if (codeShortcut && dispatchCodeShortcut(codeShortcut)) {
         event.preventDefault();
       }
     }
@@ -1935,6 +1971,10 @@ type WorkspaceCommandId = "open-model" | "open-ontology" | "open-database" | "op
   | "relayout" | "ddl-preview" | "refresh" | "preflight" | "review" | "settings" | "settings-git" | "settings-ai" | "capabilities";
 
 const COMMAND_PALETTE_SHORTCUT = "Mod+Shift+P";
+
+function dispatchCodeShortcut(shortcut: CodeShortcut) {
+  return !window.dispatchEvent(new Event(codeShortcutEvent(shortcut), { cancelable: true }));
+}
 
 function workspaceShortcutHint(label: string, shortcut?: string) {
   return shortcut ? {
