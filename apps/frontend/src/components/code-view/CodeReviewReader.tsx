@@ -1,16 +1,18 @@
 import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { sql } from "@codemirror/lang-sql";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { foldGutter, syntaxHighlighting } from "@codemirror/language";
 import { getChunks, goToNextChunk, goToPreviousChunk, uncollapseUnchanged, unifiedMergeView } from "@codemirror/merge";
 import { setDiagnostics, type Diagnostic } from "@codemirror/lint";
 import { gotoLine, openSearchPanel, search, searchKeymap } from "@codemirror/search";
-import { Decoration, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
+import { Decoration, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, type KeyBinding } from "@codemirror/view";
 import { sqlHighlightStyle } from "../../design-system/sql-highlight";
 import { useI18n } from "../../i18n";
 import type { CodeDefinitionPosition, CodeDocumentHighlightRange, CodeExtension, CodeExtensionPlatform } from "../../platform/code-review";
 import { ActionIcon } from "../ActionIcon";
 import { IconButton } from "../IconButton";
+import { CODE_SHORTCUTS, formatCommandShortcut } from "../command-shortcuts";
 import { codeDefinitionLinks } from "./code-definition-links";
 import { contentDigest, normalizeReviewText, reviewDiffCollapse, reviewDiffConfig, type CheckRange } from "./code-review-checks";
 import type { CheckedFile } from "./use-code-review-checks";
@@ -23,7 +25,16 @@ import { useExtensionSyntax } from "./use-extension-syntax";
 
 const contributedSyntax = new Compartment();
 const noExtensions: CodeExtension[] = [];
+const readerSearchKeys: readonly KeyBinding[] = [
+  { key: "Ctrl-g", scope: "editor search-panel", run: openLinePrompt },
+  ...searchKeymap,
+];
 
+function openLinePrompt(view: EditorView) {
+  if (!gotoLine(view)) return false;
+  view.dom.querySelector<HTMLInputElement>(".cm-goto-line input")?.focus();
+  return true;
+}
 const languages: Record<string, () => Promise<Extension>> = {
   go: () => import("@codemirror/lang-go").then(({ go }) => go()),
   java: () => import("@codemirror/lang-java").then(({ java }) => java()),
@@ -57,6 +68,69 @@ const sourceTheme = EditorView.theme({
   ".cm-changedText": { backgroundImage: "none", textDecoration: "underline" },
   ".cm-deletedText": { backgroundImage: "none", textDecoration: "line-through" },
 });
+
+function readerPhrases(locale: string) {
+  return EditorState.phrases.of(locale === "zh-CN" ? {
+    "Find in file": "在文件中查找", "Search options": "查找选项", "Match case": "区分大小写",
+    "Match whole word": "全字匹配", "Use regular expression": "使用正则表达式",
+    "Invalid regular expression": "正则表达式无效", "No matches": "无匹配项",
+    "1 match": "1 项匹配", "$ matches": "$ 项匹配", "Match $1 of $2": "第 $1 项，共 $2 项",
+    "Previous match": "上一个匹配项", "Next match": "下一个匹配项", "Close find": "关闭查找面板", close: "关闭",
+    "current match": "当前匹配", "on line": "所在行", "Go to line": "跳转到行", go: "跳转",
+    "$ unchanged lines": "$ 行未更改",
+  } : {});
+}
+
+export function CodeReviewDraft({ title, text, onEdit, outline, dock, footer }: {
+  title: string;
+  text: string;
+  onEdit: (text: string) => void;
+  outline: ReactNode;
+  dock: ReactNode;
+  footer: ReactNode;
+}) {
+  const { t, locale } = useI18n();
+  const host = useRef<HTMLDivElement>(null);
+  const editor = useRef<EditorView | null>(null);
+  const draft = useRef({ text, onEdit });
+  useLayoutEffect(() => { draft.current = { text, onEdit }; }, [text, onEdit]);
+  useLayoutEffect(() => {
+    if (!host.current) return;
+    const view = new EditorView({
+      parent: host.current,
+      doc: draft.current.text,
+      extensions: [
+        EditorView.contentAttributes.of({ "aria-label": title, role: "textbox", spellcheck: "false" }),
+        readerPhrases(locale), sourceTheme, lineNumbers(), history(), highlightActiveLine(),
+        search({ createPanel: createCodeFindPanel }), keymap.of([...readerSearchKeys, ...defaultKeymap, ...historyKeymap]),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) draft.current.onEdit(update.state.doc.toString());
+        }),
+      ],
+    });
+    editor.current = view;
+    view.focus();
+    return () => { editor.current = null; view.destroy(); };
+  }, [locale, title]);
+  return <>
+    <div className="code-review-reader-toolbar">
+      <div className="code-review-reader-context"><span className="code-review-status-context">{t("codeReview.draftSession")}</span></div>
+      <div className="code-review-reader-actions" role="group" aria-label={t("codeReview.readerActions")}>
+        <IconButton icon="search" className="code-review-tool" data-code-find="" label={t("codeReview.find")}
+          onClick={() => { if (editor.current) openSearchPanel(editor.current); }} />
+      </div>
+    </div>
+    <div className="code-review-reader-body"><div className="code-review-reader-host" ref={host} />{outline}</div>
+    {dock}
+    <div className="code-review-reading-status">
+      {footer}
+      <button type="button" className="code-review-position" data-code-go-to-line="" aria-keyshortcuts="Control+G"
+        title={formatCommandShortcut(CODE_SHORTCUTS["go-to-line"])}
+        onClick={() => { if (editor.current) openLinePrompt(editor.current); }}>{t("codeReview.goToLine")}</button>
+      <span>{t("codeReview.plainText")}</span>
+    </div>
+  </>;
+}
 
 export interface ReadingPosition {
   anchor: number;
@@ -178,15 +252,7 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
         selection,
         extensions: [
           EditorState.readOnly.of(true),
-          EditorState.phrases.of(locale === "zh-CN" ? {
-            "Find in file": "在文件中查找", "Search options": "查找选项", "Match case": "区分大小写",
-            "Match whole word": "全字匹配", "Use regular expression": "使用正则表达式",
-            "Invalid regular expression": "正则表达式无效", "No matches": "无匹配项",
-            "1 match": "1 项匹配", "$ matches": "$ 项匹配", "Match $1 of $2": "第 $1 项，共 $2 项",
-            "Previous match": "上一个匹配项", "Next match": "下一个匹配项", "Close find": "关闭查找面板", close: "关闭",
-            "current match": "当前匹配", "on line": "所在行", "Go to line": "跳转到行", go: "跳转",
-            "$ unchanged lines": "$ 行未更改",
-          } : {}),
+          readerPhrases(locale),
           EditorView.editable.of(false),
           EditorView.contentAttributes.of({ "aria-label": path, "aria-readonly": "true", role: "textbox", tabindex: "0" }),
           lineNumbers(),
@@ -195,7 +261,7 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
           search({ createPanel: createCodeFindPanel }),
           ...(highlightsAvailable ? [codeReferenceHighlights((position) =>
             location.current.onReferences?.(position, document) ?? Promise.resolve([]))] : []),
-          keymap.of(searchKeymap),
+          keymap.of(readerSearchKeys),
           keymap.of([
             { key: "F12", run: (view) => definitionAt(view, view.state.selection.main.head) },
             { key: "Alt-ArrowLeft", run: () => {
@@ -312,7 +378,7 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
       { label: t("codeReview.menu.copySelection"), disabled: from === to, run: () => onCopy(view.state.sliceDoc(from, to)) },
       ...(line ? [{ label: t("codeReview.menu.copyLocation"), run: () => onCopy(`${path}:${line.number}`) }] : []),
       { label: t("codeReview.menu.findInFile"), separatorBefore: true, run: () => openSearchPanel(view) },
-      { label: t("codeReview.goToLine"), run: () => gotoLine(view) },
+      { label: t("codeReview.goToLine"), run: () => openLinePrompt(view) },
       ...(canNavigate && offset !== null && view.state.wordAt(offset) ? [
         { label: t("codeReview.definition"), run: () => definitionAt(view, offset) },
       ] : []),
@@ -352,8 +418,9 @@ export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, h
     <div className="code-review-reading-status">
       {footer}
       <span className="code-review-status-context">{comparison}</span>
-      <button type="button" className="code-review-position" title={t("codeReview.goToLine")} aria-label={t("codeReview.goToLine")}
-        onClick={() => { if (editor.current) gotoLine(editor.current); }}>{t("codeReview.caret", cursor)}</button>
+      <button type="button" className="code-review-position" data-code-go-to-line="" aria-keyshortcuts="Control+G"
+        title={`${t("codeReview.goToLine")} (${formatCommandShortcut(CODE_SHORTCUTS["go-to-line"])})`} aria-label={t("codeReview.goToLine")}
+        onClick={() => { if (editor.current) openLinePrompt(editor.current); }}>{t("codeReview.caret", cursor)}</button>
       <span title={syntax?.extension}>{syntax?.name ?? codeFileType(path) ?? t("codeReview.plainText")}</span>
     </div>
   </>;
