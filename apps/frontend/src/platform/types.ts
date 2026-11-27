@@ -19,6 +19,7 @@ export interface SchemaReportExportInput {
 export interface RuntimeInfo {
   localEslint?: boolean;
   codeExtensionsPreview?: boolean;
+  codeFinderActions?: boolean;
   distribution?: "community" | "macAppStore";
   kind: "desktop" | "web";
   label: string;

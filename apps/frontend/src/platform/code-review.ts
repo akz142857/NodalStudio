@@ -1,9 +1,58 @@
 export interface CodeReviewProject {
   id: string;
+  savedProjectId?: string | null;
   key: string;
   name: string;
   baseline: string | null;
   git: "folder" | "ready" | "noBaseline" | "unavailable";
+}
+
+export interface CodeSavedProject {
+  id: string;
+  name: string;
+  path: string;
+  pinned: boolean;
+  groupId?: string | null;
+}
+
+export interface CodeSavedProjectGroup {
+  id: string;
+  name: string;
+  collapsed: boolean;
+  color?: CodeProjectGroupColor | null;
+}
+
+export type CodeProjectGroupColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple" | "gray";
+
+export interface CodeProjectCatalog {
+  projects: CodeSavedProject[];
+  groups: CodeSavedProjectGroup[];
+}
+
+export type CodeProjectGroupAction =
+  | { kind: "create"; name: string }
+  | { kind: "rename"; id: string; name: string }
+  | { kind: "remove"; id: string }
+  | { kind: "collapse"; id: string; collapsed: boolean }
+  | { kind: "color"; id: string; color: CodeProjectGroupColor | null }
+  | { kind: "move"; projectId: string; groupId: string | null };
+
+export interface CodeProjectLibrary {
+  list(): Promise<CodeProjectCatalog>;
+  editGroups(input: CodeProjectGroupAction): Promise<void>;
+  open(id: string): Promise<CodeReviewProject>;
+  pin(id: string, pinned: boolean): Promise<void>;
+  relocate(id: string): Promise<CodeReviewProject | null>;
+  remove(id: string): Promise<CodeReviewProject | null>;
+}
+
+export type CodeFinderTarget =
+  | { kind: "project"; id: string }
+  | { kind: "entry"; projectId: string; path: string };
+export type CodeFinderAction = "reveal" | "copy" | "paste";
+export interface CodePasteResult {
+  added: number;
+  skipped: number;
 }
 
 export interface CodeReviewChange {
@@ -80,7 +129,7 @@ export interface CodeOutlineSymbol {
 }
 
 export type CodeDocumentOutlineResult =
-  | { state: "disabled" | "unavailable" | "stale" }
+  | { state: "offline" | "disabled" | "unavailable" | "stale" }
   | { state: "missingServer" | "serverFailed"; command: string }
   | { state: "ready"; symbols: CodeOutlineSymbol[] };
 
@@ -91,7 +140,7 @@ export interface CodeDefinitionTarget {
 }
 
 export type CodeDefinitionResult =
-  | { state: "disabled" | "unsupported" | "stale" | "unavailable" | "notFound" }
+  | { state: "offline" | "disabled" | "unsupported" | "stale" | "unavailable" | "notFound" }
   | { state: "missingServer"; command: string }
   | { state: "resolved"; targets: CodeDefinitionTarget[] };
 
@@ -138,6 +187,11 @@ export interface CodeEslintPlatform {
 export interface CodeReviewPlatform {
   current(): Promise<CodeReviewProject | null>;
   choose(): Promise<CodeReviewProject | null>;
+  projects?: CodeProjectLibrary;
+  finder?: {
+    act(target: CodeFinderTarget, action: CodeFinderAction): Promise<CodePasteResult>;
+    addProjects(): Promise<CodePasteResult>;
+  };
   changes(projectId: string): Promise<CodeReviewChanges>;
   directory(projectId: string, path: string, compact?: CodeReviewCompactFolders): Promise<CodeReviewDirectory>;
   paths?(projectId: string): Promise<{ paths: string[]; limited: boolean }>;
@@ -148,7 +202,24 @@ export interface CodeReviewPlatform {
   definition?(projectId: string, input: CodeDefinitionRequest): Promise<CodeDefinitionResult>;
   documentHighlights?(projectId: string, input: CodeSourcePosition): Promise<CodeDocumentHighlightRange[]>;
   documentOutline?(projectId: string, input: CodeDocumentOutlineRequest): Promise<CodeDocumentOutlineResult>;
+  languageServices?: {
+    status(projectId: string): Promise<CodeLanguageStatus>;
+    enable(projectId: string): Promise<void>;
+  };
   definitionSource?(projectId: string, sourceId: string): Promise<string>;
+}
+
+export type CodeLanguageStatus =
+  | { state: "offline" | "disabled" | "discovering" | "failed" }
+  | { state: "workspaces"; workspaces: CodeLanguageWorkspace[] };
+
+export interface CodeLanguageWorkspace {
+  language: "Java" | "TypeScript" | "Go" | "Php" | "Python" | "Rust" | "Clang" | "CSharp" | "Swift";
+  root: string;
+  command: string;
+  state: "queued" | "starting" | "connected" | "missing" | "failed";
+  progress: { title: string; message: string | null; percentage: number | null } | null;
+  lastTask: string | null;
 }
 
 export interface CodeExtensionLanguage {
@@ -205,6 +276,7 @@ export interface CodeOpenVsxDetail extends CodeOpenVsxItem {
   license: string | null;
   engine: string | null;
   capability: CodeExtensionCapability | null;
+  incompatibility: "debugger" | "extensionDependencies" | null;
   downloadable: boolean;
   canUpdate: boolean;
 }
@@ -216,6 +288,7 @@ export interface CodeOpenVsxUpdate {
 }
 
 export interface CodeOpenVsxPlatform {
+  /** An empty query loads the registry's featured extensions. */
   search(projectId: string, query: string, offset: number): Promise<{ items: CodeOpenVsxItem[]; nextOffset: number | null }>;
   detail(projectId: string, id: string, version?: string): Promise<CodeOpenVsxDetail>;
   updates(projectId: string): Promise<{ updates: CodeOpenVsxUpdate[]; failed: number }>;

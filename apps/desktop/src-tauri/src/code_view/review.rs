@@ -1,10 +1,14 @@
-//! Read-only project review backed by a user-selected directory.
+//! Project review and file actions backed by user-selected directories.
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     ffi::OsStr,
     io::ErrorKind,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
 };
 
 use cap_fs_ext::DirExt;
@@ -12,18 +16,26 @@ use cap_std::fs::Dir;
 use git2::{Delta, Diff, DiffFindOptions, DiffOptions, FileMode, Oid, RepositoryOpenFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::State;
+use snapshot_store::LocalSnapshotStore;
+use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 use super::definition::{
     DefinitionRequest, DefinitionResult, Definitions, DocumentHighlightRange,
-    DocumentOutlineRequest, DocumentOutlineResult, SourcePosition,
+    DocumentOutlineRequest, DocumentOutlineResult, LanguageServiceStatus, SourcePosition,
+    warmup_sources,
 };
 use super::files::{
     MAX_FILE_BYTES, Repository, RootIdentity, open_nested_directory, read_nested,
     review_relative_path,
 };
+#[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+use super::finder::{FinderAction, FinderTarget, LocatedItem, PasteResult, clipboard_paths};
+use super::projects::{
+    PROJECT_UNAVAILABLE, ProjectCatalog, ProjectCatalogInfo, ProjectGroupAction, SavedProject,
+};
 use crate::file_access::{SelectionKind, pick_workspace_path_from};
+use crate::{AppState, effective_settings};
 
 const MAX_ENTRIES: usize = 2_000;
 const MAX_COMPACT_SEGMENTS: usize = 16;
@@ -32,26 +44,58 @@ const MAX_CHANGES: usize = 1_000;
 pub(super) const MAX_QUICK_OPEN_ENTRIES: usize = 30_000;
 pub(super) const UNAVAILABLE: &str = "codeReviewUnavailable";
 const STALE: &str = "codeReviewStale";
+const LANGUAGE_OFFLINE: &str = "codeReviewLanguageOffline";
 
 #[derive(Default)]
-pub(crate) struct ReviewState(Mutex<Option<Arc<Project>>>);
+pub(crate) struct ReviewState(Mutex<ReviewSession>);
+
+#[derive(Default)]
+struct ReviewSession {
+    project: Option<Arc<Project>>,
+    language_grants: HashMap<(PathBuf, RootIdentity), Arc<AtomicBool>>,
+}
 
 pub(super) struct Project {
     info: ProjectInfo,
     pub(super) root: PathBuf,
+    language_root: Option<PathBuf>,
     identity: RootIdentity,
     baseline: Option<Oid>,
     changes: Mutex<BTreeMap<String, Change>>,
-    definitions: Definitions,
+    languages: Mutex<ProjectLanguages>,
     pub(super) search: super::search::SearchSession,
     #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
     pub(super) eslint: super::eslint::EslintSession,
+}
+
+#[derive(Default)]
+struct ProjectLanguages {
+    definitions: Arc<Definitions>,
+    warmup: Option<tokio::task::JoinHandle<()>>,
+    watch: Option<tokio::task::JoinHandle<()>>,
+    closed: bool,
+}
+
+impl ProjectLanguages {
+    fn stop(&mut self) {
+        self.definitions.stopped.cancel();
+        if let Some(task) = self.warmup.take() {
+            task.abort();
+        }
+        if let Some(task) = self.watch.take() {
+            task.abort();
+        }
+        self.definitions = Arc::new(Definitions::with_grant(Arc::clone(
+            &self.definitions.enabled,
+        )));
+    }
 }
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProjectInfo {
     id: Uuid,
+    saved_project_id: Option<Uuid>,
     key: String,
     name: String,
     baseline: Option<String>,
@@ -157,13 +201,54 @@ pub(crate) struct Document {
 
 impl ReviewState {
     pub(super) fn current(&self) -> Result<Option<Arc<Project>>, String> {
-        Ok(self.0.lock().map_err(|_| UNAVAILABLE)?.clone())
+        Ok(self.0.lock().map_err(|_| UNAVAILABLE)?.project.clone())
     }
 
     pub(super) fn project(&self, id: Uuid) -> Result<Arc<Project>, String> {
         self.current()?
             .filter(|project| project.info.id == id)
             .ok_or_else(|| STALE.into())
+    }
+}
+
+impl ReviewSession {
+    fn activate(&mut self, mut project: Project) -> Arc<Project> {
+        self.close_project();
+        if let Some(root) = &project.language_root {
+            self.language_grants
+                .retain(|_, grant| grant.load(Ordering::Relaxed));
+            let grant = self
+                .language_grants
+                .entry((root.clone(), project.identity.clone()))
+                .or_default();
+            project.languages = Mutex::new(ProjectLanguages {
+                definitions: Arc::new(Definitions::with_grant(Arc::clone(grant))),
+                ..ProjectLanguages::default()
+            });
+        }
+        let project = Arc::new(project);
+        self.project = Some(Arc::clone(&project));
+        project
+    }
+
+    fn close_project(&mut self) {
+        if let Some(old) = self.project.take() {
+            if let Ok(mut languages) = old.languages.lock() {
+                languages.closed = true;
+                languages.stop();
+            }
+            old.search.cancel();
+            #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+            old.eslint.close();
+        }
+    }
+}
+
+impl Drop for Project {
+    fn drop(&mut self) {
+        if let Ok(languages) = self.languages.get_mut() {
+            languages.stop();
+        }
     }
 }
 
@@ -178,7 +263,11 @@ impl Project {
     }
 
     pub(super) fn open(root: PathBuf) -> Result<Self, String> {
-        let (directory, identity) = Repository::open_directory(&root, None)?;
+        Self::open_directory(root, None)
+    }
+
+    fn open_directory(root: PathBuf, identity: Option<&RootIdentity>) -> Result<Self, String> {
+        let (directory, identity) = Repository::open_directory(&root, identity)?;
         let (git, baseline) = match directory.dir.symlink_metadata(".git") {
             Err(err) if err.kind() == ErrorKind::NotFound => (GitState::Folder, None),
             _ => match open_git(&directory, &root) {
@@ -193,8 +282,14 @@ impl Project {
             },
         };
         let key_data = serde_json::to_vec(&(&root, &identity)).map_err(|_| UNAVAILABLE)?;
+        let language_root = if cfg!(feature = "mac-app-store") {
+            None
+        } else {
+            root.canonicalize().ok()
+        };
         let info = ProjectInfo {
             id: Uuid::new_v4(),
+            saved_project_id: None,
             key: format!("{:x}", Sha256::digest(key_data)),
             name: root
                 .file_name()
@@ -207,18 +302,123 @@ impl Project {
         Ok(Self {
             info,
             root,
+            language_root,
             identity,
             baseline,
             changes: Mutex::default(),
-            definitions: Definitions::default(),
+            languages: Mutex::default(),
             search: super::search::SearchSession::default(),
             #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
             eslint: super::eslint::EslintSession::default(),
         })
     }
 
+    fn registered(mut self, saved: SavedProject) -> Self {
+        self.info.saved_project_id = Some(saved.id);
+        self.info.key = saved.review_key;
+        self
+    }
+
     pub(super) fn directory(&self) -> Result<Repository, String> {
         Repository::open_directory(&self.root, Some(&self.identity)).map(|(directory, _)| directory)
+    }
+
+    fn resume_language_services(self: &Arc<Self>, app: &AppHandle) {
+        if !self
+            .languages
+            .lock()
+            .is_ok_and(|languages| languages.definitions.is_enabled())
+        {
+            return;
+        }
+        let store = app.state::<AppState>().store.clone();
+        let project = Arc::clone(self);
+        tokio::spawn(async move {
+            let _ = project.language_access(&store, false).await;
+        });
+    }
+
+    async fn language_access(
+        self: &Arc<Self>,
+        store: &LocalSnapshotStore,
+        authorizing: bool,
+    ) -> Result<Option<Arc<Definitions>>, String> {
+        let offline = effective_settings(store, None)
+            .await?
+            .app
+            .privacy
+            .offline_mode;
+        let mut languages = self.languages.lock().map_err(|_| UNAVAILABLE)?;
+        if languages.closed {
+            return Err(STALE.into());
+        }
+        if offline {
+            if languages.watch.is_some() {
+                languages.stop();
+            }
+            return Ok(None);
+        }
+        let definitions = Arc::clone(&languages.definitions);
+        if languages.watch.is_none() && (authorizing || definitions.is_enabled()) {
+            let project = Arc::downgrade(self);
+            let store = store.clone();
+            let watched = Arc::downgrade(&definitions);
+            languages.watch = Some(tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    if effective_settings(&store, None)
+                        .await
+                        .is_ok_and(|settings| !settings.app.privacy.offline_mode)
+                    {
+                        continue;
+                    }
+                    if let Some(project) = project.upgrade()
+                        && let Ok(mut languages) = project.languages.lock()
+                        && std::sync::Weak::ptr_eq(
+                            &watched,
+                            &Arc::downgrade(&languages.definitions),
+                        )
+                    {
+                        languages.stop();
+                    }
+                    return;
+                }
+            }));
+        }
+        drop(languages);
+        self.start_language_services(&definitions);
+        Ok(Some(definitions))
+    }
+
+    fn start_language_services(self: &Arc<Self>, definitions: &Arc<Definitions>) {
+        if !definitions.is_enabled() {
+            return;
+        };
+        let Ok(mut languages) = self.languages.lock() else {
+            return;
+        };
+        if languages.closed
+            || languages.warmup.is_some()
+            || !Arc::ptr_eq(definitions, &languages.definitions)
+        {
+            return;
+        }
+        let project = Arc::downgrade(self);
+        let definitions = Arc::clone(definitions);
+        languages.warmup = Some(tokio::spawn(async move {
+            let sources = tokio::task::spawn_blocking(move || {
+                let project = project.upgrade()?;
+                let directory = project.directory().ok()?;
+                let root = project.root.canonicalize().ok()?;
+                let paths = project_paths(&project).ok()?.paths;
+                let sources = warmup_sources(&root, &directory, paths);
+                Some((root, sources))
+            })
+            .await
+            .ok()
+            .flatten();
+            definitions.prewarm(sources).await;
+        }));
     }
 
     fn refresh(&self) -> Result<Changes, String> {
@@ -495,30 +695,181 @@ pub(super) fn read_worktree(directory: &Repository, path: &Path) -> FileVersion 
 
 #[tauri::command]
 pub(crate) async fn choose_code_review_project(
-    app: tauri::AppHandle,
-    state: State<'_, ReviewState>,
+    app: AppHandle,
+    relocate_id: Option<Uuid>,
 ) -> Result<Option<ProjectInfo>, String> {
-    let current = state.current()?.map(|project| project.root.clone());
+    let current = app
+        .state::<ReviewState>()
+        .current()?
+        .map(|project| project.root.clone());
     let Some(root) =
-        pick_workspace_path_from(app, SelectionKind::CodeReviewFolder, current).await?
+        pick_workspace_path_from(app.clone(), SelectionKind::CodeReviewFolder, current).await?
     else {
         return Ok(None);
     };
-    let project = tokio::task::spawn_blocking(move || Project::open(PathBuf::from(root)))
-        .await
-        .map_err(|_| UNAVAILABLE)??;
-    let info = project.info.clone();
-    let old = state
-        .0
-        .lock()
+    let project = with_project_catalog(app.clone(), move |session, file, mut catalog| {
+        let project = Project::open(PathBuf::from(root))?;
+        let saved = catalog.register(
+            &project.root,
+            &project.identity,
+            &project.info.key,
+            relocate_id,
+        )?;
+        catalog.save(file)?;
+        Ok(session.activate(project.registered(saved)))
+    })
+    .await?;
+    project.resume_language_services(&app);
+    Ok(Some(project.info.clone()))
+}
+
+async fn with_project_catalog<T: Send + 'static>(
+    app: AppHandle,
+    operation: impl FnOnce(&mut ReviewSession, &Path, ProjectCatalog) -> Result<T, String>
+    + Send
+    + 'static,
+) -> Result<T, String> {
+    let file = app
+        .path()
+        .app_data_dir()
         .map_err(|_| UNAVAILABLE)?
-        .replace(Arc::new(project));
-    if let Some(old) = old {
-        old.search.cancel();
-        #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
-        old.eslint.close();
-    }
-    Ok(Some(info))
+        .join("code-review-projects.json");
+    tokio::task::spawn_blocking(move || {
+        let state = app.state::<ReviewState>();
+        let mut session = state.0.lock().map_err(|_| UNAVAILABLE)?;
+        let catalog = ProjectCatalog::load(&file)?;
+        operation(&mut session, &file, catalog)
+    })
+    .await
+    .map_err(|_| UNAVAILABLE)?
+}
+
+#[tauri::command]
+pub(crate) async fn list_code_review_projects(
+    app: AppHandle,
+) -> Result<ProjectCatalogInfo, String> {
+    with_project_catalog(app, |_, _, catalog| Ok(catalog.info())).await
+}
+
+#[tauri::command]
+pub(crate) async fn edit_code_review_project_groups(
+    app: AppHandle,
+    input: ProjectGroupAction,
+) -> Result<(), String> {
+    with_project_catalog(app, move |_, file, mut catalog| {
+        catalog.edit_groups(input)?;
+        catalog.save(file)
+    })
+    .await
+}
+
+#[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+#[tauri::command]
+pub(crate) async fn code_review_finder_action(
+    app: AppHandle,
+    target: FinderTarget,
+    action: FinderAction,
+) -> Result<PasteResult, String> {
+    let item = match target {
+        FinderTarget::Project { id } => {
+            with_project_catalog(app.clone(), move |_, _, catalog| {
+                let saved = catalog.get(id)?;
+                let (directory, _) = Repository::open_directory(&saved.root, Some(&saved.identity))
+                    .map_err(|_| PROJECT_UNAVAILABLE)?;
+                LocatedItem::locate(saved.root.clone(), directory, "")
+            })
+            .await?
+        }
+        FinderTarget::Entry { project_id, path } => {
+            let project = app.state::<ReviewState>().project(project_id)?;
+            tokio::task::spawn_blocking(move || {
+                LocatedItem::locate(project.root.clone(), project.directory()?, &path)
+            })
+            .await
+            .map_err(|_| UNAVAILABLE)??
+        }
+    };
+    item.act(&app, action).await
+}
+
+#[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+#[tauri::command]
+pub(crate) async fn paste_code_review_projects(app: AppHandle) -> Result<PasteResult, String> {
+    let paths = clipboard_paths(&app).await?;
+    with_project_catalog(app, move |_, file, mut catalog| {
+        let mut result = PasteResult::default();
+        for path in paths {
+            if let Ok(project) = Project::open(path) {
+                catalog.register(&project.root, &project.identity, &project.info.key, None)?;
+                result.added += 1;
+            } else {
+                result.skipped += 1;
+            }
+        }
+        if result.added > 0 {
+            catalog.save(file)?;
+        }
+        Ok(result)
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn open_saved_code_review_project(
+    app: AppHandle,
+    id: Uuid,
+) -> Result<ProjectInfo, String> {
+    let project = with_project_catalog(app.clone(), move |session, file, mut catalog| {
+        if let Some(current) = session
+            .project
+            .as_ref()
+            .filter(|project| project.info.saved_project_id == Some(id))
+        {
+            return Ok(Arc::clone(current));
+        }
+        let saved = catalog.get(id)?.clone();
+        let project = Project::open_directory(saved.root.clone(), Some(&saved.identity))
+            .map_err(|_| PROJECT_UNAVAILABLE)?;
+        catalog.select(id)?;
+        catalog.save(file)?;
+        Ok(session.activate(project.registered(saved)))
+    })
+    .await?;
+    project.resume_language_services(&app);
+    Ok(project.info.clone())
+}
+
+#[tauri::command]
+pub(crate) async fn pin_code_review_project(
+    app: AppHandle,
+    id: Uuid,
+    pinned: bool,
+) -> Result<(), String> {
+    with_project_catalog(app, move |_, file, mut catalog| {
+        catalog.pin(id, pinned)?;
+        catalog.save(file)
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn remove_code_review_project(
+    app: AppHandle,
+    id: Uuid,
+) -> Result<Option<ProjectInfo>, String> {
+    with_project_catalog(app, move |session, file, mut catalog| {
+        catalog.remove(id)?;
+        catalog.save(file)?;
+        if session
+            .project
+            .as_ref()
+            .is_some_and(|project| project.info.saved_project_id == Some(id))
+        {
+            session.close_project();
+        }
+        Ok(session.project.as_ref().map(|project| project.info.clone()))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -792,11 +1143,20 @@ pub(crate) async fn find_code_definition(
     project_id: Uuid,
     input: DefinitionRequest,
     state: State<'_, ReviewState>,
+    app: State<'_, AppState>,
 ) -> Result<DefinitionResult, String> {
     let project = state.project(project_id)?;
     let directory = project.directory()?;
     let root = project.root.canonicalize().map_err(|_| UNAVAILABLE)?;
-    Ok(project.definitions.lookup(root, directory, input).await)
+    let Some(services) = project.language_access(&app.store, input.enable).await? else {
+        return Ok(DefinitionResult::Offline);
+    };
+    let result = services
+        .while_running(services.lookup(root, directory, input))
+        .await
+        .unwrap_or(DefinitionResult::Unavailable);
+    project.start_language_services(&services);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -804,14 +1164,18 @@ pub(crate) async fn find_code_document_highlights(
     project_id: Uuid,
     input: SourcePosition,
     state: State<'_, ReviewState>,
+    app: State<'_, AppState>,
 ) -> Result<Vec<DocumentHighlightRange>, String> {
     let project = state.project(project_id)?;
     let directory = project.directory()?;
     let root = project.root.canonicalize().map_err(|_| UNAVAILABLE)?;
-    Ok(project
-        .definitions
-        .highlights(&root, &directory, input)
-        .await)
+    let Some(services) = project.language_access(&app.store, false).await? else {
+        return Ok(Vec::new());
+    };
+    Ok(services
+        .while_running(services.highlights(&root, &directory, input))
+        .await
+        .unwrap_or_default())
 }
 
 #[tauri::command]
@@ -819,11 +1183,56 @@ pub(crate) async fn get_code_document_outline(
     project_id: Uuid,
     input: DocumentOutlineRequest,
     state: State<'_, ReviewState>,
+    app: State<'_, AppState>,
 ) -> Result<DocumentOutlineResult, String> {
     let project = state.project(project_id)?;
     let directory = project.directory()?;
     let root = project.root.canonicalize().map_err(|_| UNAVAILABLE)?;
-    Ok(project.definitions.outline(&root, &directory, input).await)
+    let Some(services) = project.language_access(&app.store, input.enable).await? else {
+        return Ok(DocumentOutlineResult::Offline);
+    };
+    let result = services
+        .while_running(services.outline(&root, &directory, input))
+        .await
+        .unwrap_or(DocumentOutlineResult::Unavailable);
+    project.start_language_services(&services);
+    Ok(result)
+}
+
+#[tauri::command]
+pub(crate) async fn get_code_language_status(
+    project_id: Uuid,
+    state: State<'_, ReviewState>,
+    app: State<'_, AppState>,
+) -> Result<LanguageServiceStatus, String> {
+    let project = state.project(project_id)?;
+    let Some(services) = project.language_access(&app.store, false).await? else {
+        return Ok(LanguageServiceStatus::Offline);
+    };
+    Ok(services
+        .while_running(services.status())
+        .await
+        .unwrap_or(LanguageServiceStatus::Offline))
+}
+
+#[tauri::command]
+pub(crate) async fn enable_code_language_services(
+    project_id: Uuid,
+    state: State<'_, ReviewState>,
+    app: State<'_, AppState>,
+) -> Result<(), String> {
+    if cfg!(feature = "mac-app-store") {
+        return Err(UNAVAILABLE.into());
+    }
+    let project = state.project(project_id)?;
+    project.directory()?;
+    let services = project
+        .language_access(&app.store, true)
+        .await?
+        .ok_or(LANGUAGE_OFFLINE)?;
+    services.enabled.store(true, Ordering::Relaxed);
+    project.start_language_services(&services);
+    Ok(())
 }
 
 #[tauri::command]
@@ -831,14 +1240,19 @@ pub(crate) async fn read_code_definition_source(
     project_id: Uuid,
     source_id: Uuid,
     state: State<'_, ReviewState>,
+    app: State<'_, AppState>,
 ) -> Result<String, String> {
     let project = state.project(project_id)?;
     let directory = project.directory()?;
     let root = project.root.canonicalize().map_err(|_| UNAVAILABLE)?;
-    project
-        .definitions
-        .source(&root, &directory, source_id)
+    let services = project
+        .language_access(&app.store, false)
+        .await?
+        .ok_or(LANGUAGE_OFFLINE)?;
+    services
+        .while_running(services.source(&root, &directory, source_id))
         .await
+        .ok_or(UNAVAILABLE)?
         .map_err(str::to_owned)
 }
 
@@ -846,6 +1260,104 @@ pub(crate) async fn read_code_definition_source(
 mod tests {
     use super::*;
     use std::fs;
+
+    #[tokio::test]
+    async fn switching_projects_cancels_languages_and_preserves_grants() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let state = ReviewState::default();
+        let select = |path: &Path| {
+            state
+                .0
+                .lock()
+                .unwrap()
+                .activate(Project::open(path.to_path_buf()).unwrap())
+        };
+        let definitions =
+            |project: &Arc<Project>| Arc::clone(&project.languages.lock().unwrap().definitions);
+
+        let project = select(first.path());
+        let first_services = definitions(&project);
+        assert!(matches!(
+            first_services.status().await,
+            LanguageServiceStatus::Disabled
+        ));
+        project.start_language_services(&first_services);
+        assert!(project.languages.lock().unwrap().warmup.is_none());
+        first_services.enabled.store(true, Ordering::Relaxed);
+        project.start_language_services(&first_services);
+        assert!(project.languages.lock().unwrap().warmup.is_some());
+
+        let other = select(second.path());
+        project.start_language_services(&first_services);
+        assert!(project.languages.lock().unwrap().warmup.is_none());
+        assert!(other.languages.lock().unwrap().warmup.is_none());
+        assert_eq!(first_services.while_running(async { true }).await, None);
+
+        let reopened = select(&first.path().join("."));
+        assert_ne!(reopened.info.id, project.info.id);
+        let reopened_services = definitions(&reopened);
+        assert!(reopened_services.is_enabled());
+        reopened.start_language_services(&reopened_services);
+        assert!(reopened.languages.lock().unwrap().warmup.is_some());
+    }
+
+    #[tokio::test]
+    async fn offline_mode_prevents_startup_and_cancels_active_language_work() {
+        let directory = tempfile::tempdir().unwrap();
+        let project =
+            ReviewSession::default().activate(Project::open(directory.path().into()).unwrap());
+        let store = LocalSnapshotStore::open("sqlite::memory:").await.unwrap();
+        let mut settings = crate::AppSettings::default();
+        settings.privacy.offline_mode = true;
+        store.save_app_settings(&settings).await.unwrap();
+        assert!(
+            project
+                .language_access(&store, true)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        settings.privacy.offline_mode = false;
+        store.save_app_settings(&settings).await.unwrap();
+        let online = project
+            .language_access(&store, true)
+            .await
+            .unwrap()
+            .unwrap();
+        online.enabled.store(true, Ordering::Relaxed);
+        project.start_language_services(&online);
+        assert!(project.languages.lock().unwrap().warmup.is_some());
+
+        settings.privacy.offline_mode = true;
+        store.save_app_settings(&settings).await.unwrap();
+        let cancelled = tokio::time::timeout(
+            Duration::from_secs(4),
+            online.while_running(std::future::pending::<()>()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(cancelled, None);
+        assert!(
+            project
+                .language_access(&store, false)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(project.languages.lock().unwrap().warmup.is_none());
+
+        settings.privacy.offline_mode = false;
+        store.save_app_settings(&settings).await.unwrap();
+        let resumed = project
+            .language_access(&store, false)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(resumed.is_enabled());
+        assert!(project.languages.lock().unwrap().warmup.is_some());
+    }
 
     #[test]
     fn compact_directory_listing_respects_visible_siblings_and_probe_limits() {

@@ -68,6 +68,8 @@ struct Contributions {
     languages: Vec<Language>,
     #[serde(default)]
     grammars: Vec<Grammar>,
+    #[serde(default)]
+    debuggers: serde_json::Value,
 }
 
 #[derive(Clone, Deserialize, Serialize)]

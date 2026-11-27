@@ -170,6 +170,7 @@ async fn acquire_cloud_operation(
 struct RuntimeInfo {
     local_eslint: bool,
     code_extensions_preview: bool,
+    code_finder_actions: bool,
     distribution: &'static str,
     kind: &'static str,
     label: &'static str,
@@ -804,6 +805,7 @@ type CaptureSnapshotResult = snapshot_store::StoredSnapshotCapture;
 fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
     RuntimeInfo {
         local_eslint: cfg!(all(target_os = "macos", not(feature = "mac-app-store"))),
+        code_finder_actions: cfg!(all(target_os = "macos", not(feature = "mac-app-store"))),
         code_extensions_preview: cfg!(all(
             target_os = "macos",
             feature = "code-extensions-preview",
@@ -2414,6 +2416,15 @@ pub fn run() {
                 file_access::pick_workspace_path,
                 code_view::review::choose_code_review_project,
                 code_view::review::get_code_review_project,
+                code_view::review::list_code_review_projects,
+                code_view::review::edit_code_review_project_groups,
+                #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+                code_view::review::code_review_finder_action,
+                #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+                code_view::review::paste_code_review_projects,
+                code_view::review::open_saved_code_review_project,
+                code_view::review::pin_code_review_project,
+                code_view::review::remove_code_review_project,
                 code_view::review::refresh_code_review,
                 code_view::review::list_code_review_directory,
                 code_view::review::list_code_review_paths,
@@ -2480,6 +2491,8 @@ pub fn run() {
                 code_view::review::find_code_definition,
                 code_view::review::find_code_document_highlights,
                 code_view::review::get_code_document_outline,
+                code_view::review::get_code_language_status,
+                code_view::review::enable_code_language_services,
                 code_view::review::read_code_definition_source,
                 connection_sync::export_connection_sync,
                 connection_sync::preview_connection_sync,

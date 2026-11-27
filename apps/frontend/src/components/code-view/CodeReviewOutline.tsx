@@ -47,6 +47,7 @@ export function CodeReviewOutline({ queryKey, load, locate, onRefresh }: {
   const failure = query.isError || approve.isError || result?.state === "unavailable" ? t("codeReview.outlineUnavailable")
     : result?.state === "missingServer" ? t("codeReview.outlineMissingServer", { command: result.command })
     : result?.state === "serverFailed" ? t("codeReview.outlineServerFailed", { command: result.command })
+    : result?.state === "offline" ? t("codeReview.languages.offline")
     : result?.state === "stale" ? t("codeReview.outlineStale") : undefined;
   return <div aria-busy={query.isFetching || approve.isPending}>
       {query.isPending || approve.isPending ? <p role="status">{t("codeReview.outlineLoading")}</p>

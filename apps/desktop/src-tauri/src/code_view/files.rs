@@ -16,7 +16,7 @@ pub(super) const MAX_FILE_BYTES: u64 = 512 * 1024;
 const MAX_DIRECTORY_DEPTH: usize = 24;
 const MAX_ENTRIES: usize = 8_000;
 
-#[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Deserialize, PartialEq, Eq, Hash, Serialize)]
 pub(super) struct RootIdentity(u64, u64);
 
 #[cfg_attr(unix, allow(clippy::unnecessary_wraps))]

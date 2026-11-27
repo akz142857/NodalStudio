@@ -25,12 +25,14 @@ function score(path: string, query: string) {
   return 4 + next / 2048;
 }
 
-export function CodeQuickOpen({ api, projectId, visible, anchor, contentPane, recent, untracked, unavailable, onOpen, onHit, onFind, onDismiss }: {
+export function CodeQuickOpen({ api, projectId, visible, anchor, contentPane, contentQuery, onContentQuery, recent, untracked, unavailable, onOpen, onHit, onFind, onDismiss }: {
   api: CodeReviewPlatform;
   projectId: string;
   visible: boolean;
   anchor?: RefObject<HTMLButtonElement | null>;
   contentPane: HTMLElement | null;
+  contentQuery: string;
+  onContentQuery: (query: string) => void;
   recent: readonly string[];
   untracked: readonly string[];
   unavailable: ReadonlySet<string>;
@@ -45,8 +47,7 @@ export function CodeQuickOpen({ api, projectId, visible, anchor, contentPane, re
   const popup = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<"files" | "content">("files");
   const [fileQuery, setFileQuery] = useState("");
-  const [contentQuery, setContentQuery] = useState("");
-  const [submitted, setSubmitted] = useState("");
+  const [submitted, setSubmitted] = useState(contentQuery);
   const [selectedFile, setSelectedFile] = useState(0);
   const [selectedHit, setSelectedHit] = useState(0);
   const searchingContent = mode === "content";
@@ -170,14 +171,17 @@ export function CodeQuickOpen({ api, projectId, visible, anchor, contentPane, re
   const contentStatus = !contentQuery.trim() ? ""
     : contentQuery !== submitted || content.isFetching || content.isPending ? t("codeReview.contentSearching")
     : content.isError ? t("codeReview.contentFailed")
-    : hits.length ? t("codeReview.contentCount", { lines: hits.length, files: contentFiles.length })
+    : hits.length ? t("codeReview.contentCount", {
+      lines: t(hits.length === 1 ? "codeReview.contentSingleLine" : "codeReview.contentLines", { count: hits.length }),
+      files: t(contentFiles.length === 1 ? "codeReview.contentSingleFile" : "codeReview.contentFiles", { count: contentFiles.length }),
+    })
     : t("codeReview.contentEmpty");
   const contentField = <div className="code-quick-open-field">
     <ActionIcon name="search" />
-    <input ref={contentInPopup ? field : undefined} data-modal-focus={contentInPopup || undefined} role="combobox" aria-expanded={true}
+    <input ref={contentInPopup ? field : undefined} data-modal-focus={contentInPopup || undefined} data-code-content-field role="combobox" aria-expanded={true}
       aria-controls={contentListId} aria-activedescendant={activeHit < 0 ? undefined : `${contentListId}-${activeHit}`}
       maxLength={128} aria-label={t("codeReview.projectContent")} placeholder={t("codeReview.contentPlaceholder")} value={contentQuery}
-      onChange={(event) => { setContentQuery(event.target.value); setSelectedHit(0); }} onKeyDown={(event) => navigate(event, true)} />
+      onChange={(event) => { onContentQuery(event.target.value); setSelectedHit(0); }} onKeyDown={(event) => navigate(event, true)} />
     <IconButton icon="refresh" className="code-review-tool" label={t("codeReview.refreshSearch")} onClick={refreshContent}
       disabled={!contentQuery.trim() || content.isFetching} />
   </div>;

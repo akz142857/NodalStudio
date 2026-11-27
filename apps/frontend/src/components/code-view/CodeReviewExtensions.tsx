@@ -1,20 +1,41 @@
-import { useState, type MouseEvent } from "react";
+import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "../../design-system/Button";
 import { ModalSurface } from "../../design-system/ModalSurface";
 import { useI18n } from "../../i18n";
 import type { CodeExtension, CodeExtensionAction, CodeExtensionPlatform, CodeOpenVsxUpdate } from "../../platform/code-review";
+import { ActionIcon } from "../ActionIcon";
 import { IconButton } from "../IconButton";
 import type { SchemaObjectMenuAction } from "../SchemaObjectMenu";
-import { Segmented } from "../Segmented";
 import { CodeExtensionRow } from "./CodeExtensionRow";
-import { CodeOpenVsxDetails, CodeOpenVsxSearch } from "./CodeOpenVsxExtensions";
+import { CodeOpenVsxDetails, CodeOpenVsxResults } from "./CodeOpenVsxExtensions";
 import { extensionErrorMessage } from "./code-extension-errors";
 import { useCodeContextMenu } from "./use-code-context-menu";
 
 export type ExtensionActivity = { id: string; state: "running" | "ran" | "failed"; detail?: string };
 
-export function CodeReviewExtensions({ api, projectId, items, loading, loadError, retry, activities, onUpdate, offline }: {
+function ExtensionGroup({ label, count, expanded, toggle, children }: {
+  label: string;
+  count?: number;
+  expanded: boolean;
+  toggle: () => void;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return <section className="code-extension-group" aria-label={label}>
+    <h2 className="code-extension-group-heading">
+      <button type="button" aria-expanded={expanded} aria-controls={id}
+        aria-label={count === undefined ? undefined : `${label} (${count})`} onClick={toggle}>
+        <ActionIcon name={expanded ? "chevronDown" : "chevronRight"} />
+        <span>{label}</span>
+        {count !== undefined && <span className="code-extension-count" aria-hidden="true">{count}</span>}
+      </button>
+    </h2>
+    <div id={id} className="code-extension-group-body" hidden={!expanded}>{children}</div>
+  </section>;
+}
+
+export function CodeReviewExtensions({ api, projectId, items, loading, loadError, retry, activities, onUpdate, offline, active = true }: {
   api: CodeExtensionPlatform;
   projectId: string;
   items: CodeExtension[];
@@ -24,15 +45,33 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
   activities: ExtensionActivity[];
   onUpdate: (id: string, item: CodeExtension | null) => void;
   offline: boolean;
+  active?: boolean;
 }) {
   const { t } = useI18n();
-  const [view, setView] = useState<"installed" | "market">("installed");
+  const [installedOpen, setInstalledOpen] = useState(true);
+  const [featuredOpen, setFeaturedOpen] = useState(true);
+  const [text, setText] = useState("");
+  const [submitted, setSubmitted] = useState("");
+  const input = useRef<HTMLInputElement>(null);
   const [catalogSelection, selectCatalog] = useState<{ id: string; version?: string }>();
   const [packageId, setPackageId] = useState<string>();
   const [confirm, setConfirm] = useState<{ item: CodeExtension; action: "enable" | "uninstall" }>();
   const selectedPackage = items.find((item) => item.id === packageId);
   const menu = useCodeContextMenu();
   const market = api.openVsx;
+  const term = text.trim();
+  const query = term ? submitted : "";
+  const pendingQuery = term !== query;
+  const searching = Boolean(market && !offline && term);
+  useEffect(() => {
+    if (!searching || !active || !pendingQuery) return;
+    const timer = window.setTimeout(() => setSubmitted(term), 250);
+    return () => window.clearTimeout(timer);
+  }, [active, pendingQuery, searching, term]);
+  function clearSearch() {
+    setText("");
+    setSubmitted("");
+  }
   const updates = useMutation({ mutationFn: () => market!.updates(projectId) });
   const mutation = useMutation({
     mutationFn: async (request: { id: string; action: CodeExtensionAction } | null) => {
@@ -66,12 +105,29 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
     menu.show(event, item.name, actions);
   }
 
+  const catalog = market && <CodeOpenVsxResults market={market} projectId={projectId} items={items}
+    active={active && (searching || featuredOpen)} offline={offline} query={searching ? query : ""}
+    pendingQuery={searching && pendingQuery} openDetails={(id) => selectCatalog({ id })} />;
   return <section className="code-extensions" aria-label={t("codeReview.extensions.title")}>
     <header className="code-extension-toolbar">
-      {market ? <Segmented className="code-extension-views"
-        label={t("codeReview.extensions.title")} value={view} onChange={setView}
-        options={[{ value: "installed", label: t("codeReview.extensions.installedTab") }, { value: "market", label: "Open VSX" }]} />
-        : <strong>{t("codeReview.extensions.installedTab")}</strong>}
+      {market && <form className="code-extension-search" role="search" onSubmit={(event) => {
+        event.preventDefault();
+        if (!offline) setSubmitted(term);
+      }}>
+        <ActionIcon name="search" />
+        <input ref={input} type="search" aria-label={t("codeReview.extensions.marketSearch")}
+          placeholder={t("codeReview.extensions.marketPlaceholder")} value={text} maxLength={160} disabled={offline}
+          onChange={(event) => setText(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && text) {
+              event.preventDefault();
+              event.stopPropagation();
+              clearSearch();
+            }
+          }} />
+        {text && <IconButton icon="close" className="code-review-tool" label={t("codeReview.extensions.marketClear")}
+          onClick={() => { clearSearch(); input.current?.focus(); }} />}
+      </form>}
       <IconButton icon="more" className="code-review-tool" label={t("codeReview.extensions.actions")} aria-haspopup="menu"
         aria-expanded={Boolean(menu.trigger?.closest(".code-extension-toolbar"))} onClick={(event) => {
           const actions: SchemaObjectMenuAction[] = [{
@@ -79,45 +135,51 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
           }];
           if (market && items.length > 0) actions.push({
             label: t("codeReview.extensions.marketCheckUpdates"), disabled: offline || mutation.isPending || updates.isPending,
-            description: offline ? t("codeReview.extensions.marketOffline") : undefined, run: () => { setView("installed"); updates.mutate(); },
+            description: offline ? t("codeReview.extensions.marketOffline") : undefined, run: () => {
+              clearSearch();
+              setInstalledOpen(true);
+              updates.mutate();
+            },
           });
           menu.show(event, t("codeReview.extensions.title"), actions);
         }} />
     </header>
     {mutation.isError && <p className="code-extension-feedback" role="alert">{t(extensionErrorMessage(mutation.error))}</p>}
     {(mutation.isPending || updates.isPending) && <p className="code-extension-feedback" role="status">{t("navigation.loadingWorkspace")}</p>}
-    {market && <div className="code-extension-view" hidden={view !== "market"}>
-      <CodeOpenVsxSearch market={market} projectId={projectId} items={items} offline={offline} openDetails={(id) => selectCatalog({ id })} />
-    </div>}
-    <div className="code-extension-view" hidden={view !== "installed"}>
-      {loading && <p role="status">{t("navigation.loadingWorkspace")}</p>}
-      {loadError && <p role="alert">{t("codeReview.extensions.storage")}{" "}
-        <Button size="small" onClick={retry}>{t("codeReview.refresh")}</Button></p>}
-      {updates.isError && <p role="alert">{t(extensionErrorMessage(updates.error))}</p>}
-      {updates.isSuccess && updates.data.failed > 0 && <p role="status">{t("codeReview.extensions.marketPartial", { count: updates.data.failed })}</p>}
-      {updates.isSuccess && !updates.data.failed && !updates.data.updates.some((update) => items.some((item) =>
-        item.id === update.id && item.sha256 === update.installedSha256)) && <p role="status">{t("codeReview.extensions.marketUpToDate")}</p>}
-      {!loading && !loadError && !items.length && <div className="code-extension-empty">
-        <p>{t("codeReview.extensions.empty")}</p>
-        <Button size="small" disabled={mutation.isPending} onClick={() => mutation.mutate(null)}>{t("codeReview.extensions.install")}</Button>
-      </div>}
-      <ul className="code-extension-list">
-        {items.map((item) => {
-          const activity = activities.find((candidate) => candidate.id === item.id);
-          const update = updates.data?.updates.find((candidate) => candidate.id === item.id && candidate.installedSha256 === item.sha256);
-          const status = item.capability === "unsupported" ? "unsupportedStatus"
-            : !item.enabled ? "disabled" : activity?.state ?? "enabled";
-          const statusText = t(`codeReview.extensions.${status}`);
-          return <CodeExtensionRow key={item.id} item={item} onOpen={() => setPackageId(item.id)}
-            status={update ? `${statusText} · ${t("codeReview.extensions.marketUpdateAvailable", { version: update.version })}` : statusText}
-            warning={status === "failed" || status === "unsupportedStatus"} actions={<IconButton icon="settings"
-              className="code-review-tool" label={t("codeReview.extensions.manage", { name: item.name })} aria-haspopup="menu"
-              aria-expanded={menu.trigger?.dataset.extensionId === item.id} data-extension-id={item.id}
-              onClick={(event) => manageExtension(event, item, update)} />}>
-            {activity?.detail && item.enabled && <p className="code-extension-row-alert" role="alert">{activity.detail}</p>}
-          </CodeExtensionRow>;
-        })}
-      </ul>
+    <div className="code-extension-sections">
+      {!searching && <ExtensionGroup label={t("codeReview.extensions.installedTab")} count={loading || loadError ? undefined : items.length}
+        expanded={installedOpen} toggle={() => setInstalledOpen((value) => !value)}>
+        {loading && <p role="status">{t("navigation.loadingWorkspace")}</p>}
+        {loadError && <p role="alert">{t("codeReview.extensions.storage")}{" "}
+          <Button size="small" onClick={retry}>{t("codeReview.refresh")}</Button></p>}
+        {updates.isError && <p role="alert">{t(extensionErrorMessage(updates.error))}</p>}
+        {updates.isSuccess && updates.data.failed > 0 && <p role="status">{t("codeReview.extensions.marketPartial", { count: updates.data.failed })}</p>}
+        {updates.isSuccess && !updates.data.failed && !updates.data.updates.some((update) => items.some((item) =>
+          item.id === update.id && item.sha256 === update.installedSha256)) && <p role="status">{t("codeReview.extensions.marketUpToDate")}</p>}
+        {!loading && !loadError && !items.length && <p>{t("codeReview.extensions.empty")}</p>}
+        {items.length > 0 && <ul className="code-extension-list code-extension-installed-list">
+          {items.map((item) => {
+            const activity = activities.find((candidate) => candidate.id === item.id);
+            const update = updates.data?.updates.find((candidate) => candidate.id === item.id && candidate.installedSha256 === item.sha256);
+            const status = item.capability === "unsupported" ? "unsupportedStatus"
+              : !item.enabled ? "disabled" : activity?.state ?? "enabled";
+            const statusText = t(`codeReview.extensions.${status}`);
+            return <CodeExtensionRow key={item.id} item={item} onOpen={() => setPackageId(item.id)}
+              status={update ? `${statusText} · ${t("codeReview.extensions.marketUpdateAvailable", { version: update.version })}` : statusText}
+              warning={status === "failed" || status === "unsupportedStatus"} actions={<IconButton icon="settings"
+                className="code-review-tool" label={t("codeReview.extensions.manage", { name: item.name })} aria-haspopup="menu"
+                aria-expanded={menu.trigger?.dataset.extensionId === item.id} data-extension-id={item.id}
+                onClick={(event) => manageExtension(event, item, update)} />}>
+              {activity?.detail && item.enabled && <p className="code-extension-row-alert" role="alert">{activity.detail}</p>}
+            </CodeExtensionRow>;
+          })}
+        </ul>}
+      </ExtensionGroup>}
+      {market && (searching ? <section className="code-extension-group" aria-label={t("codeReview.extensions.marketResults")}>
+        <h2 className="code-extension-group-heading">{t("codeReview.extensions.marketResults")}</h2>
+        <div className="code-extension-group-body">{catalog}</div>
+      </section> : <ExtensionGroup label={t("codeReview.extensions.marketFeatured")}
+        expanded={featuredOpen} toggle={() => setFeaturedOpen((value) => !value)}>{catalog}</ExtensionGroup>)}
     </div>
     {menu.surface}
     {selectedPackage && <ModalSurface label={t("codeReview.extensions.package")} onDismiss={() => setPackageId(undefined)}>

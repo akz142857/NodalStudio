@@ -1,6 +1,6 @@
 //! Resolves symbols through the language server that owns the source file.
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     path::{Path, PathBuf},
     sync::{
         Arc, Weak,
@@ -10,15 +10,20 @@ use std::{
 };
 
 use cap_std::fs::Dir;
+use futures_util::{StreamExt, stream};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use super::{
     files::{MAX_FILE_BYTES, Repository, read_nested, review_relative_path},
-    language_server::{Language, LanguageServer, ServerError, file_uri},
+    language_server::{
+        ActivityState, Language, LanguageServer, ServerError, SharedActivity, WorkProgress,
+        file_uri,
+    },
 };
 
 const MAX_SERVERS: usize = 12;
@@ -29,14 +34,50 @@ const MAX_OUTLINE_SYMBOLS: usize = 1500;
 const MAX_OUTLINE_DEPTH: usize = 16;
 const SOURCE_UNAVAILABLE: &str = "definitionSourceUnavailable";
 
-type Server = Mutex<Option<LanguageServer>>;
 type ServerKey = (Language, PathBuf);
 
 #[derive(Default)]
+struct Server {
+    session: Mutex<Option<LanguageServer>>,
+    activity: SharedActivity,
+}
+
+#[derive(Default)]
 pub(super) struct Definitions {
-    enabled: AtomicBool,
+    pub(super) enabled: Arc<AtomicBool>,
+    pub(super) stopped: CancellationToken,
     servers: Mutex<VecDeque<(ServerKey, Arc<Server>)>>,
     sources: Mutex<VecDeque<(Uuid, Dependency)>>,
+    startup: Mutex<Startup>,
+}
+
+#[derive(Default)]
+enum Startup {
+    #[default]
+    Discovering,
+    Workspaces(PathBuf, Vec<(ServerKey, Arc<Server>)>),
+    Failed,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub(crate) enum LanguageServiceStatus {
+    Offline,
+    Disabled,
+    Discovering,
+    Workspaces { workspaces: Vec<LanguageWorkspace> },
+    Failed,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LanguageWorkspace {
+    language: Language,
+    root: String,
+    command: &'static str,
+    state: ActivityState,
+    progress: Option<WorkProgress>,
+    last_task: Option<String>,
 }
 
 #[derive(Clone)]
@@ -73,7 +114,7 @@ pub(crate) struct SourcePosition {
 pub(crate) struct DefinitionRequest {
     #[serde(flatten)]
     source: SourcePosition,
-    enable: bool,
+    pub(super) enable: bool,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -86,7 +127,7 @@ pub(crate) struct DocumentHighlightRange {
 pub(crate) struct DocumentOutlineRequest {
     origin: DefinitionOrigin,
     text: String,
-    enable: bool,
+    pub(super) enable: bool,
 }
 
 #[derive(Serialize)]
@@ -100,6 +141,7 @@ pub(crate) struct OutlineSymbol {
 #[derive(Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub(crate) enum DocumentOutlineResult {
+    Offline,
     Disabled,
     MissingServer { command: &'static str },
     ServerFailed { command: &'static str },
@@ -120,6 +162,7 @@ pub(crate) struct DefinitionTarget {
 #[derive(Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub(crate) enum DefinitionResult {
+    Offline,
     Disabled,
     Unsupported,
     MissingServer { command: &'static str },
@@ -137,6 +180,84 @@ enum SymbolRequest {
 }
 
 impl Definitions {
+    pub(super) async fn while_running<T>(&self, task: impl Future<Output = T>) -> Option<T> {
+        tokio::select! {
+            biased;
+            _ = self.stopped.cancelled() => None,
+            output = task => Some(output),
+        }
+    }
+    pub(super) fn with_grant(enabled: Arc<AtomicBool>) -> Self {
+        Self {
+            enabled,
+            ..Self::default()
+        }
+    }
+
+    pub(super) fn is_enabled(&self) -> bool {
+        !cfg!(feature = "mac-app-store") && self.enabled.load(Ordering::Relaxed)
+    }
+
+    pub(super) async fn status(&self) -> LanguageServiceStatus {
+        if !self.is_enabled() {
+            return LanguageServiceStatus::Disabled;
+        }
+        match &*self.startup.lock().await {
+            Startup::Discovering => LanguageServiceStatus::Discovering,
+            Startup::Failed => LanguageServiceStatus::Failed,
+            Startup::Workspaces(project_root, servers) => LanguageServiceStatus::Workspaces {
+                workspaces: servers
+                    .iter()
+                    .filter_map(|((language, root), server)| {
+                        let activity = server.activity.lock().ok()?;
+                        Some(LanguageWorkspace {
+                            language: *language,
+                            root: root
+                                .strip_prefix(project_root)
+                                .unwrap_or(root)
+                                .to_string_lossy()
+                                .replace('\\', "/"),
+                            command: language.command().0,
+                            state: activity.state,
+                            progress: activity.progress(),
+                            last_task: activity.last_task(),
+                        })
+                    })
+                    .collect(),
+            },
+        }
+    }
+
+    pub(super) async fn prewarm(&self, discovered: Option<(PathBuf, Vec<Origin>)>) {
+        let Some((project_root, origins)) = discovered else {
+            *self.startup.lock().await = Startup::Failed;
+            return;
+        };
+        let mut work = Vec::new();
+        let mut workspaces = Vec::new();
+        for origin in origins {
+            let key = (origin.language, origin.root.clone());
+            let server = self.server(key.clone()).await;
+            workspaces.push((key, Arc::clone(&server)));
+            work.push((server, origin));
+        }
+        *self.startup.lock().await = Startup::Workspaces(project_root.clone(), workspaces);
+        let project_root = &project_root;
+        stream::iter(work)
+            .for_each_concurrent(2, |(server, origin)| async move {
+                let mut session = server.session.lock().await;
+                if let Ok(client) = connect(&server, &mut session, project_root, &origin).await
+                    && client
+                        .open(&origin.uri, origin.language_id, &origin.text)
+                        .await
+                        .is_err()
+                {
+                    server.disconnect(&mut session);
+                }
+            })
+            .await;
+    }
+
     pub(super) async fn lookup(
         &self,
         project_root: PathBuf,
@@ -345,9 +466,12 @@ impl Definitions {
             .iter()
             .position(|(existing, _)| *existing == key)
             .and_then(|index| servers.remove(index))
-            .map_or_else(|| Arc::new(Mutex::new(None)), |(_, server)| server);
+            .map_or_else(|| Arc::new(Server::default()), |(_, server)| server);
         if servers.len() == MAX_SERVERS {
-            servers.pop_front();
+            let unused = servers
+                .iter()
+                .position(|(_, server)| Arc::strong_count(server) == 1);
+            servers.remove(unused.unwrap_or_default());
         }
         servers.push_back((key, Arc::clone(&server)));
         server
@@ -438,7 +562,7 @@ impl Definitions {
             return read_source(project_root, directory, &path).ok_or(SOURCE_UNAVAILABLE);
         }
         let server = source.server.upgrade().ok_or(SOURCE_UNAVAILABLE)?;
-        let mut session = server.lock().await;
+        let mut session = server.session.lock().await;
         let client = session.as_mut().ok_or(SOURCE_UNAVAILABLE)?;
         let (method, content_key) = match (source.language, source.uri.scheme()) {
             (Language::Java, "jdt") => ("java/classFileContents", None),
@@ -460,12 +584,96 @@ impl Definitions {
     }
 }
 
-struct Origin {
+pub(super) struct Origin {
     uri: Url,
     text: String,
     root: PathBuf,
     language: Language,
     language_id: &'static str,
+}
+
+pub(super) fn warmup_sources(
+    project_root: &Path,
+    directory: &Repository,
+    paths: Vec<String>,
+) -> Vec<Origin> {
+    // Start one workspace per language. Other workspace roots still open on demand.
+    let mut candidates: BTreeMap<Language, Vec<_>> = BTreeMap::new();
+    for path in paths {
+        let relative = Path::new(&path);
+        if let Some((language, language_id)) = Language::for_path(relative) {
+            let in_sources = path.starts_with("src/") || path.contains("/src/");
+            let typed = language_id.starts_with("typescript");
+            let priority = (typed, in_sources);
+            candidates
+                .entry(language)
+                .or_default()
+                .push((priority, path, language_id));
+        }
+    }
+    candidates
+        .into_iter()
+        .filter_map(|(language, mut files)| {
+            files.sort_by_key(|(priority, _, _)| std::cmp::Reverse(*priority));
+            files.into_iter().find_map(|(_, path, language_id)| {
+                let file = project_root.join(path);
+                let text = normalize_source(&read_source(project_root, directory, &file)?);
+                Some(Origin {
+                    uri: file_uri(&file)?,
+                    root: language.workspace_root(project_root, &file),
+                    text,
+                    language,
+                    language_id,
+                })
+            })
+        })
+        .collect()
+}
+
+impl Server {
+    fn disconnect(&self, session: &mut Option<LanguageServer>) {
+        *session = None;
+        if let Ok(mut activity) = self.activity.lock() {
+            activity.fail(ActivityState::Failed);
+        }
+    }
+}
+
+async fn connect<'a>(
+    server: &Server,
+    session: &'a mut Option<LanguageServer>,
+    project_root: &Path,
+    origin: &Origin,
+) -> Result<&'a mut LanguageServer, ServerError> {
+    // An idle connection can fail before the next user request.
+    if server
+        .activity
+        .lock()
+        .is_ok_and(|activity| activity.state == ActivityState::Failed)
+    {
+        *session = None;
+    }
+    if session.is_none() {
+        let result = LanguageServer::start(
+            origin.language,
+            &origin.root,
+            project_root,
+            &server.activity,
+        )
+        .await;
+        if let Ok(mut activity) = server.activity.lock() {
+            match &result {
+                Ok(_) if activity.state == ActivityState::Starting => {
+                    activity.state = ActivityState::Connected
+                }
+                Err(ServerError::Missing) => activity.fail(ActivityState::Missing),
+                Err(_) => activity.fail(ActivityState::Failed),
+                Ok(_) => {}
+            }
+        }
+        *session = Some(result?);
+    }
+    session.as_mut().ok_or(ServerError::Transport)
 }
 
 async fn query_symbol(
@@ -475,18 +683,18 @@ async fn query_symbol(
     request: SymbolRequest,
 ) -> Result<Value, ServerError> {
     let mut session = match request {
-        SymbolRequest::Definition(_) | SymbolRequest::DocumentSymbols => server.lock().await,
-        SymbolRequest::DocumentHighlight(_) => {
-            server.try_lock().map_err(|_| ServerError::Request)?
+        SymbolRequest::Definition(_) | SymbolRequest::DocumentSymbols => {
+            server.session.lock().await
         }
+        SymbolRequest::DocumentHighlight(_) => server
+            .session
+            .try_lock()
+            .map_err(|_| ServerError::Request)?,
     };
-    if session.is_none() {
-        *session = Some(LanguageServer::start(origin.language, &origin.root, project_root).await?);
-    }
-    let client = session.as_mut().ok_or(ServerError::Transport)?;
+    let client = connect(server, &mut session, project_root, origin).await?;
     let result = request_symbol(client, origin, request).await;
     if matches!(&result, Err(ServerError::Transport)) {
-        *session = None;
+        server.disconnect(&mut session);
     }
     result
 }

@@ -13,12 +13,15 @@ pub(crate) mod extensions;
     reason = "Also contains file operations for the retired SQL prototype"
 )]
 mod files;
+#[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+mod finder;
 mod language_server;
 #[allow(
     dead_code,
     reason = "Keep the uncommitted prototype and existing Query draft validation without exposing its operations"
 )]
 mod legacy_sql;
+mod projects;
 pub(crate) mod review;
 pub(crate) mod search;
 

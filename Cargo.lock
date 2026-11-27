@@ -2536,6 +2536,7 @@ dependencies = [
  "glob",
  "keyring",
  "mysql-adapter",
+ "objc2",
  "objc2-app-kit",
  "objc2-foundation",
  "plist",

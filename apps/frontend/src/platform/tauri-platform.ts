@@ -73,6 +73,18 @@ export class TauriPlatform implements NodalStudioPlatform {
   readonly codeReview: CodeReviewPlatform = {
     current: () => invoke("get_code_review_project"),
     choose: () => invoke("choose_code_review_project"),
+    projects: {
+      list: () => invoke("list_code_review_projects"),
+      editGroups: (input) => invoke("edit_code_review_project_groups", { input }),
+      open: (id) => invoke("open_saved_code_review_project", { id }),
+      pin: (id, pinned) => invoke("pin_code_review_project", { id, pinned }),
+      relocate: (relocateId) => invoke("choose_code_review_project", { relocateId }),
+      remove: (id) => invoke("remove_code_review_project", { id }),
+    },
+    finder: {
+      act: (target, action) => invoke("code_review_finder_action", { target, action }),
+      addProjects: () => invoke("paste_code_review_projects"),
+    },
     changes: (projectId) => invoke("refresh_code_review", { projectId }),
     directory: (projectId, path, compact) => invoke("list_code_review_directory", { projectId, path, compact }),
     paths: (projectId) => invoke("list_code_review_paths", { projectId }),
@@ -100,6 +112,10 @@ export class TauriPlatform implements NodalStudioPlatform {
     definition: (projectId, input) => invoke("find_code_definition", { projectId, input }),
     documentHighlights: (projectId, input) => invoke("find_code_document_highlights", { projectId, input }),
     documentOutline: (projectId, input) => invoke("get_code_document_outline", { projectId, input }),
+    languageServices: {
+      status: (projectId) => invoke("get_code_language_status", { projectId }),
+      enable: (projectId) => invoke("enable_code_language_services", { projectId }),
+    },
     definitionSource: (projectId, sourceId) => invoke("read_code_definition_source", { projectId, sourceId }),
   };
 

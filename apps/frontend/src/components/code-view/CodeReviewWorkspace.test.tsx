@@ -6,7 +6,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { useState } from "react";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import type { CodeDefinitionRequest, CodeDefinitionResult, CodeDocumentHighlightRange, CodeDocumentOutlineRequest, CodeReviewCompactFolders,
-  CodeDocumentOutlineResult, CodeReviewChange, CodeReviewDirectory, CodeReviewPlatform } from "../../platform/code-review";
+  CodeDocumentOutlineResult, CodeLanguageStatus, CodeReviewChange, CodeReviewDirectory, CodeReviewPlatform, CodeReviewProject,
+  CodeSavedProject, CodeSavedProjectGroup } from "../../platform/code-review";
 import { CodeReviewWorkspace } from "./CodeReviewWorkspace";
 
 vi.mock("./code-review-checks", async (original) => {
@@ -41,8 +42,204 @@ afterAll(() => {
   Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
 });
 
+it("opens group colors on hover or by keyboard and supports search before opening a file", async () => {
+  const saved = { id: "flow", name: "flow-erp", path: "/workspace/flow-erp", pinned: false, groupId: "erp" };
+  let group: CodeSavedProjectGroup = { id: "erp", name: "ERP", collapsed: false, color: "orange" };
+  const editGroups = vi.fn<NonNullable<CodeReviewPlatform["projects"]>["editGroups"]>((update) => {
+    if (update.kind === "color") group = { ...group, color: update.color };
+    return Promise.resolve();
+  });
+  const choose = vi.fn().mockResolvedValue(null);
+  renderWorkspace({
+    current: () => Promise.resolve(null),
+    choose,
+    projects: {
+      list: () => Promise.resolve({ projects: [saved], groups: [group] }),
+      editGroups,
+      open: () => Promise.resolve({ id: "session", key: "flow", savedProjectId: "flow", name: saved.name, git: "folder", baseline: null }),
+      pin: () => Promise.resolve(),
+      remove: () => Promise.resolve(null),
+      relocate: () => Promise.resolve(null),
+    },
+    changes: () => Promise.resolve({ files: [], limited: false }),
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+    file: () => Promise.resolve({ before: null, after: { state: "missing" }, evidence: null, indexOnly: false }),
+    searchContent: () => Promise.resolve({ files: [], limited: false }),
+  });
+  const more = await screen.findByRole("button", { name: "Manage group ERP" });
+  act(() => { window.dispatchEvent(new Event("nodalstudio:code-quick-open")); });
+  await waitFor(() => expect(screen.getByRole("searchbox", { name: "Filter projects" })).toHaveFocus());
+  expect(choose).not.toHaveBeenCalled();
+  fireEvent.click(more);
+  const parent = screen.getByRole("menu", { name: "Actions for ERP" });
+  const groupColor = within(parent).getByRole("menuitem", { name: "Group Color" });
+  fireEvent.pointerEnter(groupColor);
+  const colors = screen.getByRole("menu", { name: "Group Color" });
+  expect(groupColor).toHaveAttribute("aria-expanded", "true");
+  expect(parent).toBeVisible();
+  expect(within(colors).getByRole("menuitemradio", { name: "Orange", checked: true })).toBeVisible();
+  vi.useFakeTimers();
+  try {
+    fireEvent.pointerEnter(within(parent).getByRole("menuitem", { name: "Remove Group" }));
+    fireEvent.pointerEnter(colors);
+    act(() => { vi.advanceTimersByTime(250); });
+    expect(colors).toBeVisible();
+  } finally {
+    vi.useRealTimers();
+  }
+  fireEvent.click(within(colors).getByRole("menuitemradio", { name: "No Color" }));
+  await waitFor(() => expect(editGroups).toHaveBeenCalledWith({ kind: "color", id: "erp", color: null }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "ERP" })).not.toHaveAttribute("aria-description"));
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+  fireEvent.click(more);
+  fireEvent.keyDown(screen.getByRole("menuitem", { name: "Rename Group…" }), { key: "ArrowDown" });
+  const trigger = screen.getByRole("menuitem", { name: "Group Color" });
+  expect(trigger).toHaveFocus();
+  fireEvent.keyDown(trigger, { key: "ArrowRight" });
+  const palette = within(screen.getByRole("menu", { name: "Group Color" }));
+  const selected = palette.getByRole("menuitemradio", { name: "No Color", checked: true });
+  expect(selected).toHaveFocus();
+  fireEvent.keyDown(selected, { key: "ArrowDown" });
+  const next = palette.getByRole("menuitemradio", { name: "Red" });
+  expect(next).toHaveFocus();
+  fireEvent.keyDown(next, { key: "Enter" });
+  await waitFor(() => expect(editGroups).toHaveBeenCalledWith({ kind: "color", id: "erp", color: "red" }));
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(more).toHaveFocus();
+  fireEvent.click(await screen.findByRole("button", { name: "flow-erp" }));
+  await screen.findByRole("button", { name: "Search" });
+  act(() => { window.dispatchEvent(new Event("nodalstudio:code-find")); });
+  const input = await screen.findByRole("combobox", { name: "Project Content" });
+  await waitFor(() => expect(input).toHaveFocus());
+});
+
+it("switches saved projects with independent tabs, positions, modes and content searches", async () => {
+  const first = { id: "alpha", name: "Alpha repo", path: "/workspace/Alpha", pinned: false };
+  const second = { id: "beta", name: "Beta repo", path: "/workspace/Beta", pinned: false };
+  let saved: CodeSavedProject[] = [];
+  let session = 0;
+  const open = ({ id, name }: CodeSavedProject): CodeReviewProject => ({
+    id: `${id}-${++session}`, savedProjectId: id, key: id, name, git: "ready", baseline: "abc123",
+  });
+  const path = "README.md";
+  const evidence = "review-file-change";
+  const source = (id: string) => id.startsWith("alpha") ? "# Alpha\nkept anchor\n" : "# Beta\nseparate context\n";
+  const searchContent = vi.fn<NonNullable<CodeReviewPlatform["searchContent"]>>((id, query) => {
+    const text = source(id).split("\n")[0];
+    return Promise.resolve({ files: [{ path, matches: [
+      { line: 0, character: 2, before: "# ", matched: query, after: text.slice(2 + query.length) },
+    ] }], limited: false });
+  });
+  const pin = vi.fn((id: string, pinned: boolean) => {
+    saved = saved.map((project) => project.id === id ? { ...project, pinned } : project);
+    return Promise.resolve();
+  });
+  renderWorkspace({
+    current: () => Promise.resolve(null),
+    choose: () => {
+      const project = saved.length ? second : first;
+      saved = [project, ...saved];
+      return Promise.resolve(open(project));
+    },
+    projects: {
+      list: () => Promise.resolve({ projects: saved, groups: [] }),
+      editGroups: () => Promise.resolve(),
+      open: (id) => Promise.resolve(open(saved.find((project) => project.id === id)!)),
+      pin,
+      relocate: () => Promise.resolve(null),
+      remove: () => Promise.resolve(null),
+    },
+    changes: () => Promise.resolve({ files: [{ path, previousPath: null, kind: "modified", staged: false, indexOnly: false, evidence }], limited: false }),
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+    file: (id, _, compare) => Promise.resolve({ before: compare ? { state: "text", text: "# Previous\n" } : null,
+      after: { state: "text", text: source(id) }, evidence: compare ? evidence : null, indexOnly: false }),
+    searchContent,
+  });
+  const selectProjectPanel = () => fireEvent.click(projectNavigator().getByRole("button", { name: "Projects" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Add Project…" }));
+  expect(await screen.findByRole("button", { name: first.name })).toHaveAttribute("aria-current", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Manage project Alpha repo" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Pin Project" }));
+  expect(await screen.findByRole("region", { name: "Pinned" })).toContainElement(screen.getByRole("button", { name: first.name }));
+  expect(pin).toHaveBeenCalledWith(first.id, true);
+  fireEvent.click(await screen.findByRole("button", { name: "Source" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute("aria-pressed", "true"));
+  const editor = EditorView.findFromDOM(await screen.findByRole("textbox", { name: path }))!;
+  const anchor = editor.state.doc.line(2).from + 2;
+  act(() => editor.dispatch({ selection: { anchor } }));
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Search" }));
+  fireEvent.change(await screen.findByRole("combobox", { name: "Project Content" }), { target: { value: "Alpha" } });
+  expect(await screen.findByText("1 matching line · 1 file")).toBeVisible();
+  expect(searchContent).toHaveBeenCalledWith("alpha-1", "Alpha");
+  selectProjectPanel();
+  fireEvent.click(screen.getByRole("button", { name: "Add Project…" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: second.name })).toHaveAttribute("aria-current", "true"));
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Search" }));
+  const betaSearch = await screen.findByRole("combobox", { name: "Project Content" });
+  expect(betaSearch).toHaveValue("");
+  fireEvent.change(betaSearch, { target: { value: "Beta" } });
+  await waitFor(() => expect(searchContent).toHaveBeenCalledWith("beta-2", "Beta"));
+  selectProjectPanel();
+  fireEvent.click(screen.getByRole("button", { name: first.name }));
+  await waitFor(() => expect(screen.getByRole("textbox", { name: path })).toHaveTextContent("kept anchor"));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute("aria-pressed", "true"));
+  expect(EditorView.findFromDOM(screen.getByRole("textbox", { name: path }))?.state.selection.main.anchor).toBe(anchor);
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Search" }));
+  expect(await screen.findByRole("combobox", { name: "Project Content" })).toHaveValue("Alpha");
+  await waitFor(() => expect(searchContent).toHaveBeenCalledWith("alpha-3", "Alpha"));
+
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Files" }));
+  const switcher = screen.getByRole("button", { name: /Switch project .* Alpha repo/ });
+  fireEvent.keyDown(switcher, { key: "ArrowDown" });
+  const menu = within(screen.getByRole("menu"));
+  expect(menu.getAllByRole("menuitemradio")[0]).toHaveTextContent(first.name);
+  expect(menu.getByRole("menuitemradio", { name: first.name, checked: true })).toBeVisible();
+  fireEvent.click(menu.getByRole("menuitemradio", { name: second.name }));
+  await waitFor(() => expect(screen.getByRole("button", { name: /Switch project .* Beta repo/ })).toHaveFocus());
+  expect(projectNavigator().getByRole("button", { name: "Files" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.queryByRole("complementary", { name: "Projects" })).not.toBeInTheDocument();
+});
+
+it("shows native language progress in the bottom dock and keeps Checks accessible", async () => {
+  const id = "language-progress";
+  let status: CodeLanguageStatus = { state: "disabled" };
+  const enable = vi.fn(() => {
+    status = { state: "workspaces", workspaces: [{
+      language: "Java", root: "services/os-server", command: "jdtls", state: "connected", lastTask: null,
+      progress: { title: "Importing Gradle project", message: "Resolving dependencies", percentage: 0 },
+    }] };
+    return Promise.resolve();
+  });
+  renderWorkspace({
+    current: () => Promise.resolve({ id, key: id, name: "Review", git: "folder", baseline: null }),
+    choose: () => Promise.resolve(null),
+    changes: () => Promise.resolve({ files: [], limited: false }),
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+    file: () => Promise.resolve({ before: null, after: { state: "missing" }, evidence: null, indexOnly: false }),
+    languageServices: { status: () => Promise.resolve(status), enable },
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "Language services" }));
+  const dock = screen.getByRole("complementary", { name: "Language services" });
+  expect(dock.previousElementSibling).toHaveAttribute("aria-orientation", "horizontal");
+  expect(enable).not.toHaveBeenCalled();
+  fireEvent.click(await within(dock).findByRole("button", { name: "Enable for this project" }));
+  expect(await within(dock).findByRole("progressbar", { name: "Java · Importing Gradle project" })).toHaveAttribute("value", "0");
+  expect(dock.nextElementSibling).toContainElement(screen.getByRole("button", { name: /^Language services\s*0%$/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Show Checks/ }));
+  expect(screen.getByRole("complementary", { name: "Checks" })).toBeInTheDocument();
+  expect(screen.queryByRole("complementary", { name: "Language services" })).not.toBeInTheDocument();
+});
+
 it("checks the displayed index diff, expands a folded result and rejects a stale jump", async () => {
   vi.stubGlobal("crypto", webcrypto);
+  const digest = webcrypto.subtle.digest.bind(webcrypto.subtle);
+  const digests: Promise<ArrayBuffer>[] = [];
+  const trackDigest = vi.spyOn(webcrypto.subtle, "digest").mockImplementation((...args) => {
+    const result = digest(...args);
+    digests.push(result);
+    return result;
+  });
   try {
     const project = { id: "markdown", key: "markdown", name: "Markdown review", git: "ready", baseline: "test" } as const;
     const path = "docs/guide.md";
@@ -50,15 +247,24 @@ it("checks the displayed index diff, expands a folded result and rejects a stale
     const after = before.replace("End", "Changed line   ");
     const change: CodeReviewChange = { path, previousPath: null, kind: "modified", staged: true, indexOnly: true, evidence: "index-1" };
     let evidence = "index-1";
+    let deferCompare = false;
+    let finishVerification: (() => void) | undefined;
+    const file: CodeReviewPlatform["file"] = async (_, name, compare) => {
+      if (compare && deferCompare) {
+        deferCompare = false;
+        await new Promise<void>((resolve) => { finishVerification = resolve; });
+      }
+      return name === ".markdownlint.json"
+        ? { before: null, after: { state: "text", text: '{"default":false,"MD009":"warning"}' }, evidence: null, indexOnly: false }
+        : compare ? { before: { state: "text", text: before }, after: { state: "text", text: after }, evidence, indexOnly: true }
+          : { before: null, after: { state: "text", text: "# Working tree\n" }, evidence: null, indexOnly: false };
+    };
     const api: CodeReviewPlatform = {
       current: () => Promise.resolve(project),
       choose: () => Promise.resolve(null),
       changes: () => Promise.resolve({ files: [change], limited: false }),
       directory: () => Promise.resolve({ entries: [], limited: false }),
-      file: (_, file, compare) => Promise.resolve(file === ".markdownlint.json"
-        ? { before: null, after: { state: "text", text: '{"default":false,"MD009":"warning"}' }, evidence: null, indexOnly: false }
-        : compare ? { before: { state: "text", text: before }, after: { state: "text", text: after }, evidence, indexOnly: true }
-          : { before: null, after: { state: "text", text: "# Working tree\n" }, evidence: null, indexOnly: false }),
+      file,
     };
     const workspace = renderWorkspace(api);
     await screen.findByRole("textbox", { name: path });
@@ -82,12 +288,23 @@ it("checks the displayed index diff, expands a folded result and rejects a stale
     expect(workspace.container).toHaveTextContent("Legacy line");
     await waitFor(() => expect(workspace.container.querySelector(".cm-lintRange-warning")).toBeTruthy());
 
+    const digestsBeforeJump = digests.length;
+    deferCompare = true;
+    fireEvent.click(screen.getByRole("button", { name: /MD009.*Line 3/ }));
+    await waitFor(() => expect(finishVerification).toBeDefined());
+    fireEvent.click(screen.getByRole("button", { name: "Source" }));
+    act(() => { finishVerification?.(); });
+    await waitFor(() => expect(digests).toHaveLength(digestsBeforeJump + 2));
+    await act(async () => { await Promise.all(digests.slice(digestsBeforeJump)); });
+    expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute("aria-pressed", "true");
+
     evidence = "index-2";
     fireEvent.click(screen.getByRole("button", { name: /MD009.*Line 3/ }));
     await screen.findByText("The file or rules changed. Refresh and run the check again.");
     expect(screen.getByRole("button", { name: /MD009.*Line 3/ })).toBeDisabled();
     expect(workspace.container.querySelector(".cm-lintRange-warning")).toBeNull();
   } finally {
+    trackDigest.mockRestore();
     vi.unstubAllGlobals();
   }
 });
@@ -169,7 +386,8 @@ it("reviews Go and SQL diffs and preserves earlier notes after the target change
 
   await screen.findByRole("textbox", { name: modelPath });
   fireEvent.click(screen.getByRole("button", { name: /Review note.*Pending review/ }));
-  const note = await screen.findByRole("textbox", { name: "Review note" });
+  const note = await screen.findByRole("textbox", { name: "Note" });
+  expect(note).toHaveAccessibleDescription(`${project.baseline?.slice(0, 10)} → Working tree`);
   fireEvent.change(note, { target: { value: "Check how missing payments are handled." } });
   fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
   const tabs = within(screen.getByRole("navigation", { name: "Open files" }));
@@ -177,9 +395,10 @@ it("reviews Go and SQL diffs and preserves earlier notes after the target change
   fireEvent.click(tabs.getByRole("button", { name: "orders.sql" }));
   await screen.findByRole("textbox", { name: modelPath });
   fireEvent.click(screen.getByRole("button", { name: /Review note.*Pending review/ }));
-  expect(screen.getByRole("textbox", { name: "Review note" })).toHaveValue("Check how missing payments are handled.");
+  expect(screen.getByRole("textbox", { name: "Note" })).toHaveValue("Check how missing payments are handled.");
   fireEvent.click(screen.getByRole("button", { name: "Needs changes" }));
   await waitFor(() => expect(sidebar.getByRole("button", { name: /orders\.sql.*Needs changes/i })).toBeInTheDocument());
+  expect(screen.getByRole("button", { name: /Review note.*Needs changes/ })).toBeVisible();
 
   evidence = "sql-v2";
   field = "settled_at";

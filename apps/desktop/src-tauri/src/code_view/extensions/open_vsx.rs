@@ -26,6 +26,7 @@ const UNAVAILABLE: &str = "openVsxUnavailable";
 const INTEGRITY: &str = "openVsxIntegrity";
 const MAX_JSON: u64 = 2 * 1024 * 1024;
 const SEARCH_SIZE: u32 = 20;
+const FEATURED_SIZE: u32 = 7;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -150,8 +151,45 @@ pub(crate) struct CatalogDetail {
     license: Option<String>,
     engine: Option<String>,
     capability: Option<Capability>,
+    incompatibility: Option<CatalogIncompatibility>,
     downloadable: bool,
     can_update: bool,
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum CatalogIncompatibility {
+    Debugger,
+    ExtensionDependencies,
+}
+
+struct CatalogCompatibility {
+    capability: Capability,
+    incompatibility: Option<CatalogIncompatibility>,
+}
+
+impl CatalogCompatibility {
+    fn from_manifest(manifest: &super::Manifest) -> Self {
+        let capability = capabilities(manifest, None).0;
+        let incompatibility = if capability != Capability::Unsupported {
+            None
+        } else if manifest
+            .contributes
+            .debuggers
+            .as_array()
+            .is_some_and(|items| !items.is_empty())
+        {
+            Some(CatalogIncompatibility::Debugger)
+        } else if !manifest.extension_dependencies.is_empty() {
+            Some(CatalogIncompatibility::ExtensionDependencies)
+        } else {
+            None
+        };
+        Self {
+            capability,
+            incompatibility,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -279,7 +317,7 @@ async fn release(
     Ok(Some(record))
 }
 
-async fn declared_capability(client: &Client, record: &Record) -> Option<Capability> {
+async fn declared_compatibility(client: &Client, record: &Record) -> Option<CatalogCompatibility> {
     let asset = record.file_url("manifest")?;
     let bytes = get(client, asset, MAX_ENTRY, RESPONSE).await.ok()??;
     let manifest = parse_manifest(&bytes).ok()?;
@@ -288,7 +326,7 @@ async fn declared_capability(client: &Client, record: &Record) -> Option<Capabil
     {
         return None;
     }
-    Some(capabilities(&manifest, None).0)
+    Some(CatalogCompatibility::from_manifest(&manifest))
 }
 
 async fn online(app: &AppState) -> Result<(), String> {
@@ -333,17 +371,11 @@ pub(crate) async fn search_code_open_vsx(
 ) -> Result<CatalogPage, String> {
     state.project(project_id)?;
     let query = query.trim();
-    if query.is_empty() || query.chars().count() > 160 {
+    if query.chars().count() > 160 {
         return Err(RESPONSE.into());
     }
     while_online(&app, async {
-        let mut url = api_url(&["-", "search"]);
-        url.query_pairs_mut()
-            .append_pair("query", query)
-            .append_pair("size", &SEARCH_SIZE.to_string())
-            .append_pair("offset", &offset.to_string())
-            .append_pair("targetPlatform", "universal");
-        let data = json::<SearchResponse>(&client()?, url)
+        let data = json::<SearchResponse>(&client()?, catalog_url(query, offset))
             .await?
             .ok_or(RESPONSE)?;
         let count = u32::try_from(data.extensions.len()).map_err(|_| RESPONSE)?;
@@ -354,10 +386,36 @@ pub(crate) async fn search_code_open_vsx(
                 .iter()
                 .filter_map(|record| record.catalog_item().ok())
                 .collect(),
-            next_offset: (count > 0 && next > offset && next < data.total_size).then_some(next),
+            next_offset: (!query.is_empty()
+                && count > 0
+                && next > offset
+                && next < data.total_size)
+                .then_some(next),
         })
     })
     .await
+}
+
+fn catalog_url(query: &str, offset: u32) -> Url {
+    let mut url = api_url(&["-", "search"]);
+    {
+        let mut params = url.query_pairs_mut();
+        params.append_pair("query", query);
+        if query.is_empty() {
+            // Match the featured row on the registry homepage.
+            params
+                .append_pair("size", &FEATURED_SIZE.to_string())
+                .append_pair("offset", "0")
+                .append_pair("sortBy", "relevance")
+                .append_pair("sortOrder", "desc");
+        } else {
+            params
+                .append_pair("size", &SEARCH_SIZE.to_string())
+                .append_pair("offset", &offset.to_string())
+                .append_pair("targetPlatform", "universal");
+        }
+    }
+    url
 }
 
 #[tauri::command]
@@ -370,15 +428,16 @@ pub(crate) async fn detail_code_open_vsx(
     version: Option<String>,
 ) -> Result<CatalogDetail, String> {
     state.project(project_id)?;
-    let (record, capability) = while_online(&app, async {
+    let (record, compatibility) = while_online(&app, async {
         let client = client()?;
         let record = release(&client, &id, version.as_deref())
             .await?
             .ok_or(UNAVAILABLE)?;
-        let capability = declared_capability(&client, &record).await;
-        Ok((record, capability))
+        let compatibility = declared_compatibility(&client, &record).await;
+        Ok((record, compatibility))
     })
     .await?;
+    let capability = compatibility.as_ref().map(|result| result.capability);
     let remote_version = record.version.clone();
     let can_update = with_storage(handle, &state, project_id, move |root, key| {
         let path = root.join(id);
@@ -397,6 +456,7 @@ pub(crate) async fn detail_code_open_vsx(
         license: record.license.clone(),
         engine: record.engines.get("vscode").cloned(),
         capability,
+        incompatibility: compatibility.and_then(|result| result.incompatibility),
         downloadable: record.can_download(),
         can_update,
     })
@@ -425,9 +485,9 @@ pub(crate) async fn check_code_open_vsx_updates(
                 let release = release(&client, &item.id, None).await?;
                 if let Some(record) = release
                     .filter(|record| record.can_download() && newer(&record.version, &item.version))
-                    && declared_capability(&client, &record)
+                    && declared_compatibility(&client, &record)
                         .await
-                        .is_none_or(|capability| compatible_update(item.capability, capability))
+                        .is_none_or(|result| compatible_update(item.capability, result.capability))
                 {
                     return Ok::<_, String>(Some(CatalogUpdate {
                         id: item.id,
@@ -527,4 +587,47 @@ pub(crate) async fn install_code_open_vsx(
         Ok(incoming)
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn featured_matches_the_registry_homepage_ranking() {
+        let featured = catalog_url("", 42);
+        assert!(allowed_url(&featured));
+        assert_eq!(featured.path(), "/api/-/search");
+        assert_eq!(
+            featured.query(),
+            Some("query=&size=7&offset=0&sortBy=relevance&sortOrder=desc")
+        );
+        let search = catalog_url("language tools", 20);
+        assert_eq!(
+            search.query(),
+            Some("query=language+tools&size=20&offset=20&targetPlatform=universal")
+        );
+    }
+
+    #[test]
+    fn identifies_the_debugger_requirement_in_an_unsupported_manifest() {
+        let manifest = parse_manifest(
+            br#"{
+            "name": "debugpy",
+            "publisher": "ms-python",
+            "version": "2026.6.0",
+            "engines": {"vscode": "^1.92.0"},
+            "main": "./dist/extension.js",
+            "extensionDependencies": ["ms-python.python"],
+            "contributes": {"debuggers": [{"type": "debugpy"}]}
+        }"#,
+        )
+        .unwrap();
+        let compatibility = CatalogCompatibility::from_manifest(&manifest);
+        assert!(compatibility.capability == Capability::Unsupported);
+        assert!(matches!(
+            compatibility.incompatibility,
+            Some(CatalogIncompatibility::Debugger)
+        ));
+    }
 }
