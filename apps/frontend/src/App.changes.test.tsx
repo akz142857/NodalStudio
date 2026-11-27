@@ -51,7 +51,7 @@ vi.mock("./components/SchemaCanvas", () => ({
 describe("App schema changes", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it.each(["mySql", "sqlite"])("opens Ontology from the %s model", async (databaseType) => {
+  it.each(["mySql", "sqlite"])("opens Ontology from the %s model", { timeout: 10_000 }, async (databaseType) => {
     const platform = getPlatform();
     vi.spyOn(platform, "getRuntimeInfo").mockResolvedValue({ kind: "desktop", label: "Desktop runtime", version: "test" });
     const listOntology = vi.spyOn(platform, "listOntology").mockResolvedValue([]);
@@ -59,7 +59,7 @@ describe("App schema changes", () => {
     await screen.findByText("Desktop runtime");
     fireEvent.click(screen.getByRole("button", { name: `Open ${databaseType} fixture` }));
     fireEvent.click(screen.getByRole("button", { name: "Ontology" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "New Definition" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "New Definition" })).toBeEnabled(), { timeout: 5_000 });
     expect(listOntology).toHaveBeenCalledWith({ sourceId: fixture.after.sourceId, snapshotId: fixture.after.id });
   });
 

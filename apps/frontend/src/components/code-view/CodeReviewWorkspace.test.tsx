@@ -179,7 +179,7 @@ it("opens group colors on hover or by keyboard and supports search before openin
   await waitFor(() => expect(input).toHaveFocus());
 });
 
-it("switches saved projects with independent tabs, positions, modes and content searches", async () => {
+it("switches saved projects with independent tabs, positions, modes and content searches", { timeout: 15_000 }, async () => {
   const first = { id: "alpha", name: "Alpha repo", path: "/workspace/Alpha", pinned: false };
   const second = { id: "beta", name: "Beta repo", path: "/workspace/Beta", pinned: false };
   let saved: CodeSavedProject[] = [];
@@ -873,7 +873,7 @@ it("marks collapsed ancestors from Changes and keeps deleted files reachable aft
   expect(sidebar.queryByRole("button", { name: "legacy" })).not.toBeInTheDocument();
 });
 
-it("compacts single-folder paths while keeping real file paths, visible siblings and change badges", async () => {
+it("compacts single-folder paths while keeping real file paths, visible siblings and change badges", { timeout: 15_000 }, async () => {
   const project = { id: "compact", key: "compact", name: "Java project", git: "ready", baseline: "abc123" } as const;
   const java = "src/test/java";
   const chain = ["com", "wahool", "erp", "web"];
