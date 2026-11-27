@@ -2352,7 +2352,7 @@ pub fn run() {
     #[cfg(target_os = "macos")]
     let builder = builder
         .menu(desktop_menu::menu)
-        .on_menu_event(desktop_menu::on_menu_event);
+        .on_menu_event(|app, event| desktop_menu::on_menu_event(app, &event));
     #[cfg(not(feature = "mac-app-store"))]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     builder

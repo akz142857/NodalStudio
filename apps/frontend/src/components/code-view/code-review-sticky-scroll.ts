@@ -29,14 +29,20 @@ const declarationBodies: Partial<Record<string, readonly string[]>> = {
 
 export function readerScopesAtLine(state: EditorState, lineNumber: number): ReaderScope[] {
   const { doc } = state;
-  const { from } = doc.line(lineNumber);
+  let anchorLine = doc.line(lineNumber);
+  // In indentation-sensitive grammars (such as Python), blank lines may sit outside the enclosing Body node.
+  while (!anchorLine.text.trim() && anchorLine.number < doc.lines) {
+    anchorLine = doc.line(anchorLine.number + 1);
+  }
+  const indent = anchorLine.text.search(/\S/);
+  const probe = indent >= 0 ? anchorLine.from + indent : anchorLine.from;
   const scopes: ReaderScope[] = [];
-  const resolved = syntaxTree(state).resolveInner(from, 1);
+  const resolved = syntaxTree(state).resolveInner(probe, 1);
   for (let ancestor: typeof resolved | null = resolved; ancestor; ancestor = ancestor.parent) {
     const node = ancestor;
     const bodies = declarationBodies[node.name];
     if (!bodies || (node.name === "VariableDeclaration" && node.getChildren("VariableDefinition").length !== 1)) continue;
-    const body = bodies.map((name) => node.getChild(name)).find((part) => part && part.from <= from && from < part.to);
+    const body = bodies.map((name) => node.getChild(name)).find((part) => part && part.from <= probe && probe < part.to);
     if (!body) continue;
     // Java nodes may begin with annotations on earlier lines.
     const header = doc.lineAt(node.getChild("Definition")?.from ?? node.from);

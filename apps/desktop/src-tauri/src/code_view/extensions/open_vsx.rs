@@ -458,26 +458,34 @@ async fn catalog_page(client: &Client, query: &str, offset: u32) -> Result<Catal
     // The registry offset counts all results, including releases filtered out below.
     let next_offset = (!featured && next > offset && next < data.total_size).then_some(next);
     let mut candidates = Vec::new();
+    let mut queued = HashSet::new();
+    let mut push_candidate = |id: String, version: Option<String>| {
+        if queued.insert(id.clone()) {
+            candidates.push((id, version));
+        }
+    };
     if featured
-        || ["python", "debugpy", "python debugger", PYTHON_DEBUGGER_ID]
-            .iter()
-            .any(|value| value.eq_ignore_ascii_case(query.trim()))
+        || (offset == 0
+            && ["python", "debugpy", "python debugger", PYTHON_DEBUGGER_ID]
+                .iter()
+                .any(|value| value.eq_ignore_ascii_case(query.trim())))
     {
-        candidates.push((
+        push_candidate(
             PYTHON_DEBUGGER_ID.to_owned(),
             Some(PYTHON_DEBUGGER_VERSION.to_owned()),
-        ));
-    }
-    candidates.extend(data.extensions.iter().filter_map(|record| {
-        stable_version(&record.version)?;
-        Some((record.id().ok()?, Some(record.version.clone())))
-    }));
-    if featured {
-        candidates.extend(
-            PREVIEW_RECOMMENDATIONS
-                .iter()
-                .map(|id| ((*id).to_owned(), None)),
         );
+    }
+    for record in &data.extensions {
+        if stable_version(&record.version).is_some()
+            && let Ok(id) = record.id()
+        {
+            push_candidate(id, Some(record.version.clone()));
+        }
+    }
+    if featured {
+        for id in PREVIEW_RECOMMENDATIONS {
+            push_candidate((*id).to_owned(), None);
+        }
     }
     let checks = stream::iter(candidates)
         .map(|(id, version)| async move {

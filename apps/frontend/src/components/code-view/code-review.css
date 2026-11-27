@@ -1425,7 +1425,13 @@
   .code-content-result[aria-selected="true"],
   .code-checks-finding[aria-current="true"],
   .code-quick-open-scope button.active,
+  .python-debug-inspect li button[aria-current="true"],
   .code-review :is(.code-review-segments, .code-review-view-mode) button:is(.active, [aria-pressed="true"]) { outline: 1px solid Highlight; outline-offset: -2px; }
+  .python-debug-breakpoint { border-color: CanvasText; }
+  .python-debug-breakpoint[data-verified="true"] { background: Highlight; border-color: Highlight; forced-color-adjust: none; }
+  .code-review-reader-host .cm-python-debug-paused { outline: 1px solid Highlight; }
+  .code-review-reader-host .cm-source-changes .cm-gutterElement { border-inline-start: 3px solid Highlight; }
+  .code-review-change-overview button::before { border: 1px solid Highlight; }
 }
 
 .code-extensions {

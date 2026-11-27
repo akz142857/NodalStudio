@@ -307,6 +307,28 @@ async fn wait_offline(offline: &mut watch::Receiver<bool>) {
     let _ = offline.wait_for(|value| *value).await;
 }
 
+struct TempCleanup(Option<tempfile::TempDir>);
+
+impl TempCleanup {
+    fn path(&self) -> &Path {
+        self.0
+            .as_ref()
+            .map_or_else(|| Path::new(""), tempfile::TempDir::path)
+    }
+}
+
+impl Drop for TempCleanup {
+    fn drop(&mut self) {
+        if let Some(dir) = self.0.take() {
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                drop(handle.spawn_blocking(move || drop(dir)));
+            } else {
+                drop(dir);
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run(
     handle: AppHandle,
@@ -328,7 +350,7 @@ async fn run(
         }
         let temp = tempfile::tempdir().map_err(|_| PROTOCOL)?;
         let entry = python_adapter(&handle, work.key(), temp.path())?;
-        Ok::<_, String>((temp, entry, input, program, cwd))
+        Ok::<_, String>((TempCleanup(Some(temp)), entry, input, program, cwd))
     });
     let (temp, entry, input, program, cwd) = tokio::select! {
         () = cancel.cancelled() => return Ok(()),
@@ -342,7 +364,6 @@ async fn run(
             .as_mut()
             .filter(|active| active.id == id && !cancel.is_cancelled())
             .ok_or(BUSY)?;
-        project.directory()?;
         let child = Command::new(&input.interpreter)
             .args(["-I", "-B"])
             .arg(entry)
@@ -353,7 +374,7 @@ async fn run(
             .env("LC_CTYPE", "UTF-8")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .process_group(0)
             .kill_on_drop(true)
             .spawn()
@@ -367,6 +388,7 @@ async fn run(
     let mut adapter = Adapter::new(
         child.stdin.take().ok_or(PROTOCOL)?,
         child.stdout.take().ok_or(PROTOCOL)?,
+        child.stderr.take(),
         events,
     );
     let result = tokio::select! {
@@ -383,6 +405,7 @@ async fn run(
     }
     drop(adapter);
     let _ = child.wait().await;
+    drop(temp);
     result
 }
 
@@ -419,7 +442,16 @@ async fn debug(
         if let Some(event) = adapter.event() {
             match event["event"].as_str() {
                 Some("stopped") => {
-                    let id = event["body"]["threadId"].as_u64().ok_or(PROTOCOL)?;
+                    let id = if let Some(id) = event["body"]["threadId"].as_u64() {
+                        id
+                    } else {
+                        let threads = adapter.call("threads", json!({})).await?;
+                        threads["threads"]
+                            .as_array()
+                            .and_then(|list| list.first())
+                            .and_then(|item| item["id"].as_u64())
+                            .ok_or(PROTOCOL)?
+                    };
                     thread = Some(id);
                     let stack = adapter
                         .call(
@@ -446,12 +478,13 @@ async fn debug(
             action = actions.recv() => match action {
                 Some(Action::Breakpoints { path, lines }) => {
                     let others = breakpoints.iter().filter(|(key, _)| **key != path).map(|(_, lines)| lines.len()).sum::<usize>();
-                    check_lines(&lines)?;
-                    if others + lines.len() > MAX_BREAKPOINTS {
-                        return Err(INPUT.into());
+                    if check_lines(&lines).is_err() || others + lines.len() > MAX_BREAKPOINTS {
+                        continue;
                     }
-                    set_breakpoints(adapter, project, &path, &lines).await?;
-                    if lines.is_empty() { breakpoints.remove(&path); } else { breakpoints.insert(path, lines); }
+                    if let Ok(source) = file_path(project, &path) {
+                        set_breakpoints_for_source(adapter, &path, &source, &lines).await?;
+                        if lines.is_empty() { breakpoints.remove(&path); } else { breakpoints.insert(path, lines); }
+                    }
                 }
                 Some(Action::Frame { id }) if thread.is_some() && frames.iter().any(|frame| frame.id == id) => {
                     show_frame(adapter, &frames, Some(id)).await?;
@@ -475,6 +508,26 @@ async fn debug(
     }
 }
 
+fn verified_breakpoint_lines(body: &Value, requested: &[u32]) -> Result<Vec<u32>, String> {
+    let mut lines: Vec<u32> = body["breakpoints"]
+        .as_array()
+        .ok_or(PROTOCOL)?
+        .iter()
+        .zip(requested)
+        .filter(|(item, _)| item["verified"] == true)
+        .map(|(item, line)| {
+            item["line"]
+                .as_u64()
+                .and_then(|actual| u32::try_from(actual).ok())
+                .filter(|actual| *actual > 0)
+                .unwrap_or(*line)
+        })
+        .collect();
+    lines.sort_unstable();
+    lines.dedup();
+    Ok(lines)
+}
+
 async fn set_breakpoints(
     adapter: &mut Adapter,
     project: &Project,
@@ -482,35 +535,47 @@ async fn set_breakpoints(
     lines: &[u32],
 ) -> Result<(), String> {
     let source = file_path(project, path)?;
+    set_breakpoints_for_source(adapter, path, &source, lines).await
+}
+
+async fn set_breakpoints_for_source(
+    adapter: &mut Adapter,
+    path: &str,
+    source: &Path,
+    lines: &[u32],
+) -> Result<(), String> {
     let body = adapter.call("setBreakpoints", json!({
         "source": {"path": source}, "breakpoints": lines.iter().map(|line| json!({"line": line})).collect::<Vec<_>>()
     })).await?;
-    let lines = body["breakpoints"]
-        .as_array()
-        .ok_or(PROTOCOL)?
-        .iter()
-        .zip(lines)
-        .filter(|(item, _)| item["verified"] == true)
-        .map(|(_, line)| *line)
-        .collect();
+    let verified = verified_breakpoint_lines(&body, lines)?;
     adapter.emit(Event::Breakpoints {
         path: path.into(),
-        lines,
+        lines: verified,
     })
 }
 
 fn stack_frame(project: &Project, frame: &Value) -> Option<Frame> {
     let source = frame["source"]["path"].as_str().unwrap_or_default();
-    let relative = Path::new(source)
+    let candidate = Path::new(source);
+    let relative = candidate
         .strip_prefix(&project.root)
         .ok()
-        .and_then(Path::to_str)
+        .map(Path::to_path_buf)
+        .or_else(|| {
+            let canonical_source = candidate.canonicalize().ok()?;
+            let canonical_root = project.root.canonicalize().ok()?;
+            canonical_source
+                .strip_prefix(canonical_root)
+                .ok()
+                .map(Path::to_path_buf)
+        })
+        .and_then(|path| path.to_str().map(str::to_owned))
         .filter(|path| file_path(project, path).is_ok());
     Some(Frame {
         id: frame["id"].as_u64()?,
         name: bounded_text(frame["name"].as_str().unwrap_or_default(), 256),
         source: bounded_text(frame["source"]["name"].as_str().unwrap_or(source), 256),
-        path: relative.map(str::to_owned),
+        path: relative,
         line: u32::try_from(frame["line"].as_u64()?).ok()?,
     })
 }
@@ -528,6 +593,9 @@ async fn show_frame(
                 continue;
             }
             let reference = scope["variablesReference"].as_u64().ok_or(PROTOCOL)?;
+            if reference == 0 {
+                continue;
+            }
             let result = adapter
                 .call(
                     "variables",
@@ -568,4 +636,101 @@ async fn show_frame(
         selected,
         scopes,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_python_paths_and_rejects_traversal_symlinks_and_non_python() {
+        let sandbox = tempfile::tempdir().unwrap();
+        let root = sandbox.path().canonicalize().unwrap();
+        fs::create_dir(root.join("pkg")).unwrap();
+        fs::write(root.join("pkg/app.py"), "print('ok')\n").unwrap();
+        fs::write(root.join("notes.txt"), "text\n").unwrap();
+        std::os::unix::fs::symlink(root.join("pkg/app.py"), root.join("link.py")).unwrap();
+        let project = Project::open(root.clone()).unwrap();
+
+        assert_eq!(
+            file_path(&project, "pkg/app.py").unwrap(),
+            root.join("pkg/app.py")
+        );
+        assert!(file_path(&project, "notes.txt").is_err());
+        assert!(file_path(&project, "../app.py").is_err());
+        assert!(file_path(&project, "link.py").is_err());
+        assert_eq!(working_dir(&project, ".").unwrap(), root);
+        assert_eq!(working_dir(&project, "pkg").unwrap(), root.join("pkg"));
+        assert!(working_dir(&project, "../outside").is_err());
+        assert!(check_lines(&[1, 10]).is_ok());
+        assert!(check_lines(&[0]).is_err());
+    }
+
+    #[test]
+    fn verified_breakpoints_uses_snapped_adapter_lines_and_deduplicates() {
+        let body = json!({
+            "breakpoints": [
+                {"verified": true, "line": 7},
+                {"verified": true, "line": 7},
+                {"verified": false, "line": 12},
+                {"verified": true}
+            ]
+        });
+        assert_eq!(
+            verified_breakpoint_lines(&body, &[5, 6, 12, 20]).unwrap(),
+            vec![7, 20]
+        );
+    }
+
+    #[test]
+    fn stack_frame_maps_project_relative_paths() {
+        let sandbox = tempfile::tempdir().unwrap();
+        let root = sandbox.path().canonicalize().unwrap();
+        fs::write(root.join("main.py"), "x = 1\n").unwrap();
+        let project = Project::open(root.clone()).unwrap();
+        let frame = stack_frame(
+            &project,
+            &json!({
+                "id": 1,
+                "name": "validate_count",
+                "source": { "name": "main.py", "path": root.join("main.py") },
+                "line": 7
+            }),
+        )
+        .unwrap();
+        assert_eq!(frame.path.as_deref(), Some("main.py"));
+        assert_eq!(frame.line, 7);
+
+        let external = stack_frame(
+            &project,
+            &json!({
+                "id": 2,
+                "name": "run",
+                "source": { "name": "click.py", "path": "/usr/lib/python/click.py" },
+                "line": 42
+            }),
+        )
+        .unwrap();
+        assert_eq!(external.path, None);
+    }
+
+    #[test]
+    fn debug_session_stop_and_close_cancel_active_token() {
+        let session = DebugSession::default();
+        let id = Uuid::new_v4();
+        let (commands, _rx) = mpsc::channel(4);
+        let cancel = CancellationToken::new();
+        session.0.lock().unwrap().active = Some(Active {
+            id,
+            commands,
+            cancel: cancel.clone(),
+            pid: None,
+        });
+        session.stop(Some(Uuid::new_v4()));
+        assert!(!cancel.is_cancelled());
+        session.stop(Some(id));
+        assert!(cancel.is_cancelled());
+        session.close();
+        assert!(session.0.lock().unwrap().closed);
+    }
 }

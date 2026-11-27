@@ -28,7 +28,7 @@ export function sourceChanges(doc: Text, baseline: string | undefined, wholeFile
     const kind = chunk.fromB === chunk.toB || deletedAtEnd ? "deleted"
       : chunk.fromA === chunk.toA || addedAtEnd ? "added" : "modified";
     const from = doc.lineAt(Math.min(doc.length, addedAtEnd ? start + 1 : chunk.fromB)).number;
-    const to = kind === "deleted" ? from : doc.lineAt(Math.min(doc.length, chunk.toB - 1)).number;
+    const to = kind === "deleted" ? from : Math.max(from, doc.lineAt(Math.min(doc.length, chunk.toB - 1)).number);
     return { from, to, kind };
   });
 }

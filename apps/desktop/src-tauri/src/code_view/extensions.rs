@@ -99,7 +99,7 @@ struct Grammar {
     path: String,
 }
 
-#[derive(Clone, Copy, Serialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 enum Capability {
     Diagnostics,
@@ -895,5 +895,74 @@ mod tests {
                 .version,
             "1.0.0"
         );
+    }
+
+    #[test]
+    fn python_debugger_capability_requires_pinned_version_source_and_digest() {
+        let mut archive = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default();
+        archive
+            .start_file("extension/package.json", options)
+            .unwrap();
+        serde_json::to_writer(
+            &mut archive,
+            &serde_json::json!({
+                "name": "debugpy",
+                "publisher": "ms-python",
+                "version": PYTHON_DEBUGGER_VERSION,
+                "engines": { "vscode": "^1.92.0" },
+                "extensionDependencies": ["ms-python.python"],
+                "contributes": { "debuggers": [{ "type": "debugpy" }] }
+            }),
+        )
+        .unwrap();
+        archive
+            .start_file(
+                "extension/bundled/libs/debugpy/adapter/__main__.py",
+                options,
+            )
+            .unwrap();
+        archive.write_all(b"print('adapter')\n").unwrap();
+        let bytes = archive.finish().unwrap().into_inner();
+
+        let root = tempfile::tempdir().unwrap();
+        let (_, pinned) = stage_package(
+            root.path(),
+            &bytes,
+            &Receipt {
+                file_name: "debugpy.vsix".into(),
+                sha256: PYTHON_DEBUGGER_SHA256.into(),
+                source: PackageSource::OpenVsx,
+            },
+            "project-a",
+        )
+        .unwrap();
+        assert_eq!(pinned.capability, Capability::PythonDebugger);
+
+        let (_, wrong_digest) = stage_package(
+            root.path(),
+            &bytes,
+            &Receipt {
+                file_name: "debugpy.vsix".into(),
+                sha256: "0".repeat(64),
+                source: PackageSource::OpenVsx,
+            },
+            "project-a",
+        )
+        .unwrap();
+        assert_eq!(wrong_digest.capability, Capability::Unsupported);
+
+        let (_, wrong_source) = stage_package(
+            root.path(),
+            &bytes,
+            &Receipt {
+                file_name: "debugpy.vsix".into(),
+                sha256: PYTHON_DEBUGGER_SHA256.into(),
+                source: PackageSource::Local,
+            },
+            "project-a",
+        )
+        .unwrap();
+        assert_eq!(wrong_source.capability, Capability::Unsupported);
     }
 }

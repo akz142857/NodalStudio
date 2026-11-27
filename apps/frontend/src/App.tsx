@@ -1331,11 +1331,6 @@ export function App() {
         if (!event.repeat) openCommandPalette();
         return;
       }
-      if (mode === "code" && matchesCodeShortcut(event, "Mod+B", appleKeyboard)) {
-        event.preventDefault();
-        if (!event.repeat) runWorkspaceCommand("toggle-left");
-        return;
-      }
       const platformModifier = appleKeyboard ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
       const workspaceAction = platformModifier && workspaceBindings.find(([, binding]) => binding && matchesShortcut(event, binding));
       if (workspaceAction) {
@@ -1360,6 +1355,11 @@ export function App() {
       if (action) {
         event.preventDefault();
         if (!event.repeat) runWorkspaceCommand(action[0]);
+        return;
+      }
+      if (mode === "code" && matchesCodeShortcut(event, "Mod+B", appleKeyboard)) {
+        event.preventDefault();
+        if (!event.repeat) runWorkspaceCommand("toggle-left");
         return;
       }
       if (mode !== "code" || event.repeat) return;

@@ -1,5 +1,6 @@
 import { java } from "@codemirror/lang-java";
 import { javascript } from "@codemirror/lang-javascript";
+import { python } from "@codemirror/lang-python";
 import { rust } from "@codemirror/lang-rust";
 import { EditorState, Text } from "@codemirror/state";
 import { expect, it } from "vitest";
@@ -12,6 +13,7 @@ it("maps changes to Source lines, including removed lines and an end-of-file ins
   expect(compare("head\nremoved\ntail", "head\ntail")).toEqual([{ from: 2, to: 2, kind: "deleted" }]);
   expect(compare("head\ntail", "head")).toEqual([{ from: 1, to: 1, kind: "deleted" }]);
   expect(compare("head", "head\ntail")).toEqual([{ from: 2, to: 2, kind: "added" }]);
+  expect(compare("head", "head\n")).toEqual([{ from: 2, to: 2, kind: "added" }]);
   expect(compare("same\n", "same\n")).toEqual([]);
   expect(sourceChanges(Text.of(["first", "last", ""]), undefined, "added")).toEqual([{ from: 1, to: 2, kind: "added" }]);
 });
@@ -42,4 +44,19 @@ it("finds a Java method below its annotation and a TypeScript arrow function", (
   expect(readerScopesAtLine(javaState, 4).map(({ line }) => line)).toEqual([1, 3]);
   const scriptState = EditorState.create({ doc: "const inspect = (name: string) => {\n    return name;\n};", extensions: [javascript({ typescript: true })] });
   expect(readerScopesAtLine(scriptState, 2).map(({ text }) => text)).toEqual(["const inspect = (name: string) => {"]);
+});
+
+it("keeps Python enclosing scopes pinned across blank lines inside a function body", () => {
+  const doc = [
+    "class Runner:",
+    "    def validate_count(self, value):",
+    "        total = value + 1",
+    "",
+    "        return total",
+  ].join("\n");
+  const state = EditorState.create({ doc, extensions: [python()] });
+  expect(readerScopesAtLine(state, 4).map(({ line, text }) => [line, text])).toEqual([
+    [1, "class Runner:"],
+    [2, "def validate_count(self, value):"],
+  ]);
 });

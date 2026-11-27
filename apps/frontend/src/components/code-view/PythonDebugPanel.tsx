@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "../../design-system/Button";
 import { useI18n } from "../../i18n";
 import type { PythonDebugFrame, PythonDebugPlatform } from "../../platform/code-review";
+import { codeReviewKeys } from "./code-review-query-keys";
 
 import type { PythonDebugState } from "./use-python-debug";
 
 type Launch = Parameters<PythonDebugPlatform["start"]>[2];
 type LaunchDetails = Awaited<ReturnType<PythonDebugPlatform["prepare"]>>;
+type LaunchDraft = { interpreter?: string; cwd: string; args: string };
 
 const errors = {
   pythonDebugInput: "inputError",
@@ -30,14 +32,17 @@ export function PythonDebugPanel({ api, projectId, path, ready, offline, debug, 
   onFrame: (frame: PythonDebugFrame) => void;
 }) {
   const { t } = useI18n();
+  const [drafts, setDrafts] = useState<Record<string, LaunchDraft>>({});
   const status = debug.mode === "idle" || debug.mode === "finished" ? undefined : debug.mode;
   const details = useQuery({
-    queryKey: ["python-debug-launch", projectId, path],
+    queryKey: codeReviewKeys.pythonDebugLaunch(projectId, path),
     queryFn: () => api.prepare(projectId, path!),
     enabled: Boolean(path && ready && !offline && !status),
     retry: false,
   });
   const error = debug.error ? errors[debug.error as keyof typeof errors] : undefined;
+  const draftKey = path ? `${projectId}:${path}` : undefined;
+  const currentDraft = draftKey ? drafts[draftKey] : undefined;
   return <div className="python-debug-body">
     {debug.error && <p role="alert">{t(`codeReview.debug.${error ?? "failed"}`)}{!error && ` ${debug.error}`}</p>}
     {status ? <div className="python-debug-session" role="group" aria-label={t("codeReview.debug.actions")}>
@@ -52,7 +57,9 @@ export function PythonDebugPanel({ api, projectId, path, ready, offline, debug, 
         : !path ? <p>{t("codeReview.debug.chooseFile")}</p>
         : details.isError ? <p role="alert">{t("codeReview.debug.inputError")}</p>
         : !details.data ? <p role="status">{t("navigation.loadingWorkspace")}</p>
-        : <PythonLaunchForm key={path} path={path} details={details.data} onStart={debug.start} />}
+        : <PythonLaunchForm key={draftKey} path={path} details={details.data} draft={currentDraft}
+          onDraft={(next) => { if (draftKey) setDrafts((previous) => ({ ...previous, [draftKey]: next })); }}
+          onStart={debug.start} />}
     </>}
     {debug.paused && <div className="python-debug-inspect">
       <section>
@@ -80,11 +87,19 @@ export function PythonDebugPanel({ api, projectId, path, ready, offline, debug, 
   </div>;
 }
 
-function PythonLaunchForm({ path, details, onStart }: { path: string; details: LaunchDetails; onStart: (input: Omit<Launch, "breakpoints">) => void }) {
+function PythonLaunchForm({ path, details, draft, onDraft, onStart }: {
+  path: string;
+  details: LaunchDetails;
+  draft?: LaunchDraft;
+  onDraft: (draft: LaunchDraft) => void;
+  onStart: (input: Omit<Launch, "breakpoints">) => void;
+}) {
   const { t } = useI18n();
-  const [interpreter, setInterpreter] = useState(details.interpreters[0] ?? "");
-  const [cwd, setCwd] = useState("");
-  const [args, setArgs] = useState("");
+  const listId = useId();
+  const interpreter = draft?.interpreter ?? details.interpreters[0] ?? "";
+  const cwd = draft?.cwd ?? "";
+  const args = draft?.args ?? "";
+  const update = (patch: Partial<LaunchDraft>) => onDraft({ interpreter, cwd, args, ...patch });
   return <form className="python-debug-launch" data-python-launch="" onSubmit={(event) => {
     event.preventDefault();
     onStart({ path, interpreter: interpreter.trim(), cwd: cwd.trim(), args: args ? args.split(/\r?\n/) : [] });
@@ -93,13 +108,17 @@ function PythonLaunchForm({ path, details, onStart }: { path: string; details: L
     <div className="python-debug-program"><strong>{t("codeReview.debug.program")}</strong><code>{details.program}</code></div>
     <label>{t("codeReview.debug.interpreter")}
       <input required value={interpreter} placeholder="/usr/bin/python3" autoComplete="off" spellCheck={false}
-        onChange={(event) => setInterpreter(event.target.value)} />
+        list={details.interpreters.length > 0 ? listId : undefined}
+        onChange={(event) => update({ interpreter: event.target.value })} />
+      {details.interpreters.length > 0 && <datalist id={listId}>
+        {details.interpreters.map((candidate) => <option key={candidate} value={candidate} />)}
+      </datalist>}
     </label>
     <label>{t("codeReview.debug.cwd")}
       <div className="python-debug-cwd"><code>{details.root}/</code>
-        <input value={cwd} placeholder="." autoComplete="off" spellCheck={false} onChange={(event) => setCwd(event.target.value)} /></div>
+        <input value={cwd} placeholder="." autoComplete="off" spellCheck={false} onChange={(event) => update({ cwd: event.target.value })} /></div>
     </label>
-    <label>{t("codeReview.debug.args")}<textarea rows={2} value={args} spellCheck={false} onChange={(event) => setArgs(event.target.value)} /></label>
+    <label>{t("codeReview.debug.args")}<textarea rows={2} value={args} spellCheck={false} onChange={(event) => update({ args: event.target.value })} /></label>
     <Button variant="primary" type="submit" size="small" disabled={!interpreter.trim().startsWith("/")}>{t("codeReview.debug.start")}</Button>
   </form>;
 }

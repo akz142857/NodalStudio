@@ -260,6 +260,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
   const editor = useRef<EditorView | null>(null);
   const phrases = useRef(new Compartment());
   const contributedSyntax = useRef(new Compartment());
+  const sourceChangesSlot = useRef(new Compartment());
   const debuggerSlot = useRef(new Compartment());
   const wrapping = useRef(new Compartment());
   const translator = useRef(t);
@@ -338,7 +339,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
           wrapping.current.of([]),
           lineNumbers(),
           ...(normalizedOriginal === undefined ? [foldGutter(), highlightActiveLine(), highlightActiveLineGutter()] : []),
-          ...(changes.length ? [sourceChangeGutter(changes)] : []),
+          sourceChangesSlot.current.of([]),
           stickyScroll,
           EditorView.scrollMargins.of(() => ({ top: sticky.current?.offsetHeight ?? 0 })),
           EditorView.updateListener.of((update) => { if (update.selectionSet) updateCursor(update.state); }),
@@ -381,12 +382,13 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
     }).catch(() => { /* The document remains readable as plain text. */ });
     return () => {
       active = false;
+      setScopes([]);
       const { anchor, head } = view.state.selection.main;
       remember({ anchor, head, length: view.state.doc.length, scroll: view.scrollSnapshot() });
       editor.current = null;
       view.destroy();
     };
-  }, [canNavigate, changes, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+  }, [canNavigate, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
 
   useLayoutEffect(() => {
     editor.current?.dispatch({ effects: phrases.current.reconfigure(readerPhrases(t)) });
@@ -400,15 +402,22 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
       return mark ? [mark.range(from, to)] : [];
     });
     view.dispatch({ effects: contributedSyntax.current.reconfigure(ranges.length ? EditorView.decorations.of(Decoration.set(ranges, true)) : []) });
-  }, [canNavigate, changes, definitionAt, extension, highlightsAvailable, normalizedOriginal, normalizedText, path, tokens]);
+  }, [canNavigate, definitionAt, extension, highlightsAvailable, normalizedOriginal, normalizedText, path, tokens]);
 
   useLayoutEffect(() => {
     const view = editor.current;
-    if (view) view.dispatch({ effects: [
-      debuggerSlot.current.reconfigure(debugSource ? pythonDebugSourceExtension(view.state, debugSource) : []),
-      wrapping.current.reconfigure(wrap ? EditorView.lineWrapping : []),
-    ] });
-  }, [debugSource, wrap, canNavigate, changes, definitionAt, extension, highlightsAvailable, normalizedOriginal, normalizedText, path, tokens]);
+    if (view) view.dispatch({ effects: sourceChangesSlot.current.reconfigure(changes.length ? sourceChangeGutter(changes) : []) });
+  }, [canNavigate, changes, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+
+  useLayoutEffect(() => {
+    const view = editor.current;
+    if (view) view.dispatch({ effects: debuggerSlot.current.reconfigure(debugSource ? pythonDebugSourceExtension(view.state, debugSource) : []) });
+  }, [canNavigate, debugSource, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+
+  useLayoutEffect(() => {
+    const view = editor.current;
+    if (view) view.dispatch({ effects: wrapping.current.reconfigure(wrap ? EditorView.lineWrapping : []) });
+  }, [canNavigate, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path, wrap]);
 
   useLayoutEffect(() => {
     const view = editor.current;
@@ -429,7 +438,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
       active = false;
       if (applied && editor.current === view) view.dispatch(setDiagnostics(view.state, []));
     };
-  }, [checkResult, canNavigate, changes, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+  }, [checkResult, canNavigate, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
 
   useLayoutEffect(() => {
     const view = editor.current;

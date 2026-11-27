@@ -115,7 +115,7 @@ it("reconfigures SQL editor copy without replacing its view, selection, undo or 
   act(() => { undo(editor); });
   expect(editor.state.doc.toString()).toBe("");
   act(() => { editor.dispatch({ changes: { from: 0, insert: "SELECT 42;" } }); });
-  fireEvent.click(screen.getByRole("button", { name: /^运行 / }));
+  fireEvent.click(screen.getByRole("button", { name: /^运行查询 / }));
   await waitFor(() => expect(executeReadonlyQuery).toHaveBeenCalledOnce());
   view.english();
   expect(cancelQuery).not.toHaveBeenCalled();

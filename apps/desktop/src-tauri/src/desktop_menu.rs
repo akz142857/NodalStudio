@@ -1,11 +1,29 @@
 //! Keep macOS window actions native while routing Close to the current workspace.
 use tauri::{
     AppHandle, Emitter, Manager, Wry,
-    menu::{Menu, MenuEvent, MenuItem, WINDOW_SUBMENU_ID},
+    menu::{Menu, MenuEvent, MenuItem, Submenu, WINDOW_SUBMENU_ID},
 };
 
 const CLOSE: &str = "workspace-close";
 const CLOSE_WINDOW: &str = "workspace-close-window";
+
+fn remove_close_window_item(submenu: &Submenu<Wry>) -> tauri::Result<()> {
+    for item in submenu.items()? {
+        let is_close = item
+            .as_predefined_menuitem()
+            .and_then(|predefined| predefined.text().ok())
+            .or_else(|| {
+                item.as_menuitem()
+                    .and_then(|menu_item| menu_item.text().ok())
+            })
+            .is_some_and(|text| text.eq_ignore_ascii_case("Close Window"));
+        if is_close {
+            submenu.remove(&item)?;
+            return Ok(());
+        }
+    }
+    Ok(())
+}
 
 pub(super) fn menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let menu = Menu::default(app)?;
@@ -14,8 +32,8 @@ pub(super) fn menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             continue;
         };
         if submenu.text()? == "File" {
-            // Tauri's default Mac File menu contains only Close Window.
-            submenu.remove_at(0)?;
+            // Tauri's default Mac File menu contains Close Window.
+            remove_close_window_item(submenu)?;
             submenu.append(&MenuItem::with_id(
                 app,
                 CLOSE,
@@ -25,10 +43,7 @@ pub(super) fn menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             )?)?;
         } else if submenu.id().as_ref() == WINDOW_SUBMENU_ID {
             // Remove the second default Cmd+W accelerator from the Window menu.
-            let items = submenu.items()?;
-            if let Some(last) = items.last() {
-                submenu.remove(last)?;
-            }
+            remove_close_window_item(submenu)?;
             submenu.append(&MenuItem::with_id(
                 app,
                 CLOSE_WINDOW,
@@ -41,7 +56,7 @@ pub(super) fn menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     Ok(menu)
 }
 
-pub(super) fn on_menu_event(app: &AppHandle, event: MenuEvent) {
+pub(super) fn on_menu_event(app: &AppHandle, event: &MenuEvent) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };

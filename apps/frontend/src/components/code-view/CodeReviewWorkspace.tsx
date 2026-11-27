@@ -456,6 +456,21 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   const dependency = active ? externalFiles.get(active) : undefined;
   const pythonFile = !dependency && !activeDraft && active?.endsWith(".py") ? active : undefined;
   const pausedFrame = python.paused?.frames.find((frame) => frame.id === python.paused?.selected);
+  const pythonLines = pythonFile ? python.breakpoints[pythonFile] : undefined;
+  const pythonVerified = pythonFile ? python.verified[pythonFile] : undefined;
+  const pythonPausedLine = pythonFile && pausedFrame?.path === pythonFile ? pausedFrame.line : undefined;
+  const pythonToggle = python.toggle;
+  const debugSource = useMemo(() => (pythonApi && pythonReady && !extensionsOffline && pythonFile ? {
+    lines: pythonLines ?? [],
+    verified: pythonVerified ?? [],
+    paused: pythonPausedLine,
+    toggle: (line: number) => pythonToggle(pythonFile, line),
+  } : undefined), [extensionsOffline, pythonApi, pythonFile, pythonLines, pythonPausedLine, pythonReady, pythonToggle, pythonVerified]);
+  const openPausedFrame = useRef<(frame: { path: string; line: number }) => void>(() => {});
+  useEffect(() => {
+    const frame = python.paused?.frames.find((item) => item.id === python.paused?.selected);
+    if (frame?.path && frame.line >= 1) openPausedFrame.current({ path: frame.path, line: frame.line });
+  }, [python.paused]);
 
   const hasUnsavedDrafts = useMemo(() => [...drafts.values()].some((draft) => draft.text.length > 0), [drafts]);
   useEffect(() => {
@@ -629,6 +644,12 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     if (!path.startsWith("\0")) setRecentFiles((current) => [path, ...current.filter((file) => file !== path)].slice(0, 40));
     setNotice("");
   };
+  useLayoutEffect(() => {
+    openPausedFrame.current = (frame) => {
+      setArrival({ key: frame.path, destination: { position: { line: frame.line - 1, character: 0 } } });
+      open(frame.path, "source");
+    };
+  });
 
   const locateSearchHit = async (path: string, match: CodeSearchMatch) => {
     setView("search");
@@ -1178,11 +1199,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
             extensionsApi={extensionsApi} extensions={extensions} onSyntaxActivity={onSyntaxActivity}
             readerRef={readerRef}
             wrap={wordWrap}
-            debugSource={pythonApi && pythonReady && !extensionsOffline && pythonFile ? {
-              lines: python.breakpoints[pythonFile] ?? [], verified: python.verified[pythonFile] ?? [],
-              paused: pausedFrame?.path === pythonFile ? pausedFrame.line : undefined,
-              toggle: (line) => python.toggle(pythonFile, line),
-            } : undefined}
+            debugSource={debugSource}
             locateOutline={(position) => {
               setArrival({ key: active, destination: { position } });
               setReadingMode(active, "source");
