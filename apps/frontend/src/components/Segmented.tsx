@@ -1,6 +1,9 @@
+import { ActionIcon, type ActionIconName } from "./ActionIcon";
+
 export interface SegmentedOption<T extends string> {
   value: T;
   label: string;
+  icon?: ActionIconName;
   disabled?: boolean;
   /** Native tooltip, typically the reason a segment is disabled. */
   title?: string;
@@ -64,6 +67,7 @@ export function Segmented<T extends string>({
             if (next !== index) onChange(enabled[next].value);
           }}
         >
+          {option.icon && <ActionIcon name={option.icon} />}
           {option.label}
         </button>
       ))}

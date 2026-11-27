@@ -3170,7 +3170,7 @@ export const en = {
   "codeReview.showSidebar": "Show project sidebar",
   "codeReview.projectActions": "Project actions",
   "codeReview.navigatorMode": "Project navigator",
-  "codeReview.readerMode": "Source view",
+  "codeReview.readerMode": "File view",
   "codeReview.readerActions": "Source actions",
   "codeReview.filePath": "File path",
   "codeReview.changesLabel": "Changes",

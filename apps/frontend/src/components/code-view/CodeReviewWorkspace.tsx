@@ -988,9 +988,9 @@ function FileReview({ api, project, path, dependency, change, mode, baseline, re
   const showingOriginal = source.state === "missing" && original !== undefined;
   const fullText = textFor(source) ?? (showingOriginal ? original : undefined);
   const diff = diffAvailable && mode === "diff";
-  const fileMode = diffAvailable || (readWorkingTree && file.isError) ? <Segmented label={t("codeReview.readerMode")} value={diff ? "diff" : "source"}
-    className="code-review-segments" onChange={onModeChange}
-    options={[{ value: "diff", label: t("codeReview.diff") }, { value: "source", label: t("codeReview.source") }]} /> : undefined;
+  const viewSwitcher = diffAvailable || (readWorkingTree && file.isError) ? <Segmented label={t("codeReview.readerMode")} value={diff ? "diff" : "source"}
+    className="code-review-view-mode" onChange={onModeChange}
+    options={[{ value: "diff", label: t("codeReview.diff"), icon: "diff" }, { value: "source", label: t("codeReview.source"), icon: "codeDocument" }]} /> : undefined;
   const displayPath = dependency?.path ?? path;
   const parts = displayPath.replaceAll("\\", "/").split("/").filter(Boolean);
   const filename = parts.pop() ?? displayPath;
@@ -998,6 +998,7 @@ function FileReview({ api, project, path, dependency, change, mode, baseline, re
   const heading = <div className="code-review-document-heading">
     <nav className="code-review-document-path" aria-label={t("codeReview.filePath")} title={displayPath}>
       <ol role="list">
+        {parts.length > 1 && <li className="code-review-document-overflow" aria-hidden="true">…</li>}
         {parts.map((part, index) => <li key={index} className="code-review-document-folder">
           {index > 0 && <ActionIcon name="chevronRight" />}
           <span>{part}</span>
@@ -1038,7 +1039,7 @@ function FileReview({ api, project, path, dependency, change, mode, baseline, re
   return <>
     {change?.previousPath && <p className="code-review-status">{t("codeReview.renamedFrom", { path: change.previousPath })}</p>}
     {diff || fullText !== undefined ? <CodeReviewReader path={displayPath} original={diff ? (original ?? "") : undefined}
-      text={readerText} onCopy={onCopy} mode={fileMode} heading={heading}
+      text={readerText} onCopy={onCopy} viewSwitcher={viewSwitcher} heading={heading}
       fallbackCopy={after.state === "missing" && diff ? original : undefined} footer={status} dock={dock} comparison={comparison}
       readPosition={() => readPosition(positionKey)} onPosition={(position) => savePosition(positionKey, position)}
       onDefinition={onDefinition && !showingOriginal ? (gesture) => onDefinition(gesture, diff ? "diff" : "source") : undefined}

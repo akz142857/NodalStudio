@@ -39,6 +39,7 @@
 
 .code-review-header-actions,
 .code-review-reader-actions,
+.code-review-change-actions,
 .code-review-note-actions {
   display: flex;
   align-items: center;
@@ -215,8 +216,6 @@
   white-space: nowrap;
   background: transparent;
 }
-
-.code-review-reader-toolbar .code-review-segments button { flex: 1 0 auto; }
 
 .code-review .code-review-segments button.active {
   color: var(--ds-text);
@@ -427,6 +426,7 @@
 }
 
 .code-review-document-path {
+  container-type: inline-size;
   min-width: 0;
   width: 100%;
 }
@@ -451,8 +451,9 @@
 }
 
 .code-review-document-folder { color: var(--ds-secondary); }
+.code-review-document-path .code-review-document-overflow { display: none; flex: none; color: var(--ds-secondary); }
 .code-review-document-path .code-review-document-file { flex: 0 0 auto; max-width: 100%; }
-.code-review-document-folder + .code-review-document-file { max-width: 65%; }
+.code-review-document-folder + .code-review-document-file { max-width: clamp(min(100%, 8rem), 70%, 100%); }
 .code-review-document-folder > span,
 .code-review-document-path h2 {
   min-width: 0;
@@ -471,22 +472,74 @@
   font-weight: var(--ds-weight-emphasis);
 }
 
+@container (width < 28rem) {
+  .code-review-document-path .code-review-document-overflow { display: flex; }
+  .code-review-document-folder:has(+ .code-review-document-folder) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+  }
+}
+
 .code-review-reader-toolbar {
   position: relative;
   z-index: 1;
   flex-wrap: wrap;
+  padding-block: 2px;
   background: var(--ds-surface);
 }
 
-.code-review-reader-toolbar > .code-review-document-heading {
-  flex: 1 1 175px;
+.code-review-reader-context {
+  display: flex;
+  flex: 1 1 min(100%, 17rem);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.code-review-reader-context > .code-review-document-heading {
+  flex: 1 1 auto;
   min-height: 0;
   padding: 0;
   border: 0;
 }
 
-.code-review-reader-toolbar .code-review-reader-actions { margin-inline-start: auto; }
-.code-review-reader-toolbar .code-review-segments button { min-height: max(22px, 1.69rem); }
+.code-review .code-review-view-mode {
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border-color: var(--ds-separator);
+  border-radius: var(--ds-radius-menu);
+  background: var(--ds-field);
+}
+
+.code-review .code-review-view-mode button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: max(24px, 1.846rem);
+  padding: 2px 7px;
+  color: var(--ds-secondary);
+  font-size: var(--ds-text-control);
+  font-weight: var(--ds-weight-emphasis);
+  white-space: nowrap;
+}
+
+.code-review .code-review-view-mode button[aria-pressed="true"] {
+  color: var(--ds-selection-text);
+  background: var(--ds-selection);
+  box-shadow: none;
+}
+
+.code-review-view-mode svg { flex: none; width: max(14px, 1.077rem); height: max(14px, 1.077rem); }
+.code-review-reader-context > .code-review-view-mode + .code-review-document-heading {
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--ds-separator);
+}
+
+.code-review-reader-toolbar .code-review-reader-actions { flex: none; margin-inline-start: auto; }
+.code-review-change-actions { padding-inline-end: 4px; border-inline-end: 1px solid var(--ds-separator); }
 .code-review-reader-body { display: flex; flex: 1 1 0; min-height: 0; min-width: 0; overflow: hidden; }
 .code-review-reader-host {
   flex: 1 1 auto;
@@ -989,7 +1042,6 @@
   .code-review-workspace[data-sidebar="closed"] .code-review-detail { grid-row: 1; }
   .code-review-sidebar-controls { padding: 5px 8px; }
   .code-review-header { padding-inline: 7px; }
-  .code-review-reader-toolbar > .code-review-document-heading { flex-basis: 145px; }
   .code-review-reading-status { gap: 4px; }
   .code-review-status-context { display: none; }
   .code-review-position { margin-inline-start: auto; }
@@ -997,7 +1049,7 @@
 
 @media (forced-colors: active) {
   .code-review-file-list button[aria-current="true"],
-  .code-review .code-review-segments button.active { outline: 1px solid Highlight; outline-offset: -2px; }
+  .code-review :is(.code-review-segments, .code-review-view-mode) button.active { outline: 1px solid Highlight; outline-offset: -2px; }
 }
 
 .code-extensions {

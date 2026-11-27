@@ -102,13 +102,13 @@ function expandCheckLine(view: EditorView, lineNumber: number) {
   }
 }
 
-export function CodeReviewReader({ path, text, original, onCopy, mode, heading, fallbackCopy, footer, dock, comparison, readPosition, onPosition,
+export function CodeReviewReader({ path, text, original, onCopy, viewSwitcher, heading, fallbackCopy, footer, dock, comparison, readPosition, onPosition,
   onDefinition, onReferences, onBack, arrival, onArrival, outline, checkResult, projectId = "", extensionsApi, extensions = noExtensions, onSyntaxActivity }: {
   path: string;
   text: string;
   original?: string;
   onCopy: (text: string) => void;
-  mode?: ReactNode;
+  viewSwitcher?: ReactNode;
   heading: ReactNode;
   fallbackCopy?: string;
   footer?: ReactNode;
@@ -321,15 +321,17 @@ export function CodeReviewReader({ path, text, original, onCopy, mode, heading, 
 
   return <>
     <div className="code-review-reader-toolbar">
-      {heading}
-      {mode}
+      <div className="code-review-reader-context">
+        {viewSwitcher}
+        {heading}
+      </div>
       <div className="code-review-reader-actions" role="group" aria-label={t("codeReview.readerActions")}>
-        {original !== undefined && original !== text && <>
+        {original !== undefined && original !== text && <div className="code-review-change-actions">
           <IconButton icon="chevronUp" className="code-review-tool" label={t("codeReview.previous")}
             onClick={() => { if (editor.current) goToPreviousChunk(editor.current); }} />
           <IconButton icon="chevronDown" className="code-review-tool" label={t("codeReview.next")}
             onClick={() => { if (editor.current) goToNextChunk(editor.current); }} />
-        </>}
+        </div>}
         <IconButton icon="search" className="code-review-tool" data-code-find="" label={t("codeReview.find")}
           onClick={() => { if (editor.current) openSearchPanel(editor.current); }} />
         <IconButton icon="copy" className="code-review-tool" label={t("codeReview.copy")} onClick={() => {

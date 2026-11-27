@@ -3173,7 +3173,7 @@ export const zhCN = {
   "codeReview.showSidebar": "显示项目侧边栏",
   "codeReview.projectActions": "项目操作",
   "codeReview.navigatorMode": "项目导航",
-  "codeReview.readerMode": "源码视图",
+  "codeReview.readerMode": "文件视图",
   "codeReview.readerActions": "源码操作",
   "codeReview.changesLabel": "改动",
   "codeReview.browseFiles": "浏览文件",

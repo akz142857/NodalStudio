@@ -245,7 +245,13 @@ it("opens source from Files and Quick Open while Changes opens a diff", async ()
   renderWorkspace(api);
   const sidebar = within(await screen.findByRole("complementary", { name: "Project files" }));
   expect(await screen.findByRole("textbox", { name: path })).toHaveTextContent("ordered_at");
-  const crumbs = within(screen.getByRole("navigation", { name: "File path" })).getAllByRole("listitem");
+  const viewSwitcher = screen.getByRole("group", { name: "File view" });
+  const breadcrumbs = screen.getByRole("navigation", { name: "File path" });
+  const actions = screen.getByRole("group", { name: "Source actions" });
+  expect(viewSwitcher.compareDocumentPosition(breadcrumbs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(breadcrumbs.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(within(viewSwitcher).getByRole("button", { name: "Diff", pressed: true })).toBeVisible();
+  const crumbs = within(breadcrumbs).getAllByRole("listitem");
   expect(crumbs.map((item) => item.textContent)).toEqual(["src", "services", "OrderReport.go"]);
   expect(crumbs[2]).toHaveAttribute("aria-current", "page");
   fireEvent.click(projectNavigator().getByRole("button", { name: "Files" }));
