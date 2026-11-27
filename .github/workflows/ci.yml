@@ -53,8 +53,8 @@ jobs:
       - run: cargo clippy -p nodalstudio-desktop --all-targets --features updater-smoke-test --locked -- -D warnings
       - run: cargo clippy -p nodalstudio-desktop --all-targets --features mac-app-store --locked -- -D warnings
       - run: cargo clippy -p nodalstudio-desktop --all-targets --features code-extensions --locked -- -D warnings
-      - run: cargo test -p nodalstudio-desktop --features code-extensions --locked --lib code_view::
-      - run: cargo test -p nodalstudio-desktop --features mac-app-store --locked --lib code_view::extensions::
+      - run: cargo test -p nodalstudio-desktop --features code-extensions --locked --lib 'code_view::'
+      - run: cargo test -p nodalstudio-desktop --features mac-app-store --locked --lib 'code_view::extensions::'
       - run: cargo test --workspace
 
   postgres-integration:
