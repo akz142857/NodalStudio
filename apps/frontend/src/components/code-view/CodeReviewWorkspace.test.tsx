@@ -84,19 +84,27 @@ it("uses Code shortcuts for navigation and keeps untitled text out of project fi
   const editor = EditorView.findFromDOM(draft)!;
   act(() => editor.dispatch({ changes: { from: 0, insert: "import pathlib" } }));
   const tabs = within(screen.getByRole("navigation", { name: "Open files" }));
+  shortcut("previous-tab");
+  expect(tabs.getByRole("button", { name: "main.py" })).toHaveAttribute("aria-current", "true");
+  shortcut("next-tab");
+  expect(tabs.getByRole("button", { name: "Untitled-1" })).toHaveAttribute("aria-current", "true");
   fireEvent.click(tabs.getByRole("button", { name: "main.py" }));
   await screen.findByRole("textbox", { name: "main.py" });
   fireEvent.click(tabs.getByRole("button", { name: "Untitled-1" }));
   expect(screen.getByRole("textbox", { name: "Untitled-1" })).toHaveTextContent("import pathlib");
   expect(file.mock.calls.every(([, path]) => path === "main.py")).toBe(true);
 
-  fireEvent.click(tabs.getByRole("button", { name: "Close Untitled-1" }));
+  shortcut("close-tab");
   const confirm = screen.getByRole("dialog", { name: "Discard unsaved drafts?" });
   fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
   expect(screen.getByRole("textbox", { name: "Untitled-1" })).toHaveTextContent("import pathlib");
   fireEvent.click(tabs.getByRole("button", { name: "Close Untitled-1" }));
   fireEvent.click(screen.getByRole("button", { name: "Discard and close" }));
   expect(tabs.queryByRole("button", { name: "Untitled-1" })).toBeNull();
+  shortcut("close-tab");
+  expect(tabs.queryByRole("button", { name: "main.py" })).toBeNull();
+  shortcut("reopen-tab");
+  expect(tabs.getByRole("button", { name: "main.py" })).toHaveAttribute("aria-current", "true");
 });
 
 it("opens group colors on hover or by keyboard and supports search before opening a file", async () => {
@@ -256,6 +264,66 @@ it("switches saved projects with independent tabs, positions, modes and content 
   await waitFor(() => expect(screen.getByRole("button", { name: /Switch project .* Beta repo/ })).toHaveFocus());
   expect(projectNavigator().getByRole("button", { name: "Files" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.queryByRole("complementary", { name: "Projects" })).not.toBeInTheDocument();
+});
+
+it("keeps the project list in name order after an MRU reorder and restores its filter and scroll", async () => {
+  const first = { id: "first", name: "Alpha", path: "/workspace/Alpha", pinned: true };
+  const second = { id: "second", name: "Beta", path: "/workspace/Beta", pinned: true };
+  let saved = [first, second];
+  renderWorkspace({
+    current: () => Promise.resolve(null),
+    choose: () => Promise.resolve(null),
+    projects: {
+      list: () => Promise.resolve({ projects: saved, groups: [] }),
+      editGroups: () => Promise.resolve(),
+      open: (id) => {
+        const selected = saved.find((entry) => entry.id === id)!;
+        saved = [selected, ...saved.filter((entry) => entry.id !== id)];
+        return Promise.resolve({ id, savedProjectId: id, key: id, name: selected.name, git: "folder", baseline: null });
+      },
+      pin: () => Promise.resolve(),
+      relocate: () => Promise.resolve(null),
+      remove: () => Promise.resolve(null),
+    },
+    changes: () => Promise.resolve({ files: [], limited: false }),
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+    file: () => Promise.resolve({ before: null, after: { state: "missing" }, evidence: null, indexOnly: false }),
+  });
+  fireEvent.change(await screen.findByRole("searchbox", { name: "Filter projects" }), { target: { value: "a" } });
+  fireEvent.scroll(screen.getByRole("region", { name: "Pinned" }).parentElement!, { target: { scrollTop: 96 } });
+  fireEvent.click(screen.getByRole("button", { name: "Beta" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Beta" })).toHaveAttribute("aria-current", "true"));
+  expect(saved[0]).toBe(second);
+  expect(screen.getByRole("searchbox", { name: "Filter projects" })).toHaveValue("a");
+  const pinned = screen.getByRole("region", { name: "Pinned" });
+  expect(pinned.parentElement?.scrollTop).toBe(96);
+  expect(within(pinned).getAllByRole("button", { name: /^(Alpha|Beta)$/ }).map((button) => button.textContent)).toEqual(["Alpha", "Beta"]);
+});
+
+it("keeps Source intact while marking and navigating the same changes as Diff", async () => {
+  const project = { id: "source-changes", key: "source-changes", name: "Review", git: "ready", baseline: "abc" } as const;
+  const path = "source.txt";
+  const before = "head\nold\nkeep\nstable\ntail\n";
+  const after = "head\nnew\nkeep\nstable\ntail\nadded\n";
+  renderWorkspace({
+    current: () => Promise.resolve(project),
+    choose: () => Promise.resolve(null),
+    changes: () => Promise.resolve({ files: [{ path, previousPath: null, kind: "modified", staged: false, indexOnly: false, evidence: "first" }], limited: false }),
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+    file: (_id, _path, compare) => Promise.resolve({ before: compare ? { state: "text", text: before } : null,
+      after: { state: "text", text: after }, evidence: compare ? "first" : null, indexOnly: false }),
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "Source" }));
+  const overview = within(await screen.findByRole("group", { name: "Source changes" }));
+  const view = EditorView.findFromDOM(screen.getByRole("textbox", { name: path }))!;
+  expect(view.state.doc.toString()).toBe(after);
+  expect(view.dom.querySelector(".cm-source-modified")).toBeInTheDocument();
+  fireEvent.click(overview.getByRole("button", { name: "Go to added lines 6" }));
+  expect(view.state.selection.main.head).toBe(view.state.doc.line(6).from);
+  fireEvent.click(screen.getByRole("button", { name: "Previous change" }));
+  expect(view.state.selection.main.head).toBe(view.state.doc.line(2).from);
+  fireEvent.click(screen.getByRole("button", { name: "Diff" }));
+  expect(screen.queryByRole("group", { name: "Source changes" })).not.toBeInTheDocument();
 });
 
 it("shows native language progress in the bottom dock and keeps Checks accessible", async () => {

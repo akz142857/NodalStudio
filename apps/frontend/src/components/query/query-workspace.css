@@ -7,8 +7,9 @@
 .query-source strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ds-text-body); font-weight: 600; }
 .query-page .query-source span { font-size: var(--ds-text-caption); color: var(--ds-secondary); white-space: nowrap; }
 .query-toolbar-actions { display: flex; align-items: center; flex-shrink: 0; gap: 12px; }
-.query-page .query-readonly { display: flex; align-items: center; gap: 5px; color: var(--ds-secondary); font-size: var(--ds-text-caption); }
-.query-readonly svg { width: 14px; height: 14px; }
+.query-page :is(.query-readonly, .query-schema-change) { display: flex; align-items: center; gap: 5px; color: var(--ds-secondary); font-size: var(--ds-text-caption); white-space: nowrap; }
+.query-page .query-schema-change { color: var(--ds-warning); }
+:is(.query-readonly, .query-schema-change) svg { width: 14px; height: 14px; }
 .query-page .query-limit { color: var(--ds-secondary); gap: 8px; }
 .query-page .query-toolbar select, .query-page .query-custom-limit input { min-height: 30px; font: inherit; font-size: var(--ds-text-control); }
 .query-page .query-toolbar button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 82px; min-height: 32px; padding: 6px 12px; font-weight: 600; }
@@ -25,7 +26,6 @@
 .query-editor-action > svg, .query-document-name > svg { flex: none; width: 14px; height: 14px; }
 .query-editor-action kbd { margin-inline-start: 3px; color: var(--ds-secondary); font: inherit; font-weight: var(--ds-weight-normal); white-space: nowrap; }
 .query-save-action { border-color: var(--ds-border); color: var(--ds-text); background: var(--ds-control); }
-.query-ddl-trigger > svg { color: var(--ds-warning); }
 .query-document-name { min-width: 0; max-width: 180px; }
 .query-document-name > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .query-save-feedback { display: flex; align-items: center; gap: 5px; padding: 5px 16px; color: var(--ds-positive); background: var(--ds-field); font-size: var(--ds-text-caption); }
@@ -100,7 +100,7 @@
   .query-page .query-toolbar { flex-wrap: wrap; gap: 10px; padding: 10px 12px; }
   .query-page .query-toolbar .query-source { flex-basis: 100%; }
   .query-toolbar-actions { flex: 1; gap: 8px; }
-  .query-toolbar-actions > button { margin-left: auto; }
+  .query-toolbar-actions > .query-execution-controls { margin-inline-start: auto; }
   .query-editor-heading { padding-inline: 12px; }
   .query-editor-action kbd, .query-editor-hint { display: none; }
   .query-output-toolbar { padding-inline: 8px; }

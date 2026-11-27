@@ -15,9 +15,10 @@ use uuid::Uuid;
 
 use super::{
     Capability, ESLINT_ARCHIVE_SHA256, ESLINT_ID, ESLINT_VERSION, Extension, MAX_ARCHIVE,
-    MAX_ENTRY, PackageSource, Receipt, ReviewState, capabilities, compatible_update, has_valid_id,
-    install_staged, installation, installed_paths, newer, package_id, parse_manifest,
-    replace_staged, stage_package, with_storage_read,
+    MAX_ENTRY, PYTHON_DEBUGGER_ID, PYTHON_DEBUGGER_SHA256, PYTHON_DEBUGGER_VERSION, PackageSource,
+    Receipt, ReviewState, capabilities, compatible_update, has_valid_id, install_staged,
+    installation, installed_paths, newer, package_id, parse_manifest, replace_staged,
+    stage_package, with_storage_read,
 };
 use crate::{AppState, effective_settings};
 
@@ -38,6 +39,7 @@ const PREVIEW_RECOMMENDATIONS: &[&str] = &[
     "vscode.yaml",
     "davidanson.vscode-markdownlint",
     ESLINT_ID,
+    PYTHON_DEBUGGER_ID,
 ];
 
 #[derive(Deserialize)]
@@ -321,6 +323,7 @@ async fn release(
         return Err(RESPONSE.into());
     }
     let (publisher, name) = id.split_once('.').ok_or(RESPONSE)?;
+    let version = version.or((id == PYTHON_DEBUGGER_ID).then_some(PYTHON_DEBUGGER_VERSION));
     let url = api_url(&[publisher, name, "universal", version.unwrap_or("latest")]);
     let Some(record) = json::<Record>(client, url).await? else {
         return Ok(None);
@@ -364,10 +367,10 @@ async fn installable_item(
     id: &str,
     version: Option<&str>,
 ) -> Result<Option<CatalogItem>, String> {
-    let version = if id == ESLINT_ID {
-        Some(ESLINT_VERSION)
-    } else {
-        version
+    let version = match id {
+        ESLINT_ID => Some(ESLINT_VERSION),
+        PYTHON_DEBUGGER_ID => Some(PYTHON_DEBUGGER_VERSION),
+        _ => version,
     };
     let Some(record) = release(client, id, version)
         .await?
@@ -381,10 +384,15 @@ async fn installable_item(
     if compatibility.capability == Capability::Unsupported {
         return Ok(None);
     }
-    if compatibility.capability == Capability::Eslint {
+    let pinned_digest = match compatibility.capability {
+        Capability::Eslint => Some(ESLINT_ARCHIVE_SHA256),
+        Capability::PythonDebugger => Some(PYTHON_DEBUGGER_SHA256),
+        _ => None,
+    };
+    if let Some(pinned_digest) = pinned_digest {
         let url = record.file_url("sha256").ok_or(RESPONSE)?;
         let digest = get(client, url, 256, RESPONSE).await?;
-        if digest.as_deref().and_then(checksum).as_deref() != Some(ESLINT_ARCHIVE_SHA256) {
+        if digest.as_deref().and_then(checksum).as_deref() != Some(pinned_digest) {
             return Ok(None);
         }
     }
@@ -449,14 +457,21 @@ async fn catalog_page(client: &Client, query: &str, offset: u32) -> Result<Catal
     let next = offset.saturating_add(count);
     // The registry offset counts all results, including releases filtered out below.
     let next_offset = (!featured && next > offset && next < data.total_size).then_some(next);
-    let mut candidates: Vec<_> = data
-        .extensions
-        .iter()
-        .filter_map(|record| {
-            stable_version(&record.version)?;
-            Some((record.id().ok()?, Some(record.version.clone())))
-        })
-        .collect();
+    let mut candidates = Vec::new();
+    if featured
+        || ["python", "debugpy", "python debugger", PYTHON_DEBUGGER_ID]
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case(query.trim()))
+    {
+        candidates.push((
+            PYTHON_DEBUGGER_ID.to_owned(),
+            Some(PYTHON_DEBUGGER_VERSION.to_owned()),
+        ));
+    }
+    candidates.extend(data.extensions.iter().filter_map(|record| {
+        stable_version(&record.version)?;
+        Some((record.id().ok()?, Some(record.version.clone())))
+    }));
     if featured {
         candidates.extend(
             PREVIEW_RECOMMENDATIONS
@@ -637,6 +652,11 @@ async fn download(client: &Client, input: &CatalogInstall) -> Result<(Vec<u8>, R
             .ok_or(INTEGRITY)?,
     )
     .ok_or(INTEGRITY)?;
+    if input.id == PYTHON_DEBUGGER_ID
+        && (input.version != PYTHON_DEBUGGER_VERSION || expected != PYTHON_DEBUGGER_SHA256)
+    {
+        return Err(INTEGRITY.into());
+    }
     let source = get(client, url, MAX_ARCHIVE, super::LIMIT)
         .await?
         .ok_or(UNAVAILABLE)?;
@@ -727,7 +747,7 @@ mod tests {
             br#"{
             "name": "debugpy",
             "publisher": "ms-python",
-            "version": "2026.6.0",
+            "version": "2026.7.0",
             "engines": {"vscode": "^1.92.0"},
             "main": "./dist/extension.js",
             "extensionDependencies": ["ms-python.python"],

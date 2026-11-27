@@ -1,5 +1,7 @@
 import type { CodeReviewPlatform } from "./code-review";
 import { Channel } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { DatabaseExportProgress, DatabaseExportReceipt, DatabaseExportRequest } from "./database-export";
 import { invoke } from "./desktop-invoke";
 import type { SchemaDdlInput, SchemaDdlReceipt } from "./schema-ddl";
@@ -70,6 +72,11 @@ import type {
 } from "./settings-types";
 
 export class TauriPlatform implements NodalStudioPlatform {
+  onNativeCloseShortcut(callback: (closeWindow: () => void) => void): Promise<() => void> {
+    return listen("nodalstudio-native-close", () => callback(() => {
+      void getCurrentWindow().close().catch(() => {});
+    }));
+  }
   readonly codeReview: CodeReviewPlatform = {
     current: () => invoke("get_code_review_project"),
     choose: () => invoke("choose_code_review_project"),
@@ -108,6 +115,16 @@ export class TauriPlatform implements NodalStudioPlatform {
       lint: (projectId, input) => invoke("run_code_eslint", { projectId, input }),
       cancel: (projectId, requestId) => invoke("cancel_code_eslint", { projectId, requestId }),
       revoke: (projectId) => invoke("revoke_code_eslint", { projectId }),
+    },
+    pythonDebug: {
+      prepare: (projectId, path) => invoke("prepare_python_debug", { projectId, path }),
+      start: (projectId, id, input, receive) => {
+        const events = new Channel<Parameters<typeof receive>[0]>();
+        events.onmessage = receive;
+        return invoke("start_python_debug", { projectId, id, input, events });
+      },
+      control: (projectId, id, action) => invoke("control_python_debug", { projectId, id, action }),
+      stop: (projectId, id) => invoke("stop_python_debug", { projectId, id }),
     },
     definition: (projectId, input) => invoke("find_code_definition", { projectId, input }),
     documentHighlights: (projectId, input) => invoke("find_code_document_highlights", { projectId, input }),

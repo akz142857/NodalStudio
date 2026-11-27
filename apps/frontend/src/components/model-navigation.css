@@ -302,7 +302,14 @@
 .schema-object-menu > button[aria-haspopup="menu"] { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .schema-menu-chevron { font-size: var(--ds-text-subheading); line-height: 1; }
 
-.connection-sync-shortcut { align-self: flex-start; margin-top: var(--ds-space-2); }
+.connection-sync-shortcut { justify-self: start; min-width: 0; max-width: 100%; }
+.connection-sync-shortcut .ds-button {
+  appearance: none;
+  gap: var(--ds-space-1);
+  border-radius: var(--ds-radius-group);
+  text-align: start;
+}
+.connection-sync-shortcut svg { flex: none; color: var(--ds-secondary); }
 .connection-sync-dialog { width: min(630px, calc(100vw - 48px)); }
 .connection-sync-dialog h2:focus { outline: none; }
 .connection-sync-dialog footer { justify-content: space-between; }

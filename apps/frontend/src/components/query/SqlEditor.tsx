@@ -6,7 +6,7 @@ import { linter, lintGutter } from "@codemirror/lint";
 import { Annotation, Compartment, EditorState } from "@codemirror/state";
 import { EditorView, highlightActiveLine, lineNumbers, keymap, placeholder } from "@codemirror/view";
 import { sqlHighlightStyle } from "../../design-system/sql-highlight";
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useEffectEvent, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { SchemaObjectMenu } from "../SchemaObjectMenu";
 import type { DatabaseSnapshot } from "../../platform";
 import { executableSql, quoteIdentifier } from "./query-format";
@@ -23,6 +23,7 @@ interface SqlEditorProps {
   value: string;
   snapshot?: DatabaseSnapshot;
   onChange: (value: string) => void;
+  onSelectionChange?: (selection: { document: string; sql: string } | undefined) => void;
   onRun: (sqlText: string) => void;
   executing: boolean;
   disabled: boolean;
@@ -48,7 +49,7 @@ function completions(snapshot: DatabaseSnapshot | undefined, t: Translate): Comp
 
 
 export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function SqlEditor(
-  { value, snapshot, onChange, onRun, executing, disabled, ddlEngine, onStop },
+  { value, snapshot, onChange, onSelectionChange, onRun, executing, disabled, ddlEngine, onStop },
   ref,
 ) {
   const { t: bt, locale } = useI18n();
@@ -67,6 +68,11 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   const onChangeRef = useRef(onChange);
   currentValueRef.current = value;
   onChangeRef.current = onChange;
+  const reportSelection = useEffectEvent((state: EditorState) => {
+    const { from, to } = state.selection.main;
+    const sql = state.sliceDoc(from, to).trim();
+    onSelectionChange?.(sql ? { document: state.doc.toString(), sql } : undefined);
+  });
 
   useImperativeHandle(ref, () => ({
     getCurrentStatementSql() {
@@ -107,7 +113,11 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
           ...historyKeymap,
         ]),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged || update.selectionSet) { editRevision.current++; setMenu(undefined); }
+          if (update.docChanged || update.selectionSet) {
+            editRevision.current++;
+            setMenu(undefined);
+            reportSelection(update.state);
+          }
           if (update.transactions.some((transaction) => transaction.docChanged && !transaction.annotation(syncDraft))) {
             onChangeRef.current(update.state.doc.toString());
           }
@@ -132,6 +142,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     });
     const view = new EditorView({ state, parent: hostRef.current });
     viewRef.current = view;
+    reportSelection(view.state);
     return () => {
       view.destroy();
       viewRef.current = undefined;

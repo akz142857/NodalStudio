@@ -705,13 +705,81 @@
 .code-review-reader-toolbar .code-review-reader-actions { flex: none; margin-inline-start: auto; }
 .code-review-change-actions { padding-inline-end: 4px; border-inline-end: 1px solid var(--ds-separator); }
 .code-review-reader-body { display: flex; flex: 1 1 0; min-height: 0; min-width: 0; overflow: hidden; }
+.code-review-reader-frame,
 .code-review-reader-host {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
 }
+.code-review-reader-frame { position: relative; display: flex; }
 .code-review-reader-host [contenteditable="false"]:focus-visible { outline-offset: var(--ds-focus-inset); }
+
+.code-review-sticky-scopes {
+  position: absolute;
+  z-index: 1;
+  inset: 0 0 auto;
+  background: var(--ds-surface);
+  border-block-end: 1px solid var(--ds-separator);
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--ds-text) 9%, transparent);
+}
+.code-review-sticky-scopes button {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ds-space-2);
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: 1px 10px 1px 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--ds-text);
+  background: transparent;
+  font: max(12px, var(--monospace-font-size, 12px))/1.55 var(--ds-font-mono);
+  text-align: start;
+  cursor: pointer;
+}
+.code-review-sticky-scopes button:hover { background: var(--ds-subtle); }
+.code-review-sticky-scopes button:focus-visible { outline: var(--ds-focus-ring); outline-offset: var(--ds-focus-inset); }
+.code-review-sticky-scopes span { flex: 0 0 36px; color: var(--ds-tertiary); text-align: end; }
+.code-review-sticky-scopes code { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; }
+
+.code-review-reader-host .cm-source-changes { min-inline-size: 3px; }
+.code-review-reader-host .cm-source-changes .cm-gutterElement {
+  inline-size: 3px;
+  padding: 0;
+  background: var(--code-change-color, transparent);
+}
+:is(.cm-source-added, .code-review-change-overview [data-kind="added"]) { --code-change-color: var(--ds-positive); }
+:is(.cm-source-modified, .code-review-change-overview [data-kind="modified"]) { --code-change-color: var(--ds-accent); }
+:is(.cm-source-deleted, .code-review-change-overview [data-kind="deleted"]) { --code-change-color: var(--ds-danger); }
+.code-review-change-overview {
+  position: relative;
+  flex: 0 0 12px;
+  background: var(--ds-surface);
+  border-inline-start: 1px solid var(--ds-separator);
+}
+.code-review-change-overview button {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: min(var(--code-change-start), calc(100% - 5px));
+  block-size: max(5px, var(--code-change-length));
+  min-block-size: 0;
+  display: grid;
+  justify-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.code-review-change-overview button::before {
+  content: "";
+  inline-size: 5px;
+  border-radius: var(--ds-radius-pill);
+  background: var(--code-change-color);
+}
+.code-review-change-overview button:hover::before { inline-size: 8px; }
+.code-review-change-overview button:focus-visible { z-index: 1; outline: var(--ds-focus-ring); outline-offset: var(--ds-focus-inset); }
 
 .code-outline {
   display: flex;
@@ -898,6 +966,7 @@
 
 .code-review-reader-host .cm-editor > .cm-panels-top:has(> .code-review-find) {
   position: absolute;
+  z-index: 2;
   inset-inline: 0;
   pointer-events: none;
 }
@@ -1563,3 +1632,48 @@
 .cm-vsix-number { color: var(--ds-syntax-number); }
 .cm-vsix-variable { color: var(--ds-syntax-function); }
 .cm-vsix-type { color: var(--ds-syntax-type); }
+
+.cm-python-debug-gutter { min-width: var(--ds-space-3); }
+.cm-python-debug-gutter .cm-gutterElement {
+  display: grid;
+  place-items: center;
+  min-width: var(--ds-space-3);
+  cursor: pointer;
+}
+.python-debug-breakpoint {
+  width: var(--ds-space-2);
+  height: var(--ds-space-2);
+  border: 1px solid var(--ds-danger);
+  border-radius: 50%;
+}
+.python-debug-breakpoint[data-verified="true"] { background: var(--ds-danger); }
+.code-review-reader-host .cm-python-debug-paused {
+  background: var(--ds-warning-soft);
+  box-shadow: inset 2px 0 var(--ds-warning);
+}
+
+.python-debug-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--ds-space-2) var(--ds-space-3);
+}
+.python-debug-body p { margin: 0 0 var(--ds-space-2); }
+.python-debug-body p[role="alert"] { color: var(--ds-danger); overflow-wrap: anywhere; }
+.python-debug-session { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-space-2); }
+.python-debug-session > [role="status"] { color: var(--ds-secondary); margin-inline-end: var(--ds-space-1); }
+.python-debug-launch { display: grid; justify-items: start; gap: var(--ds-space-2); max-width: 72ch; }
+.python-debug-launch > label { display: grid; gap: var(--ds-space-1); width: 100%; }
+.python-debug-launch > label :is(input, textarea) { width: 100%; }
+.python-debug-program,.python-debug-cwd { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-space-2); }
+.python-debug-cwd input { flex: 1 1 14ch; }
+.python-debug-body :is(code, pre, dd, .python-debug-inspect button span) { font: var(--ds-text-caption)/var(--ds-leading) var(--ds-font-mono); overflow-wrap: anywhere; }
+.python-debug-inspect { display: grid; grid-template-columns: minmax(10ch, 1fr) minmax(14ch, 2fr); gap: var(--ds-space-3); }
+.python-debug-body h4 { margin: var(--ds-space-3) 0 var(--ds-space-1); font-size: var(--ds-text-control); }
+.python-debug-body ul { list-style: none; margin: 0; padding: 0; }
+.python-debug-inspect li button { width: 100%; justify-content: flex-start; flex-wrap: wrap; text-align: start; }
+.python-debug-inspect li button[aria-current="true"] { background: var(--ds-selection); color: var(--ds-selection-text); }
+.python-debug-inspect dl { margin: var(--ds-space-1) 0; }
+.python-debug-inspect dl > div { display: grid; grid-template-columns: minmax(7ch, 1fr) minmax(0, 3fr); gap: var(--ds-space-2); border-bottom: 1px solid var(--ds-separator); }
+.python-debug-inspect :is(dt, dd) { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.python-debug-output pre { margin: 0; white-space: pre-wrap; }

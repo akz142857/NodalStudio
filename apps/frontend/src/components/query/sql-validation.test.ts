@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { currentSqlStatement, validateSqlText, currentPostgresStatement, validatePostgresSqlText } from "./sql-validation";
+import { classifySqlExecution, currentSqlStatement, validateSqlText, currentPostgresStatement, validatePostgresSqlText } from "./sql-validation";
 
 describe("PostgreSQL syntax validation", () => {
   it("accepts a complete select and reports an incomplete expression", () => {
@@ -45,4 +45,22 @@ it("uses SQLite lexical boundaries for quoted identifiers and accepts SQLite exp
   const text = "SELECT [a;b], 'x;y' FROM main.t; SELECT json_extract('{}', '$.x');";
   expect(currentSqlStatement(text, 5, "sqlite")).toBe("SELECT [a;b], 'x;y' FROM main.t;");
   expect(validateSqlText("SELECT strftime('%Y', 'now'), 1 || 'x'", "sqlite")).toEqual([]);
+});
+
+describe("Query editor execution routing", () => {
+  it.each([
+    ["-- structure change\nALTER TABLE `app`.`orders` ADD COLUMN tag BIGINT COMMENT 'example; note', ADD KEY idx_tag (tag);", "ddl"],
+    ["CREATE UNIQUE INDEX idx_tag ON orders (tag);", "ddl"],
+    ["DROP INDEX idx_tag ON orders;", "ddl"],
+    ["SELECT 'one;two'; -- trailing comment;", "query"],
+    ["WITH ids AS (SELECT 1) SELECT * FROM ids;", "query"],
+    ["(SELECT 1) UNION ALL SELECT 2;", "query"],
+    ["WITH ids AS (SELECT 1) UPDATE orders SET id = 0;", "unsupported"],
+    ["UPDATE orders SET tag = 0;", "unsupported"],
+    ["CREATE VIEW example AS SELECT 1;", "unsupported"],
+    ["SELECT 1; ALTER TABLE orders ADD COLUMN tag INT;", "multiple"],
+    [";; -- no statement;\n/* nor here; */", "empty"],
+  ])("classifies %s as %s", (sql, expected) => {
+    expect(classifySqlExecution(sql, "mySql")).toBe(expected);
+  });
 });

@@ -36,13 +36,53 @@ export function currentPostgresStatement(document: string, position: number): st
   return currentSqlStatement(document, position, "postgreSql");
 }
 
+type SqlNode = ReturnType<typeof PostgreSQL.language.parser.parse>["topNode"];
+
+function* sqlTokens(start: SqlNode | null) {
+  for (let token = start; token; token = token.nextSibling) {
+    if (![";", "(", ")", "BlockComment", "LineComment"].includes(token.name)) yield token;
+  }
+}
+
+function sqlStatements(document: string, dialect: SqlDialect) {
+  return sqlLanguage(dialect).language.parser.parse(document).topNode.getChildren("Statement")
+    .filter((statement) => !sqlTokens(statement.firstChild).next().done);
+}
+
+const writeVerbs = new Set(["INSERT", "UPDATE", "DELETE", "REPLACE", "MERGE"]);
+
+/** Routes the editor action. The native query and DDL validators still decide what can execute. */
+export function classifySqlExecution(document: string, dialect: SqlDialect): "empty" | "query" | "ddl" | "multiple" | "unsupported" {
+  const [statement, next] = sqlStatements(document, dialect);
+  if (next) return "multiple";
+  if (!statement) return "empty";
+  const tokens = [...sqlTokens(statement.firstChild)];
+  let opening: SqlNode | undefined = tokens[0];
+  while (opening?.name === "Parens") {
+    const inner = sqlTokens(opening.firstChild).next();
+    opening = inner.done ? undefined : inner.value;
+  }
+  const word = (token: SqlNode | undefined) => token && /^(Keyword|Identifier)$/.test(token.name)
+    ? document.slice(token.from, token.to).toUpperCase() : "";
+  const verb = word(opening);
+  if (verb === "SELECT") return "query";
+  if (verb === "WITH") {
+    const command = tokens.find((token, index) => tokens[index - 1]?.name === "Parens"
+      && (word(token) === "SELECT" || writeVerbs.has(word(token))));
+    return writeVerbs.has(word(command)) ? "unsupported" : "query";
+  }
+  if (opening !== tokens[0]) return "unsupported";
+
+  const object = word(tokens[1]);
+  if (verb === "ALTER" && object === "TABLE") return "ddl";
+  if (verb === "DROP" && (object === "TABLE" || object === "INDEX")) return "ddl";
+  if (verb === "CREATE" && (object === "TABLE" || object === "INDEX" || (object === "UNIQUE" && word(tokens[2]) === "INDEX"))) return "ddl";
+  return "unsupported";
+}
+
 /** Use the source dialect's lexical boundaries for quoted names, literals and comments. */
 export function currentSqlStatement(document: string, position: number, dialect: SqlDialect): string {
-  const statements: { from: number; to: number }[] = [];
-  const tree = (dialect === "sqlite" ? SQLite : dialect === "mySql" ? mysqlDialect : PostgreSQL).language.parser.parse(document);
-  for (let node = tree.topNode.firstChild; node; node = node.nextSibling) {
-    if (node.name === "Statement" && document.slice(node.from, node.to).replaceAll(";", "").trim()) statements.push({ from: node.from, to: node.to });
-  }
+  const statements = sqlStatements(document, dialect);
   const cursor = Math.max(0, Math.min(document.length, position));
   const statement = statements.find((item) => cursor < item.to) ?? statements.at(-1);
   if (!statement) return "";
