@@ -1,7 +1,6 @@
 //! Public Open VSX catalog and exact-version package downloads.
 use std::{
     collections::{BTreeMap, HashSet},
-    future::Future,
     time::Duration,
 };
 
@@ -17,15 +16,14 @@ use super::{
     Capability, ESLINT_ARCHIVE_SHA256, ESLINT_ID, ESLINT_VERSION, Extension, MAX_ARCHIVE,
     MAX_ENTRY, PYTHON_DEBUGGER_ID, PYTHON_DEBUGGER_SHA256, PYTHON_DEBUGGER_VERSION, PackageSource,
     Receipt, ReviewState, capabilities, compatible_update, has_valid_id, install_staged,
-    installation, installed_paths, newer, package_id, parse_manifest, replace_staged,
-    stage_package, with_storage_read,
+    installation, installed_paths, newer, online, package_id, parse_manifest, replace_staged,
+    stage_package, while_online, with_storage_read,
 };
-use crate::{AppState, effective_settings};
+use crate::AppState;
 
 const REGISTRY: &str = "open-vsx.org";
 const CDN: &str = "openvsx.eclipsecontent.org";
 const NETWORK: &str = "openVsxNetwork";
-const OFFLINE: &str = "openVsxOffline";
 const RESPONSE: &str = "openVsxResponse";
 const UNAVAILABLE: &str = "openVsxUnavailable";
 const INTEGRITY: &str = "openVsxIntegrity";
@@ -397,39 +395,6 @@ async fn installable_item(
         }
     }
     record.catalog_item().map(Some)
-}
-
-async fn online(app: &AppState) -> Result<(), String> {
-    if effective_settings(&app.store, None)
-        .await?
-        .app
-        .privacy
-        .offline_mode
-    {
-        Err(OFFLINE.into())
-    } else {
-        Ok(())
-    }
-}
-
-async fn while_online<T>(
-    app: &AppState,
-    request: impl Future<Output = Result<T, String>>,
-) -> Result<T, String> {
-    online(app).await?;
-    let mut offline_rx = app.subscribe_offline();
-    let wait_for_offline = async {
-        if offline_rx.wait_for(|offline| *offline).await.is_ok() {
-            OFFLINE.into()
-        } else {
-            std::future::pending::<String>().await
-        }
-    };
-    tokio::select! {
-        biased;
-        reason = wait_for_offline => Err(reason),
-        result = request => result,
-    }
 }
 
 #[tauri::command]

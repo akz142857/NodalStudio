@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "../../design-system/Button";
 import { ModalSurface } from "../../design-system/ModalSurface";
 import { useI18n } from "../../i18n";
@@ -60,7 +60,8 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
   const [confirm, setConfirm] = useState<{ item: CodeExtension; action: "enable" | "uninstall" }>();
   const selectedPackage = items.find((item) => item.id === packageId);
   const menu = useCodeContextMenu();
-  const market = api.openVsx;
+  const market = syntaxOnly ? undefined : api.openVsx;
+  const syntaxCatalog = syntaxOnly ? api.syntaxCatalog : undefined;
   const term = text.trim();
   const query = term ? submitted : "";
   const pendingQuery = term !== query;
@@ -74,10 +75,22 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
     setText("");
     setSubmitted("");
   }
+  const availableSyntax = useQuery({
+    queryKey: ["codeReview", "syntaxCatalog"],
+    queryFn: () => syntaxCatalog?.list() ?? Promise.resolve([]),
+    enabled: Boolean(syntaxCatalog) && active,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const downloadSyntax = useMutation({
+    mutationFn: (id: string) => syntaxCatalog!.import(projectId, id),
+    onSuccess: (item) => onUpdate(item.id, item),
+  });
   const updates = useMutation({ mutationFn: () => market!.updates(projectId) });
   const mutation = useMutation({
     mutationFn: async (request: { id: string; action: CodeExtensionAction } | null) => {
       if (request) return { id: request.id, item: await api.change(projectId, request.id, request.action) };
+      if (syntaxOnly) return null;
       const item = await api.install(projectId);
       return item ? { id: item.id, item } : null;
     },
@@ -113,7 +126,7 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
     active={active && (searching || featuredOpen)} offline={offline} query={searching ? query : ""}
     pendingQuery={searching && pendingQuery} openDetails={(id, version) => selectCatalog({ id, version })} />;
   return <section className="code-extensions" aria-label={t("codeReview.extensions.title")}>
-    <header className="code-extension-toolbar">
+    {!syntaxOnly && <header className="code-extension-toolbar">
       {market && <form className="code-extension-search" role="search" onSubmit={(event) => {
         event.preventDefault();
         if (!offline) setSubmitted(term);
@@ -132,9 +145,7 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
         {text && <IconButton icon="close" className="code-review-tool" label={t("codeReview.extensions.marketClear")}
           onClick={() => { clearSearch(); input.current?.focus(); }} />}
       </form>}
-      {syntaxOnly ? <Button size="small" disabled={mutation.isPending} onClick={() => mutation.mutate(null)}>
-        {t("codeReview.extensions.importSyntax")}
-      </Button> : <IconButton icon="more" className="code-review-tool" label={t("codeReview.extensions.actions")} aria-haspopup="menu"
+      <IconButton icon="more" className="code-review-tool" label={t("codeReview.extensions.actions")} aria-haspopup="menu"
         aria-expanded={Boolean(menu.trigger?.closest(".code-extension-toolbar"))} onClick={(event) => {
           const actions: SchemaObjectMenuAction[] = [{
             label: t("codeReview.extensions.install"), disabled: mutation.isPending, run: () => mutation.mutate(null),
@@ -148,8 +159,8 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
             },
           });
           menu.show(event, t("codeReview.extensions.title"), actions);
-        }} />}
-    </header>
+        }} />
+    </header>}
     {mutation.isError && <p className="code-extension-feedback" role="alert">{t(
       installError === "codeReview.extensions.unsupported" ? unsupported : installError,
     )}</p>}
@@ -167,7 +178,7 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
         )}</p>}
         {updates.isSuccess && !updates.data.failed && !updates.data.updates.some((update) => items.some((item) =>
           item.id === update.id && item.sha256 === update.installedSha256)) && <p role="status">{t("codeReview.extensions.marketUpToDate")}</p>}
-        {!loading && !loadError && !items.length && <p>{t(syntaxOnly ? "codeReview.extensions.syntaxOnly" : "codeReview.extensions.empty")}</p>}
+        {!loading && !loadError && !items.length && <p>{t(syntaxOnly ? "codeReview.extensions.noSyntaxImported" : "codeReview.extensions.empty")}</p>}
         {items.length > 0 && <ul className="code-extension-list code-extension-installed-list">
           {items.map((item) => {
             const activity = activities.find((candidate) => candidate.id === item.id);
@@ -186,6 +197,31 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
           })}
         </ul>}
       </ExtensionGroup>}
+      {syntaxCatalog && <ExtensionGroup label={t("codeReview.extensions.syntaxCatalog")}
+        expanded={featuredOpen} toggle={() => setFeaturedOpen((value) => !value)}>
+        <p>{t("codeReview.extensions.syntaxOnly")}</p>
+        {offline && <p role="status">{t("codeReview.extensions.marketOffline")}</p>}
+        {availableSyntax.isPending && <p role="status">{t("navigation.loadingWorkspace")}</p>}
+        {availableSyntax.isError && <p role="alert">{t("codeReview.extensions.storage")}{" "}
+          <Button size="small" onClick={() => { void availableSyntax.refetch(); }}>{t("codeReview.refresh")}</Button></p>}
+        {downloadSyntax.isError && <p role="alert">{t(extensionErrorMessage(downloadSyntax.error))}</p>}
+        {availableSyntax.data && <ul className="code-extension-list">
+          {availableSyntax.data.map((source) => {
+            const imported = items.some((item) => item.id === source.id);
+            return <li key={source.id} className="code-extension-row">
+              <span className="code-extension-copy">
+                <strong className="code-extension-line">{source.name}</strong>
+                <span className="code-extension-meta">{source.version}</span>
+              </span>
+              <Button size="small" disabled={offline || loading || loadError || imported || downloadSyntax.isPending}
+                aria-label={t(imported ? "codeReview.extensions.syntaxImported" : "codeReview.extensions.downloadSyntaxLabel", { name: source.name })}
+                onClick={() => downloadSyntax.mutate(source.id)}>
+                {t(imported ? "codeReview.extensions.importedSyntax" : "codeReview.extensions.downloadSyntax")}
+              </Button>
+            </li>;
+          })}
+        </ul>}
+      </ExtensionGroup>}
       {market && (searching ? <section className="code-extension-group" aria-label={t("codeReview.extensions.marketResults")}>
         <h2 className="code-extension-group-heading">{t("codeReview.extensions.marketResults")}</h2>
         <div className="code-extension-group-body">{catalog}</div>
@@ -193,7 +229,7 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
         expanded={featuredOpen} toggle={() => setFeaturedOpen((value) => !value)}>{catalog}</ExtensionGroup>)}
     </div>
     {menu.surface}
-    {selectedPackage && <ModalSurface label={t("codeReview.extensions.package")} onDismiss={() => setPackageId(undefined)}>
+    {selectedPackage && <ModalSurface label={t(syntaxOnly ? "codeReview.extensions.syntaxDetails" : "codeReview.extensions.package")} onDismiss={() => setPackageId(undefined)}>
       <div className="code-definition-dialog code-extension-detail ds-surface">
         <h3>{selectedPackage.name}</h3>
         {selectedPackage.description && <p>{selectedPackage.description}</p>}
@@ -201,10 +237,10 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
         <dl>
           <dt>{t("codeReview.extensions.marketPublisher")}</dt><dd>{selectedPackage.publisher}</dd>
           <dt>{t("codeReview.extensions.marketVersion")}</dt><dd>{selectedPackage.version}</dd>
-          <dt>{t("codeReview.extensions.localPackage")}</dt><dd>{selectedPackage.fileName}</dd>
-          <dt>{t("codeReview.extensions.marketSource")}</dt><dd>{selectedPackage.source === "openVsx" ? "Open VSX" : t("codeReview.extensions.localPackage")}</dd>
+          <dt>{t(syntaxOnly ? "codeReview.extensions.syntaxFile" : "codeReview.extensions.localPackage")}</dt><dd>{selectedPackage.fileName}</dd>
+          <dt>{t("codeReview.extensions.marketSource")}</dt><dd>{selectedPackage.source === "local" ? t("codeReview.extensions.localPackage") : "Open VSX"}</dd>
           <dt>SHA-256</dt><dd>{selectedPackage.sha256}</dd>
-          <dt>{t("codeReview.extensions.vscodeEngine")}</dt><dd>{selectedPackage.engine}</dd>
+          {!syntaxOnly && <><dt>{t("codeReview.extensions.vscodeEngine")}</dt><dd>{selectedPackage.engine}</dd></>}
         </dl>
         <div className="code-review-note-actions">
           <Button data-modal-focus onClick={() => setPackageId(undefined)}>{t("codeReview.extensions.marketClose")}</Button>

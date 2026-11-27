@@ -57,10 +57,7 @@ pub enum SelectionKind {
     SaveBackup,
     Repository,
     CodeReviewFolder,
-    #[cfg(all(
-        target_os = "macos",
-        any(feature = "code-extensions", feature = "mac-app-store")
-    ))]
+    #[cfg(all(target_os = "macos", feature = "code-extensions"))]
     CodeExtensionVsix,
     OpenSqlite,
     SqliteDirectory,
@@ -110,10 +107,7 @@ pub(crate) async fn pick_workspace_path_from(
             SelectionKind::CodeReviewFolder => picker
                 .set_title("Open project folder / 打开项目文件夹")
                 .blocking_pick_folder(),
-            #[cfg(all(
-                target_os = "macos",
-                any(feature = "code-extensions", feature = "mac-app-store")
-            ))]
+            #[cfg(all(target_os = "macos", feature = "code-extensions"))]
             SelectionKind::CodeExtensionVsix => picker
                 .set_title("Install from VSIX / 从 VSIX 安装")
                 .add_filter("VS Code Extension", &["vsix"])

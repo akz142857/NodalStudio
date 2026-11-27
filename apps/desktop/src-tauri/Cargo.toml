@@ -70,7 +70,7 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 workspace = true
 
 [features]
-mac-app-store = ["dep:storekit-bridge", "zip/deflate-flate2"]
+mac-app-store = ["dep:storekit-bridge"]
 code-extensions = ["zip/deflate-flate2"]
 code-extensions-preview = ["code-extensions"]
 # Only for isolated loopback upgrade acceptance builds. Never enable for distribution.

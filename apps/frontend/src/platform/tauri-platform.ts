@@ -102,6 +102,10 @@ export class TauriPlatform implements NodalStudioPlatform {
       install: (projectId) => invoke("install_code_extension", { projectId }),
       change: (projectId, id, action) => invoke("change_code_extension", { projectId, id, action }),
       prepare: (projectId, id, sha256, language) => invoke("prepare_code_extension", { projectId, id, sha256, language }),
+      syntaxCatalog: {
+        list: () => invoke("list_code_syntax_catalog"),
+        import: (projectId, id) => invoke("import_code_syntax", { projectId, id }),
+      },
       openVsx: {
         search: (projectId, query, offset) => invoke("search_code_open_vsx", { projectId, query, offset }),
         detail: (projectId, id, version) => invoke("detail_code_open_vsx", { projectId, id, version }),
