@@ -145,9 +145,12 @@ Code extensions by release channel
   search and that the supported Python Debugger can be installed, enabled and used to
   stop at a breakpoint and inspect variables. The release updater archive must include
   the same extension host as the DMG.
-- Mac App Store: use pnpm release:macos:appstore. In Code, import a local declarative
-  TextMate VSIX and verify that its highlighting applies. Verify that Open VSX and
-  Python Debugger are absent. Cargo rejects combining mac-app-store with code-extensions.
+- Mac App Store: use pnpm release:macos:appstore. In Code, open Extensions, download a
+  grammar from Syntax from Open VSX, and check that its highlighting applies. The
+  catalog pins the resource URL, version, and SHA-256 for each grammar. The native
+  build has no VSIX installer or extension runtime. Cargo rejects combining
+  mac-app-store with code-extensions. Tell App Review that the app downloads only
+  TextMate JSON for the built-in tokenizer, and provide the steps above for review.
 - Windows uses the shared production identity overlay. It does not enable the
   macOS extension host.
 

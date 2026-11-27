@@ -44,8 +44,13 @@ afterAll(() => {
   Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
 });
 
-it("exposes local syntax import in Code without activating the marketplace or debugger", async () => {
+it("downloads only a catalog grammar in the App Store edition", async () => {
   const install = vi.fn().mockResolvedValue(null);
+  const syntax = { id: "tamasfe.even-better-toml", name: "TOML", version: "0.21.2" };
+  const download = vi.fn().mockResolvedValue({
+    ...syntax, description: "", publisher: "tamasfe", fileName: "toml.tmLanguage.json",
+    sha256: "fixture", engine: "*", capability: "syntax", enabled: true, source: "openVsxSyntax", languages: [],
+  });
   const search = vi.fn();
   const debug = vi.fn();
   renderWorkspace({
@@ -56,6 +61,7 @@ it("exposes local syntax import in Code without activating the marketplace or de
     file: vi.fn(),
     extensions: {
       list: () => Promise.resolve([]), install, change: vi.fn(), prepare: vi.fn(),
+      syntaxCatalog: { list: () => Promise.resolve([syntax]), import: download },
       openVsx: { search, detail: vi.fn(), updates: vi.fn(), install: vi.fn() },
     },
     pythonDebug: { prepare: debug, start: vi.fn(), control: vi.fn(), stop: vi.fn() },
@@ -64,8 +70,11 @@ it("exposes local syntax import in Code without activating the marketplace or de
   fireEvent.click(await screen.findByRole("button", { name: "Extensions" }));
   expect(screen.queryByRole("searchbox", { name: "Search Open VSX" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Python Debugger" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Import Syntax…" }));
-  await waitFor(() => expect(install).toHaveBeenCalledExactlyOnceWith("store-project"));
+  expect(screen.queryByRole("button", { name: "Extension actions" })).toBeNull();
+  fireEvent.click(await screen.findByRole("button", { name: "Download TOML syntax" }));
+  expect(await screen.findByRole("button", { name: "TOML syntax imported" })).toBeDisabled();
+  expect(download).toHaveBeenCalledExactlyOnceWith("store-project", syntax.id);
+  expect(install).not.toHaveBeenCalled();
   expect(search).not.toHaveBeenCalled();
   expect(debug).not.toHaveBeenCalled();
 });

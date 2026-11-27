@@ -267,7 +267,7 @@ export interface CodeExtension {
   description: string;
   fileName: string;
   sha256: string;
-  source: "local" | "openVsx";
+  source: "local" | "openVsx" | "openVsxSyntax";
   engine: string;
   capability: CodeExtensionCapability;
   enabled: boolean;
@@ -286,6 +286,16 @@ export interface CodeExtensionPlatform {
   change(projectId: string, id: string, action: CodeExtensionAction): Promise<CodeExtension | null>;
   prepare(projectId: string, id: string, sha256: string, language: string): Promise<PreparedCodeExtension>;
   openVsx?: CodeOpenVsxPlatform;
+  syntaxCatalog?: {
+    list(): Promise<CodeSyntaxSource[]>;
+    import(projectId: string, id: string): Promise<CodeExtension>;
+  };
+}
+
+export interface CodeSyntaxSource {
+  id: string;
+  name: string;
+  version: string;
 }
 
 export interface CodeOpenVsxItem {

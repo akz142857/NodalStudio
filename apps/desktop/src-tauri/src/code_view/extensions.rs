@@ -1,10 +1,13 @@
-//! VSIX storage and capability checks for the macOS Code workspace.
+//! Extension storage and capability checks for the macOS Code workspace.
 #[cfg(not(feature = "mac-app-store"))]
 pub(crate) mod open_vsx;
+#[cfg(feature = "mac-app-store")]
+pub(crate) mod syntax_catalog;
 
 use std::{
-    fs::{self, File, OpenOptions},
-    io::{self, Read, Write},
+    fs::{self, File},
+    future::Future,
+    io::{self, Read},
     path::{Component, Path, PathBuf},
     sync::RwLock,
 };
@@ -15,18 +18,27 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
-use zip::ZipArchive;
+#[cfg(not(feature = "mac-app-store"))]
+use {
+    std::{fs::OpenOptions, io::Write},
+    zip::ZipArchive,
+};
 
 use super::review::ReviewState;
+#[cfg(not(feature = "mac-app-store"))]
 use crate::file_access::{SelectionKind, pick_workspace_path_from};
+use crate::{AppState, effective_settings};
 
+const OFFLINE: &str = "openVsxOffline";
 const INVALID: &str = "extensionInvalid";
 const LIMIT: &str = "extensionLimit";
 const STORAGE: &str = "extensionStorage";
 const DISABLED: &str = "extensionDisabled";
 const UNSUPPORTED: &str = "extensionUnsupported";
 const CHANGED: &str = "extensionChanged";
+#[cfg(not(feature = "mac-app-store"))]
 const MAX_ARCHIVE: u64 = 32 * 1024 * 1024;
+#[cfg(not(feature = "mac-app-store"))]
 const MAX_UNPACKED: u64 = 64 * 1024 * 1024;
 const MAX_ENTRY: u64 = 2 * 1024 * 1024;
 const MAX_INSTALLED: usize = 32;
@@ -142,7 +154,10 @@ struct Receipt {
 enum PackageSource {
     #[default]
     Local,
+    #[cfg(not(feature = "mac-app-store"))]
     OpenVsx,
+    #[cfg(feature = "mac-app-store")]
+    OpenVsxSyntax,
 }
 
 #[derive(Serialize)]
@@ -363,12 +378,6 @@ fn installation(path: &Path, project_key: &str) -> Result<Extension, String> {
         }
         _ => capability,
     };
-    #[cfg(feature = "mac-app-store")]
-    let capability = if matches!(receipt.source, PackageSource::Local) {
-        capability
-    } else {
-        Capability::Unsupported
-    };
     Ok(Extension {
         id,
         publisher: manifest.publisher,
@@ -386,55 +395,11 @@ fn installation(path: &Path, project_key: &str) -> Result<Extension, String> {
 
 #[cfg(not(feature = "mac-app-store"))]
 fn unpack(source: &[u8], target: &Path) -> Result<(), String> {
-    unpack_prefix(source, target, Path::new("extension"), |_| true)
+    unpack_prefix(source, target, Path::new("extension"))
 }
 
-#[cfg(feature = "mac-app-store")]
-fn unpack(source: &[u8], target: &Path) -> Result<(), String> {
-    let mut archive = ZipArchive::new(io::Cursor::new(source)).map_err(|_| INVALID)?;
-    if archive.len() > 2048 {
-        return Err(LIMIT.into());
-    }
-    let prefix = Path::new("extension");
-    let package = prefix.join("package.json");
-    let mut entry = archive
-        .by_name("extension/package.json")
-        .map_err(|_| INVALID)?;
-    if entry.is_symlink() || entry.is_dir() || entry.size() > MAX_ENTRY {
-        return Err(INVALID.into());
-    }
-    let mut bytes = Vec::new();
-    entry
-        .by_ref()
-        .take(MAX_ENTRY + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| INVALID)?;
-    if bytes.len() as u64 > MAX_ENTRY {
-        return Err(LIMIT.into());
-    }
-    let manifest = parse_manifest(&bytes)?;
-    let (capability, languages) = capabilities(&manifest, None);
-    if capability != Capability::Syntax {
-        return Err(UNSUPPORTED.into());
-    }
-    // Keep just the manifest and the grammar data consumed by the syntax tokenizer.
-    let mut assets = std::collections::HashSet::from([package]);
-    for language in languages {
-        assets.extend(
-            grammar_for_language(&manifest, &language.id)
-                .filter_map(|grammar| asset_path(&grammar.path, &["json"]))
-                .map(|path| prefix.join(path)),
-        );
-    }
-    unpack_prefix(source, target, prefix, |path| assets.contains(path))
-}
-
-fn unpack_prefix(
-    source: &[u8],
-    target: &Path,
-    prefix: &Path,
-    include: impl Fn(&Path) -> bool,
-) -> Result<(), String> {
+#[cfg(not(feature = "mac-app-store"))]
+fn unpack_prefix(source: &[u8], target: &Path, prefix: &Path) -> Result<(), String> {
     let mut archive = ZipArchive::new(io::Cursor::new(source)).map_err(|_| INVALID)?;
     if archive.len() > 2048 {
         return Err(LIMIT.into());
@@ -451,7 +416,7 @@ fn unpack_prefix(
         {
             return Err(INVALID.into());
         }
-        if !name.starts_with(prefix) || !include(&name) {
+        if !name.starts_with(prefix) {
             continue;
         }
         let path = target.join(name);
@@ -493,7 +458,6 @@ pub(super) fn python_adapter(app: &AppHandle, key: &str, target: &Path) -> Resul
         &archive,
         target,
         Path::new("extension/bundled/libs/debugpy"),
-        |_| true,
     )?;
     Ok(target.join(PYTHON_ADAPTER))
 }
@@ -573,6 +537,7 @@ fn installed_paths(root: &Path) -> Result<Vec<PathBuf>, String> {
         .collect()
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 fn install(root: &Path, archive_path: &Path, project_key: &str) -> Result<Extension, String> {
     if archive_path
         .extension()
@@ -598,6 +563,7 @@ fn install(root: &Path, archive_path: &Path, project_key: &str) -> Result<Extens
     Ok(extension)
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 fn stage_package(
     root: &Path,
     source: &[u8],
@@ -606,7 +572,6 @@ fn stage_package(
 ) -> Result<(tempfile::TempDir, Extension), String> {
     let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
     unpack(source, temp.path())?;
-    #[cfg(not(feature = "mac-app-store"))]
     if matches!(receipt.source, PackageSource::OpenVsx) && receipt.sha256 == PYTHON_DEBUGGER_SHA256
     {
         fs::write(temp.path().join(PYTHON_DEBUGGER_ARCHIVE), source).map_err(|_| STORAGE)?;
@@ -749,6 +714,7 @@ pub(crate) async fn list_code_extensions(
     .await
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 #[tauri::command]
 pub(crate) async fn install_code_extension(
     app: AppHandle,
@@ -880,8 +846,15 @@ pub(crate) async fn prepare_code_extension(
             Capability::Syntax => {
                 let (grammar, entry) =
                     usable_grammar(&manifest, &root, &language).ok_or(UNSUPPORTED)?;
+                let source = read_asset(&entry)?;
+                #[cfg(feature = "mac-app-store")]
+                if matches!(item.receipt.source, PackageSource::OpenVsxSyntax)
+                    && format!("{:x}", Sha256::digest(source.as_bytes())) != item.receipt.sha256
+                {
+                    return Err(CHANGED.into());
+                }
                 Ok(Prepared::Syntax {
-                    grammar: read_asset(&entry)?,
+                    grammar: source,
                     scope_name: grammar.scope_name.clone(),
                 })
             }
@@ -891,7 +864,40 @@ pub(crate) async fn prepare_code_extension(
     .await
 }
 
-#[cfg(test)]
+async fn online(app: &AppState) -> Result<(), String> {
+    if effective_settings(&app.store, None)
+        .await?
+        .app
+        .privacy
+        .offline_mode
+    {
+        Err(OFFLINE.into())
+    } else {
+        Ok(())
+    }
+}
+
+async fn while_online<T>(
+    app: &AppState,
+    request: impl Future<Output = Result<T, String>>,
+) -> Result<T, String> {
+    online(app).await?;
+    let mut offline_rx = app.subscribe_offline();
+    let wait_for_offline = async {
+        if offline_rx.wait_for(|offline| *offline).await.is_ok() {
+            OFFLINE.into()
+        } else {
+            std::future::pending::<String>().await
+        }
+    };
+    tokio::select! {
+        biased;
+        reason = wait_for_offline => Err(reason),
+        result = request => result,
+    }
+}
+
+#[cfg(all(test, not(feature = "mac-app-store")))]
 mod tests {
     use super::*;
 
@@ -951,29 +957,6 @@ mod tests {
                 .enabled
         );
         assert!(!installation(&destination, "other-project").unwrap().enabled);
-    }
-
-    #[cfg(feature = "mac-app-store")]
-    #[test]
-    fn app_store_import_keeps_declared_grammar_data_and_rejects_executable_entry_points() {
-        let source = tempfile::tempdir().unwrap();
-        let archive = source.path().join("sample.vsix");
-        let root = tempfile::tempdir().unwrap();
-
-        fs::write(&archive, syntax_archive("1.0.0", Some("unused.js"))).unwrap();
-        assert_eq!(
-            install(root.path(), &archive, "project").err().as_deref(),
-            Some(UNSUPPORTED)
-        );
-        assert!(installed_paths(root.path()).unwrap().is_empty());
-
-        fs::write(&archive, syntax_archive("1.0.0", None)).unwrap();
-        let installed = install(root.path(), &archive, "project").unwrap();
-        assert_eq!(installed.capability, Capability::Syntax);
-        let contents = root.path().join(&installed.id).join("extension");
-        assert!(contents.join("package.json").is_file());
-        assert!(contents.join("syntax.json").is_file());
-        assert!(!contents.join("unused.js").exists());
     }
 
     #[test]

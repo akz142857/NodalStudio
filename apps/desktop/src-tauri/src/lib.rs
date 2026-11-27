@@ -1,7 +1,5 @@
 #[cfg(all(feature = "mac-app-store", feature = "code-extensions"))]
-compile_error!(
-    "Mac App Store builds support local syntax imports only and cannot enable code-extensions."
-);
+compile_error!("Mac App Store builds support syntax data only and cannot enable code-extensions.");
 #[cfg(all(not(target_os = "macos"), feature = "code-extensions"))]
 compile_error!("The full Code extension host is supported only on macOS.");
 
@@ -2510,11 +2508,12 @@ pub fn run() {
                     any(feature = "code-extensions", feature = "mac-app-store")
                 ))]
                 code_view::extensions::list_code_extensions,
-                #[cfg(all(
-                    target_os = "macos",
-                    any(feature = "code-extensions", feature = "mac-app-store")
-                ))]
+                #[cfg(all(target_os = "macos", feature = "code-extensions"))]
                 code_view::extensions::install_code_extension,
+                #[cfg(all(target_os = "macos", feature = "mac-app-store"))]
+                code_view::extensions::syntax_catalog::list_code_syntax_catalog,
+                #[cfg(all(target_os = "macos", feature = "mac-app-store"))]
+                code_view::extensions::syntax_catalog::import_code_syntax,
                 #[cfg(all(
                     target_os = "macos",
                     any(feature = "code-extensions", feature = "mac-app-store")
