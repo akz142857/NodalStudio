@@ -1472,6 +1472,7 @@ export function App() {
 
       <section
         className="workspace"
+        data-code-workspace={mode === "code" || undefined}
         aria-label={t("navigation.nodalStudioWorkspace")}
         style={
           {

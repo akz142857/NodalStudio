@@ -14,11 +14,11 @@ export function useCodeContextMenu() {
     event.preventDefault();
     event.stopPropagation();
     const anchor = trigger.getBoundingClientRect();
-    const mouse = "clientX" in event && (event.clientX !== 0 || event.clientY !== 0);
+    const mouse = event.type === "contextmenu" && "clientX" in event && (event.clientX !== 0 || event.clientY !== 0);
     setMenu({ x: mouse ? event.clientX : anchor.left, y: mouse ? event.clientY : anchor.bottom, name, actions, trigger });
   }
 
-  return { show, surface: menu && <SchemaObjectMenu {...menu} onClose={(restoreFocus) => {
+  return { show, trigger: menu?.trigger, surface: menu && <SchemaObjectMenu {...menu} onClose={(restoreFocus) => {
     setMenu(undefined);
     if (restoreFocus && menu.trigger.isConnected) menu.trigger.focus({ preventScroll: true });
   }} /> };

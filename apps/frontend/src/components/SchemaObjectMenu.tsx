@@ -2,23 +2,37 @@ import { useI18n } from "../i18n";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
-type MenuItem = { label: string; disabled?: boolean; description?: string; separatorBefore?: boolean; checked?: boolean; run: () => void };
+type MenuItem = {
+  label: string;
+  disabled?: boolean;
+  description?: string;
+  separatorBefore?: boolean;
+  checked?: boolean;
+  checkbox?: boolean;
+  run: () => void;
+};
 export type SchemaObjectMenuAction = MenuItem | { label: string; disabled?: boolean; separatorBefore?: boolean; children: MenuItem[] };
+type MenuPosition =
+  | { x: number; y: number; anchor?: never }
+  | { anchor: HTMLElement; x?: never; y?: never };
 
 function items(menu: HTMLElement | null) {
-  return Array.from(menu?.querySelectorAll<HTMLButtonElement>(':is([role="menuitem"], [role="menuitemradio"]):not(:disabled)') ?? []);
+  return Array.from(menu?.querySelectorAll<HTMLButtonElement>(
+    ':is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]):not(:disabled)',
+  ) ?? []);
 }
 
-function place(menu: HTMLElement, x: number, y: number) {
+function place(menu: HTMLElement, x: number, y: number, alignRight = false) {
   const scale = menu.offsetWidth ? menu.getBoundingClientRect().width / menu.offsetWidth || 1 : 1;
+  const left = x / scale - (alignRight ? menu.offsetWidth : 0);
   menu.style.maxHeight = `${window.innerHeight / scale - 12}px`;
-  menu.style.left = `${Math.max(6, Math.min(x / scale, window.innerWidth / scale - menu.offsetWidth - 6))}px`;
+  menu.style.left = `${Math.max(6, Math.min(left, window.innerWidth / scale - menu.offsetWidth - 6))}px`;
   menu.style.top = `${Math.max(6, Math.min(y / scale, window.innerHeight / scale - menu.offsetHeight - 6))}px`;
 }
 
 /** Object actions live outside the scrolling sidebar; all coordinates respect UI zoom. */
-export function SchemaObjectMenu({ x, y, name, actions, onClose, showName = true, className }: {
-  x: number; y: number; name: string; actions: SchemaObjectMenuAction[]; onClose: (restoreFocus: boolean) => void; showName?: boolean; className?: string;
+export function SchemaObjectMenu({ x = 0, y = 0, anchor, name, actions, onClose, showName = true, className }: MenuPosition & {
+  name: string; actions: SchemaObjectMenuAction[]; onClose: (restoreFocus: boolean) => void; showName?: boolean; className?: string;
 }) {
   const { t: bt } = useI18n();
   const surface = useRef<HTMLDivElement>(null);
@@ -29,9 +43,13 @@ export function SchemaObjectMenu({ x, y, name, actions, onClose, showName = true
   useLayoutEffect(() => {
     const menu = root.current;
     if (!menu) return;
-    place(menu, x, y);
+    if (anchor) {
+      const rect = anchor.getBoundingClientRect();
+      const alignRight = getComputedStyle(anchor).direction !== "rtl";
+      place(menu, alignRight ? rect.right : rect.left, rect.bottom + 4, alignRight);
+    } else place(menu, x, y);
     (items(menu)[0] ?? menu).focus();
-  }, [name, x, y]);
+  }, [anchor, name, x, y]);
   useLayoutEffect(() => {
     const menu = sub.current;
     if (!menu || !submenu || !root.current) return;
@@ -43,14 +61,16 @@ export function SchemaObjectMenu({ x, y, name, actions, onClose, showName = true
   }, [submenu]);
   useEffect(() => {
     const contains = (target: EventTarget | null) => target instanceof Node && surface.current?.contains(target);
-    const outside = (event: PointerEvent) => { if (!contains(event.target)) onClose(false); };
+    const outside = (event: PointerEvent) => {
+      if (!contains(event.target) && !(event.target instanceof Node && anchor?.contains(event.target))) onClose(false);
+    };
     const dismiss = () => onClose(false);
     const scroll = (event: Event) => { if (!contains(event.target)) dismiss(); };
     document.addEventListener("pointerdown", outside);
     window.addEventListener("resize", dismiss);
     window.addEventListener("scroll", scroll, true);
     return () => { document.removeEventListener("pointerdown", outside); window.removeEventListener("resize", dismiss); window.removeEventListener("scroll", scroll, true); };
-  }, [onClose]);
+  }, [anchor, onClose]);
   function navigate(event: KeyboardEvent<HTMLDivElement>, inSubmenu = false) {
     const enabled = items(event.currentTarget);
     const index = enabled.indexOf(document.activeElement as HTMLButtonElement);
@@ -84,7 +104,7 @@ export function SchemaObjectMenu({ x, y, name, actions, onClose, showName = true
         onPointerEnter={(event) => {
           if (!action.disabled && submenu?.label !== action.label) setSubmenu({ label: action.label, trigger: event.currentTarget, focus: false });
         }}>{action.label}<span className="schema-menu-chevron" aria-hidden="true">›</span></button>
-        : <button type="button" role={action.checked === undefined ? "menuitem" : "menuitemradio"}
+        : <button type="button" role={action.checked === undefined ? "menuitem" : action.checkbox ? "menuitemcheckbox" : "menuitemradio"}
           aria-checked={action.checked} disabled={action.disabled} aria-description={action.description} title={action.description}
           onPointerEnter={() => { if (!inSubmenu && !sub.current?.contains(document.activeElement)) setSubmenu(undefined); }}
           onClick={() => { onClose(true); action.run(); }}>

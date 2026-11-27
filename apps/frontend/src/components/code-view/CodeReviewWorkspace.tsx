@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../../design-system/Button";
-import { ActionIcon } from "../ActionIcon";
+import { ActionIcon, type ActionIconName } from "../ActionIcon";
 import { IconButton } from "../IconButton";
+import { SchemaObjectMenu } from "../SchemaObjectMenu";
 import { Segmented } from "../Segmented";
 import { SidebarRail } from "../SidebarRail";
 import { EmptyState } from "../../design-system/EmptyState";
@@ -148,7 +149,8 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
     refetchOnWindowFocus: false,
     retry: false,
   });
-  const [view, setView] = useState<NavigatorView>(canCompare ? "changes" : "files");
+  const [selectedView, setView] = useState<NavigatorView>(canCompare ? "changes" : "files");
+  const view = selectedView === "extensions" && !extensionsApi ? "files" : selectedView;
   const [contentPane, setContentPane] = useState<HTMLDivElement | null>(null);
   const [tabs, setTabs] = useState<string[]>();
   const [selected, setSelected] = useState<string>();
@@ -173,8 +175,14 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
     try { return localStorage.getItem(compactFoldersKey) !== "false"; }
     catch { return true; }
   });
+  const toggleCompactFolders = () => {
+    const enabled = !compactFolders;
+    setCompactFolders(enabled);
+    try { localStorage.setItem(compactFoldersKey, String(enabled)); } catch { /* The current workspace can still use the setting. */ }
+  };
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [, setNoteRevision] = useState(0);
+  const activityBar = useRef<HTMLElement>(null);
   const sidebar = useRef<HTMLElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const detail = useRef<HTMLDivElement>(null);
@@ -228,7 +236,7 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
       ? detail.current?.querySelector<HTMLButtonElement>(".code-review-tabs [aria-current]")
       : pendingFocus.current === "filter"
         ? sidebar.current?.querySelector<HTMLInputElement>("input[type=search]")
-        : list.current?.querySelector<HTMLButtonElement>("[data-code-row]") ?? sidebar.current?.querySelector<HTMLButtonElement>("button[aria-pressed=true]");
+        : list.current?.querySelector<HTMLButtonElement>("[data-code-row]") ?? activityBar.current?.querySelector<HTMLButtonElement>("button[aria-pressed=true]");
     if (!target) return;
     pendingFocus.current = undefined;
     target.focus();
@@ -342,7 +350,7 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
         {dock === "checks" && <div className="code-checks-filters">
           <input type="search" placeholder={t("codeReview.checks.search")} aria-label={t("codeReview.checks.search")}
             value={findingsFilter} onChange={(event) => setFindingsFilter(event.target.value)} />
-          <select aria-label={t("codeReview.checks.severityFilter")} value={severityFilter} onChange={(event) => {
+          <select className="ds-select" aria-label={t("codeReview.checks.severityFilter")} value={severityFilter} onChange={(event) => {
             const value = event.target.value;
             if (value === "all" || value === "error" || value === "warning") setSeverityFilter(value);
           }}>
@@ -488,11 +496,14 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
 
   const refreshButton = <IconButton icon="refresh" className="code-review-tool" label={t(changes.isFetching ? "codeReview.refreshing" : "codeReview.refresh")}
     disabled={changes.isFetching} aria-busy={changes.isFetching || undefined} onClick={refresh} />;
-  const extensionsButton = extensionsApi && <IconButton icon="extensions" className="code-review-tool"
-    label={t("codeReview.extensions.title")} aria-pressed={view === "extensions" && sidebarOpen} onClick={() => {
-      setView(view === "extensions" && sidebarOpen ? "files" : "extensions");
-      setSidebarOpen(true);
-    }} />;
+  const viewLabels = {
+    files: t("codeReview.files"), search: t("codeReview.searchResults"),
+    changes: t("codeReview.changesLabel"), extensions: t("codeReview.extensions.title"),
+  };
+  const activitiesAvailable: { view: NavigatorView; icon: ActionIconName }[] = [{ view: "files", icon: "document" }];
+  if (api.searchContent) activitiesAvailable.push({ view: "search", icon: "search" });
+  if (canCompare) activitiesAvailable.push({ view: "changes", icon: "git" });
+  if (extensionsApi) activitiesAvailable.push({ view: "extensions", icon: "extensions" });
   const activities: ExtensionActivity[] = [];
   if (syntaxActivity && syntaxActivity.path === active) activities.push(syntaxActivity.activity);
   if (checkRun?.extension && checkRun.status !== "cancelled") {
@@ -507,11 +518,25 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
     {changes.isError && <p className="code-review-notice" role="alert">{t("codeReview.refreshFailed")}</p>}
     <div className="code-review-workspace" data-sidebar={sidebarOpen ? "open" : "closed"}
       style={{ "--code-sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}>
+      <nav ref={activityBar} className="code-review-activity" aria-label={t("codeReview.navigatorMode")} onKeyDown={navigateActivityBar}>
+        {activitiesAvailable.map(({ view: target, icon }) => {
+          const active = sidebarOpen && view === target;
+          const count = target === "changes" ? changes.data?.files.length : undefined;
+          return <IconButton key={target} className="code-review-tool code-review-activity-button" icon={icon}
+            label={count === undefined ? viewLabels[target] : t("codeReview.changes", { count })}
+            aria-pressed={active} aria-controls={sidebarId} onClick={() => {
+              setView(target);
+              setSidebarOpen(!active);
+            }}>
+            {count !== undefined && count > 0 && <span className="code-review-activity-count" aria-hidden="true">{count > 99 ? "99+" : count}</span>}
+          </IconButton>;
+        })}
+      </nav>
       <aside ref={sidebar} id={sidebarId} className="code-review-sidebar" aria-label={t("codeReview.projectFiles")} hidden={!sidebarOpen}>
         <header className="code-review-header">
-          {view !== "extensions" && <h1 title={project.name}>{project.name}</h1>}
+          <h1>{viewLabels[view]}</h1>
           <div className="code-review-header-actions" role="group" aria-label={t("codeReview.projectActions")}>
-            {extensionsButton}{refreshButton}{choose}
+            {refreshButton}{choose}
           </div>
         </header>
         {view === "extensions" && extensionsApi ? <CodeReviewExtensions api={extensionsApi} projectId={project.id} items={extensions}
@@ -525,18 +550,17 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
               [...current.filter((extension) => extension.id !== id), ...(item ? [item] : [])]
                 .sort((a, b) => a.id.localeCompare(b.id)));
           }} /> : <>
-        <div className="code-review-sidebar-controls">
-          {canCompare || api.searchContent ? <Segmented<NavigatorView> label={t("codeReview.navigatorMode")} value={view} onChange={setView} className="code-review-segments"
-            options={[
-              ...(canCompare ? [{ value: "changes" as const, label: changes.data ? t("codeReview.changes", { count: changed.length }) : t("codeReview.changesLabel") }] : []),
-              { value: "files", label: t("codeReview.files") },
-              ...(api.searchContent ? [{ value: "search" as const, label: t("codeReview.searchResults") }] : []),
-            ]} /> : <strong>{t("codeReview.files")}</strong>}
-          {view === "changes" && changed.length > 0 && <div className="code-review-filter">
+        {view === "files" && <div className="code-review-files-toolbar">
+          <h2 className="code-review-project-name" title={project.name}>{project.name}</h2>
+          {sidebarOpen && <FileViewOptions compactFolders={compactFolders} showHidden={showHidden}
+            toggleCompactFolders={toggleCompactFolders} toggleHidden={() => setShowHidden((visible) => !visible)} />}
+        </div>}
+        {view === "changes" && changed.length > 0 && <div className="code-review-sidebar-controls">
+          <div className="code-review-filter">
             <ActionIcon name="search" />
             <input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t("codeReview.filter")} aria-label={t("codeReview.filter")} />
-          </div>}
-        </div>
+          </div>
+        </div>}
         {view === "search" ? <div ref={setContentPane} className="code-content-pane" /> :
         <div className="code-review-file-list" ref={list} aria-busy={view === "changes" && changes.isFetching || undefined} onKeyDown={navigateFiles}>
           {view === "files" ? <>
@@ -576,21 +600,13 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
               })}</ul>
             </>}
         </div>}
-        {view === "files" && <div className="code-review-sidebar-footer">
-          <label><input type="checkbox" checked={compactFolders} onChange={(event) => {
-            const enabled = event.target.checked;
-            setCompactFolders(enabled);
-            try { localStorage.setItem(compactFoldersKey, String(enabled)); } catch { /* The current workspace can still use the setting. */ }
-          }} />{t("codeReview.compactFolders")}</label>
-          <label><input type="checkbox" checked={showHidden} onChange={(event) => setShowHidden(event.target.checked)} />{t("codeReview.showHidden")}</label>
-        </div>}
         </>}
       </aside>
       {sidebarOpen && <SidebarRail side="left" expanded width={sidebarWidth} minWidth={176} maxWidth={420}
         onResize={setSidebarWidth} onToggle={() => setSidebarOpen(false)} />}
       <div className="code-review-detail" ref={detail}>
         <header className="code-review-editor-bar" ref={toolbar} tabIndex={-1}>
-          {!sidebarOpen && <div className="code-review-header-actions">{extensionsButton}{refreshButton}{choose}</div>}
+          {!sidebarOpen && <div className="code-review-header-actions">{refreshButton}{choose}</div>}
           {returnPoints.length > 0 && <IconButton icon="chevronLeft" className="code-review-tool" label={t("codeReview.definitionBack")} onClick={back} />}
           <nav className="code-review-tabs" aria-label={t("codeReview.openFiles")}>
             {openTabs.map((key) => {
@@ -684,6 +700,46 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
   </>;
 }
 
+function FileViewOptions({ compactFolders, showHidden, toggleCompactFolders, toggleHidden }: {
+  compactFolders: boolean;
+  showHidden: boolean;
+  toggleCompactFolders: () => void;
+  toggleHidden: () => void;
+}) {
+  const { t } = useI18n();
+  const [anchor, setAnchor] = useState<HTMLButtonElement>();
+  const label = t("codeReview.fileViewOptions");
+  return <>
+    <IconButton icon="sliders" label={label} className="code-review-tool" aria-haspopup="menu" aria-expanded={Boolean(anchor)}
+      onClick={(event) => setAnchor(anchor ? undefined : event.currentTarget)}
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowDown") return;
+        event.preventDefault();
+        setAnchor(event.currentTarget);
+      }} />
+    {anchor && <SchemaObjectMenu anchor={anchor} name={label} showName={false} className="code-review-view-options"
+      actions={[
+        { label: t("codeReview.compactFolders"), checked: compactFolders, checkbox: true, run: toggleCompactFolders },
+        { label: t("codeReview.showHidden"), checked: showHidden, checkbox: true, run: toggleHidden },
+      ]} onClose={(restoreFocus) => {
+        setAnchor(undefined);
+        if (restoreFocus && anchor.isConnected) anchor.focus({ preventScroll: true });
+      }} />}
+  </>;
+}
+
+function navigateActivityBar(event: KeyboardEvent<HTMLElement>) {
+  const { key } = event;
+  if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Home" && key !== "End") return;
+  const buttons = [...event.currentTarget.querySelectorAll("button")];
+  const index = buttons.findIndex((button) => button === event.target);
+  if (index < 0) return;
+  const next = key === "Home" ? 0 : key === "End" ? buttons.length - 1
+    : (index + (key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+  event.preventDefault();
+  buttons[next].focus();
+}
+
 function navigateFiles(event: KeyboardEvent<HTMLDivElement>) {
   if (!(event.target instanceof HTMLButtonElement) || !event.target.hasAttribute("data-code-row")) return;
   const current = event.target;
@@ -715,6 +771,14 @@ type ChangedPaths = Map<string, Map<string, TreeEntry>>;
 const fileStatusMarker: Record<CodeReviewChange["kind"], string> = {
   added: "A", modified: "M", deleted: "D", renamed: "R", conflict: "!",
 };
+const folderStatusMessage = {
+  added: "codeReview.folderContainsAdded",
+  modified: "codeReview.folderContainsChanges",
+  deleted: "codeReview.folderContainsDeleted",
+  renamed: "codeReview.folderContainsChanges",
+  conflict: "codeReview.folderContainsConflicts",
+} as const;
+const folderStatusMarker: Partial<Record<CodeReviewChange["kind"], string>> = { added: "+", deleted: "−", conflict: "!" };
 
 function treeEntryKey(entry: TreeEntry) {
   return entry.directory ? `${entry.path}/` : entry.path;
@@ -722,7 +786,7 @@ function treeEntryKey(entry: TreeEntry) {
 
 function indexChangedPaths(changes: readonly CodeReviewChange[]): ChangedPaths {
   const index: ChangedPaths = new Map();
-  function add(path: string, directory: boolean, kind?: CodeReviewChange["kind"]) {
+  function add(path: string, directory: boolean, kind: CodeReviewChange["kind"]) {
     const parent = folderName(path);
     let children = index.get(parent);
     if (!children) {
@@ -731,14 +795,23 @@ function indexChangedPaths(changes: readonly CodeReviewChange[]): ChangedPaths {
     }
     const entry = { path, name: basename(path), directory, kind };
     const key = treeEntryKey(entry);
-    if (children.has(key)) return false;
-    children.set(key, entry);
+    const previous = children.get(key);
+    if (!previous) {
+      children.set(key, entry);
+      return true;
+    }
+    if (!directory || previous.kind === kind || previous.kind === "conflict") return false;
+    // Mixed changes use the modified color, and conflicts take precedence.
+    const merged = kind === "conflict" ? kind : "modified";
+    if (previous.kind === merged) return false;
+    previous.kind = merged;
     return true;
   }
   for (const { path, kind } of changes) {
     add(path, false, kind);
+    const folderKind = kind === "renamed" ? "modified" : kind;
     for (let parent = folderName(path); parent; parent = folderName(parent)) {
-      if (!add(parent, true)) break;
+      if (!add(parent, true, folderKind)) break;
     }
   }
   return index;
@@ -808,10 +881,8 @@ function DirectoryTree({ api, project, path, active, onOpen, onFileMenu, reveal,
     {readDirectory && directory.data?.limited && <p role="status">{t("codeReview.limited")}</p>}
     {visible.length > 0 && <ul className="code-review-tree">{visible.map((entry) => {
       const key = treeEntryKey(entry);
-      const changedEntry = changed?.get(key);
-      const kind = changedEntry?.kind;
-      const status = entry.directory && changedEntry ? t("codeReview.folderContainsChanges")
-        : kind ? t(`codeReview.kind.${kind}`) : undefined;
+      const kind = changed?.get(key)?.kind;
+      const status = kind ? t(entry.directory ? folderStatusMessage[kind] : `codeReview.kind.${kind}`) : undefined;
       const onDisk = present.has(key);
       const isOpen = expanded.has(entry.path);
       const { names, paths, tail } = folderRow(entry, changedPaths, showHidden,
@@ -819,6 +890,7 @@ function DirectoryTree({ api, project, path, active, onOpen, onFileMenu, reveal,
       const compacted = names.length > 1;
       return <li key={key}>
         <button type="button" data-code-row="" aria-current={!entry.directory && entry.path === active ? "true" : undefined}
+          data-folder-change={entry.directory ? kind : undefined}
           ref={!entry.directory && entry.path === reveal?.path ? revealRow : undefined}
           aria-haspopup={entry.directory ? undefined : "menu"} aria-keyshortcuts={entry.directory ? undefined : "Shift+F10"}
           onContextMenu={entry.directory ? undefined : (event) => onFileMenu(event, entry.path, "tree")}
@@ -834,8 +906,8 @@ function DirectoryTree({ api, project, path, active, onOpen, onFileMenu, reveal,
             <span className="code-review-compact-separator">/</span>
             <span className="code-review-filename code-review-compact-tail">{names.at(-1)}</span>
           </span> : <span className="code-review-filename">{entry.name}</span>}
-          {kind ? <span className="code-review-kind code-review-tree-file-status" data-kind={kind} aria-hidden="true">{fileStatusMarker[kind]}</span>
-            : status && <span className="code-review-tree-folder-status" aria-hidden="true" />}
+          {kind && (entry.directory ? <span className="code-review-tree-folder-status" aria-hidden="true">{folderStatusMarker[kind]}</span>
+            : <span className="code-review-kind code-review-tree-file-status" data-kind={kind} aria-hidden="true">{fileStatusMarker[kind]}</span>)}
         </button>
         {entry.directory && isOpen && <DirectoryTree api={api} project={project} path={tail} active={active} onOpen={onOpen}
           onFileMenu={onFileMenu} reveal={reveal}

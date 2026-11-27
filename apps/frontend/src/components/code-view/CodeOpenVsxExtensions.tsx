@@ -4,6 +4,8 @@ import { Button } from "../../design-system/Button";
 import { ModalSurface } from "../../design-system/ModalSurface";
 import { useI18n } from "../../i18n";
 import type { CodeExtension, CodeOpenVsxPlatform } from "../../platform/code-review";
+import { IconButton } from "../IconButton";
+import { CodeExtensionRow } from "./CodeExtensionRow";
 import { extensionErrorMessage } from "./code-extension-errors";
 
 const catalogKey = (projectId: string) => ["code-review", projectId, "open-vsx"] as const;
@@ -38,24 +40,20 @@ export function CodeOpenVsxSearch({ market, projectId, items, offline, openDetai
     }}>
       <input type="search" aria-label={t("codeReview.extensions.marketSearch")} placeholder={t("codeReview.extensions.marketPlaceholder")}
         value={text} maxLength={160} onChange={(event) => setText(event.currentTarget.value)} disabled={offline} />
-      <Button size="small" variant="primary" type="submit" disabled={offline || !text.trim() || search.isFetching}>
-        {t("codeReview.extensions.marketSubmit")}
-      </Button>
+      <IconButton icon="search" className="code-review-tool" label={t("codeReview.extensions.marketSubmit")}
+        type="submit" disabled={offline || !text.trim() || search.isFetching} />
     </form>
     {offline && <p role="status">{t("codeReview.extensions.marketOffline")}</p>}
     {!offline && query && <>
       {search.isFetching && <p role="status">{t("codeReview.extensions.marketSearching")}</p>}
       {search.isError && <p role="alert">{t(extensionErrorMessage(search.error))}</p>}
       {search.isSuccess && !results.length && <p role="status">{t("codeReview.extensions.marketNoResults")}</p>}
-      <ul>
+      <ul className="code-extension-list">
         {results.map((item) => {
           const installed = items.find((entry) => entry.id === item.id);
-          return <li key={item.id}>
-            <h3><button type="button" className="code-extension-result" onClick={() => openDetails(item.id)}>{item.name}</button></h3>
-            <p className="code-extension-byline">{item.publisher} · {item.version}</p>
-            {item.description && <p>{item.description}</p>}
-            {installed && <p>{t("codeReview.extensions.marketInstalledVersion", { version: installed.version })}</p>}
-          </li>;
+          return <CodeExtensionRow key={item.id} item={item} verified={item.verified} onOpen={() => openDetails(item.id)}
+            status={installed && (installed.version === item.version ? t("codeReview.extensions.installedTab")
+              : t("codeReview.extensions.marketInstalledVersion", { version: installed.version }))} />;
         })}
       </ul>
       {search.hasNextPage && <Button size="small" disabled={search.isFetching} onClick={() => { void search.fetchNextPage(); }}>
@@ -118,7 +116,7 @@ export function CodeOpenVsxDetails({ market, projectId, id, initialVersion, inst
         {!release.downloadable && <p role="status">{t("codeReview.extensions.marketUnavailable")}</p>}
         <label className="code-extension-version">
           {t("codeReview.extensions.marketVersion")}
-          <select value={version ?? release.version} disabled={offline || install.isPending} onChange={(event) => {
+          <select className="ds-select" value={version ?? release.version} disabled={offline || install.isPending} onChange={(event) => {
             install.reset();
             setVersion(event.currentTarget.value);
           }}>

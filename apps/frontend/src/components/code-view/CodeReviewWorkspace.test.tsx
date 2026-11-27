@@ -3,6 +3,7 @@ import { webcrypto } from "node:crypto";
 import { lint } from "markdownlint/sync";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import type { CodeDefinitionRequest, CodeDefinitionResult, CodeDocumentHighlightRange, CodeDocumentOutlineRequest, CodeReviewCompactFolders,
   CodeDocumentOutlineResult, CodeReviewChange, CodeReviewDirectory, CodeReviewPlatform } from "../../platform/code-review";
@@ -17,14 +18,18 @@ vi.mock("./code-review-checks", async (original) => {
 });
 
 function renderWorkspace(api: CodeReviewPlatform, client = new QueryClient()) {
-  const setSidebarOpen = vi.fn();
-  const workspace = (outlineOpen: boolean) => <QueryClientProvider client={client}>
-    <CodeReviewWorkspace api={api} sidebarId="project-sidebar" sidebarOpen setSidebarOpen={setSidebarOpen}
-      outlineId="code-outline" outlineOpen={outlineOpen} eslintAvailability={api.eslint ? "enabled" : "eslintUnavailable"} />
-  </QueryClientProvider>;
-  const result = render(workspace(false));
-  return { ...result, openOutline: (open: boolean) => result.rerender(workspace(open)) };
+  function Workspace({ outlineOpen }: { outlineOpen: boolean }) {
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    return <QueryClientProvider client={client}>
+      <CodeReviewWorkspace api={api} sidebarId="project-sidebar" sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
+        outlineId="code-outline" outlineOpen={outlineOpen} eslintAvailability={api.eslint ? "enabled" : "eslintUnavailable"} />
+    </QueryClientProvider>;
+  }
+  const result = render(<Workspace outlineOpen={false} />);
+  return { ...result, openOutline: (open: boolean) => result.rerender(<Workspace outlineOpen={open} />) };
 }
+
+const projectNavigator = () => within(screen.getByRole("navigation", { name: "Project navigator" }));
 
 beforeAll(() => {
   Object.defineProperty(Range.prototype, "getClientRects", { configurable: true, value: () => [] });
@@ -207,7 +212,8 @@ it("provides a clear clean-tree action and accessible folder navigation", async 
   fireEvent.click(screen.getByRole("button", { name: "Browse Files" }));
   const folder = await screen.findByRole("button", { name: "src" });
   expect(screen.queryByRole("button", { name: ".gitignore" })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("checkbox", { name: "Show hidden files" }));
+  fireEvent.click(screen.getByRole("button", { name: "View options" }));
+  fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Show hidden files", checked: false }));
   expect(screen.getByRole("button", { name: ".gitignore" })).toBeVisible();
   folder.focus();
   fireEvent.keyDown(folder, { key: "ArrowRight" });
@@ -242,7 +248,7 @@ it("opens source from Files and Quick Open while Changes opens a diff", async ()
   const crumbs = within(screen.getByRole("navigation", { name: "File path" })).getAllByRole("listitem");
   expect(crumbs.map((item) => item.textContent)).toEqual(["src", "services", "OrderReport.go"]);
   expect(crumbs[2]).toHaveAttribute("aria-current", "page");
-  fireEvent.click(sidebar.getByRole("button", { name: "Files" }));
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Files" }));
   fireEvent.click(await sidebar.findByRole("button", { name: "OrderReport.go" }));
   await waitFor(() => expect(screen.getByRole("textbox", { name: path })).not.toHaveTextContent("ordered_at"));
   fireEvent.click(screen.getByRole("button", { name: "Find" }));
@@ -284,7 +290,7 @@ it("opens source from Files and Quick Open while Changes opens a diff", async ()
   fireEvent.keyDown(window, { key: "Tab", ctrlKey: true, shiftKey: true });
   expect(await screen.findByRole("textbox", { name: path })).not.toHaveTextContent("ordered_at");
   expect(screen.getByRole("button", { name: "Go to line" })).toHaveTextContent("Ln 3, Col 5");
-  fireEvent.click(sidebar.getByRole("button", { name: "Changes (1)" }));
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Changes (1)" }));
   fireEvent.click(await sidebar.findByRole("button", { name: /OrderReport\.go.*Modified/ }));
   await waitFor(() => expect(screen.getByRole("textbox", { name: path })).toHaveTextContent("ordered_at"));
 });
@@ -401,8 +407,20 @@ it("groups project content hits and opens the exact working-tree match even when
   expect(sidebar.getByText("3 matching lines · 2 files")).toBeVisible();
   fireEvent.click(within(sidebar.getByRole("group", { name: first })).getByRole("option"));
   expect(await screen.findByRole("textbox", { name: first })).toBeVisible();
-  fireEvent.click(sidebar.getByRole("button", { name: "Files" }));
-  fireEvent.click(sidebar.getByRole("button", { name: "Search" }));
+  const activityBar = projectNavigator();
+  const files = activityBar.getByRole("button", { name: "Files" });
+  fireEvent.click(files);
+  files.focus();
+  const search = activityBar.getByRole("button", { name: "Search", pressed: false });
+  fireEvent.keyDown(files, { key: "ArrowDown" });
+  expect(search).toHaveFocus();
+  expect(files).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(search);
+  expect(search).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(search);
+  expect(screen.queryByRole("complementary", { name: "Project files" })).toBeNull();
+  expect(search).toBeVisible();
+  fireEvent.click(search);
   expect(sidebar.getByRole("combobox", { name: "Project Content" })).toHaveValue("total");
   secondText = "# shifted\n# no longer matches";
   fireEvent.click(within(sidebar.getByRole("group", { name: second })).getAllByRole("option")[1]);
@@ -415,10 +433,12 @@ it("marks collapsed ancestors from Changes and keeps deleted files reachable aft
   const source = "services/reporting/summary.go";
   const moved = "services/reporting/report.py";
   const removed = "legacy/archive/old.sql";
+  const added = "tools/check.ts";
   let changes: CodeReviewChange[] = [
     { path: source, previousPath: null, kind: "modified", staged: false, indexOnly: false, evidence: "go" },
     { path: moved, previousPath: "legacy/report.py", kind: "renamed", staged: true, indexOnly: false, evidence: "py" },
     { path: removed, previousPath: null, kind: "deleted", staged: false, indexOnly: false, evidence: "sql" },
+    { path: added, previousPath: null, kind: "added", staged: false, indexOnly: false, evidence: "ts" },
   ];
   const folders: Record<string, Array<{ path: string; name: string; directory: boolean }>> = {
     "": [
@@ -449,10 +469,14 @@ it("marks collapsed ancestors from Changes and keeps deleted files reachable aft
   expect(await sidebar.findByRole("button", { name: /summary\.go.*Modified/ })).toBeVisible();
   expect(sidebar.getByRole("button", { name: /report\.py.*Renamed/ })).toBeVisible();
   expect(sidebar.getByRole("button", { name: /old\.sql.*Deleted/ })).toBeVisible();
-  fireEvent.click(sidebar.getByRole("button", { name: "Files" }));
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Files" }));
   const services = await sidebar.findByRole("button", { name: "services", expanded: false });
   expect(services).toHaveAccessibleDescription("Contains changed files");
+  expect(services).toHaveAttribute("data-folder-change", "modified");
   expect(sidebar.getByRole("button", { name: "services-backup" })).not.toHaveAttribute("aria-description");
+  const tools = sidebar.getByRole("button", { name: "tools" });
+  expect(tools).toHaveAccessibleDescription("Contains added files");
+  expect(tools).toHaveAttribute("data-folder-change", "added");
   expect(directory.mock.calls.map(([, path]) => path)).not.toContain("services");
   fireEvent.click(services);
   const reporting = await sidebar.findByRole("button", { name: "reporting", expanded: false });
@@ -464,10 +488,11 @@ it("marks collapsed ancestors from Changes and keeps deleted files reachable aft
   expect(services).toHaveAccessibleDescription("Contains changed files");
 
   const legacy = sidebar.getByRole("button", { name: "legacy", expanded: false });
-  expect(legacy).toHaveAccessibleDescription("Contains changed files");
+  expect(legacy).toHaveAccessibleDescription("Contains deleted files");
+  expect(legacy).toHaveAttribute("data-folder-change", "deleted");
   fireEvent.click(legacy);
   const archive = await sidebar.findByRole("button", { name: "archive", expanded: false });
-  expect(archive).toHaveAccessibleDescription("Contains changed files");
+  expect(archive).toHaveAccessibleDescription("Contains deleted files");
   fireEvent.click(archive);
   const deleted = await sidebar.findByRole("button", { name: "old.sql" });
   expect(deleted).toHaveAccessibleDescription("Deleted");
@@ -476,9 +501,19 @@ it("marks collapsed ancestors from Changes and keeps deleted files reachable aft
   expect(await screen.findByRole("textbox", { name: removed })).toHaveTextContent("select 1;");
   expect(screen.getByRole("button", { name: "Diff" })).toHaveAttribute("aria-pressed", "true");
 
+  changes = [...changes,
+    { path: "tools/old.ts", kind: "deleted", previousPath: null, staged: false, indexOnly: false, evidence: null },
+    { path: "services/reporting/conflict.go", kind: "conflict", previousPath: null, staged: false, indexOnly: false, evidence: null },
+  ];
+  fireEvent.click(sidebar.getByRole("button", { name: "Refresh project" }));
+  await waitFor(() => expect(services).toHaveAccessibleDescription("Contains files with conflicts"));
+  expect(services).toHaveAttribute("data-folder-change", "conflict");
+  expect(tools).toHaveAccessibleDescription("Contains changed files");
+  expect(tools).toHaveAttribute("data-folder-change", "modified");
+
   changes = [];
   fireEvent.click(sidebar.getByRole("button", { name: "Refresh project" }));
-  expect(await sidebar.findByRole("button", { name: "Changes (0)" })).toBeVisible();
+  expect(await projectNavigator().findByRole("button", { name: "Changes (0)" })).toBeVisible();
   expect(services).not.toHaveAttribute("aria-description");
   expect(sidebar.queryByRole("button", { name: "legacy" })).not.toBeInTheDocument();
 });
@@ -519,11 +554,12 @@ it("compacts single-folder paths while keeping real file paths, visible siblings
     changes: () => Promise.resolve({ files: changes, limited: false }), directory, file: document,
   });
   const sidebar = within(await screen.findByRole("complementary", { name: "Project files" }));
-  fireEvent.click(sidebar.getByRole("button", { name: "Files" }));
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Files" }));
   fireEvent.click(await sidebar.findByRole("button", { name: "src" }));
   fireEvent.click(await sidebar.findByRole("button", { name: "test" }));
   const row = await sidebar.findByRole("button", { name: "java / com / wahool / erp / web", expanded: false });
   expect(row).toHaveAccessibleDescription("Contains changed files");
+  expect(row).toHaveAttribute("data-folder-change", "modified");
   expect(row).toHaveAttribute("title", `${leaf} · Contains changed files`);
   const resources = sidebar.getByRole("button", { name: "resources" });
   fireEvent.click(resources);
@@ -545,19 +581,31 @@ it("compacts single-folder paths while keeping real file paths, visible siblings
   expect(await screen.findByRole("textbox", { name: source })).toHaveTextContent("class ReviewTest");
   expect(document).toHaveBeenCalledWith(project.id, source, true);
 
-  const compact = sidebar.getByRole("checkbox", { name: "Compact folders" });
-  fireEvent.click(compact);
+  const options = sidebar.getByRole("button", { name: "View options" });
+  fireEvent.keyDown(options, { key: "ArrowDown" });
+  expect(options).toHaveAttribute("aria-expanded", "true");
+  const menu = () => within(screen.getByRole("menu", { name: /View options/ }));
+  const compact = menu().getByRole("menuitemcheckbox", { name: "Compact folders", checked: true });
+  expect(compact).toHaveFocus();
+  fireEvent.keyDown(compact, { key: "Enter" });
+  expect(options).toHaveFocus();
+  expect(options).toHaveAttribute("aria-expanded", "false");
   expect(await sidebar.findByRole("button", { name: "web", expanded: true })).toBeVisible();
   expect(await sidebar.findByRole("button", { name: "ReviewTest.java" })).toHaveAttribute("aria-current", "true");
   expect(sidebar.queryByRole("button", { name: /java \/ com/ })).not.toBeInTheDocument();
-  fireEvent.click(compact);
+  fireEvent.click(options);
+  fireEvent.click(menu().getByRole("menuitemcheckbox", { name: "Compact folders", checked: false }));
   await sidebar.findByRole("button", { name: "java / com / wahool / erp / web" });
 
-  const hidden = sidebar.getByRole("checkbox", { name: "Show hidden files" });
-  fireEvent.click(hidden);
+  fireEvent.click(options);
+  fireEvent.keyDown(menu().getByRole("menuitemcheckbox", { name: "Compact folders", checked: true }), { key: "ArrowDown" });
+  const hidden = menu().getByRole("menuitemcheckbox", { name: "Show hidden files", checked: false });
+  expect(hidden).toHaveFocus();
+  fireEvent.keyDown(hidden, { key: " " });
   expect(await sidebar.findByRole("button", { name: ".keep" })).toBeVisible();
   expect(sidebar.getByRole("button", { name: "java", expanded: true })).toBeVisible();
-  fireEvent.click(hidden);
+  fireEvent.click(options);
+  fireEvent.click(menu().getByRole("menuitemcheckbox", { name: "Show hidden files", checked: true }));
   await sidebar.findByRole("button", { name: "java / com / wahool / erp / web" });
 
   changes = [...changes, { path: deleted, previousPath: null, kind: "deleted", staged: false, indexOnly: false, evidence: null }];

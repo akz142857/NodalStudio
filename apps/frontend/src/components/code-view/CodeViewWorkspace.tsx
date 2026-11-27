@@ -242,7 +242,7 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
         </div>}
         {file.data && <>
           {file.data.diagnostic && <p>{t(`codeView.diagnostic.${file.data.diagnostic}`)}</p>}
-          {file.data.statements.length ? <label>{t("codeView.statements")}<select value={statement?.start ?? ""} onChange={(event) => selectStatement(Number(event.target.value))}>
+          {file.data.statements.length ? <label>{t("codeView.statements")}<select className="ds-select" value={statement?.start ?? ""} onChange={(event) => selectStatement(Number(event.target.value))}>
             {file.data.statements.map((entry) => <option key={entry.start} value={entry.start}>{t("codeView.line", { line: entry.line })} · {t(`codeView.${entry.kind}`)}</option>)}
           </select></label> : <p>{t("codeView.previewOnly")}</p>}
           <DefinitionReader value={file.data.contents} wrap={false} dialect="mySql" selectedLine={statement?.line} />
@@ -272,7 +272,7 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
           <h3>{t("codeView.ontology")}</h3>
           <ul>{(file.data.ontology[statement.start] ?? []).map(ontologyLink)}</ul>
           {definitions.data?.some((entry) => !ontologyRequiresReview(entry)) && <label>{t("codeView.confirmOntology")}
-            <select value="" disabled={busy || showingStale} onChange={(event) => {
+            <select className="ds-select" value="" disabled={busy || showingStale} onChange={(event) => {
               const entry = definitions.data?.find((definition) => definition.id === event.target.value);
               if (entry) setConfirmation({ definition: { id: entry.id, revision: entry.revision } });
             }}>
@@ -284,7 +284,7 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
         {showMigrationImpact && <section>
           <h3>{t("codeView.impact")}</h3>
           <p>{t("codeView.impactHelp")}</p>
-          <label>{t("codeView.baseline")}<select value={baselineId} onChange={(event) => setBaselineId(event.target.value)}>
+          <label>{t("codeView.baseline")}<select className="ds-select" value={baselineId} onChange={(event) => setBaselineId(event.target.value)}>
             <option value="">{t("codeView.currentBaseline")}</option>
             {migration.data?.linkedBaselineId && migration.data.linkedBaselineAt &&
               <option value={migration.data.linkedBaselineId}>{t("codeView.linkedBaseline", { date: formatDate(migration.data.linkedBaselineAt) })}</option>}

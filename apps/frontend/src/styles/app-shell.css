@@ -632,6 +632,8 @@
     var(--ds-canvas);
 }
 
+.workspace[data-code-workspace] > .canvas-placeholder { grid-column: 1 / -1; }
+
 .sidebar-rail {
   position: relative;
   z-index: 20;
