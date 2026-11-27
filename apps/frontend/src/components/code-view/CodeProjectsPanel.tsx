@@ -73,7 +73,7 @@ export function CodeProjectSwitcher({ projects, currentId, name, busy, onAction,
   </h2>;
 }
 
-export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy, loading, loadFailed, finderActions, onRetry, onAction }: {
+export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy, loading, loadFailed, finderActions, onRetry, onAction, onActionAsync }: {
   projects: readonly CodeSavedProject[];
   groups: readonly CodeSavedProjectGroup[];
   currentId: string | null | undefined;
@@ -84,11 +84,12 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
   finderActions?: (id: string) => SchemaObjectMenuAction[];
   onRetry: () => void;
   onAction: (action: ProjectAction) => void;
+  onActionAsync?: (action: ProjectAction) => Promise<unknown>;
 }) {
   const { t } = useI18n();
   const [filter, setFilter] = useState("");
-  const [menu, setMenu] = useState<{ title: string; anchor: HTMLButtonElement; actions: SchemaObjectMenuAction[]; groupId?: string }>();
-  const [editing, setEditing] = useState<{ group?: CodeSavedProjectGroup; value: string }>();
+  const [menu, setMenu] = useState<{ title: string; anchor: HTMLButtonElement; actions: SchemaObjectMenuAction[]; groupId?: string; projectId?: string; panel?: boolean }>();
+  const [editing, setEditing] = useState<{ group?: CodeSavedProjectGroup; value: string; error?: string }>();
   const contextMenu = useCodeContextMenu();
   const query = filter.trim().toLocaleLowerCase();
   const entries = projects.filter(({ name, path, groupId }) =>
@@ -96,8 +97,8 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
       || (groupId && groups.some((group) => group.id === groupId && group.name.toLocaleLowerCase().includes(query))));
   const addLabel = t("codeReview.projects.add");
   const colorName = (color: CodeProjectGroupColor | null | undefined) => t(color ? `codeReview.projects.color.${color}` : "codeReview.projects.color.none");
-  const toggleMenu = (anchor: HTMLButtonElement, title: string, actions: SchemaObjectMenuAction[], groupId?: string) => {
-    setMenu((current) => current?.anchor === anchor ? undefined : { anchor, title, actions, groupId });
+  const toggleMenu = (anchor: HTMLButtonElement, title: string, actions: SchemaObjectMenuAction[], meta?: { groupId?: string; projectId?: string; panel?: boolean }) => {
+    setMenu((current) => current?.anchor === anchor ? undefined : { anchor, title, actions, ...meta });
   };
   const panelActions: SchemaObjectMenuAction[] = [
     { label: t("codeReview.projects.newGroup"), run: () => setEditing({ value: "" }) },
@@ -146,7 +147,8 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
               </span>
             </button>
             <IconButton className="code-review-tool code-project-actions" icon="more" label={t("codeReview.projects.actions", { name })}
-              disabled={busy} aria-haspopup="menu" onClick={(event) => toggleMenu(event.currentTarget, name, rowActions(project))} />
+              disabled={busy} aria-haspopup="menu" aria-expanded={menu?.projectId === id}
+              onClick={(event) => toggleMenu(event.currentTarget, name, rowActions(project), { projectId: id })} />
           </li>;
         })}
       </ul>;
@@ -169,7 +171,7 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
         <IconButton className="code-review-tool code-project-actions" icon="more" label={t("codeReview.projects.groupActions", { name: group.name })}
           aria-haspopup="menu" aria-disabled={busy || undefined}
           aria-expanded={menu?.groupId === group.id}
-          onClick={(event) => { if (!busy) toggleMenu(event.currentTarget, group.name, groupActions(group), group.id); }} />
+          onClick={(event) => { if (!busy) toggleMenu(event.currentTarget, group.name, groupActions(group), { groupId: group.id }); }} />
       </div>
       {!collapsed && renderEntries(members)}
     </section>;
@@ -182,7 +184,8 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
       <IconButton className="code-review-tool" icon="add" label={addLabel} disabled={busy || loadFailed}
         onClick={() => onAction({ kind: "add" })} />
       <IconButton className="code-review-tool" icon="more" label={t("codeReview.projects.panelActions")} aria-haspopup="menu"
-        disabled={busy || loadFailed} onClick={(event) => toggleMenu(event.currentTarget, t("codeReview.projects.title"), panelActions)} />
+        aria-expanded={Boolean(menu?.panel)} disabled={busy || loadFailed}
+        onClick={(event) => toggleMenu(event.currentTarget, t("codeReview.projects.title"), panelActions, { panel: true })} />
     </header>
     {(projects.length > 0 || groups.length > 0) && <div className="code-review-sidebar-controls">
       <div className="code-review-filter">
@@ -193,7 +196,7 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
     </div>}
     <div className="code-project-list" aria-busy={busy || loading}
       onContextMenu={(event) => { if (!busy && !loadFailed) contextMenu.show(event, t("codeReview.projects.title"), panelActions); }}>
-      {loading ? <p>{t("navigation.loadingWorkspace")}</p>
+      {loading ? <p role="status">{t("navigation.loadingWorkspace")}</p>
         : loadFailed ? <div className="code-project-empty">
           <p role="alert">{t("codeReview.projects.loadFailed")}</p>
           <Button size="small" onClick={onRetry}>{t("codeReview.projects.retry")}</Button>
@@ -210,20 +213,33 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
         if (restoreFocus && menu.anchor.isConnected) menu.anchor.focus({ preventScroll: true });
       }} />}
     {contextMenu.surface}
-    {editing && <ModalSurface label={groupTitle} onDismiss={() => setEditing(undefined)}>
+    {editing && <ModalSurface label={groupTitle} onDismiss={() => { if (!busy) setEditing(undefined); }}>
       <form className="code-project-group-form ds-surface" onSubmit={(event) => {
         event.preventDefault();
         const name = editing.value.trim();
-        if (!name) return;
-        onAction({ kind: "group", input: editing.group ? { kind: "rename", id: editing.group.id, name } : { kind: "create", name } });
-        setEditing(undefined);
+        if (!name || busy) return;
+        const input: ProjectAction = { kind: "group", input: editing.group ? { kind: "rename", id: editing.group.id, name } : { kind: "create", name } };
+        if (onActionAsync) {
+          setEditing({ ...editing, error: undefined });
+          void onActionAsync(input).then(() => setEditing(undefined), (error: unknown) => {
+            const key = String(error) === "codeReviewDuplicateGroupName" ? "codeReview.projects.duplicateGroup"
+              : String(error) === "codeReviewInvalidGroupName" ? "codeReview.projects.invalidGroup"
+                : "codeReview.projects.actionFailed";
+            setEditing((current) => current ? { ...current, error: t(key) } : current);
+          });
+        } else {
+          onAction(input);
+          setEditing(undefined);
+        }
       }}>
         <h2>{groupTitle}</h2>
         <label>{t("codeReview.projects.groupName")}<input type="text" value={editing.value} maxLength={80} data-modal-focus
-          onChange={(event) => setEditing({ ...editing, value: event.target.value })} /></label>
+          aria-invalid={editing.error ? "true" : undefined}
+          onChange={(event) => setEditing({ ...editing, value: event.target.value, error: undefined })} /></label>
+        {editing.error && <p role="alert">{editing.error}</p>}
         <div className="code-review-note-actions">
-          <Button onClick={() => setEditing(undefined)}>{t("codeReview.definitionCancel")}</Button>
-          <Button type="submit" variant="primary" disabled={!editing.value.trim() || busy}>{t("settings.save")}</Button>
+          <Button disabled={busy} onClick={() => setEditing(undefined)}>{t("codeReview.cancel")}</Button>
+          <Button type="submit" variant="primary" busy={busy} disabled={!editing.value.trim()}>{t("settings.save")}</Button>
         </div>
       </form>
     </ModalSurface>}

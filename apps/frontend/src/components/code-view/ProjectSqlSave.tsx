@@ -5,6 +5,7 @@ import { codeViewQueryKey } from "../../platform/code-view";
 import type { DefinitionRevision } from "../../platform/ontology-types";
 import { useI18n } from "../../i18n";
 import "./code-view.css";
+import { Button } from "../../design-system/Button";
 import { ModalSurface } from "../../design-system/ModalSurface";
 
 export function ProjectSqlSave({ platform, sourceId, sql, generatedFrom, disabled, onOpen }: {
@@ -64,17 +65,17 @@ export function ProjectSqlSave({ platform, sourceId, sql, generatedFrom, disable
   }
 
   return <>
-    {project && <button type="button" className="query-editor-action" disabled={disabled || !sql.trim() || saving} onClick={() => {
+    {project && <Button size="small" className="query-editor-action" disabled={disabled || !sql.trim() || saving} onClick={() => {
       const directory = project.directories[0];
       setPreview({ path: directory ? `${directory}/` : "", sql, generatedFrom, bindingId: project.id });
       setError("");
       setSaved(undefined);
-    }}>{t("codeView.saveSql")}</button>}
+    }}>{t("codeView.saveSql")}</Button>}
     {saved && <span className="code-view-save-receipt" role="status">
       {t(saved.associationSaved === false ? "codeView.associationFailed" : "codeView.saveDone")}
-      {saved.associationSaved === false && api.retryAssociation && <button type="button" disabled={saving} onClick={() => void retryAssociation()}>{t("codeView.retryAssociation")}</button>}
+      {saved.associationSaved === false && api.retryAssociation && <Button size="small" disabled={saving} onClick={() => void retryAssociation()}>{t("codeView.retryAssociation")}</Button>}
       {error && !preview && <span role="alert">{error}</span>}
-      <button type="button" onClick={() => onOpen(saved.path)}>{t("codeView.title")}</button>
+      <Button size="small" onClick={() => onOpen(saved.path)}>{t("codeView.title")}</Button>
     </span>}
     {preview && <ModalSurface label={t("codeView.saveSql")} onDismiss={() => { if (!saving) setPreview(undefined); }}>
       <div className="query-dialog-backdrop"><form className="query-dialog ds-surface" onSubmit={(event) => { event.preventDefault(); void save(); }}>
@@ -84,8 +85,8 @@ export function ProjectSqlSave({ platform, sourceId, sql, generatedFrom, disable
         <pre className="code-view-save-preview">{preview.sql}</pre>
         {error && <p role="alert">{error}</p>}
         <div className="code-view-actions">
-          <button type="button" disabled={saving} onClick={() => setPreview(undefined)}>{t("business.cancel")}</button>
-          <button type="submit" className="ds-primary" disabled={saving || !preview.path.trim()}>{t("savedQueries.saveAction")}</button>
+          <Button disabled={saving} onClick={() => setPreview(undefined)}>{t("business.cancel")}</Button>
+          <Button type="submit" variant="primary" busy={saving} disabled={!preview.path.trim()}>{t("savedQueries.saveAction")}</Button>
         </div>
       </form></div>
     </ModalSurface>}

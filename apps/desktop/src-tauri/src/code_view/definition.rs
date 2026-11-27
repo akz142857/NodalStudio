@@ -55,7 +55,7 @@ pub(super) struct Definitions {
 enum Startup {
     #[default]
     Discovering,
-    Workspaces(PathBuf, Vec<(ServerKey, Arc<Server>)>),
+    Workspaces(PathBuf, Vec<(ServerKey, SharedActivity)>),
     Failed,
 }
 
@@ -183,7 +183,7 @@ impl Definitions {
     pub(super) async fn while_running<T>(&self, task: impl Future<Output = T>) -> Option<T> {
         tokio::select! {
             biased;
-            _ = self.stopped.cancelled() => None,
+            () = self.stopped.cancelled() => None,
             output = task => Some(output),
         }
     }
@@ -208,8 +208,8 @@ impl Definitions {
             Startup::Workspaces(project_root, servers) => LanguageServiceStatus::Workspaces {
                 workspaces: servers
                     .iter()
-                    .filter_map(|((language, root), server)| {
-                        let activity = server.activity.lock().ok()?;
+                    .filter_map(|((language, root), activity)| {
+                        let activity = activity.lock().ok()?;
                         Some(LanguageWorkspace {
                             language: *language,
                             root: root
@@ -238,7 +238,7 @@ impl Definitions {
         for origin in origins {
             let key = (origin.language, origin.root.clone());
             let server = self.server(key.clone()).await;
-            workspaces.push((key, Arc::clone(&server)));
+            workspaces.push((key, Arc::clone(&server.activity)));
             work.push((server, origin));
         }
         *self.startup.lock().await = Startup::Workspaces(project_root.clone(), workspaces);
@@ -571,10 +571,18 @@ impl Definitions {
             }
             _ => return Err(SOURCE_UNAVAILABLE),
         };
-        let value = client
+        let value = match client
             .request(method, json!({ "uri": source.uri.as_str() }))
             .await
-            .map_err(|_| SOURCE_UNAVAILABLE)?;
+        {
+            Ok(value) => value,
+            Err(error) => {
+                if matches!(error, ServerError::Transport) {
+                    server.disconnect(&mut session);
+                }
+                return Err(SOURCE_UNAVAILABLE);
+            }
+        };
         let text = content_key
             .map_or(&value, |key| &value[key])
             .as_str()
@@ -664,7 +672,7 @@ async fn connect<'a>(
         if let Ok(mut activity) = server.activity.lock() {
             match &result {
                 Ok(_) if activity.state == ActivityState::Starting => {
-                    activity.state = ActivityState::Connected
+                    activity.state = ActivityState::Connected;
                 }
                 Err(ServerError::Missing) => activity.fail(ActivityState::Missing),
                 Err(_) => activity.fail(ActivityState::Failed),

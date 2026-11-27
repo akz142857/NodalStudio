@@ -6,7 +6,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Component, Path, PathBuf},
-    sync::Mutex,
+    sync::RwLock,
 };
 
 use rustix::fs::{CWD, RenameFlags, renameat_with};
@@ -29,7 +29,7 @@ const MAX_ARCHIVE: u64 = 32 * 1024 * 1024;
 const MAX_UNPACKED: u64 = 64 * 1024 * 1024;
 const MAX_ENTRY: u64 = 2 * 1024 * 1024;
 const MAX_INSTALLED: usize = 32;
-static STORAGE_LOCK: Mutex<()> = Mutex::new(());
+static STORAGE_LOCK: RwLock<()> = RwLock::new(());
 const ESLINT_ID: &str = "dbaeumer.vscode-eslint";
 const ESLINT_VERSION: &str = "3.0.34";
 const ESLINT_ARCHIVE_SHA256: &str =
@@ -371,6 +371,23 @@ fn storage(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+pub(crate) async fn remove_all_storage(app: &AppHandle) {
+    let Ok(path) = app
+        .path()
+        .app_data_dir()
+        .map(|dir| dir.join("code-extensions-preview"))
+    else {
+        return;
+    };
+    let _ = tokio::task::spawn_blocking(move || {
+        let Ok(_lock) = STORAGE_LOCK.write() else {
+            return;
+        };
+        let _ = fs::remove_dir_all(path);
+    })
+    .await;
+}
+
 pub(super) struct EslintServer {
     pub(super) entry: PathBuf,
     pub(super) script: Vec<u8>,
@@ -385,7 +402,7 @@ pub(super) fn eslint_server(
     if sha256 != ESLINT_ARCHIVE_SHA256 {
         return Err(CHANGED.into());
     }
-    let _lock = STORAGE_LOCK.lock().map_err(|_| STORAGE)?;
+    let _lock = STORAGE_LOCK.read().map_err(|_| STORAGE)?;
     let directory = storage(app)?.join(ESLINT_ID);
     let item = installation(&directory, key).map_err(|_| CHANGED)?;
     if item.capability != Capability::Eslint || !item.enabled || item.receipt.sha256 != sha256 {
@@ -436,8 +453,9 @@ fn install(root: &Path, archive_path: &Path, project_key: &str) -> Result<Extens
         source: PackageSource::Local,
     };
     let (stage, extension) = stage_package(root, &source, &receipt, project_key)?;
-    let destination = root.join(&extension.id);
-    install_staged(root, stage.path(), &destination)?;
+    let _lock = STORAGE_LOCK.write().map_err(|_| STORAGE)?;
+    let extension = install_staged(root, stage.path(), project_key, extension)?;
+    let _ = stage.keep();
     Ok(extension)
 }
 
@@ -452,18 +470,38 @@ fn stage_package(
     let mut file = File::create(temp.path().join("installation.json")).map_err(|_| STORAGE)?;
     serde_json::to_writer(&mut file, receipt).map_err(|_| STORAGE)?;
     file.flush().map_err(|_| STORAGE)?;
+    file.sync_all().map_err(|_| STORAGE)?;
     let extension = installation(temp.path(), project_key)?;
     Ok((temp, extension))
 }
 
-fn install_staged(root: &Path, stage: &Path, destination: &Path) -> Result<(), String> {
+fn enable_for_project(directory: &Path, project_key: &str) -> Result<(), String> {
+    let enabled = directory.join("enabled");
+    fs::create_dir_all(&enabled).map_err(|_| STORAGE)?;
+    File::create(enabled.join(project_key)).map_err(|_| STORAGE)?;
+    Ok(())
+}
+
+fn install_staged(
+    root: &Path,
+    stage: &Path,
+    project_key: &str,
+    mut extension: Extension,
+) -> Result<Extension, String> {
+    let destination = root.join(&extension.id);
     if destination.exists() {
         return Err("extensionAlreadyInstalled".into());
     }
     if installed_paths(root)?.len() >= MAX_INSTALLED {
         return Err(LIMIT.into());
     }
-    fs::rename(stage, destination).map_err(|_| STORAGE.into())
+    if extension.capability == Capability::Unsupported {
+        return Err(UNSUPPORTED.into());
+    }
+    enable_for_project(stage, project_key)?;
+    fs::rename(stage, destination).map_err(|_| STORAGE)?;
+    extension.enabled = true;
+    Ok(extension)
 }
 
 fn newer(version: &str, previous: &str) -> bool {
@@ -515,7 +553,7 @@ fn replace_staged(
     Ok(incoming)
 }
 
-async fn with_storage<T: Send + 'static>(
+async fn with_storage_read<T: Send + 'static>(
     app: AppHandle,
     state: &State<'_, ReviewState>,
     project_id: Uuid,
@@ -524,7 +562,23 @@ async fn with_storage<T: Send + 'static>(
     let project = state.project(project_id)?;
     tokio::task::spawn_blocking(move || {
         project.directory()?;
-        let _lock = STORAGE_LOCK.lock().map_err(|_| STORAGE)?;
+        let _lock = STORAGE_LOCK.read().map_err(|_| STORAGE)?;
+        operation(&storage(&app)?, project.key())
+    })
+    .await
+    .map_err(|_| STORAGE)?
+}
+
+async fn with_storage_write<T: Send + 'static>(
+    app: AppHandle,
+    state: &State<'_, ReviewState>,
+    project_id: Uuid,
+    operation: impl FnOnce(&Path, &str) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let project = state.project(project_id)?;
+    tokio::task::spawn_blocking(move || {
+        project.directory()?;
+        let _lock = STORAGE_LOCK.write().map_err(|_| STORAGE)?;
         operation(&storage(&app)?, project.key())
     })
     .await
@@ -537,11 +591,11 @@ pub(crate) async fn list_code_extensions(
     state: State<'_, ReviewState>,
     project_id: Uuid,
 ) -> Result<Vec<Extension>, String> {
-    with_storage(app, &state, project_id, |root, key| {
-        let mut items = installed_paths(root)?
+    with_storage_read(app, &state, project_id, |root, key| {
+        let mut items: Vec<_> = installed_paths(root)?
             .into_iter()
-            .map(|path| installation(&path, key))
-            .collect::<Result<Vec<_>, _>>()?;
+            .filter_map(|path| installation(&path, key).ok())
+            .collect();
         items.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(items)
     })
@@ -554,16 +608,18 @@ pub(crate) async fn install_code_extension(
     state: State<'_, ReviewState>,
     project_id: Uuid,
 ) -> Result<Option<Extension>, String> {
-    state.project(project_id)?;
+    let project = state.project(project_id)?;
     let Some(source) =
         pick_workspace_path_from(app.clone(), SelectionKind::CodeExtensionVsix, None).await?
     else {
         return Ok(None);
     };
-    with_storage(app, &state, project_id, move |root, key| {
-        install(root, Path::new(&source), key).map(Some)
+    tokio::task::spawn_blocking(move || {
+        project.directory()?;
+        install(&storage(&app)?, Path::new(&source), project.key()).map(Some)
     })
     .await
+    .map_err(|_| STORAGE)?
 }
 
 #[tauri::command]
@@ -578,8 +634,23 @@ pub(crate) async fn change_code_extension(
         return Err(INVALID.into());
     }
     let project = state.project(project_id)?;
-    with_storage(app, &state, project_id, move |root, key| {
-        let path = root.join(id);
+    with_storage_write(app, &state, project_id, move |root, key| {
+        let path = root.join(&id);
+        if matches!(action, ExtensionAction::Uninstall) {
+            let parsed = installation(&path, key).ok();
+            if path.exists() {
+                let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
+                fs::rename(&path, temp.path().join("removed")).map_err(|_| STORAGE)?;
+            }
+            if id == ESLINT_ID
+                || parsed
+                    .as_ref()
+                    .is_none_or(|item| item.capability == Capability::Eslint)
+            {
+                project.eslint.revoke_extension();
+            }
+            return Ok(None);
+        }
         let item = installation(&path, key)?;
         let enabled = path.join("enabled");
         let marker = enabled.join(key);
@@ -588,8 +659,7 @@ pub(crate) async fn change_code_extension(
                 if item.capability == Capability::Unsupported {
                     return Err(UNSUPPORTED.into());
                 }
-                fs::create_dir_all(enabled).map_err(|_| STORAGE)?;
-                File::create(marker).map_err(|_| STORAGE)?;
+                enable_for_project(&path, key)?;
             }
             ExtensionAction::Disable => {
                 if let Err(error) = fs::remove_file(marker)
@@ -601,14 +671,7 @@ pub(crate) async fn change_code_extension(
                     project.eslint.revoke_extension();
                 }
             }
-            ExtensionAction::Uninstall => {
-                let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
-                fs::rename(path, temp.path().join("removed")).map_err(|_| STORAGE)?;
-                if item.capability == Capability::Eslint {
-                    project.eslint.revoke_extension();
-                }
-                return Ok(None);
-            }
+            ExtensionAction::Uninstall => unreachable!(),
         }
         installation(&path, key).map(Some)
     })
@@ -627,7 +690,7 @@ pub(crate) async fn prepare_code_extension(
     if !has_valid_id(&id) {
         return Err(INVALID.into());
     }
-    with_storage(app, &state, project_id, move |root, key| {
+    with_storage_read(app, &state, project_id, move |root, key| {
         let path = root.join(id);
         let item = installation(&path, key)?;
         if item.receipt.sha256 != sha256 {
@@ -670,7 +733,7 @@ pub(crate) async fn prepare_code_extension(
 mod tests {
     use super::*;
 
-    fn syntax_package(root: &Path, version: &str, sha256: &str) -> (tempfile::TempDir, Extension) {
+    fn syntax_archive(version: &str) -> Vec<u8> {
         let mut archive = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
         let options = zip::write::SimpleFileOptions::default();
         archive
@@ -690,10 +753,13 @@ mod tests {
         archive
             .write_all(br#"{"scopeName":"source.sample","patterns":[]}"#)
             .unwrap();
-        let package = archive.finish().unwrap().into_inner();
+        archive.finish().unwrap().into_inner()
+    }
+
+    fn syntax_package(root: &Path, version: &str, sha256: &str) -> (tempfile::TempDir, Extension) {
         stage_package(
             root,
-            &package,
+            &syntax_archive(version),
             &Receipt {
                 file_name: "sample.vsix".into(),
                 sha256: sha256.into(),
@@ -705,17 +771,31 @@ mod tests {
     }
 
     #[test]
+    fn installing_a_vsix_enables_it_for_the_installing_project_only() {
+        let source = tempfile::tempdir().unwrap();
+        let archive = source.path().join("sample.vsix");
+        fs::write(&archive, syntax_archive("1.0.0")).unwrap();
+        let root = tempfile::tempdir().unwrap();
+
+        let installed = install(root.path(), &archive, "current-project").unwrap();
+        let destination = root.path().join(&installed.id);
+        assert!(installed.enabled);
+        assert!(
+            installation(&destination, "current-project")
+                .unwrap()
+                .enabled
+        );
+        assert!(!installation(&destination, "other-project").unwrap().enabled);
+    }
+
+    #[test]
     fn update_rechecks_the_installed_package_and_preserves_project_enablement() {
         let root = tempfile::tempdir().unwrap();
         let destination = root.path().join("example.sample");
         let old_sha = "1".repeat(64);
         let new_sha = "2".repeat(64);
-        let (old, _) = syntax_package(root.path(), "1.0.0", &old_sha);
-        install_staged(root.path(), old.path(), &destination).unwrap();
-        fs::create_dir(destination.join("enabled")).unwrap();
-        for key in ["current-project", "other-project"] {
-            File::create(destination.join("enabled").join(key)).unwrap();
-        }
+        let (old, installed) = syntax_package(root.path(), "1.0.0", &old_sha);
+        install_staged(root.path(), old.path(), "other-project", installed).unwrap();
 
         let (staged, incoming) = syntax_package(root.path(), "1.1.0", &new_sha);
         let conflict = replace_staged(
@@ -728,7 +808,7 @@ mod tests {
         assert_eq!(conflict.err().as_deref(), Some(CHANGED));
         let retained = installation(&destination, "current-project").unwrap();
         assert_eq!(retained.version, "1.0.0");
-        assert!(retained.enabled);
+        assert!(!retained.enabled);
 
         let updated = replace_staged(
             staged.path(),
@@ -740,7 +820,7 @@ mod tests {
         .unwrap();
         assert_eq!(updated.version, "1.1.0");
         assert_eq!(updated.receipt.sha256, new_sha);
-        assert!(updated.enabled);
+        assert!(!updated.enabled);
         assert!(installation(&destination, "other-project").unwrap().enabled);
         assert!(
             !installation(&destination, "unapproved-project")

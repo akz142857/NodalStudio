@@ -4,7 +4,9 @@ import type { DatabaseSnapshot, NodalStudioPlatform, ObjectKey } from "../../pla
 import { codeViewQueryKey, type CodeOntologyReference, type CodeQueryHandoff, type IndexedProjectFile, type ProjectStatementSelection } from "../../platform/code-view";
 import { ontologyRequiresReview } from "../../platform/ontology-types";
 import { useI18n } from "../../i18n";
+import { Button } from "../../design-system/Button";
 import { ModalSurface } from "../../design-system/ModalSurface";
+import { ActionIcon } from "../ActionIcon";
 import { DefinitionReader } from "../ObjectDocument";
 import "./code-view.css";
 
@@ -26,7 +28,7 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
   onReturn: () => void;
   returnLabel?: string;
 }) {
-  const { t, locale } = useI18n();
+  const { t, formatDate } = useI18n();
   const api = platform.codeView!;
   const client = useQueryClient();
   const sourceId = snapshot.sourceId;
@@ -41,6 +43,7 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
   const [feedback, setFeedback] = useState<Feedback>();
   const [baselineId, setBaselineId] = useState("");
   const [confirmation, setConfirmation] = useState<{ object?: ObjectKey; definition?: { id: string; revision: number } }>();
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(Boolean(initialPosition));
   const active = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -148,7 +151,6 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
     onPosition(selected);
     setBaselineId("");
   };
-  const formatDate = (value: string) => new Date(value).toLocaleString(locale);
   const fileLink = (item: IndexedProjectFile) => {
     const separator = item.path.lastIndexOf("/");
     return <button type="button" key={item.path}
@@ -172,23 +174,17 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
   return <section className="code-view ds-surface" aria-label={t("codeView.title")} data-mobile-detail={mobileDetail}>
     <header className="code-view-header">
       <div>
-        <button type="button" onClick={onReturn}>← {returnLabel ?? t("navigation.model")}</button>
+        <Button size="small" onClick={onReturn}><ActionIcon name="chevronLeft" />{returnLabel ?? t("navigation.model")}</Button>
         <h2 ref={heading} tabIndex={-1}>{t("codeView.title")}</h2>
         {currentProject && <p>{currentProject.name} · {currentProject.connectionName} · {currentProject.database}</p>}
         {!currentProject && <p>{snapshot.database.name}</p>}
       </div>
       {currentProject && <div className="code-view-actions">
         {isScanning
-          ? <button type="button" onClick={() => void api.cancel({ sourceId, bindingId: currentProject.id }).catch((error: unknown) => setFeedback({ error: true, message: errorText(error) }))}>{t("codeView.cancelScan")}</button>
-          : <button type="button" className="ds-primary" disabled={busy} onClick={() => void perform(() => runScan(currentProject.id))}>{t(scan ? "codeView.rescan" : "codeView.scan")}</button>}
-        <button type="button" disabled={busy || isScanning} onClick={pick}>{t("codeView.choose")}</button>
-        <button type="button" disabled={busy || isScanning} onClick={() => {
-          if (window.confirm(t("codeView.confirmRemove"))) void perform(async () => {
-            await api.remove({ sourceId, bindingId: currentProject.id });
-            setPosition(undefined);
-            await refresh();
-          });
-        }}>{t("codeView.remove")}</button>
+          ? <Button size="small" onClick={() => void api.cancel({ sourceId, bindingId: currentProject.id }).catch((error: unknown) => setFeedback({ error: true, message: errorText(error) }))}>{t("codeView.cancelScan")}</Button>
+          : <Button size="small" variant="primary" disabled={busy} onClick={() => void perform(() => runScan(currentProject.id))}>{t(scan ? "codeView.rescan" : "codeView.scan")}</Button>}
+        <Button size="small" disabled={busy || isScanning} onClick={pick}>{t("codeView.choose")}</Button>
+        <Button size="small" disabled={busy || isScanning} onClick={() => setConfirmDisconnect(true)}>{t("codeView.remove")}</Button>
       </div>}
     </header>
     {page.isPending && <p className="code-view-notice" role="status">{t("navigation.loadingWorkspace")}</p>}
@@ -197,7 +193,7 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
     {isScanning && <p className="code-view-notice" role="status">{t("codeView.scanning")}</p>}
     {!page.isPending && !currentProject && <div className="code-view-setup">
       <p>{t("codeView.chooseHelp")}</p>
-      <button type="button" className="ds-primary" disabled={busy} onClick={pick}>{t("codeView.choose")}</button>
+      <Button variant="primary" disabled={busy} onClick={pick}>{t("codeView.choose")}</Button>
       <label>{t("codeView.directories")}<input value={directories} onChange={(event) => setDirectories(event.target.value)} /></label>
       <small>{t("codeView.directoriesHint")}</small>
     </div>}
@@ -205,7 +201,7 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
       <span>{scan?.git.commit || scan?.git.branch ? [scan.git.branch, scan.git.commit?.slice(0, 10)].filter(Boolean).join(" · ") : t("codeView.versionUnknown")} · {t("codeView.workingTree")}</span>
       <span>{t("codeView.currentDetails", { current: formatDate(currentProject.snapshotAt) })}</span>
       <span>{currentProject.directories.map((root) => root || ".").join(", ")}</span>
-      {scan ? <span>{t("codeView.scanStatus", { count: scan.fileCount, at: formatDate(scan.at) })}</span> : <span>{t("codeView.noScan")}</span>}
+      {scan ? <span>{t(scan.fileCount === 1 ? "codeView.scanStatusOne" : "codeView.scanStatus", { count: scan.fileCount, at: formatDate(scan.at) })}</span> : <span>{t("codeView.noScan")}</span>}
       {scan && (scan.skipped > 0 || scan.diagnosticCount > 0) && <span>{t("codeView.coverage", { skipped: scan.skipped, diagnostics: scan.diagnosticCount })}</span>}
       {scan?.partialUpdate && <span>{t("codeView.partialUpdate")}</span>}
       {showingStale && <strong role="status">{t("codeView.stale")}</strong>}
@@ -222,10 +218,10 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
         </div>}
       </aside>
       <div className="code-view-reader">
-        <button type="button" className="code-view-mobile-back" onClick={() => {
+        <Button size="small" className="code-view-mobile-back" onClick={() => {
           setMobileDetail(false);
           requestAnimationFrame(() => selectedFileButton.current?.focus());
-        }}>← {t("codeView.files")}</button>
+        }}><ActionIcon name="chevronLeft" />{t("codeView.files")}</Button>
         {!position && <p>{t("codeView.selectFile")}</p>}
         {position && <div className="code-view-actions code-view-reader-heading">
           <h3>{position.path}</h3>
@@ -310,17 +306,32 @@ export function CodeViewWorkspace({ platform, snapshot, initialObject, initialPo
         </section>}
       </aside>}
     </div>}
+    {confirmDisconnect && currentProject && <ModalSurface label={t("codeView.remove")} onDismiss={() => { if (!busy) setConfirmDisconnect(false); }}>
+      <div className="query-dialog-backdrop"><section className="query-dialog ds-surface">
+        <h3>{t("codeView.remove")}</h3>
+        <p>{t("codeView.confirmRemove")}</p>
+        <div className="code-view-actions">
+          <Button data-modal-focus disabled={busy} onClick={() => setConfirmDisconnect(false)}>{t("business.cancel")}</Button>
+          <Button variant="danger" busy={busy} onClick={() => void perform(async () => {
+            await api.remove({ sourceId, bindingId: currentProject.id });
+            setConfirmDisconnect(false);
+            setPosition(undefined);
+            await refresh();
+          })}>{t("codeView.remove")}</Button>
+        </div>
+      </section></div>
+    </ModalSurface>}
     {confirmation && selection && <ModalSurface label={t("codeView.confirmTitle")} onDismiss={() => setConfirmation(undefined)}>
       <div className="query-dialog-backdrop"><section className="query-dialog ds-surface">
         <h3>{t("codeView.confirmTitle")}</h3>
         <p>{t("codeView.confirmExplanation")}</p>
         <div className="code-view-actions">
-          <button type="button" data-modal-focus onClick={() => setConfirmation(undefined)}>{t("business.cancel")}</button>
-          <button type="button" className="ds-primary" disabled={busy} onClick={() => void perform(async () => {
+          <Button data-modal-focus onClick={() => setConfirmation(undefined)}>{t("business.cancel")}</Button>
+          <Button variant="primary" busy={busy} onClick={() => void perform(async () => {
             await api.confirm({ selection, ...confirmation });
             setConfirmation(undefined);
             await refresh();
-          })}>{t("codeView.confirmTitle")}</button>
+          })}>{t("codeView.confirmTitle")}</Button>
         </div>
       </section></div>
     </ModalSurface>}

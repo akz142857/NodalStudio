@@ -191,6 +191,9 @@
   --ds-relation-deleted: #c43e48;
   --ds-relation-accessible-blue: #0072b2;
   --ds-relation-accessible-orange: #b95000;
+  --ds-project-group-orange: #b85614;
+  --ds-project-group-yellow: #8f6d00;
+  --ds-project-group-purple: #6e3ec4;
 }
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"], :root:not([data-theme]) {
@@ -250,6 +253,9 @@
     --ds-relation-deleted: #c43e48;
     --ds-relation-accessible-blue: #0072b2;
     --ds-relation-accessible-orange: #b95000;
+    --ds-project-group-orange: #b85614;
+    --ds-project-group-yellow: #8f6d00;
+    --ds-project-group-purple: #6e3ec4;
   }
 }
 :root[data-density="compact"] { --ds-row-height: 44px; }

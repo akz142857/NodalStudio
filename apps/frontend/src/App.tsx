@@ -35,7 +35,7 @@ import { HeaderSidebarToggle, SidebarRail } from "./components/SidebarRail";
 import { useSystemAccent } from "./design-system/system-accent";
 import type { SettingsCategory } from "./components/SettingsPage";
 import { CommandPalette, type AppCommand } from "./components/CommandPalette";
-import { formatCommandShortcut, QUERY_SAVE_SHORTCUT, usesAppleKeyboard, WORKSPACE_SHORTCUTS } from "./components/command-shortcuts";
+import { CODE_SHORTCUTS, codeShortcutEvent, formatCommandShortcut, QUERY_SAVE_SHORTCUT, usesAppleKeyboard, WORKSPACE_SHORTCUTS, type CodeShortcut } from "./components/command-shortcuts";
 import type { QueryDraftSeed } from "./components/query/QueryDraftPanel";
 import type { OpenQueryRequest } from "./components/query/QueryPage";
 import { QuickQueryDock } from "./components/query/QuickQueryDock";
@@ -1325,9 +1325,20 @@ export function App() {
         const shortcut = appShortcut(binding);
         return shortcut && matchesShortcut(event, shortcut);
       });
-      if (!action) return;
-      event.preventDefault();
-      if (!event.repeat) runWorkspaceCommand(action[0]);
+      if (action) {
+        event.preventDefault();
+        if (!event.repeat) runWorkspaceCommand(action[0]);
+        return;
+      }
+      if (mode !== "code" || event.repeat) return;
+      const codeShortcut = (Object.keys(CODE_SHORTCUTS) as CodeShortcut[]).find((shortcut) => {
+        const binding = CODE_SHORTCUTS[shortcut];
+        if (binding === "Ctrl+G") return event.ctrlKey && !event.metaKey && matchesShortcut(event, "Mod+G");
+        return platformModifier && matchesShortcut(event, binding);
+      });
+      if (codeShortcut && !window.dispatchEvent(new Event(codeShortcutEvent(codeShortcut), { cancelable: true }))) {
+        event.preventDefault();
+      }
     }
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);

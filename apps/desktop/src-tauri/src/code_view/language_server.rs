@@ -128,14 +128,57 @@ pub(super) fn file_uri(path: &Path) -> Option<Url> {
     Url::from_file_path(path).ok()
 }
 
+const ALLOWLIST_ENV: &[&str] = &[
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "SYSTEMROOT",
+    "COMSPEC",
+    "PATHEXT",
+    "JAVA_HOME",
+    "GOPATH",
+    "GOMODCACHE",
+    "GOROOT",
+    "CARGO_HOME",
+    "RUSTUP_HOME",
+    "RUSTUP_TOOLCHAIN",
+    "DOTNET_ROOT",
+    "SDKROOT",
+    "DEVELOPER_DIR",
+    "VIRTUAL_ENV",
+    "PYENV_ROOT",
+    "NVM_DIR",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+];
+
 fn server_executables(
     language: Language,
     root: &Path,
 ) -> Result<(Vec<PathBuf>, OsString), ServerError> {
     let (name, override_key) = language.command();
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let mut directories: Vec<PathBuf> = env::var_os("PATH").map_or_else(Vec::new, |path| {
         env::split_paths(&path)
-            .filter(|p| p.is_absolute() && !p.starts_with(root))
+            .filter(|p| {
+                p.is_absolute()
+                    && !p.starts_with(root)
+                    && !p.starts_with(&canonical_root)
+                    && p.canonicalize().is_ok_and(|resolved| {
+                        !resolved.starts_with(root) && !resolved.starts_with(&canonical_root)
+                    })
+            })
             .collect()
     });
     let home = env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" });
@@ -158,7 +201,7 @@ fn server_executables(
     );
     let explicit = env::var_os(override_key).map(PathBuf::from);
     let executables: Vec<PathBuf> = if let Some(explicit) = explicit {
-        usable_executable(&explicit, root)
+        usable_executable(&explicit, &canonical_root)
             .then_some(explicit)
             .into_iter()
             .collect()
@@ -186,7 +229,7 @@ fn server_executables(
                         }
                     })
                     .find(|path| {
-                        usable_executable(path, root)
+                        usable_executable(path, &canonical_root)
                             && (*name != "tsc" || !legacy_typescript_compiler(path))
                     })
             })
@@ -202,8 +245,18 @@ fn server_executables(
 }
 
 fn usable_executable(path: &Path, root: &Path) -> bool {
-    path.is_absolute()
-        && path.is_file()
+    if !path.is_absolute() {
+        return false;
+    }
+    #[cfg(unix)]
+    let executable = {
+        use std::os::unix::fs::PermissionsExt;
+        path.metadata()
+            .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+    };
+    #[cfg(not(unix))]
+    let executable = path.is_file();
+    executable
         && path
             .canonicalize()
             .is_ok_and(|resolved| !resolved.starts_with(root))
@@ -442,7 +495,11 @@ impl LanguageServer {
         project_root: &Path,
         activity: &SharedActivity,
     ) -> Result<Self, ServerError> {
-        let (executables, search_path) = server_executables(language, project_root)?;
+        let owned_project_root = project_root.to_path_buf();
+        let (executables, search_path) =
+            tokio::task::spawn_blocking(move || server_executables(language, &owned_project_root))
+                .await
+                .map_err(|_| ServerError::Transport)??;
         let mut failure = ServerError::Transport;
         for executable in executables {
             if let Ok(mut activity) = activity.lock() {
@@ -483,10 +540,13 @@ impl LanguageServer {
                 "extendedClientCapabilities": { "classFileContentsSupport": true },
                 "settings": settings
             }),
-            Language::Php => json!({
-                "storagePath": connection.scratch.path(),
-                "globalStoragePath": connection.scratch.path()
-            }),
+            Language::Php => {
+                let storage = connection.scratch.as_ref().map(tempfile::TempDir::path);
+                json!({
+                    "storagePath": storage,
+                    "globalStoragePath": storage
+                })
+            }
             Language::CSharp => json!({ "autoLoadProjects": 100 }),
             Language::TypeScript => json!({ "disableAutomaticTypingAcquisition": true }),
             _ => Value::Null,
@@ -582,7 +642,7 @@ struct Connection {
     writer: Arc<Mutex<ChildStdin>>,
     responses: mpsc::Receiver<Value>,
     reader: JoinHandle<()>,
-    scratch: tempfile::TempDir,
+    scratch: Option<tempfile::TempDir>,
     next_id: u64,
 }
 
@@ -601,20 +661,24 @@ impl Connection {
         process.process_group(0);
         process
             .current_dir(root)
+            .env_clear()
             .env("PATH", search_path)
             .kill_on_drop(true)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
+        for key in ALLOWLIST_ENV {
+            if let Some(value) = env::var_os(key) {
+                process.env(key, value);
+            }
+        }
         match language {
             Language::Java => {
                 process
                     .arg("-configuration")
                     .arg(scratch.path().join("config"))
                     .arg("-data")
-                    .arg(scratch.path().join("workspace"))
-                    .env_remove("CLIENT_PORT")
-                    .env_remove("CLIENT_HOST");
+                    .arg(scratch.path().join("workspace"));
             }
             Language::TypeScript => {
                 if matches!(
@@ -670,7 +734,7 @@ impl Connection {
             writer,
             responses,
             reader,
-            scratch,
+            scratch: Some(scratch),
             next_id: 0,
         })
     }
@@ -726,6 +790,11 @@ impl Drop for Connection {
             let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
         }
         let _ = self.child.start_kill();
+        if let Some(scratch) = self.scratch.take()
+            && let Ok(handle) = tokio::runtime::Handle::try_current()
+        {
+            handle.spawn_blocking(move || drop(scratch));
+        }
     }
 }
 

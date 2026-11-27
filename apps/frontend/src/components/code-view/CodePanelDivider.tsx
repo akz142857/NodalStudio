@@ -13,13 +13,14 @@ export function CodePanelDivider({ orientation, panelId, label, size, min, max, 
 }) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ id: number; start: number; size: number; scale: number } | undefined>(undefined);
+  const drag = useRef<{ id: number; start: number; size: number; scale: number; frame: number; pending?: number } | undefined>(undefined);
   const vertical = orientation === "vertical";
   const [available, setAvailable] = useState<number>();
   const upper = Math.min(max, available ?? max);
   const lower = Math.min(min, upper);
   const panelSize = Math.min(size, upper);
-  const resize = (value: number) => onResize(Math.min(upper, Math.max(lower, Math.round(value))));
+  const clamp = (value: number) => Math.min(upper, Math.max(lower, Math.round(value)));
+  const resize = (value: number) => onResize(clamp(value));
   const accessibleLabel = t("navigation.resize", { value0: label });
 
   useLayoutEffect(() => {
@@ -33,7 +34,10 @@ export function CodePanelDivider({ orientation, panelId, label, size, min, max, 
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(parent);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (drag.current?.frame) cancelAnimationFrame(drag.current.frame);
+    };
   }, [vertical, ratio]);
 
   return <div ref={ref} className="code-panel-divider" role="separator" tabIndex={0}
@@ -48,16 +52,25 @@ export function CodePanelDivider({ orientation, panelId, label, size, min, max, 
       handle.focus({ preventScroll: true });
       handle.setPointerCapture(event.pointerId);
       handle.dataset.resizing = "true";
-      drag.current = { id: event.pointerId, start: vertical ? event.clientX : event.clientY, size: panelSize, scale };
+      drag.current = { id: event.pointerId, start: vertical ? event.clientX : event.clientY, size: panelSize, scale, frame: 0 };
     }}
     onPointerMove={(event) => {
       const active = drag.current;
       if (active?.id !== event.pointerId) return;
       const coordinate = vertical ? event.clientX : event.clientY;
-      resize(active.size + (active.start - coordinate) / active.scale);
+      active.pending = clamp(active.size + (active.start - coordinate) / active.scale);
+      if (!active.frame) {
+        active.frame = requestAnimationFrame(() => {
+          active.frame = 0;
+          if (active.pending !== undefined) onResize(active.pending);
+        });
+      }
     }}
     onLostPointerCapture={(event) => {
-      if (drag.current?.id !== event.pointerId) return;
+      const active = drag.current;
+      if (active?.id !== event.pointerId) return;
+      if (active.frame) cancelAnimationFrame(active.frame);
+      if (active.pending !== undefined) onResize(active.pending);
       drag.current = undefined;
       delete event.currentTarget.dataset.resizing;
     }}

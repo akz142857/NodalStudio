@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import { Button } from "../../design-system/Button";
 import { useI18n } from "../../i18n";
 import type { CodeExtension, CodeReviewChanges } from "../../platform/code-review";
@@ -28,29 +28,49 @@ export function CodeReviewChecks({ checks, current, changes, extensions, batchUn
   useLayoutEffect(() => {
     if (results.current) results.current.scrollTop = scrollRef.current.runId === run?.id ? scrollRef.current.top : 0;
   }, [run?.id, scrollRef]);
-  const files = run?.files ?? [];
-  const hasDiff = files.some((file) => file.target.mode === "diff");
+  const files = useMemo(() => run?.files ?? [], [run?.files]);
+  const hasDiff = useMemo(() => files.some((file) => file.target.mode === "diff"), [files]);
   const filterMode = !hasDiff ? "all" : filter && filter.id === run?.id ? filter.value : "changed";
   const query = search.toLocaleLowerCase().trim();
-  const shown = files.flatMap((file) => {
+  const shown = useMemo(() => files.flatMap((file) => {
     const findings = file.findings.filter((item) =>
       (filterMode === "all" || file.target.mode === "source" || item.location === "changed")
       && (severity === "all" || item.severity === severity)
       && (!query || `${file.target.path} ${file.provider ?? ""} ${item.rule} ${item.message}`.toLocaleLowerCase().includes(query)));
     return findings.length ? [{ file, findings }] : [];
-  });
-  const total = files.reduce((sum, file) => sum + file.total, 0);
-  const retained = files.reduce((sum, file) => sum + file.findings.length, 0);
+  }), [files, filterMode, query, severity]);
+  const { total, retained, checked, skipped, failed, problems, eslintVersions } = useMemo(() => {
+    let totalCount = 0;
+    let retainedCount = 0;
+    let checkedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+    const problemFiles: CheckedFile[] = [];
+    const versions = new Set<string>();
+    for (const file of files) {
+      totalCount += file.total;
+      retainedCount += file.findings.length;
+      if (file.status === "checked") checkedCount += 1;
+      else if (file.status === "skipped") skippedCount += 1;
+      else if (file.status === "failed" || file.status === "stale") failedCount += 1;
+      if (file.reason) problemFiles.push(file);
+      if (file.tool) versions.add(file.tool.version);
+    }
+    return {
+      total: totalCount,
+      retained: retainedCount,
+      checked: checkedCount,
+      skipped: skippedCount,
+      failed: failedCount,
+      problems: problemFiles,
+      eslintVersions: [...versions],
+    };
+  }, [files]);
   const running = run?.status === "running";
-  const checked = files.filter((file) => file.status === "checked").length;
-  const skipped = files.filter((file) => file.status === "skipped").length;
-  const failed = files.filter((file) => file.status === "failed" || file.status === "stale").length;
   const remaining = files.length - checked - skipped - failed;
   const partial = Boolean(skipped || failed || remaining || run?.incompleteChanges || run?.limited);
-  const problems = files.filter((file) => file.reason);
-  const candidates = changes?.files.filter((file) => file.kind !== "deleted"
-    && (isMarkdown(file.path) || (checks.eslintAvailable && isEslintSource(file.path)))).length ?? 0;
-  const eslintVersions = [...new Set(files.flatMap((file) => file.tool ? [file.tool.version] : []))];
+  const candidates = useMemo(() => changes?.files.filter((file) => file.kind !== "deleted"
+    && (isMarkdown(file.path) || (checks.eslintAvailable && isEslintSource(file.path)))).length ?? 0, [changes?.files, checks.eslintAvailable]);
   const consent = checks.consent;
   const singleProblem = run?.scope === "file" ? files[0]?.reason : undefined;
   const reason = run?.reason ?? singleProblem;

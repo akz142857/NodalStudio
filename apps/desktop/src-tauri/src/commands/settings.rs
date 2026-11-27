@@ -68,7 +68,9 @@ pub(crate) async fn update_app_settings(
         .get_organization_policy()
         .await
         .map_err(safe_store_error)?;
-    Ok(apply_policy(settings, None, &policy))
+    let effective = apply_policy(settings, None, &policy);
+    state.notify_offline(effective.app.privacy.offline_mode);
+    Ok(effective)
 }
 
 #[tauri::command]
@@ -127,7 +129,9 @@ pub(crate) async fn update_organization_policy(
         .get_app_settings()
         .await
         .map_err(safe_store_error)?;
-    Ok(apply_policy(app, None, &policy))
+    let effective = apply_policy(app, None, &policy);
+    state.notify_offline(effective.app.privacy.offline_mode);
+    Ok(effective)
 }
 
 #[tauri::command]
@@ -186,5 +190,7 @@ pub(crate) async fn refresh_organization_policy(
         .save_organization_policy(&policy)
         .await
         .map_err(safe_store_error)?;
-    effective_settings(&state.store, Some(input.source_id)).await
+    let effective = effective_settings(&state.store, Some(input.source_id)).await?;
+    state.notify_offline(effective.app.privacy.offline_mode);
+    Ok(effective)
 }

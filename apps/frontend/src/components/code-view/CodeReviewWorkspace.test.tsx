@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { codeShortcutEvent, type CodeShortcut } from "../command-shortcuts";
 import type { CodeDefinitionRequest, CodeDefinitionResult, CodeDocumentHighlightRange, CodeDocumentOutlineRequest, CodeReviewCompactFolders,
   CodeDocumentOutlineResult, CodeLanguageStatus, CodeReviewChange, CodeReviewDirectory, CodeReviewPlatform, CodeReviewProject,
   CodeSavedProject, CodeSavedProjectGroup } from "../../platform/code-review";
@@ -40,6 +41,62 @@ beforeAll(() => {
 afterAll(() => {
   Reflect.deleteProperty(Range.prototype, "getClientRects");
   Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+});
+
+it("uses Code shortcuts for navigation and keeps untitled text out of project file reads", async () => {
+  const project = { id: "shortcuts", key: "shortcuts", name: "Keyboard project", git: "folder", baseline: null } as const;
+  const file = vi.fn<CodeReviewPlatform["file"]>().mockResolvedValue({
+    before: null, after: { state: "text", text: "line 1\nline 2\n" }, evidence: null, indexOnly: false,
+  });
+  renderWorkspace({
+    current: () => Promise.resolve(project),
+    choose: () => Promise.resolve(null),
+    changes: () => Promise.resolve({ files: [], limited: false }),
+    directory: () => Promise.resolve({ entries: [{ name: "main.py", path: "main.py", directory: false }], limited: false }),
+    searchContent: () => Promise.resolve({ files: [], limited: false }),
+    file,
+  });
+  const shortcut = (name: CodeShortcut) => {
+    const event = new Event(codeShortcutEvent(name), { cancelable: true });
+    act(() => { window.dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(true);
+  };
+  fireEvent.click(await screen.findByRole("button", { name: "main.py" }));
+  const source = await screen.findByRole("textbox", { name: "main.py" });
+  expect(source).toHaveAttribute("aria-readonly", "true");
+  shortcut("go-to-line");
+  const line = screen.getByRole("textbox", { name: /Go to line/ });
+  await waitFor(() => expect(line).toHaveFocus());
+  fireEvent.keyDown(line, { key: "Escape" });
+
+  shortcut("project-search");
+  const search = await screen.findByRole("combobox", { name: "Project Content" });
+  await waitFor(() => expect(search).toHaveFocus());
+  shortcut("files");
+  const files = within(screen.getByRole("complementary", { name: "Project files" }));
+  expect(await files.findByRole("button", { name: "main.py" })).toBeVisible();
+  shortcut("checks");
+  expect(screen.getByRole("searchbox", { name: "Filter findings" })).toHaveFocus();
+
+  shortcut("new-draft");
+  const draft = screen.getByRole("textbox", { name: "Untitled-1" });
+  expect(draft).toHaveFocus();
+  const editor = EditorView.findFromDOM(draft)!;
+  act(() => editor.dispatch({ changes: { from: 0, insert: "import pathlib" } }));
+  const tabs = within(screen.getByRole("navigation", { name: "Open files" }));
+  fireEvent.click(tabs.getByRole("button", { name: "main.py" }));
+  await screen.findByRole("textbox", { name: "main.py" });
+  fireEvent.click(tabs.getByRole("button", { name: "Untitled-1" }));
+  expect(screen.getByRole("textbox", { name: "Untitled-1" })).toHaveTextContent("import pathlib");
+  expect(file.mock.calls.every(([, path]) => path === "main.py")).toBe(true);
+
+  fireEvent.click(tabs.getByRole("button", { name: "Close Untitled-1" }));
+  const confirm = screen.getByRole("dialog", { name: "Discard unsaved drafts?" });
+  fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+  expect(screen.getByRole("textbox", { name: "Untitled-1" })).toHaveTextContent("import pathlib");
+  fireEvent.click(tabs.getByRole("button", { name: "Close Untitled-1" }));
+  fireEvent.click(screen.getByRole("button", { name: "Discard and close" }));
+  expect(tabs.queryByRole("button", { name: "Untitled-1" })).toBeNull();
 });
 
 it("opens group colors on hover or by keyboard and supports search before opening a file", async () => {
@@ -385,11 +442,16 @@ it("reviews Go and SQL diffs and preserves earlier notes after the target change
   fireEvent.click(within(screen.getByRole("navigation", { name: "Open files" })).getByRole("button", { name: "orders.sql" }));
 
   await screen.findByRole("textbox", { name: modelPath });
-  fireEvent.click(screen.getByRole("button", { name: /Review note.*Pending review/ }));
-  const note = await screen.findByRole("textbox", { name: "Note" });
+  const noteToggle = screen.getByRole("button", { name: /Review note.*Pending review/ });
+  fireEvent.click(noteToggle);
+  const notePanel = within(screen.getByRole("complementary", { name: "Review note" }));
+  const note = await notePanel.findByRole("textbox", { name: "Note" });
+  expect(note).toHaveFocus();
+  expect(notePanel.getByRole("status")).toHaveTextContent("Pending review");
   expect(note).toHaveAccessibleDescription(`${project.baseline?.slice(0, 10)} → Working tree`);
   fireEvent.change(note, { target: { value: "Check how missing payments are handled." } });
-  fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
+  fireEvent.click(notePanel.getByRole("button", { name: "Close panel" }));
+  expect(noteToggle).toHaveFocus();
   const tabs = within(screen.getByRole("navigation", { name: "Open files" }));
   fireEvent.click(tabs.getByRole("button", { name: "orders.go" }));
   fireEvent.click(tabs.getByRole("button", { name: "orders.sql" }));

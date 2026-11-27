@@ -145,12 +145,12 @@ select.ds-select:disabled { opacity: .5; cursor: default; }
 }
 
 /* Composite editors draw one ring around the field, including its accessories. */
-:is(.query-composer, .quick-query-editor):has(> textarea:focus) {
+:is(.query-composer, .quick-query-editor, .ds-composite-field):has(> textarea:focus) {
   outline: var(--ds-focus-ring);
   outline-offset: var(--ds-focus-inset);
 }
 
-:is(.query-composer, .quick-query-editor) > textarea:focus,
+:is(.query-composer, .quick-query-editor, .ds-composite-field) > textarea:focus,
 .query-sql-editor .cm-content:focus {
   outline: none;
 }
@@ -167,7 +167,7 @@ select.ds-select:disabled { opacity: .5; cursor: default; }
   .ontology-workspace .ontology-list .ontology-definition-row,
   .data-source-menu-actions > button
 ):focus-visible,
-:is(.command-results, .global-search-results, .relationship-target-picker, .relationship-search-results) [role="option"][aria-selected="true"] {
+:is(.command-results, .global-search-results, .relationship-target-picker, .relationship-search-results, .code-quick-open > ul, .code-content-results) [role="option"][aria-selected="true"] {
   outline: var(--ds-list-focus-outline);
   outline-offset: var(--ds-focus-inset);
   color: var(--ds-list-focus-text);

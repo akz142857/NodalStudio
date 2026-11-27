@@ -4,10 +4,7 @@ use std::{
 };
 
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
-use cap_std::{
-    ambient_authority,
-    fs::{Dir, Metadata, OpenOptions},
-};
+use cap_std::fs::{Dir, Metadata, OpenOptions};
 use glob::{MatchOptions, Pattern};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -51,6 +48,37 @@ fn denied() -> io::Error {
     io::Error::new(ErrorKind::PermissionDenied, "Repository access denied")
 }
 
+#[cfg(unix)]
+fn open_directory_nofollow(path: &Path) -> io::Result<Dir> {
+    let fd = rustix::fs::open(
+        path,
+        rustix::fs::OFlags::RDONLY
+            | rustix::fs::OFlags::DIRECTORY
+            | rustix::fs::OFlags::NOFOLLOW
+            | rustix::fs::OFlags::CLOEXEC,
+        rustix::fs::Mode::empty(),
+    )
+    .map_err(io::Error::from)?;
+    Ok(Dir::from_std_file(std::fs::File::from(fd)))
+}
+
+#[cfg(windows)]
+fn open_directory_nofollow(path: &Path) -> io::Result<Dir> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(denied());
+    }
+    Ok(Dir::from_std_file(file))
+}
+
 impl Repository {
     pub(super) fn open(
         path: &Path,
@@ -72,10 +100,7 @@ impl Repository {
         expected: Option<&RootIdentity>,
     ) -> Result<(Self, RootIdentity), String> {
         let access = crate::file_access::access(path)?;
-        let parent = path.parent().ok_or("Choose a Git working directory.")?;
-        let name = path.file_name().ok_or("Choose a Git working directory.")?;
-        let dir = Dir::open_ambient_dir(parent, ambient_authority())
-            .and_then(|parent| parent.open_dir_nofollow(name))
+        let dir = open_directory_nofollow(path)
             .map_err(|_| "Open the repository folder again to restore access.")?;
         let identity = dir
             .dir_metadata()
@@ -288,7 +313,7 @@ pub(super) fn read_nested(root: &Dir, path: &Path, limit: u64) -> io::Result<Str
     read_file(&dir, Path::new(path.file_name().ok_or_else(denied)?), limit)
 }
 
-fn read_file(directory: &Dir, filename: &Path, max_size: u64) -> io::Result<String> {
+pub(super) fn read_file(directory: &Dir, filename: &Path, max_size: u64) -> io::Result<String> {
     let before = directory.symlink_metadata(filename)?;
     if !before.is_file() {
         return Err(denied());
@@ -493,5 +518,25 @@ pub(super) fn open_in_default_editor(path: &Path) -> Result<(), String> {
     {
         let _ = path;
         Err(ERROR.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn open_directory_opens_folder_without_parent_traversal_and_rejects_symlinks() {
+        let sandbox = tempfile::tempdir().unwrap();
+        let target = sandbox.path().join("project");
+        std::fs::create_dir(&target).unwrap();
+        let (_, identity) = Repository::open_directory(&target, None).unwrap();
+        assert!(Repository::open_directory(&target, Some(&identity)).is_ok());
+        #[cfg(unix)]
+        {
+            let link = sandbox.path().join("project-link");
+            std::os::unix::fs::symlink(&target, &link).unwrap();
+            assert!(Repository::open_directory(&link, None).is_err());
+        }
     }
 }

@@ -21,11 +21,12 @@ function ExtensionGroup({ label, count, expanded, toggle, children }: {
   toggle: () => void;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   const id = useId();
   return <section className="code-extension-group" aria-label={label}>
     <h2 className="code-extension-group-heading">
       <button type="button" aria-expanded={expanded} aria-controls={id}
-        aria-label={count === undefined ? undefined : `${label} (${count})`} onClick={toggle}>
+        aria-label={count === undefined ? undefined : t("codeReview.extensions.groupCountLabel", { label, count })} onClick={toggle}>
         <ActionIcon name={expanded ? "chevronDown" : "chevronRight"} />
         <span>{label}</span>
         {count !== undefined && <span className="code-extension-count" aria-hidden="true">{count}</span>}
@@ -107,7 +108,7 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
 
   const catalog = market && <CodeOpenVsxResults market={market} projectId={projectId} items={items}
     active={active && (searching || featuredOpen)} offline={offline} query={searching ? query : ""}
-    pendingQuery={searching && pendingQuery} openDetails={(id) => selectCatalog({ id })} />;
+    pendingQuery={searching && pendingQuery} openDetails={(id, version) => selectCatalog({ id, version })} />;
   return <section className="code-extensions" aria-label={t("codeReview.extensions.title")}>
     <header className="code-extension-toolbar">
       {market && <form className="code-extension-search" role="search" onSubmit={(event) => {
@@ -153,7 +154,10 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
         {loadError && <p role="alert">{t("codeReview.extensions.storage")}{" "}
           <Button size="small" onClick={retry}>{t("codeReview.refresh")}</Button></p>}
         {updates.isError && <p role="alert">{t(extensionErrorMessage(updates.error))}</p>}
-        {updates.isSuccess && updates.data.failed > 0 && <p role="status">{t("codeReview.extensions.marketPartial", { count: updates.data.failed })}</p>}
+        {updates.isSuccess && updates.data.failed > 0 && <p role="status">{t(
+          updates.data.failed === 1 ? "codeReview.extensions.marketPartialOne" : "codeReview.extensions.marketPartial",
+          { count: updates.data.failed },
+        )}</p>}
         {updates.isSuccess && !updates.data.failed && !updates.data.updates.some((update) => items.some((item) =>
           item.id === update.id && item.sha256 === update.installedSha256)) && <p role="status">{t("codeReview.extensions.marketUpToDate")}</p>}
         {!loading && !loadError && !items.length && <p>{t("codeReview.extensions.empty")}</p>}
@@ -200,18 +204,18 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
         </div>
       </div>
     </ModalSurface>}
-    {market && catalogSelection && <CodeOpenVsxDetails market={market} projectId={projectId} id={catalogSelection.id}
+    {market && catalogSelection && <CodeOpenVsxDetails key={`${catalogSelection.id}:${catalogSelection.version ?? ""}`} market={market} projectId={projectId} id={catalogSelection.id}
       initialVersion={catalogSelection.version} installed={items.find((item) => item.id === catalogSelection.id)}
       offline={offline} dismiss={() => selectCatalog(undefined)} onInstall={(item) => onUpdate(item.id, item)} />}
     {confirm && <ModalSurface label={t(`codeReview.extensions.${confirm.action}`)} onDismiss={() => setConfirm(undefined)}>
       <div className="code-definition-dialog ds-surface">
-        <strong>{confirm.item.name} · {confirm.item.version}</strong>
+        <h2>{confirm.item.name} · {confirm.item.version}</h2>
         <p>{confirm.action === "enable"
           ? t("codeReview.extensions.enableAccess", { file: confirm.item.fileName })
           : t("codeReview.extensions.uninstallAccess")}</p>
         <div className="code-review-note-actions">
-          <Button data-modal-focus onClick={() => setConfirm(undefined)}>{t("codeReview.definitionCancel")}</Button>
-          <Button variant="primary" onClick={() => {
+          <Button data-modal-focus onClick={() => setConfirm(undefined)}>{t("codeReview.cancel")}</Button>
+          <Button variant={confirm.action === "uninstall" ? "danger" : "primary"} onClick={() => {
             mutation.mutate({ id: confirm.item.id, action: confirm.action });
             setConfirm(undefined);
           }}>{t(`codeReview.extensions.${confirm.action}`)}</Button>

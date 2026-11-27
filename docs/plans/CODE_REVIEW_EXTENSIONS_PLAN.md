@@ -155,3 +155,26 @@ macOS 预览版支持 Open VSX 上的 `dbaeumer.vscode-eslint` 3.0.34 通用包�
 安装包 SHA-256 为 `ca5334d46f6a39079e751ef4601bfc9f86bc3a46483e87291ec609239d161308`。服务器文件 SHA-256 为 `baf39a57d3e04d63140a1d606b76042ccca304309846b2b0374c60d1caacbdb2`。
 
 2026-11-27 在真实 NodalStudio 仓库的 macOS ESLint VSIX 预览版中，从 Open VSX 安装并启用 3.0.34，再从底部授权。原版服务器使用 `apps/frontend/eslint.config.js` 和项目的 ESLint 10.6.0，对临时 TypeScript 文件发布 `@typescript-eslint/no-unused-vars`。点击诊断在 Source 和 Diff 中都选中了第 7 行第 9 列开始的变量。撤销后再运行会重新提示授权。验收后移除了临时文件。
+
+### 7.6 Python 调试与 VSIX 兼容方案
+
+目标分两步。先在 macOS 直装预览版验证本地 Python 调试，再验证 Open VSX 的原版 Python Debugger VSIX。第一步使用上游 `debugpy` 调试适配器，第二步增加运行扩展本身所需的 Node 宿主和 VS Code API。Windows 和 Mac App Store 的分发分别验收。 [debugpy](https://github.com/microsoft/debugpy) · [VS Code 调试扩展架构](https://code.visualstudio.com/api/extension-guides/debugger-extension)
+
+当前 QuickJS 文档宿主只提供 Markdown 检查需要的 API。ESLint 集成直接启动锁定版本的原版语言服务器，Code 现有 LSP 处理索引、大纲和定义。Python Debugger 2026.6.0 声明了 Node 入口、`debugpy` 调试器和 `ms-python.python` 依赖。它还会选择 Python 解释器、解析启动配置并创建适配器进程。 [Open VSX 包清单](https://open-vsx.org/api/ms-python/debugpy/2026.6.0/file/package.json) · [上游适配器工厂](https://github.com/microsoft/vscode-python-debugger/blob/main/src/extension/debugger/adapter/factory.ts)
+
+```mermaid
+flowchart LR
+  UI["Code 调试界面"] --> Session["Tauri 调试会话与执行授权"]
+  Session -->|DAP| Adapter["debugpy 适配器"]
+  Adapter --> Python["项目的 Python 进程"]
+  VSIX["原版 VSIX · 第二阶段"] --> Host["独立 Node 扩展宿主"]
+  Host -->|注册调试器和解析配置| Session
+```
+
+| 阶段 | 开发范围 | 验收 |
+| --- | --- | --- |
+| 1. 本地 DAP 原型 | 使用明确选择的解释器和验证过的 `debugpy`。首版支持在项目中启动指定的本地 `.py` 文件，读取和验证工作目录及参数。Tauri 处理 `initialize`、`launch`、`initialized`、`setBreakpoints`、`configurationDone`，以及继续、单步、查看调用栈和变量、结束会话。Code 的 Source 显示断点和暂停行，点击调用栈跳到源文件。调试输出单独显示，静态诊断继续进入底部「检查」。 | 在真实 Python 项目的现有虚拟环境中，从执行授权跑到命中断点。验证单步进入、跳过、跳出、查看变量、输出和停止后清理进程。切换项目、撤销执行权限、退出或连接失败时能回收属本次会话的进程。 |
+| 2. 原版 VSIX 兼容 | 锁定并验证 `ms-python.debugpy` 和 Python 扩展的版本、架构、哈希及依赖关系。对照真实包的激活调用评估 Theia 宿主可复用范围和定向 Node 宿主成本。提供扩展激活与释放、`contributes.debuggers`、命令注册、工作区与配置、解释器相关的扩展 API、调试配置提供器和适配器描述符工厂。宿主注册与原生进程启动走同一个 DAP 会话管理器。 | 从 Open VSX 安装、启用并激活原版包，验证选解释器、解析配置和创建适配器的调用由原版扩展完成。跑完第一阶段的断点流程，再验证缺失依赖、禁用、卸载、重启和更新失败回退。只有通过这条路径的版本才标为「Python Debugger 兼容」。 |
+| 3. 按需求扩大范围 | 单独评估可复用 `launch.json`、Python 模块启动、交互式终端、表达式求值、本地附加和远程调试。对其他语言复用 DAP 会话、断点和调试面板，分别验证每种适配器及其安装和运行依赖。 | 每新增一种启动或附加形式，都验证来源选择、权限、路径映射和终止行为。 |
+
+授权复用现有项目身份验证和 ESLint 的执行同意模式。目录访问、扩展启用和运行 Python 分别授权，启动前显示实际解释器、入口文件和工作目录。Node 扩展进程与应用数据和数据库凭据分离，限制传入环境，限制原生层可执行的请求。Node 进程分离本身无法限制本机文件和网络权限，发布前验证实际隔离能力。首版沿用现有外部工具的离线策略。App Store 版根据签名沙箱的实际运行结果与适用审核条款单独评估。 [DAP 会话顺序](https://microsoft.github.io/debug-adapter-protocol/overview) · [VS Code Extension Host](https://code.visualstudio.com/api/advanced-topics/extension-host) · [Theia 插件宿主](https://github.com/eclipse-theia/theia/blob/master/doc/Plugin-API.md) · [Apple App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/#software-requirements)

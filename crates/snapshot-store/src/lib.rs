@@ -25,7 +25,7 @@ pub mod ontology;
 pub mod relationship_batches;
 mod snapshot_history;
 
-const LOCAL_SCHEMA_VERSION: i64 = 6;
+const LOCAL_SCHEMA_VERSION: i64 = 7;
 
 #[derive(Debug, Error)]
 pub enum SnapshotStoreError {
@@ -2407,7 +2407,7 @@ impl LocalSnapshotStore {
         .bind(Utc::now().to_rfc3339())
         .execute(&self.pool)
         .await?;
-        sqlx::query("PRAGMA user_version = 6")
+        sqlx::query("PRAGMA user_version = 7")
             .execute(&self.pool)
             .await?;
         Ok(())
