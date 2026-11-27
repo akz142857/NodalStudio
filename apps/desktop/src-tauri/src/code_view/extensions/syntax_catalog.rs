@@ -1,4 +1,4 @@
-//! Mac App Store imports pinned TextMate JSON resources from Open VSX.
+//! Mac App Store imports pinned `TextMate` JSON resources from Open VSX.
 use std::{fs, path::Path, time::Duration};
 
 use reqwest::{Client, redirect};
