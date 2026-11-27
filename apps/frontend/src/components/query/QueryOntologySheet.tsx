@@ -17,7 +17,7 @@ interface Props {
   onDismiss: () => void;
   onReview: (id: string) => void;
   onReload: () => void;
-  onUse: (draft: OntologyQueryDraft) => void;
+  onUse: (draft: OntologyQueryDraft, target: { id: string; revision: number }) => void;
 }
 
 export function QueryOntologySheet({ platform, scope, entries, loading, initialPreview, onDismiss, onReview, onReload, onUse }: Props) {
@@ -51,7 +51,7 @@ export function QueryOntologySheet({ platform, scope, entries, loading, initialP
       }
       // Fetch again on insertion so a stale approval or a new business month cannot
       // transfer SQL different from the preview the user reviewed.
-      if (draft && next.sql === draft.sql && next.startsAt === draft.startsAt && next.endsBefore === draft.endsBefore) onUse(next);
+      if (draft && next.sql === draft.sql && next.startsAt === draft.startsAt && next.endsBefore === draft.endsBefore) onUse(next, { id: selected.id, revision: selected.revision });
       else setPreview({ id: selected.id, draft: next });
     } catch (reason) {
       if (!mounted.current) return;

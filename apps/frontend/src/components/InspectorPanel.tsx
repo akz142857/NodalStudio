@@ -51,6 +51,7 @@ interface InspectorPanelProps {
   onApplyView: (view: SavedView | undefined) => void;
   historyPreview?: boolean;
   onOpenQuery?: (table: TableDefinition) => void;
+  onOpenCode?: (key: import("../platform").ObjectKey) => void;
   onOpenSettings: (category: "ai" | "cloud" | "git") => void;
   onSelectSnapshot: (snapshot: DatabaseSnapshot, latest: boolean) => void;
   onCompareSnapshots: (snapshot: DatabaseSnapshot, changeSet: SchemaChangeSet) => void;
@@ -99,6 +100,7 @@ export function InspectorPanel({
   onApplyView,
   historyPreview,
   onOpenQuery,
+  onOpenCode,
   onOpenSettings,
   onSelectSnapshot,
   onCompareSnapshots,
@@ -201,7 +203,7 @@ export function InspectorPanel({
               <pre>{focusedEvidence.detail}</pre>
               <button type="button" onClick={() => setSegment("ai")}>{bt("business.backToAIExplanation")}</button>
             </section> : null}
-            <TableStructure onOpenObject={onOpenObject} snapshot={snapshot} table={evidenceTable || selectedTable} columnFocus={focusedEvidence ? undefined : columnFocus} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection || historyPreview ? undefined : onOpenQuery} />
+            <TableStructure onOpenCode={onOpenCode} onOpenObject={onOpenObject} snapshot={snapshot} table={evidenceTable || selectedTable} columnFocus={focusedEvidence ? undefined : columnFocus} focusedEvidence={focusedEvidence} onOpenQuery={historicalSelection || historyPreview ? undefined : onOpenQuery} />
           </>
         ) : (
           <dl className="snapshot-summary">

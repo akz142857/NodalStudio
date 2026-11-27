@@ -9,6 +9,9 @@
   --ds-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --ds-text-body: 1rem;
   --ds-text-control: .923rem;
+  --ds-project-group-orange: #df8748;
+  --ds-project-group-yellow: #c59e29;
+  --ds-project-group-purple: #986cdb;
   --ds-text-caption: max(11px, .846rem);
   --ds-text-title: 1.538rem;
   --ds-text-heading: 1.077rem;

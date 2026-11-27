@@ -1,6 +1,6 @@
 use query_engine::{
     DEFAULT_CELL_BYTES, DEFAULT_RESULT_BYTES, ExecuteQueryRequest, QueryCell, QueryError,
-    execute_mysql_query,
+    execute_mysql_query, execute_mysql_query_for_database,
 };
 use sqlx::MySqlPool;
 use std::time::{Duration, Instant};
@@ -130,6 +130,39 @@ async fn mysql_fixture_types_limits_guard_timeout_and_server_cancellation() {
     .await
     .unwrap();
     assert_eq!(again.row_count, 1);
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn project_query_validates_the_database_on_its_execution_connection() {
+    let Ok(url) = std::env::var("SQLAI_MYSQL_QUERY_TEST_DATABASE_URL") else {
+        eprintln!("skipping MySQL fixture: SQLAI_MYSQL_QUERY_TEST_DATABASE_URL is not set");
+        return;
+    };
+    let pool = MySqlPool::connect(&url).await.unwrap();
+    let database: String = sqlx::query_scalar("SELECT DATABASE()")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let query = request("SELECT DATABASE() AS selected_database", 1, 5_000);
+    let cancellation = CancellationToken::new();
+
+    let different_database = format!("{database}_different");
+    let wrong = execute_mysql_query_for_database(&pool, &query, &cancellation, &different_database)
+        .await
+        .unwrap_err();
+    assert!(matches!(wrong, QueryError::Validation(_)));
+
+    let result = execute_mysql_query_for_database(&pool, &query, &cancellation, &database)
+        .await
+        .unwrap();
+    assert_eq!(
+        result.rows,
+        vec![vec![QueryCell::Text {
+            value: database,
+            truncated: false,
+        }]],
+    );
     pool.close().await;
 }
 

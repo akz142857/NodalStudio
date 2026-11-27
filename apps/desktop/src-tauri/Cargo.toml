@@ -16,15 +16,20 @@ tauri-build.workspace = true
 storekit-bridge = { path = "../../../crates/storekit-bridge", optional = true }
 ai-context = { path = "../../../crates/ai-context" }
 base64 = "0.22"
+cap-fs-ext = "4.0.3"
+cap-std = "4.0.3"
+glob = "0.3.4"
 chrono.workspace = true
 extension-model = { path = "../../../crates/extension-model" }
 futures-util = "0.3"
 git-workspace = { path = "../../../crates/git-workspace" }
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
 keyring.workspace = true
 sqlite-adapter = { path = "../../../crates/sqlite-adapter" }
 mysql-adapter = { path = "../../../crates/mysql-adapter" }
 postgres-adapter = { path = "../../../crates/postgres-adapter" }
 query-engine = { path = "../../../crates/query-engine" }
+regex = "1.12"
 reqwest.workspace = true
 ring = "0.17"
 rustls-native-certs = "0.8"
@@ -37,6 +42,7 @@ serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 snapshot-store = { path = "../../../crates/snapshot-store" }
+sqlparser = { workspace = true, features = ["visitor"] }
 sqlx.workspace = true
 tauri.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "net", "process"] }
@@ -51,16 +57,21 @@ tauri-plugin-dialog = "2"
 zip = { version = "4.6.1", default-features = false }
 zeroize = "1"
 
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs", "process"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSAppearance", "NSColor", "NSColorSpace"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSAppearance", "NSColor", "NSColorSpace", "NSPasteboard", "NSPasteboardItem", "NSWorkspace"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSError", "NSFileManager", "NSString", "NSURL"] }
 
 [lints]
 workspace = true
 
 [features]
 mac-app-store = ["dep:storekit-bridge"]
+code-extensions-preview = ["zip/deflate-flate2"]
 # Only for isolated loopback upgrade acceptance builds. Never enable for distribution.
 updater-smoke-test = []
 

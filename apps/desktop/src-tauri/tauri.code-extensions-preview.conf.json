@@ -1,0 +1,20 @@
+{
+  "identifier": "com.claycosmos.nodalstudio.code-extensions-preview",
+  "productName": "Nodal Studio Code Extensions Preview",
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "Nodal Studio Code Extensions Preview",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 960,
+        "minHeight": 640,
+        "visible": false
+      }
+    ]
+  }
+}

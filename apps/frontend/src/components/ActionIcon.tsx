@@ -4,6 +4,7 @@ const documentOutline = <path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 
 const sidebarOutline = <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />;
 
 const paths = {
+  extensions: <><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /><path d="m17.5 2.5 4.5 4.5-4.5 4.5L13 7Z" /></>,
   map: <><rect x="3" y="3" width="18" height="18" rx="2" /><rect x="6" y="7" width="8" height="6" rx="1" /><path d="M17 6h1m-1 4h1M6 17h3m4 0h5" /></>,
   table: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 9v12" /></>,
   list: <path d="M8.5 6.5h11M8.5 12h11M8.5 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" />,
@@ -16,6 +17,7 @@ const paths = {
   select: <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M9 9h6v6H9Z" />,
   grip: <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" strokeWidth="2.8" />,
   close: <path d="m6 6 12 12M6 18 18 6" />,
+  error: <><circle cx="12" cy="12" r="9" /><path d="m9 9 6 6m0-6-6 6" /></>,
   add: <path d="M12 5v14M5 12h14" />,
   remove: <path d="M5 12h14" />,
   check: <path d="m5 12 4 4 10-10" />,
@@ -39,6 +41,9 @@ const paths = {
   import: <path d="M12 3.5v11m-3.5-3.5 3.5 3.5 3.5-3.5M4.5 13.5V18a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4.5" />,
   preflight: <>{documentOutline}<path d="m8.75 13.25 2.25 2.25 4.25-4.25" /></>,
   report: <>{documentOutline}<path d="M9 12.5h6M9 16h4.5" /></>,
+  folder: <path d="M3.5 8V6.5A1.5 1.5 0 0 1 5 5h4l2 2h8A1.5 1.5 0 0 1 20.5 8.5V18A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18Z" />,
+  document: documentOutline,
+  diff: <path d="M4.5 7.5h7m-3.5-3.5v7m4.5 6h7" />,
   codeDocument: <>{documentOutline}<path d="m10.25 11.5-2.5 2.5 2.5 2.5m3.5-5 2.5 2.5-2.5 2.5" /></>,
   save: <>{documentOutline}<path d="M12 10.5v6m-2.5-2.5 2.5 2.5 2.5-2.5" /></>,
   floppyDisk: <><path d="M5 3h12l4 4v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M7.5 3v6H16V3M7.5 21v-7h9v7" /></>,

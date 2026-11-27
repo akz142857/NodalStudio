@@ -1,0 +1,229 @@
+.code-view {
+  position: absolute;
+  inset: 0;
+  container: code-view / inline-size;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.code-view-header,
+.code-view-status {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ds-separator);
+}
+
+.code-view-header h2,
+.code-view-header p,
+.code-view-body h3,
+.code-view-body h4 {
+  margin: 0;
+}
+
+.code-view-status,
+.code-view-setup small,
+.code-view-references small {
+  color: var(--ds-secondary);
+  font-size: var(--ds-text-control);
+}
+
+.code-view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.code-view-setup {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 12px;
+  padding: 20px;
+  overflow: auto;
+}
+
+.code-view-body {
+  display: grid;
+  grid-template-columns: minmax(160px, .75fr) minmax(250px, 2fr) minmax(195px, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.code-view-body > * {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.code-view-files,
+.code-view-reader {
+  border-right: 1px solid var(--ds-separator);
+}
+
+.code-view-files {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.code-view-files > .code-view-file-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.code-view-files label,
+.code-view-setup label,
+.code-view-reader label,
+.code-view-references label {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.code-view-reader {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.code-view-files input,
+.code-view-reader select {
+  min-width: 0;
+}
+
+.code-view-reader-heading h3 {
+  overflow-wrap: anywhere;
+}
+
+.code-view-filter {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin-block: 8px;
+}
+
+.code-view-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-block: 10px;
+}
+
+.code-view-file-list button {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  gap: 4px;
+  height: auto;
+  min-height: var(--ds-toolbar-height);
+  min-width: 0;
+}
+
+.code-view-file-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.code-view-file-label > :is(span, small) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-view-file-label small {
+  color: var(--ds-secondary);
+  font-size: var(--ds-text-caption);
+}
+
+.code-view-file-list button[aria-current="true"] {
+  border-color: var(--ds-accent);
+}
+
+.code-view-references section {
+  padding-block: 8px 12px;
+  border-bottom: 1px solid var(--ds-separator);
+  overflow-wrap: anywhere;
+}
+
+.code-view-references ul {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  padding: 0;
+}
+
+.code-view-references small {
+  display: block;
+}
+
+.code-view-notice {
+  margin: 8px 16px;
+}
+
+.code-view-mobile-back {
+  display: none;
+}
+
+@container code-view (width < 650px) {
+  .code-view-body {
+    display: block;
+    overflow: auto;
+  }
+
+  .code-view-body > * {
+    border-right: 0;
+    overflow: visible;
+  }
+
+  .code-view[data-mobile-detail="false"] .code-view-files {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .code-view[data-mobile-detail="true"] .code-view-files,
+  .code-view[data-mobile-detail="false"] :is(.code-view-reader, .code-view-references) {
+    display: none;
+  }
+
+  .code-view-mobile-back {
+    display: inline-flex;
+    align-self: start;
+  }
+
+  .code-view-reader .object-definition-reader {
+    height: 45vh;
+  }
+}
+
+.code-view-save-preview {
+  max-height: min(40vh, 300px);
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.code-view-save-receipt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-view-query-origin {
+  padding-inline: 12px;
+  color: var(--ds-secondary);
+}

@@ -18,6 +18,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 pub mod change_review;
+mod code_view;
 mod import_safety;
 mod knowledge;
 pub mod ontology;
@@ -998,6 +999,16 @@ impl LocalSnapshotStore {
             }
         }
         if delete_connection {
+            for statement in [
+                "DELETE FROM code_view_bindings WHERE source_id = ?",
+                "DELETE FROM code_view_links WHERE source_id = ?",
+            ] {
+                affected += sqlx::query(statement)
+                    .bind(&source)
+                    .execute(&mut *transaction)
+                    .await?
+                    .rows_affected();
+            }
             affected += sqlx::query("DELETE FROM data_source_settings WHERE source_id = ?")
                 .bind(&source)
                 .execute(&mut *transaction)
@@ -1037,6 +1048,8 @@ impl LocalSnapshotStore {
             "DELETE FROM saved_views",
             "DELETE FROM canvas_layouts",
             "DELETE FROM code_lineage",
+            "DELETE FROM code_view_bindings",
+            "DELETE FROM code_view_links",
             "DELETE FROM logical_relationships",
             "DELETE FROM ignored_relationship_inferences",
             "DELETE FROM relationship_review_batches",
@@ -2538,6 +2551,12 @@ impl LocalSnapshotStore {
     }
 
     async fn initialize_extension_tables(&self) -> Result<(), SnapshotStoreError> {
+        for statement in [
+            "CREATE TABLE IF NOT EXISTS code_view_bindings (source_id TEXT PRIMARY KEY, binding_id TEXT NOT NULL, payload TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS code_view_links (source_id TEXT NOT NULL, link_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY (source_id, link_id))",
+        ] {
+            sqlx::query(statement).execute(&self.pool).await?;
+        }
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS change_provenance (change_set_id TEXT PRIMARY KEY NOT NULL, recorded_at TEXT NOT NULL, payload_json TEXT NOT NULL)",
         )

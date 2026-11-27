@@ -1,12 +1,28 @@
+import { z } from "zod";
+import { codeQueryHandoffSchema } from "../../platform/code-view";
 import type { QueryExecutionResult } from "../../platform";
 import { setUpdateBlocker } from "../../platform/update-guard";
 import type { SavedQuery } from "./saved-queries";
+
+const draftOriginSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("project"), handoff: codeQueryHandoffSchema, sql: z.string() }),
+  z.object({ kind: z.literal("ontology"), target: z.object({ id: z.string(), revision: z.number().int() }), sql: z.string() }),
+  z.object({ kind: z.literal("unavailable") }),
+]);
+export type DraftOrigin = z.infer<typeof draftOriginSchema>;
+
+function readOrigin(raw: unknown): DraftOrigin | undefined {
+  if (raw === undefined) return undefined;
+  const result = draftOriginSchema.safeParse(raw);
+  return result.success ? result.data : { kind: "unavailable" };
+}
 
 export type QueryTab = "results" | "message" | "history";
 
 export interface QuerySession {
   draft: string;
-  previousDraft?: { sql: string; rowLimit: number };
+  previousDraft?: { sql: string; rowLimit: number; origin?: DraftOrigin };
+  origin?: DraftOrigin;
   savedQuery?: Pick<SavedQuery, "id" | "name">;
   outputSourceId?: string;
   result?: QueryExecutionResult;
@@ -43,15 +59,18 @@ export function loadQuerySession(sourceId: string): QuerySession {
   let previousDraft: QuerySession["previousDraft"];
   let savedQuery: QuerySession["savedQuery"];
   let restoreFailed = false;
+  let origin: DraftOrigin | undefined;
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(draftKey(sourceId)) ?? "null");
     if (stored && typeof stored === "object" && "draft" in stored && typeof stored.draft === "string") draft = stored.draft;
+    if (stored && typeof stored === "object" && "origin" in stored) origin = readOrigin(stored.origin);
     if (stored && typeof stored === "object" && "previousDraft" in stored) {
       const previous = stored.previousDraft;
       if (previous && typeof previous === "object" && "sql" in previous && typeof previous.sql === "string"
         && "rowLimit" in previous && typeof previous.rowLimit === "number" && Number.isInteger(previous.rowLimit)
         && previous.rowLimit >= 1 && previous.rowLimit <= 5000) {
         previousDraft = { sql: previous.sql, rowLimit: previous.rowLimit };
+        if ("origin" in previous) previousDraft.origin = readOrigin(previous.origin);
       }
     }
     if (stored && typeof stored === "object" && "savedQuery" in stored) {
@@ -63,6 +82,7 @@ export function loadQuerySession(sourceId: string): QuerySession {
   return {
     draft,
     previousDraft,
+    origin,
     savedQuery,
     message: restoreFailed ? "The saved SQL draft could not be restored from local storage." : "Ready. Only one read-only SELECT statement can be executed.",
     activeTab: restoreFailed ? "message" : "results",
@@ -77,7 +97,7 @@ export function saveQuerySession(sourceId: string, session: QuerySession): boole
   // Persist only the editor draft, never query results or database row contents.
   // The blocker survives QueryPage unmounting when Settings is opened.
   try {
-    if (session.draft || session.previousDraft || session.savedQuery) localStorage.setItem(draftKey(sourceId), JSON.stringify({ draft: session.draft, previousDraft: session.previousDraft, savedQuery: session.savedQuery }));
+    if (session.draft || session.previousDraft || session.savedQuery) localStorage.setItem(draftKey(sourceId), JSON.stringify({ draft: session.draft, previousDraft: session.previousDraft, savedQuery: session.savedQuery, origin: session.origin }));
     else localStorage.removeItem(draftKey(sourceId));
     setUpdateBlocker(`query-draft:${sourceId}`, undefined);
     return true;
@@ -90,9 +110,9 @@ export function saveQuerySession(sourceId: string, session: QuerySession): boole
 export function recoverQueryDraft(fromWorkspace: string, workspace: string, current: QuerySession): QuerySession {
   const previous = loadQuerySession(fromWorkspace);
   if (current.draft || current.previousDraft || (!previous.draft && !previous.previousDraft)) return current;
-  const recovered = { ...current, draft: previous.draft, previousDraft: previous.previousDraft, savedQuery: undefined };
+  const recovered = { ...current, draft: previous.draft, previousDraft: previous.previousDraft, savedQuery: undefined, origin: previous.origin };
   if (saveQuerySession(workspace, recovered)) {
-    saveQuerySession(fromWorkspace, { ...previous, draft: "", previousDraft: undefined, savedQuery: undefined });
+    saveQuerySession(fromWorkspace, { ...previous, draft: "", previousDraft: undefined, savedQuery: undefined, origin: undefined });
   }
   return recovered;
 }

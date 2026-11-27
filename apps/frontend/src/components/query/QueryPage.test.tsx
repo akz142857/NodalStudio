@@ -2,6 +2,7 @@ import { EditorView } from "@codemirror/view";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DatabaseSnapshot, QueryExecutionResult, QueryHistoryEntry, NodalStudioPlatform } from "../../platform";
+import type { CodeQueryHandoff } from "../../platform/code-view";
 import type { ConfirmedDefinition, OntologyQueryDraft } from "../../platform/ontology-types";
 import { discoverySettings } from "../../test/discovery-fixture";
 import { reportSemantics, reportSnapshot } from "../../test/schema-report-fixture";
@@ -112,6 +113,43 @@ describe("QueryPage", () => {
     fireEvent.click(within(sheet).getByRole("button", { name: "Open in SQL Editor" }));
     await waitFor(() => expect(onConsumeOpenRequest).toHaveBeenCalledOnce());
     expect(loadQuerySession(reportWorkspace).draft).toBe(updated.sql);
+  });
+  it("keeps a project query tied to its source when sources or snapshots change", async () => {
+    const mysql = { ...snapshot, database: { ...snapshot.database, databaseType: "mySql" as const } };
+    const other = { ...mysql, sourceId: "other-source", database: { ...mysql.database, name: "other" } };
+    const sourceKey = queryWorkspaceKey(mysql.sourceId);
+    const otherKey = queryWorkspaceKey(other.sourceId);
+    const sql = "SELECT id FROM orders";
+    const handoff: CodeQueryHandoff = {
+      sourceId: mysql.sourceId, snapshotId: mysql.id, database: mysql.database.name,
+      bindingId: "binding", path: "queries/orders.sql", statementDigest: "statement",
+      connection: "target", profileRevision: mysql.capturedAt,
+    };
+    const executeReadonlyQuery = vi.fn<NodalStudioPlatform["executeReadonlyQuery"]>().mockResolvedValue(result);
+    const platform = { executeReadonlyQuery, listQueryHistory: vi.fn().mockResolvedValue([]) } as unknown as NodalStudioPlatform;
+    const onConsumeOpenRequest = vi.fn();
+    saveQuerySession(sourceKey, { ...loadQuerySession(sourceKey), draft: "SELECT 2" });
+    saveQuerySession(otherKey, { ...loadQuerySession(otherKey), draft: "SELECT 3" });
+    const page = (selected: DatabaseSnapshot, opening = false) => <QueryPage
+      platform={platform} snapshot={selected} runtimeKind="desktop" onConsumeOpenRequest={onConsumeOpenRequest}
+      openRequest={opening ? { id: 1, kind: "project", sourceId: mysql.sourceId, projectHandoff: handoff, sql } : undefined} />;
+    const view = render(page(mysql, true));
+    const dialog = screen.getByRole("dialog", { name: "Open project query" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Open" }));
+    expect(onConsumeOpenRequest).toHaveBeenCalledOnce();
+    view.rerender(page(mysql));
+    expect(loadQuerySession(sourceKey)).toMatchObject({ draft: sql, previousDraft: { sql: "SELECT 2" } });
+    expect(executeReadonlyQuery).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^Run/ }));
+    await waitFor(() => expect(executeReadonlyQuery).toHaveBeenCalledWith(expect.objectContaining({ sql, projectHandoff: handoff })));
+
+    view.rerender(page(other));
+    expect(loadQuerySession(otherKey).draft).toBe("SELECT 3");
+    expect(loadQuerySession(sourceKey).origin).toMatchObject({ kind: "project", handoff });
+    view.rerender(page({ ...mysql, id: "refreshed-snapshot" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Run/ }));
+    expect(await screen.findByText(/needs a verified database target/)).toBeVisible();
+    expect(executeReadonlyQuery).toHaveBeenCalledTimes(1);
   });
   it.each([false, true])("runs MySQL cursor statements and discards a late result after changing sources (return to original: %s)", async (returnToOriginal) => {
     let finish!: (value: QueryExecutionResult) => void;

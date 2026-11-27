@@ -1,4 +1,7 @@
 packages:
   - apps/*
   - packages/*
+patchedDependencies:
+  decode-named-character-reference@1.3.0: patches/decode-named-character-reference@1.3.0.patch
+  markdownlint@0.42.2: patches/markdownlint@0.42.2.patch
 

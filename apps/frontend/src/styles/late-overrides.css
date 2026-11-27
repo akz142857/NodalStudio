@@ -45,7 +45,7 @@
 .refresh-operation-result .operation-feedback { margin: 0; }
 
 /* Align navigation, search, and action groups to the header's control height. */
-.topbar .global-search input {
+.topbar .global-search :is(input, .code-toolbar-search) {
   height: var(--ds-toolbar-height);
   border: 1px solid var(--ds-separator);
   border-radius: var(--ds-radius-menu);
@@ -114,6 +114,7 @@
 .schema-object-menu > button { display: block; width: 100%; min-height: 32px; padding: 6px 9px; border: 0; border-radius: var(--ds-radius-control); color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .schema-object-menu > button:hover:not(:disabled) { color: var(--ds-selection-text); background: var(--ds-selection); }
 .schema-menu-check { display: inline-block; width: 18px; }
+.schema-menu-leading { display: inline-flex; margin-inline-end: var(--ds-space-2); align-items: center; vertical-align: middle; }
 .schema-object-preview { margin: 6px 0 10px; padding: 9px; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-control); color: var(--ds-text); background: var(--ds-sidebar); font-size: var(--ds-text-caption); }
 .schema-object-preview header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; overflow-wrap: anywhere; }
 .schema-object-preview header button { flex: 0 0 24px; }
