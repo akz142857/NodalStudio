@@ -59,8 +59,7 @@ pub enum SelectionKind {
     CodeReviewFolder,
     #[cfg(all(
         target_os = "macos",
-        feature = "code-extensions-preview",
-        not(feature = "mac-app-store")
+        any(feature = "code-extensions", feature = "mac-app-store")
     ))]
     CodeExtensionVsix,
     OpenSqlite,
@@ -113,8 +112,7 @@ pub(crate) async fn pick_workspace_path_from(
                 .blocking_pick_folder(),
             #[cfg(all(
                 target_os = "macos",
-                feature = "code-extensions-preview",
-                not(feature = "mac-app-store")
+                any(feature = "code-extensions", feature = "mac-app-store")
             ))]
             SelectionKind::CodeExtensionVsix => picker
                 .set_title("Install from VSIX / 从 VSIX 安装")

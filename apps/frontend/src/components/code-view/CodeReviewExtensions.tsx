@@ -36,7 +36,7 @@ function ExtensionGroup({ label, count, expanded, toggle, children }: {
   </section>;
 }
 
-export function CodeReviewExtensions({ api, projectId, items, loading, loadError, retry, activities, onUpdate, offline, active = true }: {
+export function CodeReviewExtensions({ api, projectId, items, loading, loadError, retry, activities, onUpdate, offline, syntaxOnly = false, active = true }: {
   api: CodeExtensionPlatform;
   projectId: string;
   items: CodeExtension[];
@@ -46,6 +46,7 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
   activities: ExtensionActivity[];
   onUpdate: (id: string, item: CodeExtension | null) => void;
   offline: boolean;
+  syntaxOnly?: boolean;
   active?: boolean;
 }) {
   const { t } = useI18n();
@@ -82,6 +83,8 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
     },
     onSuccess: (result) => { if (result) onUpdate(result.id, result.item); },
   });
+  const installError = extensionErrorMessage(mutation.error);
+  const unsupported = syntaxOnly ? "codeReview.extensions.syntaxOnly" : "codeReview.extensions.unsupported";
 
   function manageExtension(event: MouseEvent<HTMLButtonElement>, item: CodeExtension, update?: CodeOpenVsxUpdate) {
     const actions: SchemaObjectMenuAction[] = [];
@@ -129,7 +132,9 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
         {text && <IconButton icon="close" className="code-review-tool" label={t("codeReview.extensions.marketClear")}
           onClick={() => { clearSearch(); input.current?.focus(); }} />}
       </form>}
-      <IconButton icon="more" className="code-review-tool" label={t("codeReview.extensions.actions")} aria-haspopup="menu"
+      {syntaxOnly ? <Button size="small" disabled={mutation.isPending} onClick={() => mutation.mutate(null)}>
+        {t("codeReview.extensions.importSyntax")}
+      </Button> : <IconButton icon="more" className="code-review-tool" label={t("codeReview.extensions.actions")} aria-haspopup="menu"
         aria-expanded={Boolean(menu.trigger?.closest(".code-extension-toolbar"))} onClick={(event) => {
           const actions: SchemaObjectMenuAction[] = [{
             label: t("codeReview.extensions.install"), disabled: mutation.isPending, run: () => mutation.mutate(null),
@@ -143,9 +148,11 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
             },
           });
           menu.show(event, t("codeReview.extensions.title"), actions);
-        }} />
+        }} />}
     </header>
-    {mutation.isError && <p className="code-extension-feedback" role="alert">{t(extensionErrorMessage(mutation.error))}</p>}
+    {mutation.isError && <p className="code-extension-feedback" role="alert">{t(
+      installError === "codeReview.extensions.unsupported" ? unsupported : installError,
+    )}</p>}
     {(mutation.isPending || updates.isPending) && <p className="code-extension-feedback" role="status">{t("navigation.loadingWorkspace")}</p>}
     <div className="code-extension-sections">
       {!searching && <ExtensionGroup label={t("codeReview.extensions.installedTab")} count={loading || loadError ? undefined : items.length}
@@ -160,7 +167,7 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
         )}</p>}
         {updates.isSuccess && !updates.data.failed && !updates.data.updates.some((update) => items.some((item) =>
           item.id === update.id && item.sha256 === update.installedSha256)) && <p role="status">{t("codeReview.extensions.marketUpToDate")}</p>}
-        {!loading && !loadError && !items.length && <p>{t("codeReview.extensions.empty")}</p>}
+        {!loading && !loadError && !items.length && <p>{t(syntaxOnly ? "codeReview.extensions.syntaxOnly" : "codeReview.extensions.empty")}</p>}
         {items.length > 0 && <ul className="code-extension-list code-extension-installed-list">
           {items.map((item) => {
             const activity = activities.find((candidate) => candidate.id === item.id);
@@ -190,7 +197,7 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
       <div className="code-definition-dialog code-extension-detail ds-surface">
         <h3>{selectedPackage.name}</h3>
         {selectedPackage.description && <p>{selectedPackage.description}</p>}
-        {selectedPackage.capability === "unsupported" && <p>{t("codeReview.extensions.unsupported")}</p>}
+        {selectedPackage.capability === "unsupported" && <p>{t(unsupported)}</p>}
         <dl>
           <dt>{t("codeReview.extensions.marketPublisher")}</dt><dd>{selectedPackage.publisher}</dd>
           <dt>{t("codeReview.extensions.marketVersion")}</dt><dd>{selectedPackage.version}</dd>

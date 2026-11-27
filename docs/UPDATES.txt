@@ -139,6 +139,18 @@ Workspace Clippy with all targets/features, type checking, lint and Release buil
 When system proxies are enabled, native tests need explicit loopback exceptions:
 NO_PROXY=localhost,127.0.0.1,::1 cargo test -p nodalstudio-desktop -p snapshot-store
 
+Code extensions by release channel
+- GitHub macOS: use pnpm release:macos. The script applies tauri.macos-release.conf.json
+  to the production identity and enables code-extensions. Check that Code shows Open VSX
+  search and that the supported Python Debugger can be installed, enabled and used to
+  stop at a breakpoint and inspect variables. The release updater archive must include
+  the same extension host as the DMG.
+- Mac App Store: use pnpm release:macos:appstore. In Code, import a local declarative
+  TextMate VSIX and verify that its highlighting applies. Verify that Open VSX and
+  Python Debugger are absent. Cargo rejects combining mac-app-store with code-extensions.
+- Windows uses the shared production identity overlay. It does not enable the
+  macOS extension host.
+
 Prepare a real GitHub distribution
 1. Generate and securely back up a dedicated Tauri updater signing key. Keep the
    private key out of source control; only the public key is embedded in the app.

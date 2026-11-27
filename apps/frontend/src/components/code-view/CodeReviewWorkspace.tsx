@@ -9,6 +9,7 @@ import type {
   CodeFinderAction, CodeFinderTarget, CodeLanguageStatus, CodePasteResult, CodeReviewChange,
   CodeReviewPlatform, CodeReviewProject, CodeSearchMatch,
 } from "../../platform/code-review";
+import type { RuntimeInfo } from "../../platform/types";
 import { setUpdateBlocker } from "../../platform/update-guard";
 import { ActionIcon, type ActionIconName } from "../ActionIcon";
 import { IconButton } from "../IconButton";
@@ -107,11 +108,11 @@ function CodeWorkspaceFrame({ layoutStore, sidebarOpen, setSidebarOpen, children
   </div>;
 }
 
-export function CodeReviewWorkspace({ api, allowDefinitions = true, allowExtensions = false, allowFinder = false, extensionsOffline = false,
+export function CodeReviewWorkspace({ api, allowDefinitions = true, extensionsMode, allowFinder = false, extensionsOffline = false,
   eslintAvailability = "eslintUnavailable", outlineId, outlineOpen, searchAnchor, sidebarId, sidebarOpen, setSidebarOpen }: {
   api: CodeReviewPlatform;
   allowDefinitions?: boolean;
-  allowExtensions?: boolean;
+  extensionsMode?: RuntimeInfo["codeExtensions"];
   allowFinder?: boolean;
   extensionsOffline?: boolean;
   eslintAvailability?: EslintAvailability;
@@ -124,6 +125,10 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, allowExtensi
   const projectScrollTopRef = useRef(0);
   const project = useQuery({ queryKey: codeReviewKeys.current, queryFn: () => api.current(), retry: false, staleTime: Infinity });
   const library = api.projects;
+  const extensionsApi = useMemo(() => {
+    if (extensionsMode === "syntax" && api.extensions) return { ...api.extensions, openVsx: undefined };
+    return extensionsMode === "full" ? api.extensions : undefined;
+  }, [api.extensions, extensionsMode]);
   const finder = allowFinder ? api.finder : undefined;
   const projects = useQuery({ queryKey: codeReviewKeys.projects, queryFn: () => library?.list() ?? Promise.resolve({ projects: [], groups: [] }),
     enabled: Boolean(library), retry: false, staleTime: Infinity });
@@ -265,7 +270,7 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, allowExtensi
         filesInitially={project.data.id === filesAfterSwitch} projectSwitcher={switcher}
         finderMenu={finderMenu}
         projectsPanel={panel} showProjects={showProjects} setShowProjects={setShowProjects}
-        extensionsApi={allowExtensions ? api.extensions : undefined} extensionsOffline={extensionsOffline}
+        extensionsApi={extensionsApi} extensionsOffline={extensionsOffline} syntaxExtensionsOnly={extensionsMode === "syntax"}
         allowDefinitions={allowDefinitions} eslintAvailability={eslintAvailability} outlineOpen={outlineOpen}
         renderOutline={renderOutline} searchAnchor={searchAnchor} sidebarId={sidebarId} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       : panel ? <CodeWorkspaceFrame layoutStore={layoutStore} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
@@ -320,7 +325,7 @@ function CodeDockFrame({ layoutStore, dock, dockId, dockLabel, onEscape, childre
 }
 
 function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpenInitially, filesInitially, projectSwitcher, finderMenu, allowDefinitions, eslintAvailability, sidebarId, sidebarOpen, setSidebarOpen,
-  outlineOpen, renderOutline, searchAnchor, extensionsApi, extensionsOffline, projectsPanel, showProjects, setShowProjects }: ProjectProps & CodeSidebarProps & CodeSearchProps & {
+  outlineOpen, renderOutline, searchAnchor, extensionsApi, extensionsOffline, syntaxExtensionsOnly, projectsPanel, showProjects, setShowProjects }: ProjectProps & CodeSidebarProps & CodeSearchProps & {
   choose: React.ReactNode;
   layoutStore: CodeReviewStore;
   refreshRef: RefObject<(() => void) | undefined>;
@@ -334,6 +339,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   eslintAvailability: EslintAvailability;
   extensionsApi?: CodeExtensionPlatform;
   extensionsOffline: boolean;
+  syntaxExtensionsOnly: boolean;
   projectsPanel?: React.ReactNode;
   showProjects: boolean;
   setShowProjects: (open: boolean) => void;
@@ -350,7 +356,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     queryFn: () => extensionsApi?.list(project.id) ?? Promise.resolve([]),
   });
   const extensions = extensionsApi ? extensionList.data ?? [] : [];
-  const pythonApi = extensionsApi ? api.pythonDebug : undefined;
+  const pythonApi = extensionsApi && !syntaxExtensionsOnly ? api.pythonDebug : undefined;
   const pythonReady = extensions.some((extension) => extension.capability === "pythonDebugger" && extension.enabled);
   const python = usePythonDebug(pythonApi, project.id);
   const [syntaxActivity, setSyntaxActivity] = useState<{ path: string; activity: ExtensionActivity }>();
@@ -1086,7 +1092,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
           </header>
           {view === "extensions" && extensionsApi ? <CodeReviewExtensions api={extensionsApi} projectId={project.id} items={extensions}
             loading={extensionList.isPending} loadError={extensionList.isError} retry={() => { void extensionList.refetch(); }}
-            activities={activities} offline={extensionsOffline} active={sidebarOpen} onUpdate={(id, item) => {
+            activities={activities} offline={extensionsOffline} syntaxOnly={syntaxExtensionsOnly} active={sidebarOpen} onUpdate={(id, item) => {
               if (!item?.enabled || extensions.some((installed) => installed.id === id && installed.sha256 !== item.sha256)) {
                 checks.clearExtension(id);
                 setSyntaxActivity((current) => current?.activity.id === id ? undefined : current);

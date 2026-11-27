@@ -1673,7 +1673,7 @@ export function App() {
                 outlineId={codeOutlineId} outlineOpen={codeInspectorAvailable && codeOutlineExpanded}
                 eslintAvailability={!runtime.data?.localEslint ? "eslintUnavailable"
                   : settings.app.privacy.offlineMode ? "eslintOffline" : "enabled"}
-                allowExtensions={runtime.data?.codeExtensionsPreview === true}
+                extensionsMode={runtime.data?.codeExtensions}
                 allowFinder={runtime.data?.codeFinderActions === true}
                 extensionsOffline={settings.app.privacy.offlineMode}
                 allowDefinitions={runtime.data?.distribution !== "macAppStore"} />

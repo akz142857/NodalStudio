@@ -4,8 +4,7 @@ mod definition;
 pub(crate) mod eslint;
 #[cfg(all(
     target_os = "macos",
-    feature = "code-extensions-preview",
-    not(feature = "mac-app-store")
+    any(feature = "code-extensions", feature = "mac-app-store")
 ))]
 pub(crate) mod extensions;
 #[allow(
@@ -24,7 +23,7 @@ mod legacy_sql;
 mod projects;
 #[cfg(all(
     target_os = "macos",
-    feature = "code-extensions-preview",
+    feature = "code-extensions",
     not(feature = "mac-app-store")
 ))]
 pub(crate) mod python_debug;

@@ -19,12 +19,13 @@ vi.mock("./code-review-checks", async (original) => {
   }) };
 });
 
-function renderWorkspace(api: CodeReviewPlatform, client = new QueryClient()) {
+function renderWorkspace(api: CodeReviewPlatform, client = new QueryClient(), extensionsMode?: Parameters<typeof CodeReviewWorkspace>[0]["extensionsMode"]) {
   function Workspace({ outlineOpen }: { outlineOpen: boolean }) {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     return <QueryClientProvider client={client}>
       <CodeReviewWorkspace api={api} sidebarId="project-sidebar" sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
-        outlineId="code-outline" outlineOpen={outlineOpen} eslintAvailability={api.eslint ? "enabled" : "eslintUnavailable"} />
+        outlineId="code-outline" outlineOpen={outlineOpen} extensionsMode={extensionsMode}
+        eslintAvailability={api.eslint ? "enabled" : "eslintUnavailable"} />
     </QueryClientProvider>;
   }
   const result = render(<Workspace outlineOpen={false} />);
@@ -41,6 +42,32 @@ beforeAll(() => {
 afterAll(() => {
   Reflect.deleteProperty(Range.prototype, "getClientRects");
   Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+});
+
+it("exposes local syntax import in Code without activating the marketplace or debugger", async () => {
+  const install = vi.fn().mockResolvedValue(null);
+  const search = vi.fn();
+  const debug = vi.fn();
+  renderWorkspace({
+    current: () => Promise.resolve({ id: "store-project", key: "store-project", name: "Store project", git: "folder", baseline: null }),
+    choose: () => Promise.resolve(null),
+    changes: () => Promise.resolve({ files: [], limited: false }),
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+    file: vi.fn(),
+    extensions: {
+      list: () => Promise.resolve([]), install, change: vi.fn(), prepare: vi.fn(),
+      openVsx: { search, detail: vi.fn(), updates: vi.fn(), install: vi.fn() },
+    },
+    pythonDebug: { prepare: debug, start: vi.fn(), control: vi.fn(), stop: vi.fn() },
+  }, new QueryClient(), "syntax");
+
+  fireEvent.click(await screen.findByRole("button", { name: "Extensions" }));
+  expect(screen.queryByRole("searchbox", { name: "Search Open VSX" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Python Debugger" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Import Syntax…" }));
+  await waitFor(() => expect(install).toHaveBeenCalledExactlyOnceWith("store-project"));
+  expect(search).not.toHaveBeenCalled();
+  expect(debug).not.toHaveBeenCalled();
 });
 
 it("uses Code shortcuts for navigation and keeps untitled text out of project file reads", async () => {

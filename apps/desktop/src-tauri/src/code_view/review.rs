@@ -102,7 +102,7 @@ pub(super) struct Project {
     pub(super) eslint: super::eslint::EslintSession,
     #[cfg(all(
         target_os = "macos",
-        feature = "code-extensions-preview",
+        feature = "code-extensions",
         not(feature = "mac-app-store")
     ))]
     pub(super) debugger: super::python_debug::DebugSession,
@@ -282,7 +282,7 @@ impl ReviewSession {
             old.eslint.close();
             #[cfg(all(
                 target_os = "macos",
-                feature = "code-extensions-preview",
+                feature = "code-extensions",
                 not(feature = "mac-app-store")
             ))]
             old.debugger.close();
@@ -301,8 +301,7 @@ impl Drop for Project {
 impl Project {
     #[cfg(all(
         target_os = "macos",
-        feature = "code-extensions-preview",
-        not(feature = "mac-app-store")
+        any(feature = "code-extensions", feature = "mac-app-store")
     ))]
     pub(super) fn key(&self) -> &str {
         &self.info.key
@@ -358,7 +357,7 @@ impl Project {
             eslint: super::eslint::EslintSession::default(),
             #[cfg(all(
                 target_os = "macos",
-                feature = "code-extensions-preview",
+                feature = "code-extensions",
                 not(feature = "mac-app-store")
             ))]
             debugger: super::python_debug::DebugSession::default(),

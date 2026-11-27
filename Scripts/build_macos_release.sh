@@ -297,7 +297,9 @@ fi
 
 info "Building, signing, notarizing, and stapling Nodal Studio"
 # Keep the app bundle for signature, ticket, and Gatekeeper verification below.
-BUILD_ARGS=(--bundles "app,$BUNDLE_FORMAT" --config src-tauri/tauri.release.conf.json)
+BUILD_ARGS=(--bundles "app,$BUNDLE_FORMAT"
+  --config src-tauri/tauri.release.conf.json
+  --config src-tauri/tauri.macos-release.conf.json)
 if [[ "$BUILD_TARGET" != "host" ]]; then
   BUILD_ARGS+=(--target "$BUILD_TARGET")
 fi

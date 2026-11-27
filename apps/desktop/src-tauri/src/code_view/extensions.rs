@@ -1,4 +1,5 @@
-//! VSIX storage and capability checks for the macOS preview.
+//! VSIX storage and capability checks for the macOS Code workspace.
+#[cfg(not(feature = "mac-app-store"))]
 pub(crate) mod open_vsx;
 
 use std::{
@@ -8,6 +9,7 @@ use std::{
     sync::RwLock,
 };
 
+#[cfg(not(feature = "mac-app-store"))]
 use rustix::fs::{CWD, RenameFlags, renameat_with};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -29,18 +31,32 @@ const MAX_UNPACKED: u64 = 64 * 1024 * 1024;
 const MAX_ENTRY: u64 = 2 * 1024 * 1024;
 const MAX_INSTALLED: usize = 32;
 static STORAGE_LOCK: RwLock<()> = RwLock::new(());
+#[cfg(feature = "mac-app-store")]
+const STORAGE_DIRECTORY: &str = "code-syntax-extensions";
+#[cfg(not(feature = "mac-app-store"))]
+const STORAGE_DIRECTORY: &str = "code-extensions-preview";
+#[cfg(not(feature = "mac-app-store"))]
 const ESLINT_ID: &str = "dbaeumer.vscode-eslint";
+#[cfg(not(feature = "mac-app-store"))]
 const ESLINT_VERSION: &str = "3.0.34";
+#[cfg(not(feature = "mac-app-store"))]
 const ESLINT_ARCHIVE_SHA256: &str =
     "ca5334d46f6a39079e751ef4601bfc9f86bc3a46483e87291ec609239d161308";
+#[cfg(not(feature = "mac-app-store"))]
 const ESLINT_SERVER: &str = "server/out/eslintServer.js";
+#[cfg(not(feature = "mac-app-store"))]
 const ESLINT_SERVER_SHA256: &str =
     "baf39a57d3e04d63140a1d606b76042ccca304309846b2b0374c60d1caacbdb2";
+#[cfg(not(feature = "mac-app-store"))]
 const PYTHON_DEBUGGER_ID: &str = "ms-python.debugpy";
+#[cfg(not(feature = "mac-app-store"))]
 const PYTHON_DEBUGGER_VERSION: &str = "2026.6.0";
+#[cfg(not(feature = "mac-app-store"))]
 const PYTHON_DEBUGGER_SHA256: &str =
     "a5b8169877cbc836b997d7066e8dac164484c976df1c76cd6c0b0ef66a0163a2";
+#[cfg(not(feature = "mac-app-store"))]
 const PYTHON_DEBUGGER_ARCHIVE: &str = "debugpy.vsix";
+#[cfg(not(feature = "mac-app-store"))]
 const PYTHON_ADAPTER: &str = "extension/bundled/libs/debugpy/adapter";
 
 #[derive(Deserialize)]
@@ -102,8 +118,11 @@ struct Grammar {
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 enum Capability {
+    #[cfg(not(feature = "mac-app-store"))]
     Diagnostics,
+    #[cfg(not(feature = "mac-app-store"))]
     Eslint,
+    #[cfg(not(feature = "mac-app-store"))]
     PythonDebugger,
     Syntax,
     Unsupported,
@@ -145,14 +164,10 @@ pub(crate) struct Extension {
 #[derive(Serialize)]
 #[serde(tag = "capability", rename_all = "camelCase")]
 pub(crate) enum Prepared {
-    Diagnostics {
-        script: String,
-    },
+    #[cfg(not(feature = "mac-app-store"))]
+    Diagnostics { script: String },
     #[serde(rename_all = "camelCase")]
-    Syntax {
-        grammar: String,
-        scope_name: String,
-    },
+    Syntax { grammar: String, scope_name: String },
 }
 
 #[derive(Deserialize)]
@@ -258,6 +273,7 @@ fn usable_grammar<'a>(
 }
 
 fn capabilities(manifest: &Manifest, root: Option<&Path>) -> (Capability, Vec<Language>) {
+    #[cfg(not(feature = "mac-app-store"))]
     if manifest.version == PYTHON_DEBUGGER_VERSION
         && package_id(&manifest.publisher, &manifest.name).is_ok_and(|id| id == PYTHON_DEBUGGER_ID)
         && manifest
@@ -275,16 +291,29 @@ fn capabilities(manifest: &Manifest, root: Option<&Path>) -> (Capability, Vec<La
     if !manifest.extension_dependencies.is_empty() {
         return (Capability::Unsupported, Vec::new());
     }
+    #[cfg(feature = "mac-app-store")]
+    if !manifest.activation_events.is_empty()
+        || !(manifest.contributes.debuggers.is_null()
+            || manifest
+                .contributes
+                .debuggers
+                .as_array()
+                .is_some_and(Vec::is_empty))
+    {
+        return (Capability::Unsupported, Vec::new());
+    }
     let asset_exists = |file: &str, suffixes: &[&str]| match root {
         Some(path) => package_asset(path, file, suffixes).is_some(),
         None => asset_path(file, suffixes).is_some(),
     };
+    #[cfg(not(feature = "mac-app-store"))]
     if manifest.version == ESLINT_VERSION
         && package_id(&manifest.publisher, &manifest.name).is_ok_and(|id| id == ESLINT_ID)
         && asset_exists(ESLINT_SERVER, &["js"])
     {
         return (Capability::Eslint, Vec::new());
     }
+    #[cfg(not(feature = "mac-app-store"))]
     if manifest
         .browser
         .as_deref()
@@ -318,20 +347,28 @@ fn installation(path: &Path, project_key: &str) -> Result<Extension, String> {
     let root = path.join("extension");
     let manifest = manifest(&root)?;
     let id = package_id(&manifest.publisher, &manifest.name)?;
-    let (mut capability, languages) = capabilities(&manifest, Some(&root));
+    let (capability, languages) = capabilities(&manifest, Some(&root));
     let receipt: Receipt =
         serde_json::from_slice(&bounded_file(&path.join("installation.json"), 16 * 1024)?)
             .map_err(|_| STORAGE)?;
-    if capability == Capability::Eslint && receipt.sha256 != ESLINT_ARCHIVE_SHA256 {
-        capability = Capability::Unsupported;
-    }
-    if capability == Capability::PythonDebugger
-        && (receipt.sha256 != PYTHON_DEBUGGER_SHA256
-            || !matches!(receipt.source, PackageSource::OpenVsx)
-            || !path.join(PYTHON_DEBUGGER_ARCHIVE).is_file())
-    {
-        capability = Capability::Unsupported;
-    }
+    #[cfg(not(feature = "mac-app-store"))]
+    let capability = match capability {
+        Capability::Eslint if receipt.sha256 != ESLINT_ARCHIVE_SHA256 => Capability::Unsupported,
+        Capability::PythonDebugger
+            if receipt.sha256 != PYTHON_DEBUGGER_SHA256
+                || !matches!(receipt.source, PackageSource::OpenVsx)
+                || !path.join(PYTHON_DEBUGGER_ARCHIVE).is_file() =>
+        {
+            Capability::Unsupported
+        }
+        _ => capability,
+    };
+    #[cfg(feature = "mac-app-store")]
+    let capability = if matches!(receipt.source, PackageSource::Local) {
+        capability
+    } else {
+        Capability::Unsupported
+    };
     Ok(Extension {
         id,
         publisher: manifest.publisher,
@@ -347,11 +384,57 @@ fn installation(path: &Path, project_key: &str) -> Result<Extension, String> {
     })
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 fn unpack(source: &[u8], target: &Path) -> Result<(), String> {
-    unpack_prefix(source, target, Path::new("extension"))
+    unpack_prefix(source, target, Path::new("extension"), |_| true)
 }
 
-fn unpack_prefix(source: &[u8], target: &Path, prefix: &Path) -> Result<(), String> {
+#[cfg(feature = "mac-app-store")]
+fn unpack(source: &[u8], target: &Path) -> Result<(), String> {
+    let mut archive = ZipArchive::new(io::Cursor::new(source)).map_err(|_| INVALID)?;
+    if archive.len() > 2048 {
+        return Err(LIMIT.into());
+    }
+    let prefix = Path::new("extension");
+    let package = prefix.join("package.json");
+    let mut entry = archive
+        .by_name("extension/package.json")
+        .map_err(|_| INVALID)?;
+    if entry.is_symlink() || entry.is_dir() || entry.size() > MAX_ENTRY {
+        return Err(INVALID.into());
+    }
+    let mut bytes = Vec::new();
+    entry
+        .by_ref()
+        .take(MAX_ENTRY + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| INVALID)?;
+    if bytes.len() as u64 > MAX_ENTRY {
+        return Err(LIMIT.into());
+    }
+    let manifest = parse_manifest(&bytes)?;
+    let (capability, languages) = capabilities(&manifest, None);
+    if capability != Capability::Syntax {
+        return Err(UNSUPPORTED.into());
+    }
+    // Keep just the manifest and the grammar data consumed by the syntax tokenizer.
+    let mut assets = std::collections::HashSet::from([package]);
+    for language in languages {
+        assets.extend(
+            grammar_for_language(&manifest, &language.id)
+                .filter_map(|grammar| asset_path(&grammar.path, &["json"]))
+                .map(|path| prefix.join(path)),
+        );
+    }
+    unpack_prefix(source, target, prefix, |path| assets.contains(path))
+}
+
+fn unpack_prefix(
+    source: &[u8],
+    target: &Path,
+    prefix: &Path,
+    include: impl Fn(&Path) -> bool,
+) -> Result<(), String> {
     let mut archive = ZipArchive::new(io::Cursor::new(source)).map_err(|_| INVALID)?;
     if archive.len() > 2048 {
         return Err(LIMIT.into());
@@ -368,7 +451,7 @@ fn unpack_prefix(source: &[u8], target: &Path, prefix: &Path) -> Result<(), Stri
         {
             return Err(INVALID.into());
         }
-        if !name.starts_with(prefix) {
+        if !name.starts_with(prefix) || !include(&name) {
             continue;
         }
         let path = target.join(name);
@@ -392,6 +475,7 @@ fn unpack_prefix(source: &[u8], target: &Path, prefix: &Path) -> Result<(), Stri
     Ok(())
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 pub(super) fn python_adapter(app: &AppHandle, key: &str, target: &Path) -> Result<PathBuf, String> {
     let archive = {
         let _lock = STORAGE_LOCK.read().map_err(|_| STORAGE)?;
@@ -409,6 +493,7 @@ pub(super) fn python_adapter(app: &AppHandle, key: &str, target: &Path) -> Resul
         &archive,
         target,
         Path::new("extension/bundled/libs/debugpy"),
+        |_| true,
     )?;
     Ok(target.join(PYTHON_ADAPTER))
 }
@@ -418,7 +503,7 @@ fn storage(app: &AppHandle) -> Result<PathBuf, String> {
         .path()
         .app_data_dir()
         .map_err(|_| STORAGE)?
-        .join("code-extensions-preview");
+        .join(STORAGE_DIRECTORY);
     fs::create_dir_all(&path).map_err(|_| STORAGE)?;
     Ok(path)
 }
@@ -427,7 +512,7 @@ pub(crate) async fn remove_all_storage(app: &AppHandle) {
     let Ok(path) = app
         .path()
         .app_data_dir()
-        .map(|dir| dir.join("code-extensions-preview"))
+        .map(|dir| dir.join(STORAGE_DIRECTORY))
     else {
         return;
     };
@@ -440,12 +525,14 @@ pub(crate) async fn remove_all_storage(app: &AppHandle) {
     .await;
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 pub(super) struct EslintServer {
     pub(super) entry: PathBuf,
     pub(super) script: Vec<u8>,
     pub(super) version: String,
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 pub(super) fn eslint_server(
     app: &AppHandle,
     key: &str,
@@ -519,6 +606,7 @@ fn stage_package(
 ) -> Result<(tempfile::TempDir, Extension), String> {
     let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
     unpack(source, temp.path())?;
+    #[cfg(not(feature = "mac-app-store"))]
     if matches!(receipt.source, PackageSource::OpenVsx) && receipt.sha256 == PYTHON_DEBUGGER_SHA256
     {
         fs::write(temp.path().join(PYTHON_DEBUGGER_ARCHIVE), source).map_err(|_| STORAGE)?;
@@ -560,6 +648,7 @@ fn install_staged(
     Ok(extension)
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 fn newer(version: &str, previous: &str) -> bool {
     let (Ok(version), Ok(previous)) = (
         semver::Version::parse(version),
@@ -570,11 +659,13 @@ fn newer(version: &str, previous: &str) -> bool {
     version.cmp_precedence(&previous).is_gt()
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 fn compatible_update(current: Capability, incoming: Capability) -> bool {
     incoming != Capability::Unsupported
         && (current == Capability::Unsupported || current == incoming)
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 fn replace_staged(
     stage: &Path,
     destination: &Path,
@@ -672,7 +763,9 @@ pub(crate) async fn install_code_extension(
     };
     tokio::task::spawn_blocking(move || {
         project.directory()?;
-        install(&storage(&app)?, Path::new(&source), project.key()).map(Some)
+        let source = Path::new(&source);
+        let _access = crate::file_access::access(source)?;
+        install(&storage(&app)?, source, project.key()).map(Some)
     })
     .await
     .map_err(|_| STORAGE)?
@@ -689,15 +782,18 @@ pub(crate) async fn change_code_extension(
     if !has_valid_id(&id) {
         return Err(INVALID.into());
     }
+    #[cfg(not(feature = "mac-app-store"))]
     let project = state.project(project_id)?;
     with_storage_write(app, &state, project_id, move |root, key| {
         let path = root.join(&id);
         if matches!(action, ExtensionAction::Uninstall) {
+            #[cfg(not(feature = "mac-app-store"))]
             let parsed = installation(&path, key).ok();
             if path.exists() {
                 let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
                 fs::rename(&path, temp.path().join("removed")).map_err(|_| STORAGE)?;
             }
+            #[cfg(not(feature = "mac-app-store"))]
             if id == ESLINT_ID
                 || parsed
                     .as_ref()
@@ -705,6 +801,7 @@ pub(crate) async fn change_code_extension(
             {
                 project.eslint.revoke_extension();
             }
+            #[cfg(not(feature = "mac-app-store"))]
             if id == PYTHON_DEBUGGER_ID {
                 project.debugger.stop(None);
             }
@@ -726,9 +823,11 @@ pub(crate) async fn change_code_extension(
                 {
                     return Err(STORAGE.into());
                 }
+                #[cfg(not(feature = "mac-app-store"))]
                 if item.capability == Capability::Eslint {
                     project.eslint.revoke_extension();
                 }
+                #[cfg(not(feature = "mac-app-store"))]
                 if item.capability == Capability::PythonDebugger {
                     project.debugger.stop(None);
                 }
@@ -767,6 +866,7 @@ pub(crate) async fn prepare_code_extension(
             String::from_utf8(bounded_file(path, MAX_ENTRY)?).map_err(|_| INVALID.to_owned())
         };
         match item.capability {
+            #[cfg(not(feature = "mac-app-store"))]
             Capability::Diagnostics if language == "markdown" => {
                 let entry = manifest
                     .browser
@@ -795,14 +895,14 @@ pub(crate) async fn prepare_code_extension(
 mod tests {
     use super::*;
 
-    fn syntax_archive(version: &str) -> Vec<u8> {
+    fn syntax_archive(version: &str, browser: Option<&str>) -> Vec<u8> {
         let mut archive = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
         let options = zip::write::SimpleFileOptions::default();
         archive
             .start_file("extension/package.json", options)
             .unwrap();
         serde_json::to_writer(&mut archive, &serde_json::json!({
-            "name": "sample", "publisher": "Example", "version": version,
+            "name": "sample", "publisher": "Example", "version": version, "browser": browser,
             "engines": { "vscode": "*" },
             "contributes": {
                 "languages": [{ "id": "sample", "extensions": [".sample"] }],
@@ -815,13 +915,16 @@ mod tests {
         archive
             .write_all(br#"{"scopeName":"source.sample","patterns":[]}"#)
             .unwrap();
+        archive.start_file("extension/unused.js", options).unwrap();
+        archive.write_all(b"// Not a grammar asset.").unwrap();
         archive.finish().unwrap().into_inner()
     }
 
+    #[cfg(not(feature = "mac-app-store"))]
     fn syntax_package(root: &Path, version: &str, sha256: &str) -> (tempfile::TempDir, Extension) {
         stage_package(
             root,
-            &syntax_archive(version),
+            &syntax_archive(version, None),
             &Receipt {
                 file_name: "sample.vsix".into(),
                 sha256: sha256.into(),
@@ -836,7 +939,7 @@ mod tests {
     fn installing_a_vsix_enables_it_for_the_installing_project_only() {
         let source = tempfile::tempdir().unwrap();
         let archive = source.path().join("sample.vsix");
-        fs::write(&archive, syntax_archive("1.0.0")).unwrap();
+        fs::write(&archive, syntax_archive("1.0.0", None)).unwrap();
         let root = tempfile::tempdir().unwrap();
 
         let installed = install(root.path(), &archive, "current-project").unwrap();
@@ -850,7 +953,31 @@ mod tests {
         assert!(!installation(&destination, "other-project").unwrap().enabled);
     }
 
+    #[cfg(feature = "mac-app-store")]
     #[test]
+    fn app_store_import_keeps_declared_grammar_data_and_rejects_executable_entry_points() {
+        let source = tempfile::tempdir().unwrap();
+        let archive = source.path().join("sample.vsix");
+        let root = tempfile::tempdir().unwrap();
+
+        fs::write(&archive, syntax_archive("1.0.0", Some("unused.js"))).unwrap();
+        assert_eq!(
+            install(root.path(), &archive, "project").err().as_deref(),
+            Some(UNSUPPORTED)
+        );
+        assert!(installed_paths(root.path()).unwrap().is_empty());
+
+        fs::write(&archive, syntax_archive("1.0.0", None)).unwrap();
+        let installed = install(root.path(), &archive, "project").unwrap();
+        assert_eq!(installed.capability, Capability::Syntax);
+        let contents = root.path().join(&installed.id).join("extension");
+        assert!(contents.join("package.json").is_file());
+        assert!(contents.join("syntax.json").is_file());
+        assert!(!contents.join("unused.js").exists());
+    }
+
+    #[test]
+    #[cfg(not(feature = "mac-app-store"))]
     fn update_rechecks_the_installed_package_and_preserves_project_enablement() {
         let root = tempfile::tempdir().unwrap();
         let destination = root.path().join("example.sample");
@@ -898,6 +1025,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "mac-app-store"))]
     fn python_debugger_capability_requires_pinned_version_source_and_digest() {
         let mut archive = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
         let options = zip::write::SimpleFileOptions::default();

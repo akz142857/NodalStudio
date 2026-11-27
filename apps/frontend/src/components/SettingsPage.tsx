@@ -82,8 +82,7 @@ const codeShortcutRows = [
   ["settings.codeShortcut.wrap", CODE_SHORTCUTS["word-wrap"]],
   ["codeReview.definition", "F12"],
 ] as const;
-const extensionShortcutRows = [
-  ["codeReview.extensions.title", CODE_SHORTCUTS.extensions],
+const debugShortcutRows = [
   ["codeReview.debug.title", CODE_SHORTCUTS["debug-panel"]],
   ["settings.codeShortcut.startDebug", CODE_SHORTCUTS["debug-start"]],
   ["settings.codeShortcut.breakpoint", CODE_SHORTCUTS["debug-breakpoint"]],
@@ -720,7 +719,9 @@ function SettingsContent({
                   ...codeShortcutRows,
                   ["codeReview.definitionBack", usesAppleKeyboard() ? CODE_SHORTCUTS["definition-back"] : "Alt+ArrowLeft"] as const,
                   ...(usesAppleKeyboard() ? [["settings.codeShortcut.closeWindow", "Mod+Shift+W"] as const] : []),
-                  ...(runtime.codeExtensionsPreview ? extensionShortcutRows : []),
+                  ...(runtime.codeExtensions === "full" || runtime.codeExtensions === "syntax"
+                    ? [["codeReview.extensions.title", CODE_SHORTCUTS.extensions] as const] : []),
+                  ...(runtime.codeExtensions === "full" ? debugShortcutRows : []),
                 ].filter(([label, ...keys]) => `${t(label)} ${keys.join(" ")}`.toLowerCase().includes(shortcutQuery.trim().toLowerCase()))
                   .map(([label, ...keys]) => <div className="setting-row setting-static settings-workspace-shortcut" key={label}>
                     <span>{t(label)}</span><span>{keys.map((key) => <kbd key={key}>{formatCommandShortcut(key)}</kbd>)}</span>

@@ -37,6 +37,17 @@ elif name == "git" and args == ["status", "--porcelain"]:
     pass
 elif name == "pnpm":
     assert args[:4] == ["--filter", "@nodalstudio/desktop", "tauri", "build"]
+    configs = []
+    for index, arg in enumerate(args):
+        if arg == "--config":
+            path = pathlib.Path(args[index + 1])
+            if not path.is_absolute():
+                path = pathlib.Path.cwd() / "apps/desktop" / path
+            configs.append(json.loads(path.read_text()))
+    assert configs[0]["identifier"] == "com.claycosmos.nodalstudio"
+    assert "code-extensions" not in configs[0].get("build", {}).get("features", [])
+    assert configs[1]["build"]["features"] == ["code-extensions"]
+    assert "'wasm-unsafe-eval'" in configs[1]["app"]["security"]["csp"]
     bundles = args[args.index("--bundles") + 1].split(",")
     bundle = pathlib.Path.cwd() / "target/release/bundle"
     # Tauri removes the intermediate app when only the DMG is requested.
@@ -48,15 +59,6 @@ elif name == "pnpm":
     if os.environ.get("RELEASE_TEST_MISSING_DMG") != "1":
         (bundle / "dmg/Nodal Studio_0.1.0_test.dmg").write_bytes(b"fixture disk image")
     if os.environ.get("RELEASE_TEST_UPDATER") == "1":
-        assert "--config" in args
-        configs = []
-        for index, arg in enumerate(args):
-            if arg == "--config":
-                path = pathlib.Path(args[index + 1])
-                if not path.is_absolute():
-                    path = pathlib.Path.cwd() / "apps/desktop" / path
-                configs.append(json.loads(path.read_text()))
-        assert configs[0]["identifier"] == "com.claycosmos.nodalstudio"
         config = configs[-1]
         assert config["bundle"]["createUpdaterArtifacts"] is True
         assert config["plugins"]["updater"]["endpoints"][0].endswith("/latest/download/latest.json")
@@ -105,9 +107,10 @@ class MacOSReleaseCheckTests(unittest.TestCase):
             script = scripts / SCRIPT.name
             shutil.copyfile(SCRIPT, script)
             shutil.copyfile(SCRIPT.parent / "github_update.py", scripts / "github_update.py")
-            release_config = root / "apps/desktop/src-tauri/tauri.release.conf.json"
-            release_config.parent.mkdir(parents=True)
-            shutil.copyfile(SCRIPT.parent.parent / "apps/desktop/src-tauri/tauri.release.conf.json", release_config)
+            config_dir = Path("apps/desktop/src-tauri")
+            (root / config_dir).mkdir(parents=True)
+            for name in ("tauri.release.conf.json", "tauri.macos-release.conf.json"):
+                shutil.copyfile(SCRIPT.parent.parent / config_dir / name, root / config_dir / name)
             log = root / "commands.log"
             stub = commands / "stub"
             stub.write_text(STUB)

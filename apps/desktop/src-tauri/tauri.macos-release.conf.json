@@ -1,0 +1,10 @@
+{
+  "build": {
+    "features": ["code-extensions"]
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
+    }
+  }
+}

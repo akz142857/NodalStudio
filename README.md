@@ -121,6 +121,10 @@ with a Developer ID Application certificate, submits it to Apple for
 notarization, staples the ticket, creates a DMG, verifies it with Gatekeeper,
 and writes a SHA-256 checksum.
 
+The GitHub macOS package enables the Code extension host, including Open VSX
+search, install and updates, plus the supported Python Debugger integration.
+See the [release channel rules](docs/UPDATES.txt) for the build and acceptance steps.
+
 Create the private local configuration:
 
 ```bash
@@ -167,6 +171,10 @@ StoreKit AppTransaction and exposes **Settings → Updates & About → Version &
 purchase** for explicit purchase recovery. It does not implement an In-App
 Purchase product or a NodalStudio account/license server. A free App Store app
 would need a separate IAP entitlement implementation before selling Pro unlocks.
+
+In Code, the App Store package supports importing declarative TextMate syntax
+from a local VSIX and managing it per project. The native build excludes Open VSX,
+extension code execution and Python debugging.
 
 The MAS channel does not register the GitHub updater plugin; update commands are
 also rejected at the native boundary. Community builds retain their existing
