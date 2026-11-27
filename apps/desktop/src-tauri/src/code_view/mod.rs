@@ -2,6 +2,12 @@ mod analysis;
 mod definition;
 #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
 pub(crate) mod eslint;
+#[cfg(all(
+    target_os = "macos",
+    feature = "code-extensions-preview",
+    not(feature = "mac-app-store")
+))]
+pub(crate) mod extensions;
 #[allow(
     dead_code,
     reason = "Also contains file operations for the retired SQL prototype"

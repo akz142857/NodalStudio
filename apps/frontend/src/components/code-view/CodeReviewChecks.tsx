@@ -1,17 +1,18 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { Button } from "../../design-system/Button";
 import { useI18n } from "../../i18n";
-import type { CodeReviewChanges } from "../../platform/code-review";
+import type { CodeExtension, CodeReviewChanges } from "../../platform/code-review";
 import { ActionIcon } from "../ActionIcon";
 import { Segmented } from "../Segmented";
 import { CodeFileIcon } from "./CodeReviewReader";
 import { isEslintSource, isMarkdown, type CheckFinding } from "./code-review-checks";
 import type { CheckedFile, CodeChecks, DisplayedCheckTarget } from "./use-code-review-checks";
 
-export function CodeReviewChecks({ checks, current, changes, batchUnavailable, locate, search, severity, collapsed, toggleFile, selected, scrollRef }: {
+export function CodeReviewChecks({ checks, current, changes, extensions, batchUnavailable, locate, search, severity, collapsed, toggleFile, selected, scrollRef }: {
   checks: CodeChecks;
   current?: DisplayedCheckTarget;
   changes?: CodeReviewChanges;
+  extensions: CodeExtension[];
   batchUnavailable?: "folder" | "git" | "loading" | "clean";
   locate: (file: CheckedFile, finding: CheckFinding) => void;
   search: string;
@@ -61,6 +62,10 @@ export function CodeReviewChecks({ checks, current, changes, batchUnavailable, l
       <Button size="small" variant="secondary" disabled={!changes || Boolean(batchUnavailable)}
         title={batchUnavailable ? t(`codeReview.checks.batch.${batchUnavailable}`) : undefined}
         onClick={() => { if (changes) checks.changedFiles(changes); }}>{t("codeReview.checks.changedFiles")}</Button>
+      {current && !current.problem && isMarkdown(current.target.path) && extensions
+        .filter((extension) => extension.enabled && extension.capability === "diagnostics").map((extension) =>
+          <Button key={extension.id} size="small" variant="secondary" disabled={running}
+            onClick={() => checks.currentFile(current, extension)}>{t("codeReview.extensions.run", { name: extension.name })}</Button>)}
       {running && <Button size="small" variant="ghost" onClick={checks.cancel}>{t("codeReview.checks.cancel")}</Button>}
       {run && hasDiff && total > 0 && <Segmented className="code-review-segments" label={t("codeReview.checks.filter")}
         options={[{ value: "changed", label: t("codeReview.checks.changed") }, { value: "all", label: t("codeReview.checks.all") }]}
@@ -99,6 +104,8 @@ export function CodeReviewChecks({ checks, current, changes, batchUnavailable, l
               : failed ? t("codeReview.checks.failed") : t("codeReview.checks.noCandidates")}</p>
     {run?.scope === "changes" && <p>{t("codeReview.checks.coverage", { checked, skipped, failed, remaining })}</p>}
     {run?.version && <p>markdownlint {run.version} · {t(run.configDigest ? "codeReview.checks.projectConfig" : "codeReview.checks.defaultConfig")}</p>}
+    {run?.extension && <p>{run.extension.name} {run.extension.version} · VSIX</p>}
+    {run?.extensionError && <p role="alert">{run.extensionError}</p>}
     {eslintVersions.length > 0 && <p>ESLint {eslintVersions.join(", ")} · {t("codeReview.checks.eslintProjectRules")}</p>}
     {run?.incompleteChanges && <p>{t("codeReview.checks.limitedChanges")}</p>}
     {run?.limited && <p>{t("codeReview.checks.batchLimit")}</p>}

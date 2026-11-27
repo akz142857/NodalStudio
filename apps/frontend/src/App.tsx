@@ -1625,6 +1625,7 @@ export function App() {
                 outlineId={codeOutlineId} outlineOpen={codeInspectorAvailable && codeOutlineExpanded}
                 eslintAvailability={!runtime.data?.localEslint ? "eslintUnavailable"
                   : settings.app.privacy.offlineMode ? "eslintOffline" : "enabled"}
+                allowExtensions={runtime.data?.codeExtensionsPreview === true}
                 allowDefinitions={runtime.data?.distribution !== "macAppStore"} />
             </Suspense> : null
           ) : mode === "ontology" ? (

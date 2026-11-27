@@ -5,10 +5,10 @@ import { foldGutter, syntaxHighlighting } from "@codemirror/language";
 import { getChunks, goToNextChunk, goToPreviousChunk, uncollapseUnchanged, unifiedMergeView } from "@codemirror/merge";
 import { setDiagnostics, type Diagnostic } from "@codemirror/lint";
 import { gotoLine, openSearchPanel, search, searchKeymap } from "@codemirror/search";
-import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
+import { Decoration, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { sqlHighlightStyle } from "../../design-system/sql-highlight";
 import { useI18n } from "../../i18n";
-import type { CodeDefinitionPosition, CodeDocumentHighlightRange } from "../../platform/code-review";
+import type { CodeDefinitionPosition, CodeDocumentHighlightRange, CodeExtension, CodeExtensionPlatform } from "../../platform/code-review";
 import { ActionIcon } from "../ActionIcon";
 import { IconButton } from "../IconButton";
 import { codeDefinitionLinks } from "./code-definition-links";
@@ -18,6 +18,11 @@ import { codeFileType, fileExtension, supportsCodeNavigation } from "./code-revi
 import { createCodeFindPanel } from "./code-review-find";
 import { codeReferenceHighlights } from "./code-review-references";
 import { isCodeContextMenuKey, useCodeContextMenu } from "./use-code-context-menu";
+import type { ExtensionActivity } from "./CodeReviewExtensions";
+import { useExtensionSyntax } from "./use-extension-syntax";
+
+const contributedSyntax = new Compartment();
+const noExtensions: CodeExtension[] = [];
 
 const languages: Record<string, () => Promise<Extension>> = {
   go: () => import("@codemirror/lang-go").then(({ go }) => go()),
@@ -98,7 +103,7 @@ function expandCheckLine(view: EditorView, lineNumber: number) {
 }
 
 export function CodeReviewReader({ path, text, original, onCopy, mode, heading, fallbackCopy, footer, dock, comparison, readPosition, onPosition,
-  onDefinition, onReferences, onBack, arrival, onArrival, outline, checkResult }: {
+  onDefinition, onReferences, onBack, arrival, onArrival, outline, checkResult, projectId = "", extensionsApi, extensions = noExtensions, onSyntaxActivity }: {
   path: string;
   text: string;
   original?: string;
@@ -118,6 +123,10 @@ export function CodeReviewReader({ path, text, original, onCopy, mode, heading, 
   onArrival: (found?: boolean) => void;
   outline?: ReactNode;
   checkResult?: CheckedFile;
+  projectId?: string;
+  extensionsApi?: CodeExtensionPlatform;
+  extensions?: CodeExtension[];
+  onSyntaxActivity?: (path: string, activity: ExtensionActivity) => void;
 }) {
   const { t, locale } = useI18n();
   const host = useRef<HTMLDivElement>(null);
@@ -125,6 +134,8 @@ export function CodeReviewReader({ path, text, original, onCopy, mode, heading, 
   const location = useRef({ readPosition, onPosition, onDefinition, onReferences, onBack });
   const contextMenu = useCodeContextMenu();
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
+  const syntax = useExtensionSyntax(extensionsApi, extensions, projectId, path, text, onSyntaxActivity);
+  const tokens = syntax?.tokens;
   const extension = fileExtension(path);
   const highlightsAvailable = Boolean(onReferences);
   const canNavigate = Boolean(onDefinition && supportsCodeNavigation(path));
@@ -197,6 +208,7 @@ export function CodeReviewReader({ path, text, original, onCopy, mode, heading, 
           ...(canNavigate ? [codeDefinitionLinks(definitionAt)] : []),
           sourceTheme,
           language.of([]),
+          contributedSyntax.of([]),
           syntaxHighlighting(sqlHighlightStyle),
           ...(original === undefined ? [] : unifiedMergeView({
             original: normalizeReviewText(original),
@@ -226,6 +238,13 @@ export function CodeReviewReader({ path, text, original, onCopy, mode, heading, 
       view.destroy();
     };
   }, [canNavigate, definitionAt, extension, highlightsAvailable, locale, original, path, text]);
+
+  useLayoutEffect(() => {
+    const view = editor.current;
+    if (!view) return;
+    const ranges = (tokens ?? []).map(({ from, to, style }) => Decoration.mark({ class: "cm-vsix-" + style }).range(from, to));
+    view.dispatch({ effects: contributedSyntax.reconfigure(ranges.length ? EditorView.decorations.of(Decoration.set(ranges)) : []) });
+  }, [canNavigate, definitionAt, extension, highlightsAvailable, locale, original, path, text, tokens]);
 
   useLayoutEffect(() => {
     const view = editor.current;
@@ -333,7 +352,7 @@ export function CodeReviewReader({ path, text, original, onCopy, mode, heading, 
       <span className="code-review-status-context">{comparison}</span>
       <button type="button" className="code-review-position" title={t("codeReview.goToLine")} aria-label={t("codeReview.goToLine")}
         onClick={() => { if (editor.current) gotoLine(editor.current); }}>{t("codeReview.caret", cursor)}</button>
-      <span>{codeFileType(path) ?? t("codeReview.plainText")}</span>
+      <span title={syntax?.extension}>{syntax?.name ?? codeFileType(path) ?? t("codeReview.plainText")}</span>
     </div>
   </>;
 }

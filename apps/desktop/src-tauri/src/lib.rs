@@ -169,6 +169,7 @@ async fn acquire_cloud_operation(
 #[serde(rename_all = "camelCase")]
 struct RuntimeInfo {
     local_eslint: bool,
+    code_extensions_preview: bool,
     distribution: &'static str,
     kind: &'static str,
     label: &'static str,
@@ -803,6 +804,11 @@ type CaptureSnapshotResult = snapshot_store::StoredSnapshotCapture;
 fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
     RuntimeInfo {
         local_eslint: cfg!(all(target_os = "macos", not(feature = "mac-app-store"))),
+        code_extensions_preview: cfg!(all(
+            target_os = "macos",
+            feature = "code-extensions-preview",
+            not(feature = "mac-app-store")
+        )),
         kind: "desktop",
         label: "Tauri desktop runtime",
         distribution: if purchase::IS_MAS {
@@ -2413,6 +2419,30 @@ pub fn run() {
                 code_view::review::list_code_review_paths,
                 code_view::search::search_code_review_content,
                 code_view::review::read_code_review_file,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::extensions::list_code_extensions,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::extensions::install_code_extension,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::extensions::change_code_extension,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::extensions::prepare_code_extension,
                 #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
                 code_view::eslint::inspect_code_eslint,
                 #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]

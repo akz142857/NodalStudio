@@ -4,7 +4,7 @@
 
 产品目标是在 Nodal Studio Code 中提供类似 VS Code Extensions 的「扩展」入口。用户可以自行查找和安装兼容扩展、查看已安装及运行状态、启用、禁用、更新和卸载。扩展由兼容宿主运行，能在 Code 工作区提供诊断、语言服务等能力。 [VS Code 扩展管理](https://code.visualstudio.com/docs/configure/extensions/extension-marketplace)
 
-「检查」是 Code 的底部结果面板。P0 的内置 Markdown 检查和 P1 的项目 ESLint 已在开发版接入。它们提供审阅和结果定位能力，可供未来扩展的诊断复用。「扩展」入口与兼容宿主待实现。 [Code View 开发计划](CODE_VIEW_DEVELOPMENT_PLAN.md) · [文件树设计](CODE_FILES_TREE_DESIGN.md)
+「检查」是 Code 的底部结果面板。P0 的内置 Markdown 检查和 P1 的项目 ESLint 已在开发版接入。macOS 原型增加「扩展」入口与本地 VSIX 安装，复用底部诊断和结果定位。原型覆盖范围与验收记录见第 7.3 节。 [Code View 开发计划](CODE_VIEW_DEVELOPMENT_PLAN.md) · [文件树设计](CODE_FILES_TREE_DESIGN.md)
 
 ## 1. 产品范围与交付顺序
 
@@ -120,3 +120,20 @@ P0 先完成单文件 Diff 定位，再进入批量开发。P0 的功能验收�
 为每个候选包记录来源、发布者、版本、哈希、平台及许可。发行包可来自符合许可的本地 `.vsix` 或 Open VSX。微软及其关联方发布在 Visual Studio Marketplace 上的扩展有特定使用限制。 [微软 Marketplace FAQ](https://code.visualstudio.com/docs/supporting/faq#_can-i-use-a-microsoft-extension-outside-of-vs-code)
 
 发行前独立验证兼容宿主的进程生命周期、版本固定及更新失败恢复。验证文件、进程和网络的访问边界。项目文件访问限制在获授权的工作区内，Nodal 的数据库连接和凭据留在应用自身的进程中。
+
+### 7.3 macOS 本地 VSIX 原型
+
+Code 左侧项目标题旁的「扩展」入口使用系统选择器安装本地 VSIX。安装包保存在预览版的应用数据目录，安装后默认禁用，启用状态按项目保存。卸载会移除安装包及其项目授权。
+
+Theia 的 VS Code 插件宿主依赖其前后端服务。本次原型在 WKWebView 的 Worker 中使用 QuickJS WebAssembly 运行浏览器扩展的诊断入口。该解释器接收当前 Markdown 文档快照及静态规则配置，虚拟文件系统仅提供该快照。声明式语言扩展通过 TextMate 语法给 CodeMirror 着色。通用 VS Code API、Node 扩展、语言服务器、扩展市场和更新流程尚待实现。 [Theia 插件宿主架构](https://github.com/eclipse-theia/theia/blob/master/doc/Plugin-API.md)
+
+```sh
+pnpm --filter @nodalstudio/desktop tauri build --debug --features code-extensions-preview --bundles app --config src-tauri/tauri.code-extensions-preview.conf.json
+```
+
+使用真实 NodalStudio 项目完成两份原版 Open VSX 包的安装、启用、运行、禁用和卸载。两份包均为通用平台与 MIT 许可。重启并重新打开项目后，两份包保持启用。卸载后再次重启，扩展列表保持为空。
+
+| 验收包 | SHA-256 | 在 macOS 预览版中观察到的行为 |
+| --- | --- | --- |
+| [DavidAnson.vscode-markdownlint 0.62.1](https://open-vsx.org/api/DavidAnson/vscode-markdownlint/0.62.1/file/DavidAnson.vscode-markdownlint-0.62.1.vsix) | `b6baf90037c903aa21b9c525972910561a903b82e12fe8d67220740ec15b1aa0` | 从底部「检查」运行该 VSIX 后，点击 `MD012` 定位到 `README.md` 第 101 行第 1 列。禁用后扩展结果和计数清空。 |
+| [vscode.docker 1.95.3](https://open-vsx.org/api/vscode/docker/1.95.3/file/vscode.docker-1.95.3.vsix) | `5de2f31e7e8e9c64b17d0b2eb915a5c14653904376a06d07f2229890fe296078` | `apps/frontend/Dockerfile` 使用该扩展的 Docker 语言模式并高亮 `FROM`、`AS` 等关键字。禁用或卸载后立即恢复纯文本。 |

@@ -78,6 +78,12 @@ export class TauriPlatform implements NodalStudioPlatform {
     paths: (projectId) => invoke("list_code_review_paths", { projectId }),
     searchContent: (projectId, query) => invoke("search_code_review_content", { projectId, query }),
     file: (projectId, path, compareFile) => invoke("read_code_review_file", { projectId, path, compareFile }),
+    extensions: {
+      list: (projectId) => invoke("list_code_extensions", { projectId }),
+      install: (projectId) => invoke("install_code_extension", { projectId }),
+      change: (projectId, id, action) => invoke("change_code_extension", { projectId, id, action }),
+      prepare: (projectId, id, language) => invoke("prepare_code_extension", { projectId, id, language }),
+    },
     eslint: {
       inspect: (projectId, path) => invoke("inspect_code_eslint", { projectId, path }),
       approve: (projectId, path, toolId) => invoke("approve_code_eslint", { projectId, path, toolId }),

@@ -10,11 +10,12 @@ import { ModalSurface } from "../../design-system/ModalSurface";
 import { useI18n } from "../../i18n";
 import type {
   CodeDefinitionPosition, CodeDefinitionRequest, CodeDefinitionTarget, CodeReviewChange, CodeReviewCompactFolders, CodeReviewDirectory, CodeReviewDocument,
-  CodeReviewPlatform, CodeReviewProject, CodeReviewVersion, CodeSearchMatch,
+  CodeExtension, CodeExtensionPlatform, CodeReviewPlatform, CodeReviewProject, CodeReviewVersion, CodeSearchMatch,
 } from "../../platform/code-review";
 import { CodeFileIcon, CodeReviewReader, type DefinitionArrival, type DefinitionGesture, type ReadingPosition } from "./CodeReviewReader";
 import { CodeReviewOutline } from "./CodeReviewOutline";
 import { CodeReviewChecks } from "./CodeReviewChecks";
+import { CodeReviewExtensions, type ExtensionActivity } from "./CodeReviewExtensions";
 import { checkTargetProblem, isEslintSource, normalizeReviewText, type CheckFinding, type EslintAvailability, type ReadingMode } from "./code-review-checks";
 import { useCodeReviewChecks, type CheckedFile, type DisplayedCheckTarget } from "./use-code-review-checks";
 import { CodeQuickOpen } from "./CodeQuickOpen";
@@ -35,7 +36,7 @@ const noChanges: readonly CodeReviewChange[] = [];
 type CodeSidebarProps = { sidebarId: string; sidebarOpen: boolean; setSidebarOpen: (open: boolean) => void };
 type CodeOutlineProps = { outlineId: string; outlineOpen: boolean };
 type CodeSearchProps = { searchAnchor?: RefObject<HTMLButtonElement | null> };
-type NavigatorView = "changes" | "files" | "search";
+type NavigatorView = "changes" | "files" | "search" | "extensions";
 type NoteStatus = ReviewNote["status"] | "recheck" | "pending";
 type ReviewDock = "checks" | "note";
 type RenderDock = (current?: DisplayedCheckTarget, note?: React.ReactNode) => React.ReactNode;
@@ -44,9 +45,10 @@ function fileReviewStatus(history: ReviewNote[], evidence: string): NoteStatus {
   return history.find((entry) => entry.evidence === evidence)?.status ?? (history.length ? "recheck" : "pending");
 }
 
-export function CodeReviewWorkspace({ api, allowDefinitions = true, eslintAvailability = "eslintUnavailable", outlineId, outlineOpen, searchAnchor, ...sidebarProps }: {
+export function CodeReviewWorkspace({ api, allowDefinitions = true, allowExtensions = false, eslintAvailability = "eslintUnavailable", outlineId, outlineOpen, searchAnchor, ...sidebarProps }: {
   api: CodeReviewPlatform;
   allowDefinitions?: boolean;
+  allowExtensions?: boolean;
   eslintAvailability?: EslintAvailability;
 } & CodeSidebarProps & CodeOutlineProps & CodeSearchProps) {
   const { t } = useI18n();
@@ -85,6 +87,7 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, eslintAvaila
     {project.isPending ? <p className="code-review-status" role="status">{t("navigation.loadingWorkspace")}</p>
       : project.data ? <ProjectReview key={project.data.id} api={api} project={project.data} choose={choose}
         quickOpenInitially={project.data.id === searchAfterPick}
+        extensionsApi={allowExtensions ? api.extensions : undefined}
         allowDefinitions={allowDefinitions} eslintAvailability={eslintAvailability} outlineOpen={outlineOpen}
         renderOutline={renderOutline} searchAnchor={searchAnchor} {...sidebarProps} />
       : <div className="code-review-reader-body">
@@ -102,13 +105,14 @@ type DefinitionDialog = { point: ReturnPoint } & (
 );
 
 function ProjectReview({ api, project, choose, quickOpenInitially, allowDefinitions, eslintAvailability, sidebarId, sidebarOpen, setSidebarOpen,
-  outlineOpen, renderOutline, searchAnchor }: ProjectProps & CodeSidebarProps & CodeSearchProps & {
+  outlineOpen, renderOutline, searchAnchor, extensionsApi }: ProjectProps & CodeSidebarProps & CodeSearchProps & {
   choose: React.ReactNode;
   outlineOpen: boolean;
   renderOutline: (outline?: React.ReactNode) => React.ReactNode;
   quickOpenInitially: boolean;
   allowDefinitions: boolean;
   eslintAvailability: EslintAvailability;
+  extensionsApi?: CodeExtensionPlatform;
 }) {
   const { t } = useI18n();
   const client = useQueryClient();
@@ -116,6 +120,16 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
   const scope = [...workspaceKey, project.id] as const;
   const checks = useCodeReviewChecks(api, project, eslintAvailability);
   const { run: checkRun, verify: verifyCheck } = checks;
+  const extensionsKey = [...scope, "extensions"] as const;
+  const extensionList = useQuery({
+    queryKey: extensionsKey, enabled: Boolean(extensionsApi), retry: false, staleTime: Infinity,
+    queryFn: () => extensionsApi?.list(project.id) ?? Promise.resolve([]),
+  });
+  const extensions = extensionsApi ? extensionList.data ?? [] : [];
+  const [syntaxActivity, setSyntaxActivity] = useState<{ path: string; activity: ExtensionActivity }>();
+  const onSyntaxActivity = useCallback((path: string, activity: ExtensionActivity) => {
+    setSyntaxActivity({ path, activity });
+  }, []);
   const [dock, setDock] = useState<ReviewDock>();
   const [dockSizes, setDockSizes] = useState({ checks: 300, note: 270 });
   const dockId = useId();
@@ -336,7 +350,7 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
         </div>}
         <IconButton className="code-review-tool code-review-dock-close" icon="close" label={t("codeReview.checks.close")} onClick={closeDock} />
       </header>
-      {dock === "checks" ? <CodeReviewChecks checks={checks} current={current} changes={changes.data} scrollRef={checksScroll}
+      {dock === "checks" ? <CodeReviewChecks checks={checks} current={current} changes={changes.data} extensions={extensions} scrollRef={checksScroll}
         search={findingsFilter} severity={severityFilter} collapsed={collapsedChecks} selected={selectedFinding} toggleFile={(path) => setCollapsedChecks((previous) => {
           const next = new Set(previous);
           if (!next.delete(path)) next.add(path);
@@ -471,6 +485,20 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
 
   const refreshButton = <IconButton icon="refresh" className="code-review-tool" label={t(changes.isFetching ? "codeReview.refreshing" : "codeReview.refresh")}
     disabled={changes.isFetching} aria-busy={changes.isFetching || undefined} onClick={refresh} />;
+  const extensionsButton = extensionsApi && <IconButton icon="extensions" className="code-review-tool"
+    label={t("codeReview.extensions.title")} aria-pressed={view === "extensions" && sidebarOpen} onClick={() => {
+      setView(view === "extensions" && sidebarOpen ? "files" : "extensions");
+      setSidebarOpen(true);
+    }} />;
+  const activities: ExtensionActivity[] = [];
+  if (syntaxActivity && syntaxActivity.path === active) activities.push(syntaxActivity.activity);
+  if (checkRun?.extension && checkRun.status !== "cancelled") {
+    activities.push({
+      id: checkRun.extension.id,
+      state: checkRun.status === "running" ? "running" : checkRun.files.some((file) => file.status === "checked") ? "ran" : "failed",
+      detail: checkRun.extensionError,
+    });
+  }
   const baseline = project.baseline ? t("codeReview.compareBase", { commit: project.baseline.slice(0, 10) }) : t(`codeReview.git.${project.git}`);
   return <>
     {changes.isError && <p className="code-review-notice" role="alert">{t("codeReview.refreshFailed")}</p>}
@@ -480,9 +508,20 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
         <header className="code-review-header">
           <h1 title={project.name}>{project.name}</h1>
           <div className="code-review-header-actions" role="group" aria-label={t("codeReview.projectActions")}>
-            {refreshButton}{choose}
+            {extensionsButton}{refreshButton}{choose}
           </div>
         </header>
+        {view === "extensions" && extensionsApi ? <CodeReviewExtensions api={extensionsApi} projectId={project.id} items={extensions}
+          loading={extensionList.isPending} loadError={extensionList.isError} retry={() => { void extensionList.refetch(); }}
+          activities={activities} onUpdate={(id, item) => {
+            if (!item?.enabled) {
+              checks.clearExtension(id);
+              setSyntaxActivity((current) => current?.activity.id === id ? undefined : current);
+            }
+            client.setQueryData<CodeExtension[]>(extensionsKey, (current = []) =>
+              [...current.filter((extension) => extension.id !== id), ...(item ? [item] : [])]
+                .sort((a, b) => a.id.localeCompare(b.id)));
+          }} /> : <>
         <div className="code-review-sidebar-controls">
           {canCompare || api.searchContent ? <Segmented<NavigatorView> label={t("codeReview.navigatorMode")} value={view} onChange={setView} className="code-review-segments"
             options={[
@@ -542,12 +581,13 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
           }} />{t("codeReview.compactFolders")}</label>
           <label><input type="checkbox" checked={showHidden} onChange={(event) => setShowHidden(event.target.checked)} />{t("codeReview.showHidden")}</label>
         </div>}
+        </>}
       </aside>
       {sidebarOpen && <SidebarRail side="left" expanded width={sidebarWidth} minWidth={176} maxWidth={420}
         onResize={setSidebarWidth} onToggle={() => setSidebarOpen(false)} />}
       <div className="code-review-detail" ref={detail}>
         <header className="code-review-editor-bar" ref={toolbar} tabIndex={-1}>
-          {!sidebarOpen && <div className="code-review-header-actions">{refreshButton}{choose}</div>}
+          {!sidebarOpen && <div className="code-review-header-actions">{extensionsButton}{refreshButton}{choose}</div>}
           {returnPoints.length > 0 && <IconButton icon="chevronLeft" className="code-review-tool" label={t("codeReview.definitionBack")} onClick={back} />}
           <nav className="code-review-tabs" aria-label={t("codeReview.openFiles")}>
             {openTabs.map((key) => {
@@ -569,6 +609,7 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
           allowLanguageTools={allowDefinitions} eslintAvailability={eslintAvailability}
           showOutline={outlineOpen} renderOutline={renderOutline} renderDock={renderDock} renderStatus={renderStatus}
           checkFiles={checkRun?.status === "running" ? undefined : checkRun?.files}
+          extensionsApi={extensionsApi} extensions={extensions} onSyntaxActivity={onSyntaxActivity}
           locateOutline={(position) => {
             setArrival({ key: active, destination: { position } });
             setReadingMode(active, "source");
@@ -803,7 +844,8 @@ function DirectoryTree({ api, project, path, active, onOpen, onFileMenu, reveal,
 }
 
 function FileReview({ api, project, path, dependency, change, mode, baseline, readPosition, savePosition, onModeChange, onSaved, onRefresh, onCopy,
-  onDefinition, allowLanguageTools, eslintAvailability, onBack, arrival, onArrival, showOutline, locateOutline, renderOutline, renderDock, renderStatus, checkFiles }: ProjectProps & {
+  onDefinition, allowLanguageTools, eslintAvailability, onBack, arrival, onArrival, showOutline, locateOutline, renderOutline, renderDock, renderStatus,
+  checkFiles, extensionsApi, extensions, onSyntaxActivity }: ProjectProps & {
   path: string;
   dependency?: CodeDefinitionTarget;
   change?: CodeReviewChange;
@@ -824,6 +866,9 @@ function FileReview({ api, project, path, dependency, change, mode, baseline, re
   renderDock: RenderDock;
   renderStatus: RenderStatus;
   checkFiles?: readonly CheckedFile[];
+  extensionsApi?: CodeExtensionPlatform;
+  extensions: CodeExtension[];
+  onSyntaxActivity: (path: string, activity: ExtensionActivity) => void;
   onBack?: () => void;
   arrival?: DefinitionArrival;
   onArrival: (found?: boolean) => void;
@@ -924,6 +969,7 @@ function FileReview({ api, project, path, dependency, change, mode, baseline, re
       onDefinition={onDefinition && !showingOriginal ? (gesture) => onDefinition(gesture, diff ? "diff" : "source") : undefined}
       onReferences={allowLanguageTools && liveSource && api.documentHighlights ? (position, text) => api.documentHighlights?.(project.id, { origin, position, text }) ?? Promise.resolve([]) : undefined}
       outline={inspector} checkResult={checkResult}
+      extensionsApi={dependency ? undefined : extensionsApi} extensions={extensions} projectId={project.id} onSyntaxActivity={onSyntaxActivity}
       onBack={onBack} arrival={safeArrival} onArrival={onArrival} />
       : <>{heading}<div className="code-review-reader-body">
         <EmptyState className="code-review-placeholder" icon={<ActionIcon name="document" />} title={t(`codeReview.file.${source.state}`)} />

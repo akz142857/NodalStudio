@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CodeEslintTool, CodeReviewChanges, CodeReviewPlatform, CodeReviewProject } from "../../platform/code-review";
+import type { CodeEslintTool, CodeExtension, CodeReviewChanges, CodeReviewPlatform, CodeReviewProject } from "../../platform/code-review";
 import {
-  checkMarkdown, CheckError, checkTargetProblem, contentDigest, eslintFindings, isEslintSource, isMarkdown, markdownFindings,
-  normalizeReviewText, readMarkdownConfig, targetMatchesDocument, type CheckFinding, type CheckProblem, type CheckProvider,
+  checkMarkdown, CheckError, checkTargetProblem, contentDigest, eslintFindings, extensionFindings, isEslintSource, isMarkdown, markdownFindings,
+  normalizeReviewText, readMarkdownConfig, targetMatchesDocument, type CheckFinding, type CheckProblem,
   type CheckTarget, type EslintAvailability,
 } from "./code-review-checks";
+import { runExtension } from "./code-extension-runtime";
 
 export type DisplayedCheckTarget = {
   target: CheckTarget;
@@ -17,7 +18,7 @@ export type CheckedFile = {
   status: "pending" | "checked" | "skipped" | "failed" | "stale";
   reason?: CheckProblem;
   digest?: string;
-  provider?: CheckProvider;
+  provider?: string;
   version?: string;
   tool?: CodeEslintTool;
   findings: CheckFinding[];
@@ -35,6 +36,8 @@ export type CheckRun = {
   reason?: CheckProblem;
   configDigest?: string | null;
   version?: string;
+  extension?: CodeExtension;
+  extensionError?: string;
   files: CheckedFile[];
 };
 
@@ -74,6 +77,7 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
   const [eslintApproved, setEslintApproved] = useState(false);
   const eslint = availability === "enabled" ? api.eslint : undefined;
   const active = useRef<AbortController | null>(null);
+  const activeExtension = useRef<string | undefined>(undefined);
   const epoch = useRef(0);
   const mounted = useRef(false);
   useEffect(() => {
@@ -99,14 +103,15 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
     });
   }
 
-  const runChecks = async (initial: CheckedFile[], displayed?: string, incompleteChanges = false) => {
+  const runChecks = async (initial: CheckedFile[], displayed?: string, incompleteChanges = false, extension?: CodeExtension) => {
     active.current?.abort();
     const controller = new AbortController();
     active.current = controller;
+    activeExtension.current = extension?.id;
     const batch = displayed === undefined;
     const snapshot: CheckRun = {
       id: ++epoch.current, projectId, baseline, scope: batch ? "changes" : "file", startedAt: Date.now(),
-      status: "running", incompleteChanges, limited: false, files: initial,
+      status: "running", incompleteChanges, limited: false, files: initial, extension,
     };
     const files = [...initial];
     const publish = (status = snapshot.status) => {
@@ -153,10 +158,26 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
             markdownConfig ??= await readMarkdownConfig(api, projectId).catch((error: unknown) => new CheckError(problem(error)));
             if (markdownConfig instanceof CheckError) throw markdownConfig;
             snapshot.configDigest = markdownConfig.digest;
-            const result = await checkMarkdown({ text: input.text, config: markdownConfig.value, limit }, controller.signal);
-            if ("failed" in result) throw new CheckError("engine");
-            checked = { provider: "markdownlint", version: result.version, findings: markdownFindings(input.text, before, result.findings), total: result.total };
-            snapshot.version = result.version;
+            if (extension) {
+              try {
+                const source = await api.extensions?.prepare(projectId, extension.id, "markdown");
+                if (source?.capability !== "diagnostics") throw new Error("Diagnostic entry unavailable.");
+                const result = await runExtension({
+                  source, path: input.target.path, text: input.text, config: markdownConfig.value, limit,
+                }, controller.signal);
+                if (!("findings" in result)) throw new Error("Missing diagnostic result.");
+                checked = { provider: extension.name + " (VSIX)", version: extension.version,
+                  findings: extensionFindings(input.text, before, result.findings), total: result.total };
+              } catch (error) {
+                snapshot.extensionError = String(error);
+                throw new CheckError("extensionEngine");
+              }
+            } else {
+              const result = await checkMarkdown({ text: input.text, config: markdownConfig.value, limit }, controller.signal);
+              if ("failed" in result) throw new CheckError("engine");
+              checked = { provider: "markdownlint", version: result.version, findings: markdownFindings(input.text, before, result.findings), total: result.total };
+              snapshot.version = result.version;
+            }
           } else {
             if (!eslint) throw new CheckError(availability === "enabled" ? "eslintUnavailable" : availability);
             const path = input.target.path;
@@ -214,7 +235,9 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
         controller.signal.throwIfAborted();
         if (latestConfig?.digest === markdownConfig.digest) return;
         for (const [index, file] of files.entries()) {
-          if (file.status === "checked" && file.provider === "markdownlint") files[index] = { ...file, status: "stale", reason: "stale" };
+          if (file.status === "checked" && (extension || file.provider === "markdownlint")) {
+            files[index] = { ...file, status: "stale", reason: "stale" };
+          }
         }
       }
     } catch (error) {
@@ -222,12 +245,23 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
     } finally {
       clearTimeout(deadline);
       if (!controller.signal.aborted || controller.signal.reason instanceof CheckError) publish("finished");
-      if (active.current === controller) active.current = null;
+      if (active.current === controller) {
+        active.current = null;
+        activeExtension.current = undefined;
+      }
     }
   };
 
-  const currentFile = ({ target, text, problem: unavailable }: DisplayedCheckTarget) => {
-    if (!unavailable) void runChecks([pending(target)], text);
+  const currentFile = ({ target, text, problem: unavailable }: DisplayedCheckTarget, extension?: CodeExtension) => {
+    if (!unavailable && (!extension || (extension.enabled && isMarkdown(target.path)))) {
+      void runChecks([pending(target)], text, false, extension);
+    }
+  };
+
+  const clearExtension = (id: string) => {
+    if (activeExtension.current === id) active.current?.abort();
+    if (run?.extension?.id === id && run.id === epoch.current) epoch.current += 1;
+    setRun((current) => current?.extension?.id === id ? undefined : current);
   };
 
   const changedFiles = (changes: CodeReviewChanges) => {
@@ -278,7 +312,8 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
     }
   }, [api, baseline, eslint, projectId]);
 
-  return { run, currentFile, changedFiles, cancel, verify, filter, setFilter, consent, eslintApproved, revoke, eslintAvailable: Boolean(eslint) };
+  return { run, currentFile, changedFiles, cancel, clearExtension, verify, filter, setFilter, consent, eslintApproved, revoke,
+    eslintAvailable: Boolean(eslint) };
 }
 
 export type CodeChecks = ReturnType<typeof useCodeReviewChecks>;

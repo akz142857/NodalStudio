@@ -70,6 +70,7 @@ workspace = true
 
 [features]
 mac-app-store = ["dep:storekit-bridge"]
+code-extensions-preview = ["zip/deflate-flate2"]
 # Only for isolated loopback upgrade acceptance builds. Never enable for distribution.
 updater-smoke-test = []
 

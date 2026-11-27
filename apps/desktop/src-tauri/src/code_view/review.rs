@@ -168,6 +168,15 @@ impl ReviewState {
 }
 
 impl Project {
+    #[cfg(all(
+        target_os = "macos",
+        feature = "code-extensions-preview",
+        not(feature = "mac-app-store")
+    ))]
+    pub(super) fn key(&self) -> &str {
+        &self.info.key
+    }
+
     pub(super) fn open(root: PathBuf) -> Result<Self, String> {
         let (directory, identity) = Repository::open_directory(&root, None)?;
         let (git, baseline) = match directory.dir.symlink_metadata(".git") {

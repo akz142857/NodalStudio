@@ -142,8 +142,44 @@ export interface CodeReviewPlatform {
   searchContent?(projectId: string, query: string): Promise<CodeContentSearchResult>;
   file(projectId: string, path: string, compareFile: boolean): Promise<CodeReviewDocument>;
   eslint?: CodeEslintPlatform;
+  extensions?: CodeExtensionPlatform;
   definition?(projectId: string, input: CodeDefinitionRequest): Promise<CodeDefinitionResult>;
   documentHighlights?(projectId: string, input: CodeSourcePosition): Promise<CodeDocumentHighlightRange[]>;
   documentOutline?(projectId: string, input: CodeDocumentOutlineRequest): Promise<CodeDocumentOutlineResult>;
   definitionSource?(projectId: string, sourceId: string): Promise<string>;
+}
+
+export interface CodeExtensionLanguage {
+  id: string;
+  aliases: string[];
+  filenames: string[];
+  filenamePatterns: string[];
+  extensions: string[];
+}
+
+export interface CodeExtension {
+  id: string;
+  name: string;
+  publisher: string;
+  version: string;
+  description: string;
+  fileName: string;
+  sha256: string;
+  engine: string;
+  capability: "diagnostics" | "syntax" | "unsupported";
+  enabled: boolean;
+  languages: CodeExtensionLanguage[];
+}
+
+export type CodeExtensionAction = "enable" | "disable" | "uninstall";
+
+export type PreparedCodeExtension =
+  | { capability: "diagnostics"; script: string }
+  | { capability: "syntax"; grammar: string; scopeName: string };
+
+export interface CodeExtensionPlatform {
+  list(projectId: string): Promise<CodeExtension[]>;
+  install(projectId: string): Promise<CodeExtension | null>;
+  change(projectId: string, id: string, action: CodeExtensionAction): Promise<CodeExtension | null>;
+  prepare(projectId: string, id: string, language: string): Promise<PreparedCodeExtension>;
 }

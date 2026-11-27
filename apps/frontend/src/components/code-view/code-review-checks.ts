@@ -2,6 +2,7 @@ import { Chunk, type DiffConfig } from "@codemirror/merge";
 import { Text } from "@codemirror/state";
 import type { Configuration, LintError } from "markdownlint";
 import type { CodeEslintFinding, CodeReviewDocument, CodeReviewPlatform, CodeReviewVersion } from "../../platform/code-review";
+import type { ExtensionDiagnostic } from "./code-extension-runtime";
 
 export const reviewDiffConfig: DiffConfig = { scanLimit: 500 };
 export const reviewDiffCollapse = { margin: 4, minSize: 10 };
@@ -9,7 +10,6 @@ export const markdownConfigPath = ".markdownlint.json";
 export const normalizeReviewText = (text: string) => text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
 export const isMarkdown = (path: string) => /\.(md|markdown)$/i.test(path);
 export const isEslintSource = (path: string) => /\.(js|jsx|ts|tsx|mjs|cjs|mts|cts)$/i.test(path);
-export type CheckProvider = "markdownlint" | "ESLint";
 export type EslintAvailability = "enabled" | "eslintOffline" | "eslintUnavailable";
 
 export type ReadingMode = "diff" | "source";
@@ -23,7 +23,7 @@ export type CheckFinding = {
   location: "changed" | "other" | "unknown" | "file";
 };
 export type CheckProblem = "deleted" | "dependency" | "unsupported" | "unreadable" | "binary" | "encoding" | "tooLarge"
-  | "noEvidence" | "stale" | "config" | "configUnsupported" | "engine" | "timeout"
+  | "noEvidence" | "stale" | "config" | "configUnsupported" | "engine" | "timeout" | "extensionEngine"
   | "eslintOffline" | "eslintUnavailable" | "eslintConfig" | "eslintMissing" | "eslintUnsupported" | "eslintNode"
   | "eslintApproval" | "eslintOutput" | "eslintEngine" | "eslintIgnored" | "eslintIndex" | "eslintCancelled";
 export class CheckError extends Error {
@@ -142,6 +142,14 @@ export function eslintFindings(text: string, before: CodeReviewVersion | null, f
     return { rule: finding.ruleId ?? (finding.fatal ? "Parse" : "ESLint"),
       severity: finding.severity === 1 ? "warning" : "error", message: finding.message, range };
   }));
+}
+
+export function extensionFindings(text: string, before: CodeReviewVersion | null, findings: ExtensionDiagnostic[]) {
+  return eslintFindings(text, before, findings.map((finding) => ({
+    ruleId: finding.rule, message: finding.message, severity: finding.severity === "error" ? 2 : 1, fatal: null,
+    line: finding.start ? finding.start.line + 1 : null, column: finding.start ? finding.start.character + 1 : null,
+    endLine: finding.end ? finding.end.line + 1 : null, endColumn: finding.end ? finding.end.character + 1 : null,
+  })));
 }
 
 export function checkMarkdown(request: MarkdownRequest, signal: AbortSignal): Promise<MarkdownResponse> {
