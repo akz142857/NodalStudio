@@ -5,7 +5,7 @@ import type { CodeExtension, CodeReviewChanges } from "../../platform/code-revie
 import { ActionIcon } from "../ActionIcon";
 import { Segmented } from "../Segmented";
 import { CodeFileIcon } from "./CodeReviewReader";
-import { isEslintSource, isMarkdown, type CheckFinding } from "./code-review-checks";
+import { canCheckWithExtension, isEslintSource, isMarkdown, type CheckFinding } from "./code-review-checks";
 import type { CheckedFile, CodeChecks, DisplayedCheckTarget } from "./use-code-review-checks";
 
 export function CodeReviewChecks({ checks, current, changes, extensions, batchUnavailable, locate, search, severity, collapsed, toggleFile, selected, scrollRef }: {
@@ -50,7 +50,7 @@ export function CodeReviewChecks({ checks, current, changes, extensions, batchUn
   const problems = files.filter((file) => file.reason);
   const candidates = changes?.files.filter((file) => file.kind !== "deleted"
     && (isMarkdown(file.path) || (checks.eslintAvailable && isEslintSource(file.path)))).length ?? 0;
-  const eslintVersions = [...new Set(files.flatMap((file) => file.provider === "ESLint" ? [file.version] : []))].filter(Boolean);
+  const eslintVersions = [...new Set(files.flatMap((file) => file.tool ? [file.tool.version] : []))];
   const consent = checks.consent;
   const singleProblem = run?.scope === "file" ? files[0]?.reason : undefined;
   const reason = run?.reason ?? singleProblem;
@@ -62,8 +62,8 @@ export function CodeReviewChecks({ checks, current, changes, extensions, batchUn
       <Button size="small" variant="secondary" disabled={!changes || Boolean(batchUnavailable)}
         title={batchUnavailable ? t(`codeReview.checks.batch.${batchUnavailable}`) : undefined}
         onClick={() => { if (changes) checks.changedFiles(changes); }}>{t("codeReview.checks.changedFiles")}</Button>
-      {current && !current.problem && isMarkdown(current.target.path) && extensions
-        .filter((extension) => extension.enabled && extension.capability === "diagnostics").map((extension) =>
+      {current && !current.problem && extensions
+        .filter((extension) => canCheckWithExtension(extension, current.target.path)).map((extension) =>
           <Button key={extension.id} size="small" variant="secondary" disabled={running}
             onClick={() => checks.currentFile(current, extension)}>{t("codeReview.extensions.run", { name: extension.name })}</Button>)}
       {running && <Button size="small" variant="ghost" onClick={checks.cancel}>{t("codeReview.checks.cancel")}</Button>}
@@ -78,8 +78,11 @@ export function CodeReviewChecks({ checks, current, changes, extensions, batchUn
     }}>
     {consent && <section className="code-checks-consent" aria-label={t("codeReview.checks.eslintConsent")}>
       <h4>{t("codeReview.checks.eslintConsent")}</h4>
-      <p>{t("codeReview.checks.eslintTrust")}</p>
+      <p>{t(consent.tool.extension ? "codeReview.checks.eslintExtensionTrust" : "codeReview.checks.eslintTrust")}</p>
       <dl>
+        {consent.tool.extension && <>
+          <dt>{t("codeReview.checks.eslintExtensionServer", { version: consent.tool.extension.version })}</dt><dd>{consent.tool.extension.entry}</dd>
+        </>}
         <dt>{t("codeReview.checks.eslintTool", { version: consent.tool.version })}</dt><dd>{consent.tool.entry}</dd>
         <dt>Node</dt><dd>{consent.tool.node}</dd>
         <dt>{t("codeReview.checks.eslintConfiguration")}</dt><dd>{consent.tool.config}</dd>

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CodeEslintTool, CodeExtension, CodeReviewChanges, CodeReviewPlatform, CodeReviewProject } from "../../platform/code-review";
 import {
-  checkMarkdown, CheckError, checkTargetProblem, contentDigest, eslintFindings, extensionFindings, isEslintSource, isMarkdown, markdownFindings,
+  canCheckWithExtension, checkMarkdown, CheckError, checkTargetProblem, contentDigest, eslintExtensionSha, eslintFindings,
+  extensionFindings, isEslintSource, isMarkdown, markdownFindings,
   normalizeReviewText, readMarkdownConfig, targetMatchesDocument, type CheckFinding, type CheckProblem,
   type CheckTarget, type EslintAvailability,
 } from "./code-review-checks";
@@ -74,7 +75,7 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
   const [run, setRun] = useState<CheckRun>();
   const [filter, setFilter] = useState<{ id: number; value: "changed" | "all" }>();
   const [consent, setConsent] = useState<{ tool: CodeEslintTool; decide: (approved: boolean) => void }>();
-  const [eslintApproved, setEslintApproved] = useState(false);
+  const [eslintApproval, setEslintApproval] = useState<{ builtin: boolean; extensionId?: string }>({ builtin: false });
   const eslint = availability === "enabled" ? api.eslint : undefined;
   const active = useRef<AbortController | null>(null);
   const activeExtension = useRef<string | undefined>(undefined);
@@ -109,6 +110,7 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
     active.current = controller;
     activeExtension.current = extension?.id;
     const batch = displayed === undefined;
+    const extensionSha256 = eslintExtensionSha(extension);
     const snapshot: CheckRun = {
       id: ++epoch.current, projectId, baseline, scope: batch ? "changes" : "file", startedAt: Date.now(),
       status: "running", incompleteChanges, limited: false, files: initial, extension,
@@ -181,7 +183,7 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
           } else {
             if (!eslint) throw new CheckError(availability === "enabled" ? "eslintUnavailable" : availability);
             const path = input.target.path;
-            const tool = await eslint.inspect(projectId, path).catch((error: unknown) => { throw eslintError(error); });
+            const tool = await eslint.inspect(projectId, path, extensionSha256).catch((error: unknown) => { throw eslintError(error); });
             controller.signal.throwIfAborted();
             if (!tool.approved) {
               if (declined.has(tool.toolId)) throw new CheckError("eslintApproval");
@@ -194,20 +196,23 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
                 declined.add(tool.toolId);
                 throw new CheckError("eslintApproval");
               }
-              await eslint.approve(projectId, path, tool.toolId).catch((error: unknown) => { throw eslintError(error); });
+              await eslint.approve(projectId, path, tool.toolId, extensionSha256).catch((error: unknown) => { throw eslintError(error); });
             }
             controller.signal.throwIfAborted();
-            setEslintApproved(true);
+            setEslintApproval((current) => extensionSha256
+              ? { ...current, extensionId: extension?.id }
+              : { ...current, builtin: true });
             const requestId = crypto.randomUUID();
             const cancelRequest = () => { void eslint.cancel(projectId, requestId).catch(() => {}); };
             controller.signal.addEventListener("abort", cancelRequest, { once: true });
             try {
               const result = await eslint.lint(projectId, {
                 requestId, path, compare: input.target.mode === "diff", evidence: input.target.evidence,
-                digest, context: tool.context, limit,
+                digest, context: tool.context, limit, extensionSha256,
               }).catch((error: unknown) => { throw eslintError(error); });
               if (result.ignored) throw new CheckError("eslintIgnored");
-              checked = { provider: "ESLint", version: tool.version, tool,
+              checked = { provider: extensionSha256 ? (extension?.name ?? "ESLint") + " (VSIX)" : "ESLint",
+                version: extensionSha256 ? extension?.version : tool.version, tool,
                 findings: eslintFindings(input.text, before, result.findings), total: result.total };
             } finally {
               controller.signal.removeEventListener("abort", cancelRequest);
@@ -215,7 +220,8 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
           }
           const latest = await readTarget(api, projectId, input.target);
           if (latest.text !== input.text) throw new CheckError("stale");
-          if (checked.tool && eslint && (await eslint.inspect(projectId, input.target.path).catch(() => undefined))?.context !== checked.tool.context) {
+          if (checked.tool && eslint
+            && (await eslint.inspect(projectId, input.target.path, extensionSha256).catch(() => undefined))?.context !== checked.tool.context) {
             throw new CheckError("stale");
           }
           controller.signal.throwIfAborted();
@@ -253,7 +259,7 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
   };
 
   const currentFile = ({ target, text, problem: unavailable }: DisplayedCheckTarget, extension?: CodeExtension) => {
-    if (!unavailable && (!extension || (extension.enabled && isMarkdown(target.path)))) {
+    if (!unavailable && (!extension || canCheckWithExtension(extension, target.path))) {
       void runChecks([pending(target)], text, false, extension);
     }
   };
@@ -262,6 +268,7 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
     if (activeExtension.current === id) active.current?.abort();
     if (run?.extension?.id === id && run.id === epoch.current) epoch.current += 1;
     setRun((current) => current?.extension?.id === id ? undefined : current);
+    setEslintApproval((current) => current.extensionId === id ? { builtin: current.builtin } : current);
   };
 
   const changedFiles = (changes: CodeReviewChanges) => {
@@ -284,10 +291,10 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
     if (!api.eslint) return;
     cancel();
     await api.eslint.revoke(projectId);
-    setEslintApproved(false);
+    setEslintApproval({ builtin: false });
     setRun((current) => current && {
       ...current,
-      files: current.files.map((file) => file.provider === "ESLint" && file.status === "checked"
+      files: current.files.map((file) => file.tool && file.status === "checked"
         ? { ...file, status: "stale", reason: "eslintApproval" } : file),
     });
   };
@@ -299,7 +306,7 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
       const latest = await readTarget(api, projectId, file.target);
       if (await contentDigest(latest.text) !== file.digest) throw new CheckError("stale");
       if (file.tool) {
-        const tool = await eslint?.inspect(projectId, file.target.path);
+        const tool = await eslint?.inspect(projectId, file.target.path, eslintExtensionSha(snapshot.extension));
         if (!tool?.approved || tool.context !== file.tool.context) throw new CheckError("stale");
       } else if ((await readMarkdownConfig(api, projectId)).digest !== snapshot.configDigest) {
         throw new CheckError("stale");
@@ -312,7 +319,8 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
     }
   }, [api, baseline, eslint, projectId]);
 
-  return { run, currentFile, changedFiles, cancel, clearExtension, verify, filter, setFilter, consent, eslintApproved, revoke,
+  return { run, currentFile, changedFiles, cancel, clearExtension, verify, filter, setFilter, consent, revoke,
+    eslintApproved: eslintApproval.builtin || Boolean(eslintApproval.extensionId),
     eslintAvailable: Boolean(eslint) };
 }
 

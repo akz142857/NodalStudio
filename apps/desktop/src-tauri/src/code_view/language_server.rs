@@ -541,7 +541,9 @@ fn server_reply(
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
 }
 
-async fn read_frame(reader: &mut (impl tokio::io::AsyncBufRead + Unpin)) -> io::Result<Value> {
+pub(super) async fn read_frame(
+    reader: &mut (impl tokio::io::AsyncBufRead + Unpin),
+) -> io::Result<Value> {
     let mut length = None;
     let mut budget = 8192;
     loop {
@@ -573,7 +575,7 @@ async fn read_frame(reader: &mut (impl tokio::io::AsyncBufRead + Unpin)) -> io::
     Ok(serde_json::from_slice(&data)?)
 }
 
-async fn write_frame(
+pub(super) async fn write_frame(
     writer: &mut (impl tokio::io::AsyncWrite + Unpin),
     value: &Value,
 ) -> io::Result<()> {

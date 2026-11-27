@@ -91,8 +91,9 @@ export function CodeOpenVsxDetails({ market, projectId, id, initialVersion, inst
   });
   const release = detail.data;
   const compatibility = release?.capability === "diagnostics" ? "marketDiagnostics"
-    : release?.capability === "syntax" ? "marketSyntax"
-      : release?.capability === "unsupported" ? "unsupportedStatus" : "marketUnknown";
+    : release?.capability === "eslint" ? "marketEslint"
+      : release?.capability === "syntax" ? "marketSyntax"
+        : release?.capability === "unsupported" ? "unsupportedStatus" : "marketUnknown";
   const upgrade = Boolean(installed && release?.canUpdate && installed.version !== release.version);
   const canInstall = !offline && !detail.isPlaceholderData && release?.downloadable
     && release.capability !== "unsupported" && (!installed || upgrade);

@@ -91,8 +91,8 @@ export class TauriPlatform implements NodalStudioPlatform {
       },
     },
     eslint: {
-      inspect: (projectId, path) => invoke("inspect_code_eslint", { projectId, path }),
-      approve: (projectId, path, toolId) => invoke("approve_code_eslint", { projectId, path, toolId }),
+      inspect: (projectId, path, extensionSha256) => invoke("inspect_code_eslint", { projectId, path, extensionSha256 }),
+      approve: (projectId, path, toolId, extensionSha256) => invoke("approve_code_eslint", { projectId, path, toolId, extensionSha256 }),
       lint: (projectId, input) => invoke("run_code_eslint", { projectId, input }),
       cancel: (projectId, requestId) => invoke("cancel_code_eslint", { projectId, requestId }),
       revoke: (projectId) => invoke("revoke_code_eslint", { projectId }),

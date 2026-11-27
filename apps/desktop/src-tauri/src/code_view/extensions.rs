@@ -30,6 +30,13 @@ const MAX_UNPACKED: u64 = 64 * 1024 * 1024;
 const MAX_ENTRY: u64 = 2 * 1024 * 1024;
 const MAX_INSTALLED: usize = 32;
 static STORAGE_LOCK: Mutex<()> = Mutex::new(());
+const ESLINT_ID: &str = "dbaeumer.vscode-eslint";
+const ESLINT_VERSION: &str = "3.0.34";
+const ESLINT_ARCHIVE_SHA256: &str =
+    "ca5334d46f6a39079e751ef4601bfc9f86bc3a46483e87291ec609239d161308";
+const ESLINT_SERVER: &str = "server/out/eslintServer.js";
+const ESLINT_SERVER_SHA256: &str =
+    "baf39a57d3e04d63140a1d606b76042ccca304309846b2b0374c60d1caacbdb2";
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,6 +96,7 @@ struct Grammar {
 #[serde(rename_all = "camelCase")]
 enum Capability {
     Diagnostics,
+    Eslint,
     Syntax,
     Unsupported,
 }
@@ -249,6 +257,12 @@ fn capabilities(manifest: &Manifest, root: Option<&Path>) -> (Capability, Vec<La
         Some(path) => package_asset(path, file, suffixes).is_some(),
         None => asset_path(file, suffixes).is_some(),
     };
+    if manifest.version == ESLINT_VERSION
+        && package_id(&manifest.publisher, &manifest.name).is_ok_and(|id| id == ESLINT_ID)
+        && asset_exists(ESLINT_SERVER, &["js"])
+    {
+        return (Capability::Eslint, Vec::new());
+    }
     if manifest
         .browser
         .as_deref()
@@ -282,10 +296,13 @@ fn installation(path: &Path, project_key: &str) -> Result<Extension, String> {
     let root = path.join("extension");
     let manifest = manifest(&root)?;
     let id = package_id(&manifest.publisher, &manifest.name)?;
-    let (capability, languages) = capabilities(&manifest, Some(&root));
-    let receipt =
+    let (mut capability, languages) = capabilities(&manifest, Some(&root));
+    let receipt: Receipt =
         serde_json::from_slice(&bounded_file(&path.join("installation.json"), 16 * 1024)?)
             .map_err(|_| STORAGE)?;
+    if capability == Capability::Eslint && receipt.sha256 != ESLINT_ARCHIVE_SHA256 {
+        capability = Capability::Unsupported;
+    }
     Ok(Extension {
         id,
         publisher: manifest.publisher,
@@ -350,6 +367,39 @@ fn storage(app: &AppHandle) -> Result<PathBuf, String> {
         .join("code-extensions-preview");
     fs::create_dir_all(&path).map_err(|_| STORAGE)?;
     Ok(path)
+}
+
+pub(super) struct EslintServer {
+    pub(super) entry: PathBuf,
+    pub(super) script: Vec<u8>,
+    pub(super) version: String,
+}
+
+pub(super) fn eslint_server(
+    app: &AppHandle,
+    key: &str,
+    sha256: &str,
+) -> Result<EslintServer, String> {
+    if sha256 != ESLINT_ARCHIVE_SHA256 {
+        return Err(CHANGED.into());
+    }
+    let _lock = STORAGE_LOCK.lock().map_err(|_| STORAGE)?;
+    let directory = storage(app)?.join(ESLINT_ID);
+    let item = installation(&directory, key).map_err(|_| CHANGED)?;
+    if item.capability != Capability::Eslint || !item.enabled || item.receipt.sha256 != sha256 {
+        return Err(CHANGED.into());
+    }
+    let entry =
+        package_asset(&directory.join("extension"), ESLINT_SERVER, &["js"]).ok_or(CHANGED)?;
+    let script = bounded_file(&entry, MAX_ENTRY).map_err(|_| CHANGED)?;
+    if format!("{:x}", Sha256::digest(&script)) != ESLINT_SERVER_SHA256 {
+        return Err(CHANGED.into());
+    }
+    Ok(EslintServer {
+        entry,
+        script,
+        version: item.version,
+    })
 }
 
 fn installed_paths(root: &Path) -> Result<Vec<PathBuf>, String> {
@@ -525,6 +575,7 @@ pub(crate) async fn change_code_extension(
     if !has_valid_id(&id) {
         return Err(INVALID.into());
     }
+    let project = state.project(project_id)?;
     with_storage(app, &state, project_id, move |root, key| {
         let path = root.join(id);
         let item = installation(&path, key)?;
@@ -544,10 +595,16 @@ pub(crate) async fn change_code_extension(
                 {
                     return Err(STORAGE.into());
                 }
+                if item.capability == Capability::Eslint {
+                    project.eslint.revoke_extension();
+                }
             }
             ExtensionAction::Uninstall => {
                 let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
                 fs::rename(path, temp.path().join("removed")).map_err(|_| STORAGE)?;
+                if item.capability == Capability::Eslint {
+                    project.eslint.revoke_extension();
+                }
                 return Ok(None);
             }
         }

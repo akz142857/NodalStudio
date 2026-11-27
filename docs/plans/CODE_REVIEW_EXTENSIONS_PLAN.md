@@ -4,7 +4,7 @@
 
 产品目标是在 Nodal Studio Code 中提供类似 VS Code Extensions 的「扩展」入口。用户可以自行查找和安装兼容扩展、查看已安装及运行状态、启用、禁用、更新和卸载。扩展由兼容宿主运行，能在 Code 工作区提供诊断、语言服务等能力。 [VS Code 扩展管理](https://code.visualstudio.com/docs/configure/extensions/extension-marketplace)
 
-「检查」是 Code 的底部结果面板。P0 的内置 Markdown 检查和 P1 的项目 ESLint 已在开发版接入。macOS 预览版支持本地 VSIX 安装及 Open VSX 搜索、详情、安装和更新，复用底部诊断和结果定位。原型覆盖范围与验收记录见第 7.3 和 7.4 节。 [Code View 开发计划](CODE_VIEW_DEVELOPMENT_PLAN.md) · [文件树设计](CODE_FILES_TREE_DESIGN.md)
+「检查」是 Code 的底部结果面板。P0 的内置 Markdown 检查和 P1 的项目 ESLint 已在开发版接入。macOS 预览版支持本地 VSIX 安装及 Open VSX 搜索、详情、安装和更新，复用底部诊断和结果定位。第 7.3 至 7.5 节记录原型范围与验收，包括从 VSIX 启动的 ESLint 语言服务器。 [Code View 开发计划](CODE_VIEW_DEVELOPMENT_PLAN.md) · [文件树设计](CODE_FILES_TREE_DESIGN.md)
 
 ## 1. 产品范围与交付顺序
 
@@ -145,3 +145,13 @@ pnpm --filter @nodalstudio/desktop tauri build --debug --features code-extension
 新安装默认禁用。更新在校验完成后原子替换安装目录，保留各项目的启用状态。下载、校验或替换失败时原版本仍可用。更新成功后清除旧版本诊断，重新运行会加载新版本。
 
 2026-11-27 在 macOS Open VSX 预览版和真实 NodalStudio 项目中，通过市场搜索并打开 `DavidAnson.vscode-markdownlint` 详情，选择安装 0.62.1，启用后在底部「检查」运行。检查更新发现 0.63.1，安装后启用状态保留、旧诊断清空。重新运行仍得到 `MD012`，点击定位到 `README.md` 第 101 行第 1 列。再次检查显示没有可用更新。0.63.1 的 SHA-256 为 `a3cfccc3714febf06b895eb70af301a8eb64ac5b14029e7527eb025558156967`。 [0.63.1 注册表元数据](https://open-vsx.org/api/DavidAnson/vscode-markdownlint/universal/0.63.1)
+
+### 7.5 VS Code ESLint 扩展的诊断
+
+macOS 预览版支持 Open VSX 上的 `dbaeumer.vscode-eslint` 3.0.34 通用包，许可证为 MIT。原生层固定安装包和 `server/out/eslintServer.js` 的 SHA-256，用本机 Node 启动经过校验的原版服务器。兼容范围为 JS、TS、JSX 和 TSX 的只读 LSP 诊断，复用项目安装的 ESLint 9 或 10 与 JavaScript flat config。 [Open VSX 扩展](https://open-vsx.org/extension/dbaeumer/vscode-eslint) · [上游服务器](https://raw.githubusercontent.com/microsoft/vscode-eslint/release/3.0.34/server/src/eslintServer.ts)
+
+安装和启用后，在底部「检查」选择「运行 ESLint（VSIX）」。授权显示 VSIX 服务器、本机 Node、项目 ESLint 和配置路径。授权绑定项目会话、安装包和工具身份。禁用、卸载、撤销、切项目或取消运行会结束相应任务。诊断使用编辑器文档快照，结果归入底部「检查」并复用行列定位。
+
+安装包 SHA-256 为 `ca5334d46f6a39079e751ef4601bfc9f86bc3a46483e87291ec609239d161308`。服务器文件 SHA-256 为 `baf39a57d3e04d63140a1d606b76042ccca304309846b2b0374c60d1caacbdb2`。
+
+2026-11-27 在真实 NodalStudio 仓库的 macOS ESLint VSIX 预览版中，从 Open VSX 安装并启用 3.0.34，再从底部授权。原版服务器使用 `apps/frontend/eslint.config.js` 和项目的 ESLint 10.6.0，对临时 TypeScript 文件发布 `@typescript-eslint/no-unused-vars`。点击诊断在 Source 和 Diff 中都选中了第 7 行第 9 列开始的变量。撤销后再运行会重新提示授权。验收后移除了临时文件。

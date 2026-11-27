@@ -24,11 +24,15 @@ const OFFLINE: &str = "openVsxOffline";
 const RESPONSE: &str = "openVsxResponse";
 const UNAVAILABLE: &str = "openVsxUnavailable";
 const INTEGRITY: &str = "openVsxIntegrity";
-const MAX_JSON: usize = 2 * 1024 * 1024;
+const MAX_JSON: u64 = 2 * 1024 * 1024;
 const SEARCH_SIZE: u32 = 20;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "Mirrors independent flags in the registry response"
+)]
 struct Record {
     namespace: String,
     name: String,
@@ -219,7 +223,7 @@ fn client() -> Result<Client, String> {
 async fn get(
     client: &Client,
     url: Url,
-    max: usize,
+    max: u64,
     size_error: &str,
 ) -> Result<Option<Vec<u8>>, String> {
     if !allowed_url(&url) {
@@ -232,15 +236,12 @@ async fn get(
     if !response.status().is_success() {
         return Err(NETWORK.into());
     }
-    if response
-        .content_length()
-        .is_some_and(|size| size > max as u64)
-    {
+    if response.content_length().is_some_and(|size| size > max) {
         return Err(size_error.into());
     }
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| NETWORK)? {
-        if chunk.len() > max - body.len() {
+        if chunk.len() as u64 > max - body.len() as u64 {
             return Err(size_error.into());
         }
         body.extend_from_slice(&chunk);
@@ -280,9 +281,7 @@ async fn release(
 
 async fn declared_capability(client: &Client, record: &Record) -> Option<Capability> {
     let asset = record.file_url("manifest")?;
-    let bytes = get(client, asset, MAX_ENTRY as usize, RESPONSE)
-        .await
-        .ok()??;
+    let bytes = get(client, asset, MAX_ENTRY, RESPONSE).await.ok()??;
     let manifest = parse_manifest(&bytes).ok()?;
     if package_id(&manifest.publisher, &manifest.name).ok()? != record.id().ok()?
         || manifest.version != record.version
@@ -347,7 +346,7 @@ pub(crate) async fn search_code_open_vsx(
         let data = json::<SearchResponse>(&client()?, url)
             .await?
             .ok_or(RESPONSE)?;
-        let count = data.extensions.len() as u32;
+        let count = u32::try_from(data.extensions.len()).map_err(|_| RESPONSE)?;
         let next = offset.saturating_add(count);
         Ok(CatalogPage {
             items: data
@@ -478,7 +477,7 @@ async fn download(client: &Client, input: &CatalogInstall) -> Result<(Vec<u8>, R
             .ok_or(INTEGRITY)?,
     )
     .ok_or(INTEGRITY)?;
-    let source = get(client, url, MAX_ARCHIVE as usize, super::LIMIT)
+    let source = get(client, url, MAX_ARCHIVE, super::LIMIT)
         .await?
         .ok_or(UNAVAILABLE)?;
     let sha256 = format!("{:x}", Sha256::digest(&source));
@@ -507,7 +506,7 @@ pub(crate) async fn install_code_open_vsx(
     let (bytes, receipt) = while_online(&app, async { download(&client()?, &input).await }).await?;
     online(&app).await?;
     with_storage(handle, &state, project_id, move |root, key| {
-        let (stage, incoming) = stage_package(root, &bytes, &receipt, key)?;
+        let (staged_package, incoming) = stage_package(root, &bytes, &receipt, key)?;
         if incoming.id != input.id || incoming.version != input.version {
             return Err(INTEGRITY.into());
         }
@@ -516,9 +515,15 @@ pub(crate) async fn install_code_open_vsx(
         }
         let destination = root.join(&incoming.id);
         if let Some(previous) = input.installed_sha256 {
-            return replace_staged(stage.path(), &destination, key, &incoming, &previous);
+            return replace_staged(
+                staged_package.path(),
+                &destination,
+                key,
+                &incoming,
+                &previous,
+            );
         }
-        install_staged(root, stage.path(), &destination)?;
+        install_staged(root, staged_package.path(), &destination)?;
         Ok(incoming)
     })
     .await

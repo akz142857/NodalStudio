@@ -104,6 +104,7 @@ export interface CodeEslintTool {
   cwd: string;
   version: string;
   approved: boolean;
+  extension?: { entry: string; version: string };
 }
 
 export interface CodeEslintFinding {
@@ -118,8 +119,8 @@ export interface CodeEslintFinding {
 }
 
 export interface CodeEslintPlatform {
-  inspect(projectId: string, path: string): Promise<CodeEslintTool>;
-  approve(projectId: string, path: string, toolId: string): Promise<void>;
+  inspect(projectId: string, path: string, extensionSha256?: string): Promise<CodeEslintTool>;
+  approve(projectId: string, path: string, toolId: string, extensionSha256?: string): Promise<void>;
   lint(projectId: string, input: {
     requestId: string;
     path: string;
@@ -128,6 +129,7 @@ export interface CodeEslintPlatform {
     digest: string;
     context: string;
     limit: number;
+    extensionSha256?: string;
   }): Promise<{ ignored: boolean; findings: CodeEslintFinding[]; total: number }>;
   cancel(projectId: string, requestId: string): Promise<void>;
   revoke(projectId: string): Promise<void>;
@@ -157,7 +159,7 @@ export interface CodeExtensionLanguage {
   extensions: string[];
 }
 
-export type CodeExtensionCapability = "diagnostics" | "syntax" | "unsupported";
+export type CodeExtensionCapability = "diagnostics" | "eslint" | "syntax" | "unsupported";
 
 export interface CodeExtension {
   id: string;

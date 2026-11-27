@@ -1,7 +1,7 @@
 import { Chunk, type DiffConfig } from "@codemirror/merge";
 import { Text } from "@codemirror/state";
 import type { Configuration, LintError } from "markdownlint";
-import type { CodeEslintFinding, CodeReviewDocument, CodeReviewPlatform, CodeReviewVersion } from "../../platform/code-review";
+import type { CodeEslintFinding, CodeExtension, CodeReviewDocument, CodeReviewPlatform, CodeReviewVersion } from "../../platform/code-review";
 import type { ExtensionDiagnostic } from "./code-extension-runtime";
 
 export const reviewDiffConfig: DiffConfig = { scanLimit: 500 };
@@ -10,6 +10,11 @@ export const markdownConfigPath = ".markdownlint.json";
 export const normalizeReviewText = (text: string) => text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
 export const isMarkdown = (path: string) => /\.(md|markdown)$/i.test(path);
 export const isEslintSource = (path: string) => /\.(js|jsx|ts|tsx|mjs|cjs|mts|cts)$/i.test(path);
+export function canCheckWithExtension(extension: CodeExtension, path: string) {
+  return extension.enabled && ((extension.capability === "diagnostics" && isMarkdown(path))
+    || (extension.capability === "eslint" && isEslintSource(path)));
+}
+export const eslintExtensionSha = (extension?: CodeExtension) => extension?.capability === "eslint" ? extension.sha256 : undefined;
 export type EslintAvailability = "enabled" | "eslintOffline" | "eslintUnavailable";
 
 export type ReadingMode = "diff" | "source";

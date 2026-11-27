@@ -1,4 +1,7 @@
 //! Local `ESLint` checks for Code Review. Discovery reads metadata without starting Node.
+#[cfg(feature = "code-extensions-preview")]
+mod vsix;
+
 use std::{
     collections::{HashSet, VecDeque},
     fs::File,
@@ -57,6 +60,10 @@ pub(super) struct EslintSession(Mutex<SessionState>);
 #[derive(Default)]
 struct SessionState {
     approved: HashSet<String>,
+    #[cfg(feature = "code-extensions-preview")]
+    extension_approved: HashSet<String>,
+    #[cfg(feature = "code-extensions-preview")]
+    extension_generation: u64,
     active: Option<Active>,
     cancelled: VecDeque<Uuid>,
     closed: bool,
@@ -66,6 +73,8 @@ struct Active {
     id: Uuid,
     cancellation: CancellationToken,
     pid: Option<Pid>,
+    #[cfg(feature = "code-extensions-preview")]
+    extension: bool,
 }
 
 impl Drop for Active {
@@ -83,6 +92,26 @@ impl EslintSession {
             state.closed = true;
             state.active = None;
             state.approved.clear();
+            #[cfg(feature = "code-extensions-preview")]
+            state.clear_extension();
+        }
+    }
+
+    #[cfg(feature = "code-extensions-preview")]
+    pub(super) fn revoke_extension(&self) {
+        if let Ok(mut state) = self.0.lock() {
+            state.clear_extension();
+        }
+    }
+}
+
+#[cfg(feature = "code-extensions-preview")]
+impl SessionState {
+    fn clear_extension(&mut self) {
+        self.extension_approved.clear();
+        self.extension_generation = self.extension_generation.wrapping_add(1);
+        if self.active.as_ref().is_some_and(|job| job.extension) {
+            self.active = None;
         }
     }
 }
@@ -126,6 +155,8 @@ struct Tool {
     version: String,
     identity: String,
     context: String,
+    #[cfg(feature = "code-extensions-preview")]
+    extension: Option<vsix::Server>,
 }
 
 #[derive(Serialize)]
@@ -139,6 +170,9 @@ pub(crate) struct ToolInfo {
     cwd: PathBuf,
     version: String,
     approved: bool,
+    #[cfg(feature = "code-extensions-preview")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extension: Option<vsix::ServerInfo>,
 }
 
 impl Tool {
@@ -147,15 +181,33 @@ impl Tool {
         if state.closed {
             return Err(STALE.into());
         }
+        #[cfg(feature = "code-extensions-preview")]
+        let extension = self.extension.as_ref();
+        #[cfg(feature = "code-extensions-preview")]
+        let approved = extension.map_or_else(
+            || state.approved.contains(&self.identity),
+            |server| {
+                server.generation == state.extension_generation
+                    && state.extension_approved.contains(&self.identity)
+            },
+        );
+        #[cfg(not(feature = "code-extensions-preview"))]
+        let approved = state.approved.contains(&self.identity);
+        #[cfg(feature = "code-extensions-preview")]
+        let entry = extension.map_or(self.entry.as_path(), vsix::Server::library);
+        #[cfg(not(feature = "code-extensions-preview"))]
+        let entry = self.entry.as_path();
         Ok(ToolInfo {
             tool_id: self.identity.clone(),
             context: self.context.clone(),
             node: self.node.clone(),
-            entry: self.entry.clone(),
+            entry: entry.to_owned(),
             config: self.config.clone(),
             cwd: self.cwd.clone(),
             version: self.version.clone(),
-            approved: state.approved.contains(&self.identity),
+            approved,
+            #[cfg(feature = "code-extensions-preview")]
+            extension: extension.map(vsix::Server::info),
         })
     }
 }
@@ -270,7 +322,30 @@ fn discover(project: &Project, path: &str) -> Result<Tool, String> {
         version: package.version.to_string(),
         identity: tool_id,
         context: format!("{:x}", context.finalize()),
+        #[cfg(feature = "code-extensions-preview")]
+        extension: None,
     })
+}
+
+fn discover_provider(
+    handle: &AppHandle,
+    project: &Project,
+    path: &str,
+    extension_sha256: Option<&str>,
+) -> Result<Tool, String> {
+    let tool = discover(project, path)?;
+    let Some(sha256) = extension_sha256 else {
+        return Ok(tool);
+    };
+    #[cfg(feature = "code-extensions-preview")]
+    {
+        vsix::select_server(handle, project, sha256, tool)
+    }
+    #[cfg(not(feature = "code-extensions-preview"))]
+    {
+        let _ = (handle, sha256);
+        Err(UNSUPPORTED.into())
+    }
 }
 
 async fn check_settings(app: &AppState) -> Result<(), String> {
@@ -285,40 +360,62 @@ async fn check_settings(app: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-async fn resolve(project: Arc<Project>, path: String) -> Result<Tool, String> {
-    tokio::task::spawn_blocking(move || discover(&project, &path))
-        .await
-        .map_err(|_| TOOL)?
+async fn resolve(
+    handle: AppHandle,
+    project: Arc<Project>,
+    path: String,
+    extension_sha256: Option<String>,
+) -> Result<Tool, String> {
+    tokio::task::spawn_blocking(move || {
+        discover_provider(&handle, &project, &path, extension_sha256.as_deref())
+    })
+    .await
+    .map_err(|_| TOOL)?
 }
 
 #[tauri::command]
 pub(crate) async fn inspect_code_eslint(
+    handle: AppHandle,
     project_id: Uuid,
     path: String,
+    extension_sha256: Option<String>,
     state: State<'_, ReviewState>,
     app: State<'_, AppState>,
 ) -> Result<ToolInfo, String> {
     check_settings(&app).await?;
     let project = state.project(project_id)?;
-    resolve(project.clone(), path).await?.info(&project.eslint)
+    resolve(handle, project.clone(), path, extension_sha256)
+        .await?
+        .info(&project.eslint)
 }
 
 #[tauri::command]
 pub(crate) async fn approve_code_eslint(
+    handle: AppHandle,
     project_id: Uuid,
     path: String,
     tool_id: String,
+    extension_sha256: Option<String>,
     state: State<'_, ReviewState>,
     app: State<'_, AppState>,
 ) -> Result<(), String> {
     check_settings(&app).await?;
     let project = state.project(project_id)?;
-    if resolve(project.clone(), path).await?.identity != tool_id {
+    let tool = resolve(handle, project.clone(), path, extension_sha256).await?;
+    if tool.identity != tool_id {
         return Err(STALE.into());
     }
     let mut state = project.eslint.0.lock().map_err(|_| TOOL)?;
     if state.closed {
         return Err(STALE.into());
+    }
+    #[cfg(feature = "code-extensions-preview")]
+    if let Some(server) = tool.extension {
+        if server.generation != state.extension_generation {
+            return Err(STALE.into());
+        }
+        state.extension_approved.insert(tool_id);
+        return Ok(());
     }
     state.approved.insert(tool_id);
     Ok(())
@@ -334,6 +431,8 @@ pub(crate) fn revoke_code_eslint(
     let mut state = project.eslint.0.lock().map_err(|_| TOOL)?;
     state.active = None;
     state.approved.clear();
+    #[cfg(feature = "code-extensions-preview")]
+    state.clear_extension();
     Ok(())
 }
 
@@ -372,9 +471,14 @@ pub(crate) struct EslintInput {
     digest: String,
     context: String,
     limit: usize,
+    extension_sha256: Option<String>,
 }
 
-fn capture(project: &Project, input: &EslintInput) -> Result<(Tool, String), String> {
+fn capture(
+    handle: &AppHandle,
+    project: &Project,
+    input: &EslintInput,
+) -> Result<(Tool, String), String> {
     let doc = project.read(&input.path, input.compare)?;
     if doc.index_only {
         return Err("eslintIndex".into());
@@ -389,14 +493,24 @@ fn capture(project: &Project, input: &EslintInput) -> Result<(Tool, String), Str
     if text.len() > MAX_INPUT || format!("{:x}", Sha256::digest(&text)) != input.digest {
         return Err(STALE.into());
     }
-    let tool = discover(project, &input.path)?;
+    let tool = discover_provider(
+        handle,
+        project,
+        &input.path,
+        input.extension_sha256.as_deref(),
+    )?;
     if tool.context != input.context {
         return Err(STALE.into());
     }
     Ok((tool, text))
 }
 
-fn start(tool: &Tool, project: &Project, id: Uuid) -> Result<(Child, CancellationToken), String> {
+fn start(
+    tool: &Tool,
+    project: &Project,
+    id: Uuid,
+    server_entry: Option<&Path>,
+) -> Result<(Child, CancellationToken), String> {
     let mut state = project.eslint.0.lock().map_err(|_| TOOL)?;
     let active = state
         .active
@@ -404,18 +518,27 @@ fn start(tool: &Tool, project: &Project, id: Uuid) -> Result<(Child, Cancellatio
         .filter(|active| active.id == id)
         .ok_or(CANCELLED)?;
     let mut command = Command::new(&tool.node);
+    if let Some(server) = server_entry {
+        command.arg(server).arg("--stdio");
+    } else {
+        command
+            .arg(&tool.entry)
+            .args(["--stdin", "--stdin-filename"])
+            .arg(&tool.file)
+            .args(["--format", "json", "--no-color"]);
+    }
     command
-        .arg(&tool.entry)
-        .args(["--stdin", "--stdin-filename"])
-        .arg(&tool.file)
-        .args(["--format", "json", "--no-color"])
         .current_dir(&tool.cwd)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("ESLINT_USE_FLAT_CONFIG", "true")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(if server_entry.is_some() {
+            Stdio::null()
+        } else {
+            Stdio::piped()
+        })
         .process_group(0)
         .kill_on_drop(true);
     let child = command.spawn().map_err(|_| TOOL)?;
@@ -533,6 +656,7 @@ async fn watch_offline(app: &AppState) -> String {
 
 #[tauri::command]
 pub(crate) async fn run_code_eslint(
+    handle: AppHandle,
     project_id: Uuid,
     input: EslintInput,
     state: State<'_, ReviewState>,
@@ -558,6 +682,8 @@ pub(crate) async fn run_code_eslint(
             id,
             cancellation: CancellationToken::new(),
             pid: None,
+            #[cfg(feature = "code-extensions-preview")]
+            extension: input.extension_sha256.is_some(),
         });
     }
     let _guard = RunGuard {
@@ -566,21 +692,39 @@ pub(crate) async fn run_code_eslint(
     };
     check_settings(&app).await?;
     let capture_project = project.clone();
-    let (tool, text) = tokio::task::spawn_blocking(move || capture(&capture_project, &input))
-        .await
-        .map_err(|_| TOOL)??;
+    let (tool, text) =
+        tokio::task::spawn_blocking(move || capture(&handle, &capture_project, &input))
+            .await
+            .map_err(|_| TOOL)??;
     check_settings(&app).await?;
     if !tool.info(&project.eslint)?.approved {
         return Err(TRUST.into());
     }
-    let (child, cancellation) = start(&tool, &project, id)?;
-    let (status, stdout) = tokio::select! {
-        biased;
-        () = cancellation.cancelled() => return Err(CANCELLED.into()),
-        reason = watch_offline(&app) => return Err(reason),
-        result = tokio::time::timeout(Duration::from_secs(12), communicate(child, text)) => result.map_err(|_| TIMEOUT)??,
+    #[cfg(feature = "code-extensions-preview")]
+    let server = tool
+        .extension
+        .as_ref()
+        .map(vsix::Server::stage)
+        .transpose()?;
+    #[cfg(feature = "code-extensions-preview")]
+    let server_entry = server.as_ref().map(tempfile::NamedTempFile::path);
+    #[cfg(not(feature = "code-extensions-preview"))]
+    let server_entry = None;
+    let (child, cancellation) = start(&tool, &project, id, server_entry)?;
+    let report = async {
+        #[cfg(feature = "code-extensions-preview")]
+        if let Some(server) = &tool.extension {
+            return vsix::lint(child, &tool, server, text, limit).await;
+        }
+        let (status, stdout) = communicate(child, text).await?;
+        decode_output(status, &stdout, &tool.file, limit)
     };
-    decode_output(status, &stdout, &tool.file, limit)
+    tokio::select! {
+        biased;
+        () = cancellation.cancelled() => Err(CANCELLED.into()),
+        reason = watch_offline(&app) => Err(reason),
+        result = tokio::time::timeout(Duration::from_secs(12), report) => result.map_err(|_| TIMEOUT)?,
+    }
 }
 
 #[cfg(test)]
@@ -631,6 +775,8 @@ mod tests {
         let active = Active {
             id: Uuid::new_v4(),
             cancellation: CancellationToken::new(),
+            #[cfg(feature = "code-extensions-preview")]
+            extension: true,
             pid: child
                 .id()
                 .and_then(|id| i32::try_from(id).ok())
