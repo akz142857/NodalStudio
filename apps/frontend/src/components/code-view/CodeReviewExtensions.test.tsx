@@ -47,13 +47,17 @@ it("loads the Open VSX featured list by default and restores it when search is c
   const featured = { id: "example.featured", name: "Featured extension", description: "Example", publisher: "example",
     version: "1.0.0", verified: true, deprecated: false };
   const matched = { ...featured, id: "example.linter", name: "Example Linter" };
-  const search = vi.fn<CodeOpenVsxPlatform["search"]>((_, query) => Promise.resolve({
-    items: [query ? matched : featured], nextOffset: null,
-  }));
+  const search = vi.fn<CodeOpenVsxPlatform["search"]>((_, query, offset) => Promise.resolve(
+    query && offset === 0 ? { items: [], nextOffset: 20 } : { items: [query ? matched : featured], nextOffset: null },
+  ));
   const install = vi.fn<CodeExtensionPlatform["install"]>().mockResolvedValue(null);
+  const detail = vi.fn<CodeOpenVsxPlatform["detail"]>().mockResolvedValue({
+    ...matched, versions: [matched.version], capability: "syntax", downloadable: true, canUpdate: false,
+    license: null, engine: null, incompatibility: null,
+  });
   const api: CodeExtensionPlatform = {
     list: vi.fn(), install, prepare: vi.fn(), change: vi.fn(),
-    openVsx: { search, detail: vi.fn(), install: vi.fn(), updates: vi.fn() },
+    openVsx: { search, detail, install: vi.fn(), updates: vi.fn() },
   };
   const client = new QueryClient();
   const renderPanel = (offline: boolean) => <QueryClientProvider client={client}><CodeReviewExtensions
@@ -64,7 +68,7 @@ it("loads the Open VSX featured list by default and restores it when search is c
   expect(search).not.toHaveBeenCalled();
 
   rerender(renderPanel(false));
-  const featuredGroup = screen.getByRole("region", { name: "Featured on Open VSX" });
+  const featuredGroup = screen.getByRole("region", { name: "Recommended from Open VSX" });
   expect(await within(featuredGroup).findByRole("button", { name: featured.name })).toBeVisible();
   expect(search).toHaveBeenCalledExactlyOnceWith("project", "", 0);
   const installed = screen.getByRole("region", { name: "Installed" });
@@ -81,13 +85,21 @@ it("loads the Open VSX featured list by default and restores it when search is c
   const input = screen.getByRole("searchbox", { name: "Search Open VSX" });
   fireEvent.change(input, { target: { value: "linter" } });
   const results = screen.getByRole("region", { name: "Open VSX results" });
-  expect(await within(results).findByRole("button", { name: matched.name })).toBeVisible();
+  const more = await within(results).findByRole("button", { name: "Load more" });
   expect(search).toHaveBeenLastCalledWith("project", "linter", 0);
+  expect(within(results).getByText("No compatible extensions found so far.")).toBeVisible();
+  fireEvent.click(more);
+  fireEvent.click(await within(results).findByRole("button", { name: matched.name }));
+  expect(search).toHaveBeenLastCalledWith("project", "linter", 20);
+  const dialog = within(screen.getByRole("dialog", { name: "Extension details" }));
+  expect(await dialog.findByRole("button", { name: "Install 1.0.0" })).toBeEnabled();
+  expect(detail).toHaveBeenCalledExactlyOnceWith("project", matched.id, matched.version);
+  fireEvent.click(dialog.getByRole("button", { name: "Close" }));
   fireEvent.click(screen.getByRole("button", { name: "Clear extension search" }));
   expect(input).toHaveFocus();
   expect(screen.getByRole("button", { name: featured.name })).toBeVisible();
   expect(screen.getByRole("button", { name: "Installed (0)" })).toHaveAttribute("aria-expanded", "false");
-  expect(search).toHaveBeenCalledTimes(2);
+  expect(search).toHaveBeenCalledTimes(3);
 });
 
 it("explains why a downloadable debugger cannot be installed in Code", async () => {

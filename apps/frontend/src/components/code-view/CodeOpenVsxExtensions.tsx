@@ -17,7 +17,7 @@ export function CodeOpenVsxResults({ market, projectId, items, offline, active, 
   active: boolean;
   query: string;
   pendingQuery: boolean;
-  openDetails: (id: string) => void;
+  openDetails: (id: string, version: string) => void;
 }) {
   const { t } = useI18n();
   const search = useInfiniteQuery({
@@ -38,12 +38,13 @@ export function CodeOpenVsxResults({ market, projectId, items, offline, active, 
     {search.isError && <p role="alert">{t(extensionErrorMessage(search.error))}{" "}
       <Button size="small" variant="ghost" onClick={() => { void search.refetch(); }}>{t("codeReview.refresh")}</Button></p>}
     {search.isSuccess && !results.length && <p role="status">
-      {t(query ? "codeReview.extensions.marketNoResults" : "codeReview.extensions.marketNoFeatured")}
+      {t(search.hasNextPage ? "codeReview.extensions.marketNoResultsYet"
+        : query ? "codeReview.extensions.marketNoResults" : "codeReview.extensions.marketNoFeatured")}
     </p>}
     {results.length > 0 && <ul className="code-extension-list">
       {results.map((item) => {
         const installed = items.find((entry) => entry.id === item.id);
-        return <CodeExtensionRow key={item.id} item={item} verified={item.verified} onOpen={() => openDetails(item.id)}
+        return <CodeExtensionRow key={item.id} item={item} verified={item.verified} onOpen={() => openDetails(item.id, item.version)}
           status={installed && (installed.version === item.version ? t("codeReview.extensions.installedTab")
             : t("codeReview.extensions.marketInstalledVersion", { version: installed.version }))} />;
       })}
@@ -85,7 +86,7 @@ export function CodeOpenVsxDetails({ market, projectId, id, initialVersion, inst
         : release?.capability === "unsupported" ? "unsupportedStatus" : "marketUnknown";
   const upgrade = Boolean(installed && release?.canUpdate && installed.version !== release.version);
   const showInstall = !installed || upgrade;
-  const canInstall = !offline && !detail.isPlaceholderData && release?.downloadable && release.capability !== "unsupported";
+  const canInstall = !offline && !detail.isPlaceholderData && release?.downloadable && release.capability != null && release.capability !== "unsupported";
   const incompatibility = release?.incompatibility === "debugger" ? "marketRequiresDebugger"
     : release?.incompatibility === "extensionDependencies" ? "marketRequiresExtensions" : "unsupported";
   return <ModalSurface label={t("codeReview.extensions.marketDetails")} onDismiss={dismiss}>
@@ -95,7 +96,10 @@ export function CodeOpenVsxDetails({ market, projectId, id, initialVersion, inst
       {!offline && (detail.isPending || detail.isPlaceholderData) && <p role="status">{t("navigation.loadingWorkspace")}</p>}
       {!offline && detail.isError && <p role="alert">{t(extensionErrorMessage(detail.error))}{" "}
         <Button variant="ghost" size="small" onClick={() => { void detail.refetch(); }}>{t("codeReview.refresh")}</Button></p>}
-      {installed && <p role="status">{t("codeReview.extensions.marketInstalledVersion", { version: installed.version })}</p>}
+      {installed && <p role="status">
+        {t("codeReview.extensions.marketInstalledVersion", { version: installed.version })}
+        {installed.enabled && ` · ${t("codeReview.extensions.enabled")}`}
+      </p>}
       {release && <>
         <p className="code-extension-byline">Open VSX · {release.id}</p>
         {release.description && <p>{release.description}</p>}

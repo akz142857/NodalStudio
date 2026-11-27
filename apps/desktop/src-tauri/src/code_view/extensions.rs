@@ -454,8 +454,7 @@ fn install(root: &Path, archive_path: &Path, project_key: &str) -> Result<Extens
     };
     let (stage, extension) = stage_package(root, &source, &receipt, project_key)?;
     let _lock = STORAGE_LOCK.write().map_err(|_| STORAGE)?;
-    let destination = root.join(&extension.id);
-    install_staged(root, stage.path(), &destination)?;
+    let extension = install_staged(root, stage.path(), project_key, extension)?;
     let _ = stage.keep();
     Ok(extension)
 }
@@ -476,14 +475,33 @@ fn stage_package(
     Ok((temp, extension))
 }
 
-fn install_staged(root: &Path, stage: &Path, destination: &Path) -> Result<(), String> {
+fn enable_for_project(directory: &Path, project_key: &str) -> Result<(), String> {
+    let enabled = directory.join("enabled");
+    fs::create_dir_all(&enabled).map_err(|_| STORAGE)?;
+    File::create(enabled.join(project_key)).map_err(|_| STORAGE)?;
+    Ok(())
+}
+
+fn install_staged(
+    root: &Path,
+    stage: &Path,
+    project_key: &str,
+    mut extension: Extension,
+) -> Result<Extension, String> {
+    let destination = root.join(&extension.id);
     if destination.exists() {
         return Err("extensionAlreadyInstalled".into());
     }
     if installed_paths(root)?.len() >= MAX_INSTALLED {
         return Err(LIMIT.into());
     }
-    fs::rename(stage, destination).map_err(|_| STORAGE.into())
+    if extension.capability == Capability::Unsupported {
+        return Err(UNSUPPORTED.into());
+    }
+    enable_for_project(stage, project_key)?;
+    fs::rename(stage, destination).map_err(|_| STORAGE)?;
+    extension.enabled = true;
+    Ok(extension)
 }
 
 fn newer(version: &str, previous: &str) -> bool {
@@ -641,8 +659,7 @@ pub(crate) async fn change_code_extension(
                 if item.capability == Capability::Unsupported {
                     return Err(UNSUPPORTED.into());
                 }
-                fs::create_dir_all(enabled).map_err(|_| STORAGE)?;
-                File::create(marker).map_err(|_| STORAGE)?;
+                enable_for_project(&path, key)?;
             }
             ExtensionAction::Disable => {
                 if let Err(error) = fs::remove_file(marker)
@@ -716,7 +733,7 @@ pub(crate) async fn prepare_code_extension(
 mod tests {
     use super::*;
 
-    fn syntax_package(root: &Path, version: &str, sha256: &str) -> (tempfile::TempDir, Extension) {
+    fn syntax_archive(version: &str) -> Vec<u8> {
         let mut archive = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
         let options = zip::write::SimpleFileOptions::default();
         archive
@@ -736,10 +753,13 @@ mod tests {
         archive
             .write_all(br#"{"scopeName":"source.sample","patterns":[]}"#)
             .unwrap();
-        let package = archive.finish().unwrap().into_inner();
+        archive.finish().unwrap().into_inner()
+    }
+
+    fn syntax_package(root: &Path, version: &str, sha256: &str) -> (tempfile::TempDir, Extension) {
         stage_package(
             root,
-            &package,
+            &syntax_archive(version),
             &Receipt {
                 file_name: "sample.vsix".into(),
                 sha256: sha256.into(),
@@ -751,17 +771,31 @@ mod tests {
     }
 
     #[test]
+    fn installing_a_vsix_enables_it_for_the_installing_project_only() {
+        let source = tempfile::tempdir().unwrap();
+        let archive = source.path().join("sample.vsix");
+        fs::write(&archive, syntax_archive("1.0.0")).unwrap();
+        let root = tempfile::tempdir().unwrap();
+
+        let installed = install(root.path(), &archive, "current-project").unwrap();
+        let destination = root.path().join(&installed.id);
+        assert!(installed.enabled);
+        assert!(
+            installation(&destination, "current-project")
+                .unwrap()
+                .enabled
+        );
+        assert!(!installation(&destination, "other-project").unwrap().enabled);
+    }
+
+    #[test]
     fn update_rechecks_the_installed_package_and_preserves_project_enablement() {
         let root = tempfile::tempdir().unwrap();
         let destination = root.path().join("example.sample");
         let old_sha = "1".repeat(64);
         let new_sha = "2".repeat(64);
-        let (old, _) = syntax_package(root.path(), "1.0.0", &old_sha);
-        install_staged(root.path(), old.path(), &destination).unwrap();
-        fs::create_dir(destination.join("enabled")).unwrap();
-        for key in ["current-project", "other-project"] {
-            File::create(destination.join("enabled").join(key)).unwrap();
-        }
+        let (old, installed) = syntax_package(root.path(), "1.0.0", &old_sha);
+        install_staged(root.path(), old.path(), "other-project", installed).unwrap();
 
         let (staged, incoming) = syntax_package(root.path(), "1.1.0", &new_sha);
         let conflict = replace_staged(
@@ -774,7 +808,7 @@ mod tests {
         assert_eq!(conflict.err().as_deref(), Some(CHANGED));
         let retained = installation(&destination, "current-project").unwrap();
         assert_eq!(retained.version, "1.0.0");
-        assert!(retained.enabled);
+        assert!(!retained.enabled);
 
         let updated = replace_staged(
             staged.path(),
@@ -786,7 +820,7 @@ mod tests {
         .unwrap();
         assert_eq!(updated.version, "1.1.0");
         assert_eq!(updated.receipt.sha256, new_sha);
-        assert!(updated.enabled);
+        assert!(!updated.enabled);
         assert!(installation(&destination, "other-project").unwrap().enabled);
         assert!(
             !installation(&destination, "unapproved-project")

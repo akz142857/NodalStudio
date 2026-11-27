@@ -1,5 +1,9 @@
 //! Public Open VSX catalog and exact-version package downloads.
-use std::{collections::BTreeMap, future::Future, time::Duration};
+use std::{
+    collections::{BTreeMap, HashSet},
+    future::Future,
+    time::Duration,
+};
 
 use futures_util::{StreamExt, stream};
 use reqwest::{Client, StatusCode, Url, redirect};
@@ -10,10 +14,10 @@ use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 use super::{
-    Capability, Extension, MAX_ARCHIVE, MAX_ENTRY, PackageSource, Receipt, ReviewState,
-    UNSUPPORTED, capabilities, compatible_update, has_valid_id, install_staged, installation,
-    installed_paths, newer, package_id, parse_manifest, replace_staged, stage_package,
-    with_storage_read,
+    Capability, ESLINT_ARCHIVE_SHA256, ESLINT_ID, ESLINT_VERSION, Extension, MAX_ARCHIVE,
+    MAX_ENTRY, PackageSource, Receipt, ReviewState, capabilities, compatible_update, has_valid_id,
+    install_staged, installation, installed_paths, newer, package_id, parse_manifest,
+    replace_staged, stage_package, with_storage_read,
 };
 use crate::{AppState, effective_settings};
 
@@ -27,6 +31,14 @@ const INTEGRITY: &str = "openVsxIntegrity";
 const MAX_JSON: u64 = 2 * 1024 * 1024;
 const SEARCH_SIZE: u32 = 20;
 const FEATURED_SIZE: u32 = 7;
+const PREVIEW_RECOMMENDATIONS: &[&str] = &[
+    "vscode.css",
+    "vscode.html",
+    "vscode.json",
+    "vscode.yaml",
+    "davidanson.vscode-markdownlint",
+    ESLINT_ID,
+];
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -323,16 +335,60 @@ async fn release(
     Ok(Some(record))
 }
 
-async fn declared_compatibility(client: &Client, record: &Record) -> Option<CatalogCompatibility> {
-    let asset = record.file_url("manifest")?;
-    let bytes = get(client, asset, MAX_ENTRY, RESPONSE).await.ok()??;
-    let manifest = parse_manifest(&bytes).ok()?;
-    if package_id(&manifest.publisher, &manifest.name).ok()? != record.id().ok()?
+async fn declared_compatibility(
+    client: &Client,
+    record: &Record,
+) -> Result<Option<CatalogCompatibility>, String> {
+    let Some(asset) = record.file_url("manifest") else {
+        return Ok(None);
+    };
+    let Some(bytes) = get(client, asset, MAX_ENTRY, RESPONSE).await? else {
+        return Ok(None);
+    };
+    let Ok(manifest) = parse_manifest(&bytes) else {
+        return Ok(None);
+    };
+    if package_id(&manifest.publisher, &manifest.name)
+        .ok()
+        .as_deref()
+        != Some(&record.id()?)
         || manifest.version != record.version
     {
-        return None;
+        return Ok(None);
     }
-    Some(CatalogCompatibility::from_manifest(&manifest))
+    Ok(Some(CatalogCompatibility::from_manifest(&manifest)))
+}
+
+async fn installable_item(
+    client: &Client,
+    id: &str,
+    version: Option<&str>,
+) -> Result<Option<CatalogItem>, String> {
+    let version = if id == ESLINT_ID {
+        Some(ESLINT_VERSION)
+    } else {
+        version
+    };
+    let Some(record) = release(client, id, version)
+        .await?
+        .filter(Record::can_download)
+    else {
+        return Ok(None);
+    };
+    let Some(compatibility) = declared_compatibility(client, &record).await? else {
+        return Ok(None);
+    };
+    if compatibility.capability == Capability::Unsupported {
+        return Ok(None);
+    }
+    if compatibility.capability == Capability::Eslint {
+        let url = record.file_url("sha256").ok_or(RESPONSE)?;
+        let digest = get(client, url, 256, RESPONSE).await?;
+        if digest.as_deref().and_then(checksum).as_deref() != Some(ESLINT_ARCHIVE_SHA256) {
+            return Ok(None);
+        }
+    }
+    record.catalog_item().map(Some)
 }
 
 async fn online(app: &AppState) -> Result<(), String> {
@@ -381,26 +437,63 @@ pub(crate) async fn search_code_open_vsx(
     if query.chars().count() > 160 {
         return Err(RESPONSE.into());
     }
-    while_online(&app, async {
-        let data = json::<SearchResponse>(&client()?, catalog_url(query, offset))
-            .await?
-            .ok_or(RESPONSE)?;
-        let count = u32::try_from(data.extensions.len()).map_err(|_| RESPONSE)?;
-        let next = offset.saturating_add(count);
-        Ok(CatalogPage {
-            items: data
-                .extensions
-                .iter()
-                .filter_map(|record| record.catalog_item().ok())
-                .collect(),
-            next_offset: (!query.is_empty()
-                && count > 0
-                && next > offset
-                && next < data.total_size)
-                .then_some(next),
+    while_online(&app, catalog_page(&client()?, query, offset)).await
+}
+
+async fn catalog_page(client: &Client, query: &str, offset: u32) -> Result<CatalogPage, String> {
+    let featured = query.is_empty();
+    let data = json::<SearchResponse>(client, catalog_url(query, offset))
+        .await?
+        .ok_or(RESPONSE)?;
+    let count = u32::try_from(data.extensions.len()).map_err(|_| RESPONSE)?;
+    let next = offset.saturating_add(count);
+    // The registry offset counts all results, including releases filtered out below.
+    let next_offset = (!featured && next > offset && next < data.total_size).then_some(next);
+    let mut candidates: Vec<_> = data
+        .extensions
+        .iter()
+        .filter_map(|record| {
+            stable_version(&record.version)?;
+            Some((record.id().ok()?, Some(record.version.clone())))
         })
-    })
-    .await
+        .collect();
+    if featured {
+        candidates.extend(
+            PREVIEW_RECOMMENDATIONS
+                .iter()
+                .map(|id| ((*id).to_owned(), None)),
+        );
+    }
+    let checks = stream::iter(candidates)
+        .map(|(id, version)| async move {
+            tokio::time::timeout(
+                Duration::from_secs(6),
+                installable_item(client, &id, version.as_deref()),
+            )
+            .await
+            .map_err(|_| NETWORK.to_owned())?
+        })
+        .buffered(8);
+    tokio::pin!(checks);
+    let mut items = Vec::new();
+    let mut ids = HashSet::new();
+    let mut failure = None;
+    while let Some(check) = checks.next().await {
+        match check {
+            Ok(Some(item)) if ids.insert(item.id.clone()) => items.push(item),
+            Err(error) => failure = Some(error),
+            _ => {}
+        }
+        if featured && items.len() == FEATURED_SIZE as usize {
+            break;
+        }
+    }
+    if items.is_empty()
+        && let Some(error) = failure
+    {
+        return Err(error);
+    }
+    Ok(CatalogPage { items, next_offset })
 }
 
 fn catalog_url(query: &str, offset: u32) -> Url {
@@ -440,7 +533,7 @@ pub(crate) async fn detail_code_open_vsx(
         let record = release(&client, &id, version.as_deref())
             .await?
             .ok_or(UNAVAILABLE)?;
-        let compatibility = declared_compatibility(&client, &record).await;
+        let compatibility = declared_compatibility(&client, &record).await?;
         Ok((record, compatibility))
     })
     .await?;
@@ -493,7 +586,7 @@ pub(crate) async fn check_code_open_vsx_updates(
                 if let Some(record) = release
                     .filter(|record| record.can_download() && newer(&record.version, &item.version))
                     && declared_compatibility(&client, &record)
-                        .await
+                        .await?
                         .is_none_or(|result| compatible_update(item.capability, result.capability))
                 {
                     return Ok::<_, String>(Some(CatalogUpdate {
@@ -585,9 +678,6 @@ pub(crate) async fn install_code_open_vsx(
         if incoming.id != input.id || incoming.version != input.version {
             return Err(INTEGRITY.into());
         }
-        if incoming.capability == Capability::Unsupported {
-            return Err(UNSUPPORTED.into());
-        }
         let _lock = super::STORAGE_LOCK.write().map_err(|_| super::STORAGE)?;
         let destination = root.join(&incoming.id);
         if let Some(previous) = input.installed_sha256 {
@@ -603,9 +693,9 @@ pub(crate) async fn install_code_open_vsx(
             }
             return Ok(replaced);
         }
-        install_staged(&root, staged_package.path(), &destination)?;
+        let installed = install_staged(&root, staged_package.path(), key, incoming)?;
         let _ = staged_package.keep();
-        Ok(incoming)
+        Ok(installed)
     })
     .await
     .map_err(|_| super::STORAGE)?

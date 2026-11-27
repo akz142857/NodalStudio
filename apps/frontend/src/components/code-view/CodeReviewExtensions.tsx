@@ -108,7 +108,7 @@ export function CodeReviewExtensions({ api, projectId, items, loading, loadError
 
   const catalog = market && <CodeOpenVsxResults market={market} projectId={projectId} items={items}
     active={active && (searching || featuredOpen)} offline={offline} query={searching ? query : ""}
-    pendingQuery={searching && pendingQuery} openDetails={(id) => selectCatalog({ id })} />;
+    pendingQuery={searching && pendingQuery} openDetails={(id, version) => selectCatalog({ id, version })} />;
   return <section className="code-extensions" aria-label={t("codeReview.extensions.title")}>
     <header className="code-extension-toolbar">
       {market && <form className="code-extension-search" role="search" onSubmit={(event) => {
