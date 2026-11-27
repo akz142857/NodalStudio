@@ -46,7 +46,7 @@ type ProjectView = "changes" | "files" | "search" | "extensions";
 type NavigatorView = "projects" | ProjectView;
 type NoteStatus = ReviewNote["status"] | "recheck" | "pending";
 type ReviewDock = "checks" | "note" | "languages";
-type RenderDock = (current?: DisplayedCheckTarget, note?: React.ReactNode) => React.ReactNode;
+type RenderDock = (current?: DisplayedCheckTarget, note?: { path: string; status: NoteStatus; body: React.ReactNode }) => React.ReactNode;
 type RenderStatus = (status?: NoteStatus) => React.ReactNode;
 type FinderMenu = (target: CodeFinderTarget, intoParent?: boolean) => SchemaObjectMenuAction[];
 type Draft = { number: number; text: string };
@@ -377,7 +377,7 @@ function ProjectReview({ api, project, choose, quickOpenInitially, filesInitiall
   const list = useRef<HTMLDivElement>(null);
   const detail = useRef<HTMLDivElement>(null);
   const toolbar = useRef<HTMLElement>(null);
-  const pendingFocus = useRef<"list" | "filter" | "search" | "tab" | "checks" | undefined>(undefined);
+  const pendingFocus = useRef<"list" | "filter" | "search" | "tab" | "checks" | "note" | undefined>(undefined);
   const changed = changes.data?.files ?? noChanges;
   const changedPaths = useMemo(() => indexChangedPaths(changed), [changed]);
   const firstChange = changed[0]?.path;
@@ -453,6 +453,7 @@ function ProjectReview({ api, project, choose, quickOpenInitially, filesInitiall
     const focus = pendingFocus.current;
     const target = focus === "tab" ? detail.current?.querySelector<HTMLElement>(".code-review-tabs [aria-current]")
       : focus === "checks" ? detail.current?.querySelector<HTMLElement>(".code-checks-filters input")
+      : focus === "note" ? detail.current?.querySelector<HTMLTextAreaElement>(".code-review-note-composer textarea")
       : focus === "filter" ? sidebar.current?.querySelector<HTMLElement>("input[type=search]")
       : focus === "search" ? sidebar.current?.querySelector<HTMLElement>("[data-code-content-field]")
       : list.current?.querySelector<HTMLElement>("[data-code-row]") ?? activityBar.current?.querySelector<HTMLElement>("button[aria-pressed=true]");
@@ -568,6 +569,7 @@ function ProjectReview({ api, project, choose, quickOpenInitially, filesInitiall
     open(target.path, target.mode);
   };
   const closeDock = () => {
+    if (pendingFocus.current === "note") pendingFocus.current = undefined;
     detail.current?.querySelector<HTMLButtonElement>(`[data-review-dock-toggle="${dock}"]`)?.focus();
     setDock(undefined);
   };
@@ -579,6 +581,15 @@ function ProjectReview({ api, project, choose, quickOpenInitially, filesInitiall
       onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closeDock(); } }}>
       <header className="code-review-dock-header">
         <h3>{dockLabel}</h3>
+        {dock === "note" && note && <>
+          <div className="code-review-note-target" title={note.path}>
+            <CodeFileIcon path={note.path} />
+            <strong>{basename(note.path)}</strong>
+            {folderName(note.path) && <span>{folderName(note.path)}</span>}
+          </div>
+          <span className="code-review-note-status code-review-note-badge" data-status={note.status}
+            role="status">{t(`codeReview.${note.status}`)}</span>
+        </>}
         {dock === "checks" && <div className="code-checks-filters">
           <input type="search" placeholder={t("codeReview.checks.search")} aria-label={t("codeReview.checks.search")}
             value={findingsFilter} onChange={(event) => setFindingsFilter(event.target.value)} />
@@ -604,7 +615,7 @@ function ProjectReview({ api, project, choose, quickOpenInitially, filesInitiall
           : changes.isFetching ? "loading" : changes.isError ? "git" : changed.length === 0 ? "clean" : undefined} />
         : dock === "languages" ? <CodeReviewLanguageServices status={languageQuery.data} projectName={project.name}
           enable={() => enableLanguages()} enabling={enablingLanguages} error={languageQuery.isError || enableLanguagesFailed} />
-          : note ?? <p className="code-review-dock-empty">{t("codeReview.noteSelectChange")}</p>}
+          : note?.body ?? <p className="code-review-dock-empty">{t("codeReview.noteSelectChange")}</p>}
     </aside>
   </>;
   const findings = checkRun?.files.flatMap((file) => file.status === "checked" ? file.findings : []) ?? [];
@@ -631,7 +642,13 @@ function ProjectReview({ api, project, choose, quickOpenInitially, filesInitiall
     {status && <button type="button" className="code-review-dock-toggle" data-review-dock-toggle="note"
       aria-expanded={dock === "note"} aria-controls={dock === "note" ? dockId : undefined}
       aria-label={t("codeReview.noteToggle", { status: t(`codeReview.${status}`) })}
-      onClick={() => setDock((current) => current === "note" ? undefined : "note")}>
+      onClick={() => {
+        if (dock === "note") closeDock();
+        else {
+          pendingFocus.current = "note";
+          setDock("note");
+        }
+      }}>
       <ActionIcon name="edit" /><span>{t("codeReview.notes")}</span>
       <span className="code-review-note-status" data-status={status}>{t(`codeReview.${status}`)}</span>
     </button>}
@@ -1347,8 +1364,12 @@ function FileReview({ api, project, path, dependency, change, mode, baseline, re
   </div>;
   const noteHistory = change && evidence ? reviewHistory(project.key, path) : undefined;
   const noteStatus = noteHistory && evidence ? fileReviewStatus(noteHistory, evidence) : undefined;
-  const note = noteHistory && noteStatus ? <ReviewNotes key={evidence} api={api} project={project} path={path} document={document}
-    history={noteHistory} status={noteStatus} onSaved={onSaved} /> : undefined;
+  const note = noteHistory && noteStatus ? {
+    path,
+    status: noteStatus,
+    body: <ReviewNotes key={evidence} api={api} project={project} path={path} document={document}
+      history={noteHistory} onSaved={onSaved} />,
+  } : undefined;
   const comparison = dependency ? t("codeReview.definitionDependency") : diff && indexOnly ? t("codeReview.index")
     : !diff && showingOriginal ? t("codeReview.originalVersion") : diff && change?.staged ? t("codeReview.hasStaged") : baseline;
   const readerText = diff ? (revised ?? "") : (fullText ?? "");
@@ -1392,14 +1413,13 @@ function FileReview({ api, project, path, dependency, change, mode, baseline, re
   </>;
 }
 
-function ReviewNotes({ api, project, path, document, history, status, onSaved }: ProjectProps & {
+function ReviewNotes({ api, project, path, document, history, onSaved }: ProjectProps & {
   path: string;
   document: CodeReviewDocument;
   history: ReviewNote[];
-  status: NoteStatus;
   onSaved: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, formatDate } = useI18n();
   const noteId = useId();
   const comparisonId = `${noteId}-comparison`;
   const target = t(document.indexOnly ? "codeReview.index" : "codeReview.worktree");
@@ -1417,33 +1437,32 @@ function ReviewNotes({ api, project, path, document, history, status, onSaved }:
     onSuccess: onSaved,
   });
   return <div className="code-review-notes-body">
-    <div className="code-review-note-context">
-      <div className="code-review-note-file" title={path}>
-        <CodeFileIcon path={path} />
-        <strong>{basename(path)}</strong>
-        {folderName(path) && <span>{folderName(path)}</span>}
-      </div>
-      <span className="code-review-note-status" data-status={status} role="status">{t(`codeReview.${status}`)}</span>
-      <span id={comparisonId} className="code-review-note-comparison">{comparison}</span>
-    </div>
-    <div className="code-review-note-field">
-      <label htmlFor={noteId}>{t("codeReview.noteField")}</label>
-      <textarea id={noteId} aria-describedby={comparisonId} rows={3} maxLength={2000} value={note} readOnly={save.isPending}
+    <div className="code-review-note-composer ds-composite-field" aria-busy={save.isPending}>
+      <label className="visually-hidden" htmlFor={noteId}>{t("codeReview.noteField")}</label>
+      <textarea id={noteId} aria-describedby={comparisonId} rows={2} maxLength={2000} value={note} readOnly={save.isPending}
         onChange={(event) => {
           setNote(event.target.value);
           saveReviewDraft(project.key, path, document.evidence, event.target.value, current?.note ?? "");
         }} placeholder={t("codeReview.notePlaceholder")} />
+      <div className="code-review-note-footer">
+        <span id={comparisonId} className="code-review-note-comparison" title={comparison}>{comparison}</span>
+        <div className="code-review-note-actions">
+          <Button size="small" variant="secondary" disabled={save.isPending} busy={save.isPending && save.variables === "needsChanges"}
+            onClick={() => save.mutate("needsChanges")}>{t("codeReview.needsChanges")}</Button>
+          <Button size="small" variant="primary" disabled={save.isPending} busy={save.isPending && save.variables === "reviewed"}
+            onClick={() => save.mutate("reviewed")}>{t("codeReview.markReviewed")}</Button>
+        </div>
+      </div>
     </div>
-    <div className="code-review-note-actions">
-      <Button size="small" variant="secondary" disabled={save.isPending} onClick={() => save.mutate("needsChanges")}>{t("codeReview.needsChanges")}</Button>
-      <Button size="small" variant="primary" disabled={save.isPending} onClick={() => save.mutate("reviewed")}>{t("codeReview.markReviewed")}</Button>
-    </div>
-    {save.isError && <p role="alert">{t(save.error.message === "codeReviewStale" || String(save.error) === "codeReviewStale"
+    {save.isError && <p className="code-review-note-feedback" role="alert">{t(save.error.message === "codeReviewStale" || String(save.error) === "codeReviewStale"
       ? "codeReview.stale" : "codeReview.noteFailed")}</p>}
     {older.length > 0 && <details className="code-review-history">
       <summary>{t("codeReview.history")}</summary>
       <ul>{[...older].reverse().map((entry) => <li key={entry.evidence}>
-        <span>{t(`codeReview.${entry.status}`)} · {new Date(entry.at).toLocaleString()}</span>
+        <div>
+          <span data-status={entry.status}>{t(`codeReview.${entry.status}`)}</span>
+          <time dateTime={entry.at}>{formatDate(entry.at, "local", { dateStyle: "medium", timeStyle: "short" })}</time>
+        </div>
         {entry.note && <p>{entry.note}</p>}
       </li>)}</ul>
     </details>}

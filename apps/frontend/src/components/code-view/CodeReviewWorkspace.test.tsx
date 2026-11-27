@@ -442,11 +442,16 @@ it("reviews Go and SQL diffs and preserves earlier notes after the target change
   fireEvent.click(within(screen.getByRole("navigation", { name: "Open files" })).getByRole("button", { name: "orders.sql" }));
 
   await screen.findByRole("textbox", { name: modelPath });
-  fireEvent.click(screen.getByRole("button", { name: /Review note.*Pending review/ }));
-  const note = await screen.findByRole("textbox", { name: "Note" });
+  const noteToggle = screen.getByRole("button", { name: /Review note.*Pending review/ });
+  fireEvent.click(noteToggle);
+  const notePanel = within(screen.getByRole("complementary", { name: "Review note" }));
+  const note = await notePanel.findByRole("textbox", { name: "Note" });
+  expect(note).toHaveFocus();
+  expect(notePanel.getByRole("status")).toHaveTextContent("Pending review");
   expect(note).toHaveAccessibleDescription(`${project.baseline?.slice(0, 10)} → Working tree`);
   fireEvent.change(note, { target: { value: "Check how missing payments are handled." } });
-  fireEvent.click(screen.getByRole("button", { name: "Close panel" }));
+  fireEvent.click(notePanel.getByRole("button", { name: "Close panel" }));
+  expect(noteToggle).toHaveFocus();
   const tabs = within(screen.getByRole("navigation", { name: "Open files" }));
   fireEvent.click(tabs.getByRole("button", { name: "orders.go" }));
   fireEvent.click(tabs.getByRole("button", { name: "orders.sql" }));

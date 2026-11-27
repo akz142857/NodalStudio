@@ -145,12 +145,12 @@ select.ds-select:disabled { opacity: .5; cursor: default; }
 }
 
 /* Composite editors draw one ring around the field, including its accessories. */
-:is(.query-composer, .quick-query-editor):has(> textarea:focus) {
+:is(.query-composer, .quick-query-editor, .ds-composite-field):has(> textarea:focus) {
   outline: var(--ds-focus-ring);
   outline-offset: var(--ds-focus-inset);
 }
 
-:is(.query-composer, .quick-query-editor) > textarea:focus,
+:is(.query-composer, .quick-query-editor, .ds-composite-field) > textarea:focus,
 .query-sql-editor .cm-content:focus {
   outline: none;
 }

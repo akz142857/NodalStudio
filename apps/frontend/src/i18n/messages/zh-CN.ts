@@ -3532,7 +3532,7 @@ export const zhCN = {
   "codeReview.recheck": "待复核",
   "codeReview.markReviewed": "标为已阅",
   "codeReview.noteField": "备注",
-  "codeReview.notePlaceholder": "记录需要核对或修改的内容",
+  "codeReview.notePlaceholder": "添加审阅备注…",
   "codeReview.noteFailed": "无法保存审阅备注。",
   "codeReview.history": "历史版本备注",
   "codeView.title": "代码",

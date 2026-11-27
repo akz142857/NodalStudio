@@ -3530,7 +3530,7 @@ export const en = {
   "codeReview.recheck": "Review again",
   "codeReview.markReviewed": "Mark reviewed",
   "codeReview.noteField": "Note",
-  "codeReview.notePlaceholder": "What should be checked or revised?",
+  "codeReview.notePlaceholder": "Add a review note…",
   "codeReview.noteFailed": "Could not save this review note.",
   "codeReview.history": "Notes on earlier versions",
   "codeView.title": "Code",
