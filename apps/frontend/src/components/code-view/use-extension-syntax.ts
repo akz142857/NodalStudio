@@ -15,7 +15,7 @@ export function useExtensionSyntax(api: CodeExtensionPlatform | undefined, items
     if (!api || !extension || !language || !text || text.length > 512 * 1024) return;
     const controller = new AbortController();
     onActivity?.(path, { id: extension.id, state: "running" });
-    void api.prepare(projectId, extension.id, language.id).then(async (source) => {
+    void api.prepare(projectId, extension.id, extension.sha256, language.id).then(async (source) => {
       if (source.capability !== "syntax") throw new Error("TextMate grammar unavailable.");
       const result = await runExtension({ source, text: normalizeReviewText(text) }, controller.signal);
       if (!("tokens" in result)) throw new Error("Missing tokenization result.");

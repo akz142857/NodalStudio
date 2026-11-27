@@ -2443,6 +2443,30 @@ pub fn run() {
                     not(feature = "mac-app-store")
                 ))]
                 code_view::extensions::prepare_code_extension,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::extensions::open_vsx::search_code_open_vsx,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::extensions::open_vsx::detail_code_open_vsx,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::extensions::open_vsx::check_code_open_vsx_updates,
+                #[cfg(all(
+                    target_os = "macos",
+                    feature = "code-extensions-preview",
+                    not(feature = "mac-app-store")
+                ))]
+                code_view::extensions::open_vsx::install_code_open_vsx,
                 #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
                 code_view::eslint::inspect_code_eslint,
                 #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]

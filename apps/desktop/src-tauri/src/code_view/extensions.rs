@@ -1,5 +1,7 @@
-//! Local VSIX storage for the macOS preview. Extension code runs in the UI's
+//! VSIX storage for the macOS preview. Extension code runs in the UI's
 //! isolated interpreter and never runs in the native process.
+pub(crate) mod open_vsx;
+
 use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
@@ -7,6 +9,7 @@ use std::{
     sync::Mutex,
 };
 
+use rustix::fs::{CWD, RenameFlags, renameat_with};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, State};
@@ -21,6 +24,7 @@ const LIMIT: &str = "extensionLimit";
 const STORAGE: &str = "extensionStorage";
 const DISABLED: &str = "extensionDisabled";
 const UNSUPPORTED: &str = "extensionUnsupported";
+const CHANGED: &str = "extensionChanged";
 const MAX_ARCHIVE: u64 = 32 * 1024 * 1024;
 const MAX_UNPACKED: u64 = 64 * 1024 * 1024;
 const MAX_ENTRY: u64 = 2 * 1024 * 1024;
@@ -94,6 +98,16 @@ enum Capability {
 struct Receipt {
     file_name: String,
     sha256: String,
+    #[serde(default)]
+    source: PackageSource,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum PackageSource {
+    #[default]
+    Local,
+    OpenVsx,
 }
 
 #[derive(Serialize)]
@@ -151,7 +165,7 @@ fn has_valid_id(id: &str) -> bool {
         .is_some_and(|(publisher, name)| package_id(publisher, name).is_ok_and(|valid| valid == id))
 }
 
-fn package_asset(root: &Path, file: &str, extensions: &[&str]) -> Option<PathBuf> {
+fn asset_path<'a>(file: &'a str, extensions: &[&str]) -> Option<&'a Path> {
     let relative = Path::new(file);
     if file.contains('\\')
         || relative
@@ -167,6 +181,11 @@ fn package_asset(root: &Path, file: &str, extensions: &[&str]) -> Option<PathBuf
     {
         return None;
     }
+    Some(relative)
+}
+
+fn package_asset(root: &Path, file: &str, extensions: &[&str]) -> Option<PathBuf> {
+    let relative = asset_path(file, extensions)?;
     let root = root.canonicalize().ok()?;
     let path = root.join(relative).canonicalize().ok()?;
     let meta = path.metadata().ok()?;
@@ -189,10 +208,8 @@ fn bounded_file(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
     Ok(buffer)
 }
 
-fn manifest(root: &Path) -> Result<Manifest, String> {
-    let manifest: Manifest =
-        serde_json::from_slice(&bounded_file(&root.join("package.json"), MAX_ENTRY)?)
-            .map_err(|_| INVALID)?;
+fn parse_manifest(bytes: &[u8]) -> Result<Manifest, String> {
+    let manifest: Manifest = serde_json::from_slice(bytes).map_err(|_| INVALID)?;
     package_id(&manifest.publisher, &manifest.name)?;
     semver::Version::parse(&manifest.version).map_err(|_| INVALID)?;
     if manifest.engines.vscode.is_empty() {
@@ -201,28 +218,41 @@ fn manifest(root: &Path) -> Result<Manifest, String> {
     Ok(manifest)
 }
 
+fn manifest(root: &Path) -> Result<Manifest, String> {
+    parse_manifest(&bounded_file(&root.join("package.json"), MAX_ENTRY)?)
+}
+
+fn grammar_for_language<'a>(
+    manifest: &'a Manifest,
+    language: &str,
+) -> impl Iterator<Item = &'a Grammar> {
+    manifest.contributes.grammars.iter().filter(move |grammar| {
+        grammar.language.as_deref() == Some(language) && !grammar.scope_name.is_empty()
+    })
+}
+
 fn usable_grammar<'a>(
     manifest: &'a Manifest,
     root: &Path,
     language: &str,
 ) -> Option<(&'a Grammar, PathBuf)> {
-    manifest.contributes.grammars.iter().find_map(|grammar| {
-        if grammar.language.as_deref() != Some(language) || grammar.scope_name.is_empty() {
-            return None;
-        }
+    grammar_for_language(manifest, language).find_map(|grammar| {
         package_asset(root, &grammar.path, &["json"]).map(|asset| (grammar, asset))
     })
 }
 
-fn capabilities(manifest: &Manifest, root: &Path) -> (Capability, Vec<Language>) {
+fn capabilities(manifest: &Manifest, root: Option<&Path>) -> (Capability, Vec<Language>) {
     if !manifest.extension_dependencies.is_empty() {
         return (Capability::Unsupported, Vec::new());
     }
+    let asset_exists = |file: &str, suffixes: &[&str]| match root {
+        Some(path) => package_asset(path, file, suffixes).is_some(),
+        None => asset_path(file, suffixes).is_some(),
+    };
     if manifest
         .browser
         .as_deref()
-        .and_then(|entry| package_asset(root, entry, &["js", "cjs"]))
-        .is_some()
+        .is_some_and(|entry| asset_exists(entry, &["js", "cjs"]))
         && manifest
             .activation_events
             .iter()
@@ -235,7 +265,10 @@ fn capabilities(manifest: &Manifest, root: &Path) -> (Capability, Vec<Language>)
             .contributes
             .languages
             .iter()
-            .filter(|language| usable_grammar(manifest, root, &language.id).is_some())
+            .filter(|language| {
+                grammar_for_language(manifest, &language.id)
+                    .any(|grammar| asset_exists(&grammar.path, &["json"]))
+            })
             .cloned()
             .collect();
         if !languages.is_empty() {
@@ -249,7 +282,7 @@ fn installation(path: &Path, project_key: &str) -> Result<Extension, String> {
     let root = path.join("extension");
     let manifest = manifest(&root)?;
     let id = package_id(&manifest.publisher, &manifest.name)?;
-    let (capability, languages) = capabilities(&manifest, &root);
+    let (capability, languages) = capabilities(&manifest, Some(&root));
     let receipt =
         serde_json::from_slice(&bounded_file(&path.join("installation.json"), 16 * 1024)?)
             .map_err(|_| STORAGE)?;
@@ -340,30 +373,94 @@ fn install(root: &Path, archive_path: &Path, project_key: &str) -> Result<Extens
     {
         return Err(INVALID.into());
     }
-    if installed_paths(root)?.len() >= MAX_INSTALLED {
-        return Err(LIMIT.into());
-    }
     let source = bounded_file(archive_path, MAX_ARCHIVE)?;
-    let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
-    unpack(&source, temp.path())?;
     let receipt = Receipt {
         file_name: archive_path
             .file_name()
             .ok_or(INVALID)?
             .to_string_lossy()
             .into_owned(),
-        sha256: format!("{:x}", Sha256::digest(source)),
+        sha256: format!("{:x}", Sha256::digest(&source)),
+        source: PackageSource::Local,
     };
+    let (stage, extension) = stage_package(root, &source, &receipt, project_key)?;
+    let destination = root.join(&extension.id);
+    install_staged(root, stage.path(), &destination)?;
+    Ok(extension)
+}
+
+fn stage_package(
+    root: &Path,
+    source: &[u8],
+    receipt: &Receipt,
+    project_key: &str,
+) -> Result<(tempfile::TempDir, Extension), String> {
+    let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
+    unpack(source, temp.path())?;
     let mut file = File::create(temp.path().join("installation.json")).map_err(|_| STORAGE)?;
-    serde_json::to_writer(&mut file, &receipt).map_err(|_| STORAGE)?;
+    serde_json::to_writer(&mut file, receipt).map_err(|_| STORAGE)?;
     file.flush().map_err(|_| STORAGE)?;
     let extension = installation(temp.path(), project_key)?;
-    let destination = root.join(&extension.id);
+    Ok((temp, extension))
+}
+
+fn install_staged(root: &Path, stage: &Path, destination: &Path) -> Result<(), String> {
     if destination.exists() {
         return Err("extensionAlreadyInstalled".into());
     }
-    fs::rename(temp.path(), destination).map_err(|_| STORAGE)?;
-    Ok(extension)
+    if installed_paths(root)?.len() >= MAX_INSTALLED {
+        return Err(LIMIT.into());
+    }
+    fs::rename(stage, destination).map_err(|_| STORAGE.into())
+}
+
+fn newer(version: &str, previous: &str) -> bool {
+    let (Ok(version), Ok(previous)) = (
+        semver::Version::parse(version),
+        semver::Version::parse(previous),
+    ) else {
+        return false;
+    };
+    version.cmp_precedence(&previous).is_gt()
+}
+
+fn compatible_update(current: Capability, incoming: Capability) -> bool {
+    incoming != Capability::Unsupported
+        && (current == Capability::Unsupported || current == incoming)
+}
+
+fn replace_staged(
+    stage: &Path,
+    destination: &Path,
+    project_key: &str,
+    incoming: &Extension,
+    current_sha256: &str,
+) -> Result<Extension, String> {
+    if !destination.exists() {
+        return Err(CHANGED.into());
+    }
+    let current = installation(destination, project_key)?;
+    if current.receipt.sha256 != current_sha256 || !newer(&incoming.version, &current.version) {
+        return Err(CHANGED.into());
+    }
+    if !compatible_update(current.capability, incoming.capability) {
+        return Err(UNSUPPORTED.into());
+    }
+    let previous = destination.join("enabled");
+    let enabled = stage.join("enabled");
+    if previous.is_dir() {
+        fs::create_dir(&enabled).map_err(|_| STORAGE)?;
+        for marker in fs::read_dir(previous).map_err(|_| STORAGE)? {
+            let marker = marker.map_err(|_| STORAGE)?;
+            if marker.file_type().map_err(|_| STORAGE)?.is_file() {
+                File::create(enabled.join(marker.file_name())).map_err(|_| STORAGE)?;
+            }
+        }
+    }
+    let incoming = installation(stage, project_key)?;
+    // Atomic directory exchange keeps the previous installation intact if preparation or replacement fails.
+    renameat_with(CWD, stage, CWD, destination, RenameFlags::EXCHANGE).map_err(|_| STORAGE)?;
+    Ok(incoming)
 }
 
 async fn with_storage<T: Send + 'static>(
@@ -465,6 +562,7 @@ pub(crate) async fn prepare_code_extension(
     state: State<'_, ReviewState>,
     project_id: Uuid,
     id: String,
+    sha256: String,
     language: String,
 ) -> Result<Prepared, String> {
     if !has_valid_id(&id) {
@@ -473,6 +571,9 @@ pub(crate) async fn prepare_code_extension(
     with_storage(app, &state, project_id, move |root, key| {
         let path = root.join(id);
         let item = installation(&path, key)?;
+        if item.receipt.sha256 != sha256 {
+            return Err(CHANGED.into());
+        }
         if !item.enabled {
             return Err(DISABLED.into());
         }
@@ -504,4 +605,94 @@ pub(crate) async fn prepare_code_extension(
         }
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn syntax_package(root: &Path, version: &str, sha256: &str) -> (tempfile::TempDir, Extension) {
+        let mut archive = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default();
+        archive
+            .start_file("extension/package.json", options)
+            .unwrap();
+        serde_json::to_writer(&mut archive, &serde_json::json!({
+            "name": "sample", "publisher": "Example", "version": version,
+            "engines": { "vscode": "*" },
+            "contributes": {
+                "languages": [{ "id": "sample", "extensions": [".sample"] }],
+                "grammars": [{ "language": "sample", "scopeName": "source.sample", "path": "syntax.json" }]
+            }
+        })).unwrap();
+        archive
+            .start_file("extension/syntax.json", options)
+            .unwrap();
+        archive
+            .write_all(br#"{"scopeName":"source.sample","patterns":[]}"#)
+            .unwrap();
+        let package = archive.finish().unwrap().into_inner();
+        stage_package(
+            root,
+            &package,
+            &Receipt {
+                file_name: "sample.vsix".into(),
+                sha256: sha256.into(),
+                source: PackageSource::OpenVsx,
+            },
+            "current-project",
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn update_rechecks_the_installed_package_and_preserves_project_enablement() {
+        let root = tempfile::tempdir().unwrap();
+        let destination = root.path().join("example.sample");
+        let old_sha = "1".repeat(64);
+        let new_sha = "2".repeat(64);
+        let (old, _) = syntax_package(root.path(), "1.0.0", &old_sha);
+        install_staged(root.path(), old.path(), &destination).unwrap();
+        fs::create_dir(destination.join("enabled")).unwrap();
+        for key in ["current-project", "other-project"] {
+            File::create(destination.join("enabled").join(key)).unwrap();
+        }
+
+        let (staged, incoming) = syntax_package(root.path(), "1.1.0", &new_sha);
+        let conflict = replace_staged(
+            staged.path(),
+            &destination,
+            "current-project",
+            &incoming,
+            &new_sha,
+        );
+        assert_eq!(conflict.err().as_deref(), Some(CHANGED));
+        let retained = installation(&destination, "current-project").unwrap();
+        assert_eq!(retained.version, "1.0.0");
+        assert!(retained.enabled);
+
+        let updated = replace_staged(
+            staged.path(),
+            &destination,
+            "current-project",
+            &incoming,
+            &old_sha,
+        )
+        .unwrap();
+        assert_eq!(updated.version, "1.1.0");
+        assert_eq!(updated.receipt.sha256, new_sha);
+        assert!(updated.enabled);
+        assert!(installation(&destination, "other-project").unwrap().enabled);
+        assert!(
+            !installation(&destination, "unapproved-project")
+                .unwrap()
+                .enabled
+        );
+        assert_eq!(
+            installation(staged.path(), "current-project")
+                .unwrap()
+                .version,
+            "1.0.0"
+        );
+    }
 }

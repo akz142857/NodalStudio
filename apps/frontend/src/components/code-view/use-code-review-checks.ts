@@ -160,7 +160,7 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
             snapshot.configDigest = markdownConfig.digest;
             if (extension) {
               try {
-                const source = await api.extensions?.prepare(projectId, extension.id, "markdown");
+                const source = await api.extensions?.prepare(projectId, extension.id, extension.sha256, "markdown");
                 if (source?.capability !== "diagnostics") throw new Error("Diagnostic entry unavailable.");
                 const result = await runExtension({
                   source, path: input.target.path, text: input.text, config: markdownConfig.value, limit,

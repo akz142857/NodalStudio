@@ -157,6 +157,8 @@ export interface CodeExtensionLanguage {
   extensions: string[];
 }
 
+export type CodeExtensionCapability = "diagnostics" | "syntax" | "unsupported";
+
 export interface CodeExtension {
   id: string;
   name: string;
@@ -165,8 +167,9 @@ export interface CodeExtension {
   description: string;
   fileName: string;
   sha256: string;
+  source: "local" | "openVsx";
   engine: string;
-  capability: "diagnostics" | "syntax" | "unsupported";
+  capability: CodeExtensionCapability;
   enabled: boolean;
   languages: CodeExtensionLanguage[];
 }
@@ -181,5 +184,38 @@ export interface CodeExtensionPlatform {
   list(projectId: string): Promise<CodeExtension[]>;
   install(projectId: string): Promise<CodeExtension | null>;
   change(projectId: string, id: string, action: CodeExtensionAction): Promise<CodeExtension | null>;
-  prepare(projectId: string, id: string, language: string): Promise<PreparedCodeExtension>;
+  prepare(projectId: string, id: string, sha256: string, language: string): Promise<PreparedCodeExtension>;
+  openVsx?: CodeOpenVsxPlatform;
+}
+
+export interface CodeOpenVsxItem {
+  id: string;
+  publisher: string;
+  name: string;
+  description: string;
+  version: string;
+  verified: boolean;
+  deprecated: boolean;
+}
+
+export interface CodeOpenVsxDetail extends CodeOpenVsxItem {
+  versions: string[];
+  license: string | null;
+  engine: string | null;
+  capability: CodeExtensionCapability | null;
+  downloadable: boolean;
+  canUpdate: boolean;
+}
+
+export interface CodeOpenVsxUpdate {
+  id: string;
+  version: string;
+  installedSha256: string;
+}
+
+export interface CodeOpenVsxPlatform {
+  search(projectId: string, query: string, offset: number): Promise<{ items: CodeOpenVsxItem[]; nextOffset: number | null }>;
+  detail(projectId: string, id: string, version?: string): Promise<CodeOpenVsxDetail>;
+  updates(projectId: string): Promise<{ updates: CodeOpenVsxUpdate[]; failed: number }>;
+  install(projectId: string, input: { id: string; version: string; installedSha256?: string }): Promise<CodeExtension>;
 }

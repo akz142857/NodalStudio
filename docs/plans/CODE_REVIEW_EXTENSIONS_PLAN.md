@@ -4,7 +4,7 @@
 
 产品目标是在 Nodal Studio Code 中提供类似 VS Code Extensions 的「扩展」入口。用户可以自行查找和安装兼容扩展、查看已安装及运行状态、启用、禁用、更新和卸载。扩展由兼容宿主运行，能在 Code 工作区提供诊断、语言服务等能力。 [VS Code 扩展管理](https://code.visualstudio.com/docs/configure/extensions/extension-marketplace)
 
-「检查」是 Code 的底部结果面板。P0 的内置 Markdown 检查和 P1 的项目 ESLint 已在开发版接入。macOS 原型增加「扩展」入口与本地 VSIX 安装，复用底部诊断和结果定位。原型覆盖范围与验收记录见第 7.3 节。 [Code View 开发计划](CODE_VIEW_DEVELOPMENT_PLAN.md) · [文件树设计](CODE_FILES_TREE_DESIGN.md)
+「检查」是 Code 的底部结果面板。P0 的内置 Markdown 检查和 P1 的项目 ESLint 已在开发版接入。macOS 预览版支持本地 VSIX 安装及 Open VSX 搜索、详情、安装和更新，复用底部诊断和结果定位。原型覆盖范围与验收记录见第 7.3 和 7.4 节。 [Code View 开发计划](CODE_VIEW_DEVELOPMENT_PLAN.md) · [文件树设计](CODE_FILES_TREE_DESIGN.md)
 
 ## 1. 产品范围与交付顺序
 
@@ -109,7 +109,7 @@ P0 先完成单文件 Diff 定位，再进入批量开发。P0 的功能验收�
 
 1. 在 Code 中打开「扩展」，查看已安装的扩展、发布者、版本和启用状态。可从本地选择 `.vsix` 安装。安装和启用分别显示状态，启用后展示实际运行状态及错误原因。
 2. 管理扩展的启用、禁用和卸载。在项目里启用可运行代码的扩展前，显示其来源和所需的工作区访问。禁用或卸载后结束该扩展的活动并清理其界面结果。
-3. 接入 Open VSX 后，用户可以搜索、查看详情、安装及检查更新。扩展版本与实际兼容性一并显示。 [Open VSX](https://open-vsx.org/)
+3. 在「Open VSX」页签搜索并打开详情，查看发布者、许可证、版本及预览版兼容性。在「已安装」页签检查更新，打开目标版本详情并确认更新。 [Open VSX](https://open-vsx.org/)
 
 ### 7.2 宿主原型和验收
 
@@ -125,7 +125,7 @@ P0 先完成单文件 Diff 定位，再进入批量开发。P0 的功能验收�
 
 Code 左侧项目标题旁的「扩展」入口使用系统选择器安装本地 VSIX。安装包保存在预览版的应用数据目录，安装后默认禁用，启用状态按项目保存。卸载会移除安装包及其项目授权。
 
-Theia 的 VS Code 插件宿主依赖其前后端服务。本次原型在 WKWebView 的 Worker 中使用 QuickJS WebAssembly 运行浏览器扩展的诊断入口。该解释器接收当前 Markdown 文档快照及静态规则配置，虚拟文件系统仅提供该快照。声明式语言扩展通过 TextMate 语法给 CodeMirror 着色。通用 VS Code API、Node 扩展、语言服务器、扩展市场和更新流程尚待实现。 [Theia 插件宿主架构](https://github.com/eclipse-theia/theia/blob/master/doc/Plugin-API.md)
+Theia 的 VS Code 插件宿主依赖其前后端服务。本次原型在 WKWebView 的 Worker 中使用 QuickJS WebAssembly 运行浏览器扩展的诊断入口。该解释器接收当前 Markdown 文档快照及静态规则配置，虚拟文件系统仅提供该快照。声明式语言扩展通过 TextMate 语法给 CodeMirror 着色。通用 VS Code API、Node 扩展和语言服务器留待后续兼容宿主。 [Theia 插件宿主架构](https://github.com/eclipse-theia/theia/blob/master/doc/Plugin-API.md)
 
 ```sh
 pnpm --filter @nodalstudio/desktop tauri build --debug --features code-extensions-preview --bundles app --config src-tauri/tauri.code-extensions-preview.conf.json
@@ -137,3 +137,11 @@ pnpm --filter @nodalstudio/desktop tauri build --debug --features code-extension
 | --- | --- | --- |
 | [DavidAnson.vscode-markdownlint 0.62.1](https://open-vsx.org/api/DavidAnson/vscode-markdownlint/0.62.1/file/DavidAnson.vscode-markdownlint-0.62.1.vsix) | `b6baf90037c903aa21b9c525972910561a903b82e12fe8d67220740ec15b1aa0` | 从底部「检查」运行该 VSIX 后，点击 `MD012` 定位到 `README.md` 第 101 行第 1 列。禁用后扩展结果和计数清空。 |
 | [vscode.docker 1.95.3](https://open-vsx.org/api/vscode/docker/1.95.3/file/vscode.docker-1.95.3.vsix) | `5de2f31e7e8e9c64b17d0b2eb915a5c14653904376a06d07f2229890fe296078` | `apps/frontend/Dockerfile` 使用该扩展的 Docker 语言模式并高亮 `FROM`、`AS` 等关键字。禁用或卸载后立即恢复纯文本。 |
+
+### 7.4 Open VSX 原型
+
+市场详情读取通用平台版本的公开元数据及扩展清单。安装或手动更新使用用户确认的稳定版本。原生层核对注册表的 SHA-256、包内扩展 ID、版本与宿主兼容性。下载使用 Open VSX 及其官方 CDN，完全离线模式会中止网络请求。 [Open VSX Registry API](https://github.com/eclipse-openvsx/openvsx/wiki/Registry-API)
+
+新安装默认禁用。更新在校验完成后原子替换安装目录，保留各项目的启用状态。下载、校验或替换失败时原版本仍可用。更新成功后清除旧版本诊断，重新运行会加载新版本。
+
+2026-11-27 在 macOS Open VSX 预览版和真实 NodalStudio 项目中，通过市场搜索并打开 `DavidAnson.vscode-markdownlint` 详情，选择安装 0.62.1，启用后在底部「检查」运行。检查更新发现 0.63.1，安装后启用状态保留、旧诊断清空。重新运行仍得到 `MD012`，点击定位到 `README.md` 第 101 行第 1 列。再次检查显示没有可用更新。0.63.1 的 SHA-256 为 `a3cfccc3714febf06b895eb70af301a8eb64ac5b14029e7527eb025558156967`。 [0.63.1 注册表元数据](https://open-vsx.org/api/DavidAnson/vscode-markdownlint/universal/0.63.1)

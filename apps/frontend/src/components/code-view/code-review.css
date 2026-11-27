@@ -44,6 +44,7 @@
   align-items: center;
   gap: 4px;
 }
+.code-review-header > .code-review-header-actions { margin-inline-start: auto; }
 
 .code-review .code-review-tool,
 .code-review .code-review-tab-close {
@@ -968,8 +969,64 @@
   gap: 6px;
 }
 
-.code-extensions > p {
+.code-extensions > div > p {
   margin-block: 10px;
+}
+
+.code-extension-views {
+  margin-block-end: 10px;
+}
+
+.code-extension-search {
+  display: flex;
+  gap: 6px;
+}
+
+.code-extension-search input,
+.code-extension-version select {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-control);
+  color: var(--ds-text);
+  background: var(--ds-surface);
+  font: inherit;
+}
+
+.code-extension-search input { flex: 1; }
+
+.code-extension-result {
+  padding: 0;
+  border: 0;
+  color: var(--ds-accent-text, var(--ds-text));
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.code-extension-result:hover { text-decoration: underline; }
+
+.code-extension-detail h3,
+.code-extension-detail dl { margin: 0; }
+
+.code-extension-detail dl {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) 1fr;
+  gap: 4px 10px;
+}
+
+.code-extension-detail dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.code-extension-version {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .code-extension-state {

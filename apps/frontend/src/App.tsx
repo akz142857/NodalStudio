@@ -1626,6 +1626,7 @@ export function App() {
                 eslintAvailability={!runtime.data?.localEslint ? "eslintUnavailable"
                   : settings.app.privacy.offlineMode ? "eslintOffline" : "enabled"}
                 allowExtensions={runtime.data?.codeExtensionsPreview === true}
+                extensionsOffline={settings.app.privacy.offlineMode}
                 allowDefinitions={runtime.data?.distribution !== "macAppStore"} />
             </Suspense> : null
           ) : mode === "ontology" ? (

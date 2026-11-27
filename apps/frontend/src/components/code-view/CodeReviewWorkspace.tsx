@@ -45,10 +45,12 @@ function fileReviewStatus(history: ReviewNote[], evidence: string): NoteStatus {
   return history.find((entry) => entry.evidence === evidence)?.status ?? (history.length ? "recheck" : "pending");
 }
 
-export function CodeReviewWorkspace({ api, allowDefinitions = true, allowExtensions = false, eslintAvailability = "eslintUnavailable", outlineId, outlineOpen, searchAnchor, ...sidebarProps }: {
+export function CodeReviewWorkspace({ api, allowDefinitions = true, allowExtensions = false, extensionsOffline = false,
+  eslintAvailability = "eslintUnavailable", outlineId, outlineOpen, searchAnchor, ...sidebarProps }: {
   api: CodeReviewPlatform;
   allowDefinitions?: boolean;
   allowExtensions?: boolean;
+  extensionsOffline?: boolean;
   eslintAvailability?: EslintAvailability;
 } & CodeSidebarProps & CodeOutlineProps & CodeSearchProps) {
   const { t } = useI18n();
@@ -87,7 +89,7 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, allowExtensi
     {project.isPending ? <p className="code-review-status" role="status">{t("navigation.loadingWorkspace")}</p>
       : project.data ? <ProjectReview key={project.data.id} api={api} project={project.data} choose={choose}
         quickOpenInitially={project.data.id === searchAfterPick}
-        extensionsApi={allowExtensions ? api.extensions : undefined}
+        extensionsApi={allowExtensions ? api.extensions : undefined} extensionsOffline={extensionsOffline}
         allowDefinitions={allowDefinitions} eslintAvailability={eslintAvailability} outlineOpen={outlineOpen}
         renderOutline={renderOutline} searchAnchor={searchAnchor} {...sidebarProps} />
       : <div className="code-review-reader-body">
@@ -105,7 +107,7 @@ type DefinitionDialog = { point: ReturnPoint } & (
 );
 
 function ProjectReview({ api, project, choose, quickOpenInitially, allowDefinitions, eslintAvailability, sidebarId, sidebarOpen, setSidebarOpen,
-  outlineOpen, renderOutline, searchAnchor, extensionsApi }: ProjectProps & CodeSidebarProps & CodeSearchProps & {
+  outlineOpen, renderOutline, searchAnchor, extensionsApi, extensionsOffline }: ProjectProps & CodeSidebarProps & CodeSearchProps & {
   choose: React.ReactNode;
   outlineOpen: boolean;
   renderOutline: (outline?: React.ReactNode) => React.ReactNode;
@@ -113,6 +115,7 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
   allowDefinitions: boolean;
   eslintAvailability: EslintAvailability;
   extensionsApi?: CodeExtensionPlatform;
+  extensionsOffline: boolean;
 }) {
   const { t } = useI18n();
   const client = useQueryClient();
@@ -506,15 +509,15 @@ function ProjectReview({ api, project, choose, quickOpenInitially, allowDefiniti
       style={{ "--code-sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}>
       <aside ref={sidebar} id={sidebarId} className="code-review-sidebar" aria-label={t("codeReview.projectFiles")} hidden={!sidebarOpen}>
         <header className="code-review-header">
-          <h1 title={project.name}>{project.name}</h1>
+          {view !== "extensions" && <h1 title={project.name}>{project.name}</h1>}
           <div className="code-review-header-actions" role="group" aria-label={t("codeReview.projectActions")}>
             {extensionsButton}{refreshButton}{choose}
           </div>
         </header>
         {view === "extensions" && extensionsApi ? <CodeReviewExtensions api={extensionsApi} projectId={project.id} items={extensions}
           loading={extensionList.isPending} loadError={extensionList.isError} retry={() => { void extensionList.refetch(); }}
-          activities={activities} onUpdate={(id, item) => {
-            if (!item?.enabled) {
+          activities={activities} offline={extensionsOffline} onUpdate={(id, item) => {
+            if (!item?.enabled || extensions.some((installed) => installed.id === id && installed.sha256 !== item.sha256)) {
               checks.clearExtension(id);
               setSyntaxActivity((current) => current?.activity.id === id ? undefined : current);
             }
