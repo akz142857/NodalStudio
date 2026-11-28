@@ -1,5 +1,5 @@
-import { useId, useState, type ReactNode, type Ref } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useId, useRef, useState, type ReactNode, type Ref } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../../design-system/Button";
 import { EmptyState } from "../../design-system/EmptyState";
 import { useI18n } from "../../i18n";
@@ -40,7 +40,7 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   baselineCommit?: string | null;
   branchReviewKey?: string;
   previousReview?: boolean;
-  gitControls?: ReactNode;
+  gitControls?: (current: boolean) => ReactNode;
   readPosition: (key: string) => ReadingPosition | undefined;
   savePosition: (key: string, position: ReadingPosition) => void;
   onModeChange: (mode: ReadingMode) => void;
@@ -71,6 +71,7 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   const { t } = useI18n();
   const client = useQueryClient();
   const contextMenu = useCodeContextMenu();
+  const lastPosition = useRef<ReadingPosition | undefined>(undefined);
   const compare = Boolean(change);
   const scope = change?.comparison;
   const readComparison = () => branchReviewKey && api.branchFile ? api.branchFile(project.id, path)
@@ -86,6 +87,7 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
       if ((scope || branchReviewKey) && current.evidence !== change?.evidence) throw new Error("codeReviewStale");
       return current;
     },
+    placeholderData: keepPreviousData,
     retry: false,
     gcTime: 30_000,
   });
@@ -101,9 +103,9 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
     <EmptyState className="code-review-placeholder" title={<span role="status">{t("navigation.loadingWorkspace")}</span>} />
     {renderOutline()}
   </div>{renderDock()}<div className="code-review-reading-status">{renderStatus()}</div></>;
-  const document = (file.isError ? undefined : file.data) ?? (readWorkingTree ? workingTree.data : undefined);
+  const document = file.data ?? (readWorkingTree ? workingTree.data : undefined);
   const stale = (file.error instanceof Error ? file.error.message : String(file.error)) === "codeReviewStale";
-  if (!document || (readWorkingTree && workingTree.isError)) return <><div className="code-review-reader-body">
+  if (!document || (readWorkingTree && !workingTree.data)) return <><div className="code-review-reader-body">
     <div className="code-review-status code-review-placeholder" role="alert">
       <p>{t(dependency ? "codeReview.definitionSourceUnavailable" : stale ? "codeReview.stale" : "codeReview.fileFailed")}</p>
       <Button size="small" onClick={onRefresh}>{t("codeReview.refresh")}</Button>
@@ -152,7 +154,7 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
         </li>
       </ol>
     </nav>
-    {gitControls}
+    {gitControls?.(!file.isPlaceholderData && !file.isError)}
   </div>;
   const reviewKey = branchReviewKey ?? project.key;
   const noteHistory = change && evidence ? reviewHistory(reviewKey, path) : undefined;
@@ -204,7 +206,11 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
       sourceFileChange={!diff && change ? showingOriginal ? "deleted" : before?.state === "missing" ? "added" : undefined : undefined}
       text={readerText} onCopy={onCopy} onRevealInFinder={onRevealInFinder} viewSwitcher={viewSwitcher} heading={heading}
       fallbackCopy={after.state === "missing" && diff ? original : undefined} footer={status} dock={dock} comparison={comparison}
-      readPosition={() => readPosition(positionKey)} onPosition={(position) => savePosition(positionKey, position)}
+      readPosition={() => readPosition(positionKey) ?? lastPosition.current}
+      onPosition={(position) => {
+        lastPosition.current = position;
+        savePosition(positionKey, position);
+      }}
       onDefinition={onDefinition && liveSource ? (gesture) => onDefinition(gesture, diff ? "diff" : "source") : undefined}
       onReferences={allowLanguageTools && liveSource && api.documentHighlights ? (position, text) => api.documentHighlights?.(project.id, { origin, position, text }) ?? Promise.resolve([]) : undefined}
       outline={inspector} checkResult={checkResult} readerRef={readerRef}

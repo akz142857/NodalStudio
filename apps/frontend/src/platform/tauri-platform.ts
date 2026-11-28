@@ -93,6 +93,7 @@ export class TauriPlatform implements NodalStudioPlatform {
       addProjects: () => invoke("paste_code_review_projects"),
     },
     changes: (projectId) => invoke("refresh_code_review", { projectId }),
+    gitRevision: (projectId) => invoke("code_review_git_revision", { projectId }),
     switchWorktree: (projectId, path) => invoke("switch_code_review_worktree", { projectId, path }),
     branchFile: (projectId, path) => invoke("read_code_review_branch_file", { projectId, path }),
     updateBaseline: (projectId) => invoke("update_code_review_baseline", { projectId }),

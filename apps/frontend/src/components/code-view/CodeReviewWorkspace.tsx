@@ -6,7 +6,7 @@ import { ModalSurface } from "../../design-system/ModalSurface";
 import { useI18n } from "../../i18n";
 import type {
   CodeChangeComparison, CodeDefinitionRequest, CodeDefinitionTarget, CodeExtension, CodeExtensionPlatform, CodeIndexChange,
-  CodeFinderAction, CodeFinderTarget, CodeLanguageStatus, CodeNewEntryKind, CodePasteResult, CodeReviewChange,
+  CodeFinderAction, CodeFinderTarget, CodeLanguageStatus, CodeNewEntryKind, CodePasteResult, CodeReviewChange, CodeReviewChanges,
   CodeReviewPlatform, CodeReviewProject, CodeSearchMatch,
 } from "../../platform/code-review";
 import type { RuntimeInfo } from "../../platform/types";
@@ -45,6 +45,7 @@ const basename = (path: string) => path.split("/").at(-1) ?? path;
 const folderName = (path: string) => path.slice(0, Math.max(0, path.lastIndexOf("/")));
 const noChanges: readonly CodeReviewChange[] = [];
 const projectMutationScope = { id: "code-review-active-project" };
+const gitRevisionInterval = 2_000;
 
 type CodeSidebarProps = { sidebarId: string; sidebarOpen: boolean; setSidebarOpen: (open: boolean) => void };
 type CodeOutlineProps = { outlineId: string; outlineOpen: boolean };
@@ -445,6 +446,10 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     networkMode: "always",
     retry: false,
   });
+  const [refreshingChanges, setRefreshingChanges] = useState(false);
+  const [manualRefreshFailed, setManualRefreshFailed] = useState(false);
+  const changesBusy = changes.isPending || refreshingChanges;
+  const changesFailed = changes.isError && (!changes.data || manualRefreshFailed);
   const checks = useCodeReviewChecks(api, { ...project, baseline: changes.data?.git ? changes.data.git.head ?? changes.data.git.baseline : project.baseline }, eslintAvailability);
   const { run: checkRun, verify: verifyCheck, verifyAll: verifyAllChecks } = checks;
   const filesRefreshing = useIsFetching({ queryKey: codeReviewKeys.directories(project.id) }) > 0;
@@ -507,6 +512,17 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   const pendingFocus = useRef<"list" | "filter" | "search" | "tab" | "checks" | "note" | undefined>(undefined);
   const changed = changes.data?.files ?? noChanges;
   const git = changes.data?.git;
+  const indexRevision = git?.indexRevision;
+  const lastIndexRevision = useRef(indexRevision);
+  useEffect(() => {
+    if (lastIndexRevision.current && indexRevision && lastIndexRevision.current !== indexRevision) {
+      void client.invalidateQueries({
+        queryKey: codeReviewKeys.files(project.id),
+        predicate: ({ queryKey }) => queryKey[4] === false,
+      });
+    }
+    lastIndexRevision.current = indexRevision;
+  }, [client, indexRevision, project.id]);
   const worktrees = git?.worktrees;
   const modernChanges = Boolean(worktrees);
   const branch = api.branchFile ? changes.data?.branchChanges : undefined;
@@ -527,7 +543,8 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   }), [changes.data, historical]);
   const changedPaths = useMemo(() => indexChangedPaths(modernChanges ? allScoped : changed), [allScoped, changed, modernChanges]);
   const firstChange = (branchView?.files ?? (historical ? previousChanges : allScoped))[0]?.path;
-  const openTabs = useMemo(() => tabs ?? (firstChange ? [firstChange] : []), [firstChange, tabs]);
+  if (tabs === undefined && firstChange) setTabs([firstChange]);
+  const openTabs = useMemo(() => tabs ?? [], [tabs]);
   const active = selected && openTabs.includes(selected) ? selected : openTabs[0];
   const activeDraft = active ? drafts.get(active) : undefined;
   const selectedComparison = active ? comparisonChoices.get(active) : undefined;
@@ -707,6 +724,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   }
   const baselineMutation = useMutation({
     networkMode: "always",
+    onMutate: () => client.cancelQueries({ queryKey: codeReviewKeys.changes(projectId) }),
     mutationFn: () => api.updateBaseline!(projectId),
     onSuccess: (result) => {
       rememberReviewedComparisons(project.key, result);
@@ -736,7 +754,35 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
       void client.invalidateQueries({ queryKey: codeReviewKeys.files(projectId) });
     },
   });
-  const gitBusy = changes.isFetching || indexMutation.isPending || baselineMutation.isPending;
+  const gitBusy = changesBusy || indexMutation.isPending || baselineMutation.isPending;
+  const watchGit = canCompare && view === "changes" && sidebarOpen && !worktreeBusy && !gitBusy;
+  const gitRevision = api.gitRevision;
+  useEffect(() => {
+    if (!watchGit || !gitRevision) return;
+    const probe = gitRevision;
+    const queryKey = codeReviewKeys.changes(projectId);
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    function schedule() {
+      timer = setTimeout(() => { void poll(); }, gitRevisionInterval);
+    }
+    async function poll() {
+      try {
+        if (document.visibilityState === "hidden") return;
+        const revision = await probe(projectId);
+        if (stopped) return;
+        const current = client.getQueryData<CodeReviewChanges>(queryKey)?.git?.indexRevision;
+        if (!current || current === revision || client.getQueryState(queryKey)?.fetchStatus === "fetching") return;
+        await refetch({ cancelRefetch: false });
+      } catch {
+        // A concurrent Git operation can make the probe temporarily unavailable.
+      } finally {
+        if (!stopped) schedule();
+      }
+    }
+    schedule();
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [client, gitRevision, projectId, refetch, watchGit]);
   const indexAllowed = (entry: CodeReviewChange) => Boolean(api.changeIndex && git && (modernChanges || !git.baselineChanged) && !historical && !branchView && !gitBusy && !worktreeBusy
     && entry.comparison && entry.evidence && entry.kind !== "conflict");
   function updateIndex(entry: CodeReviewChange) {
@@ -749,15 +795,21 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
 
   const refreshChanges = useCallback(() => {
     setNotice("");
+    setRefreshingChanges(true);
+    setManualRefreshFailed(false);
     refreshVerifyAbort.current?.abort();
     const controller = new AbortController();
     refreshVerifyAbort.current = controller;
-    void refetch().then(() => {
+    void refetch({ cancelRefetch: false }).then((result) => {
+      if (controller.signal.aborted) return;
+      setManualRefreshFailed(result.isError);
       void client.invalidateQueries({ queryKey: codeReviewKeys.files(projectId) });
       const currentRun = checkRunRef.current;
       if (currentRun && currentRun.status !== "running") {
         void verifyAllChecks(currentRun, controller.signal);
       }
+    }).finally(() => {
+      if (!controller.signal.aborted) setRefreshingChanges(false);
     });
   }, [client, projectId, refetch, verifyAllChecks]);
 
@@ -783,10 +835,10 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     window.addEventListener("nodalstudio:code-refresh", refreshProject);
     return () => {
       refreshRef.current = undefined;
-      refreshVerifyAbort.current?.abort();
       window.removeEventListener("nodalstudio:code-refresh", refreshProject);
     };
   }, [refreshProject, refreshRef]);
+  useEffect(() => () => refreshVerifyAbort.current?.abort(), []);
 
   const open = (path: string, mode?: ReadingMode, comparison?: CodeChangeComparison | null) => {
     definitionVersion.current += 1;
@@ -884,7 +936,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
         })}
         locate={(file, finding) => { void locateCheck(file, finding); }}
         batchUnavailable={!canCompare ? project.git === "folder" ? "folder" : "git"
-          : changes.isFetching ? "loading" : changes.isError ? "git" : !checkChanges?.files.length ? "clean" : undefined} />
+          : changesBusy ? "loading" : changesFailed ? "git" : !checkChanges?.files.length ? "clean" : undefined} />
         : dock === "languages" ? <CodeReviewLanguageServices status={languageQuery.data} projectName={project.name}
           enable={() => enableLanguages()} enabling={enablingLanguages} error={languageQuery.isError || enableLanguagesFailed} />
         : dock === "debug" && pythonApi ? <PythonDebugPanel api={pythonApi} projectId={project.id} path={pythonFile}
@@ -1153,7 +1205,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   const activeReview = nextReview.findIndex(({ entry }) => entry.path === active);
   const nextReviewEntry = nextReview.length ? nextReview[(activeReview + 1) % nextReview.length].next : undefined;
   const displayedLimited = branchView?.limited ?? (historical ? changes.data?.previousLimited : changes.data?.localLimited ?? changes.data?.limited);
-  const clean = canCompare && Boolean(changes.data && !scoped.length && !displayedLimited && !changes.isError);
+  const clean = canCompare && Boolean(changes.data && !scoped.length && !displayedLimited && !changesFailed);
   const grouped = modernChanges && !branchView && !historical;
   const groups = grouped ? (["staged", "unstaged"] as const).map((scope) => ({
     scope,
@@ -1272,8 +1324,8 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     [changed],
   );
 
-  const refreshButton = <IconButton icon="refresh" className="code-review-tool" label={t(changes.isFetching ? "codeReview.refreshing" : "codeReview.refresh")}
-    disabled={changes.isFetching} aria-busy={changes.isFetching || undefined} onClick={refreshProject} />;
+  const refreshButton = <IconButton icon="refresh" className="code-review-tool" label={t(changesBusy ? "codeReview.refreshing" : "codeReview.refresh")}
+    disabled={changesBusy} aria-busy={changesBusy || undefined} onClick={refreshProject} />;
   const viewLabels = {
     projects: t("codeReview.projects.title"),
     files: t("codeReview.files"), search: t("codeReview.searchResults"),
@@ -1298,18 +1350,18 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   const baseline = branchView ? t("codeReview.worktrees.branchRange", { base: branchView.base.slice(0, 10), head: branchView.head.slice(0, 10) })
     : baselineCommit ? t("codeReview.compareBase", { commit: baselineCommit.slice(0, 10) }) : t(`codeReview.git.${project.git}`);
   const alternateScope = stagedVersion && unstagedVersion;
-  const diffControls = git && active && change?.comparison && readingMode === "diff" ? <div className="code-review-git-diff-actions">
+  const diffControls = (current: boolean) => git && active && change?.comparison && readingMode === "diff" ? <div className="code-review-git-diff-actions">
     {alternateScope && <Segmented label={t("codeReview.gitReview.fileComparison")} value={change.comparison}
       options={[
         { value: "unstaged", label: t("codeReview.gitReview.unstaged") },
         { value: "staged", label: t("codeReview.gitReview.staged") },
       ]} onChange={(scope) => selectComparison(active, scope)} />}
-    {api.changeIndex && !historical && <Button size="small" disabled={!indexAllowed(change)} onClick={() => updateIndex(change)}>
+    {api.changeIndex && !historical && <Button size="small" disabled={!current || !indexAllowed(change)} onClick={() => updateIndex(change)}>
       {t(change.comparison === "staged" ? "codeReview.gitReview.unstage" : "codeReview.gitReview.stage")}
     </Button>}
   </div> : undefined;
   return <>
-    {changes.isError && <p className="code-review-notice" role="alert">{t("codeReview.refreshFailed")}</p>}
+    {changesFailed && <p className="code-review-notice" role="alert">{t("codeReview.refreshFailed")}</p>}
     <CodeWorkspaceFrame layoutStore={layoutStore} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
       {(rail) => <>
         <nav ref={activityBar} className="code-review-activity" aria-label={t("codeReview.navigatorMode")} onKeyDown={navigateActivityBar}>
@@ -1359,13 +1411,13 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
             <div className="code-review-header-actions" role="group" aria-label={t("codeReview.panelActions", { name: viewLabels[view] })}>
               {view === "files" ? <>
                 <IconButton icon="refresh" className="code-review-tool" label={t("codeReview.refreshFiles")}
-                  disabled={filesRefreshing || (canCompare && changes.isFetching)} onClick={refreshFiles} />
+                  disabled={filesRefreshing || (canCompare && changesBusy)} onClick={refreshFiles} />
                 {api.createEntry && <IconButton icon="documentAdd" className="code-review-tool" label={t("codeReview.files.newFile")}
                   onClick={() => setNewEntry({ directory: "", kind: "file" })} />}
                 {sidebarOpen && <FileViewOptions compactFolders={compactFolders} showHidden={showHidden}
                   toggleCompactFolders={toggleCompactFolders} toggleHidden={() => setShowHidden((visible) => !visible)} />}
               </> : <IconButton icon="refresh" className="code-review-tool" label={t("codeReview.refreshChanges")}
-                disabled={changes.isFetching || worktreeBusy} onClick={refreshChanges} />}
+                disabled={changesBusy || worktreeBusy} onClick={refreshChanges} />}
             </div>
           </header>
           {view === "changes" && modernChanges && <CodeChangesNavigation view={branchView ? "branch" : "local"} branch={branch} head={git?.head}
@@ -1393,7 +1445,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
               <input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t("codeReview.filter")} aria-label={t("codeReview.filter")} />
             </div>
           </div>}
-          <div className="code-review-file-list" ref={list} aria-busy={view === "changes" && changes.isFetching || undefined}
+          <div className="code-review-file-list" ref={list} aria-busy={view === "changes" && changesBusy || undefined}
             onContextMenu={(event) => { if (view === "files" && event.target === event.currentTarget) folderMenu(event, ""); }}
             onKeyDown={navigateFiles}>
             {view === "files" ? <>
@@ -1412,7 +1464,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
               : changes.isPending ? <p role="status">{t("codeReview.loadingChanges")}</p>
               : <>
                 {displayedLimited && <p role="status">{t("codeReview.limited")}</p>}
-                {!hasMatches && !changes.isError && !clean && (git || query) && <p role="status">{t("codeReview.noMatches")}</p>}
+                {!hasMatches && !changesFailed && !clean && (git || query) && <p role="status">{t("codeReview.noMatches")}</p>}
                 {clean && active && <p role="status">{t(emptyChangesLabel)}</p>}
                 {grouped ? groups.filter(({ entries }) => entries.length > 0).map(({ scope, entries }) =>
                   <details key={scope} className="code-changes-group" open>
@@ -1459,8 +1511,9 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
             wrap={wordWrap}
             text={activeDraft.text} onEdit={(text) => setDrafts((current) => new Map(current).set(active, { ...activeDraft, text }))}
             outline={renderOutline()} dock={renderDock()} footer={renderStatus()} readerRef={readerRef} />
-          : active && (!branchView || change) ? <FileReview key={JSON.stringify([active, change?.evidence, change?.comparison, branchReviewKey, historical])}
-            api={api} project={project} path={active} dependency={dependency} change={change} mode={readingMode} branchReviewKey={branchReviewKey} previousReview={historical}
+          : active ? <FileReview key={active}
+            api={api} project={project} path={active} dependency={dependency} change={change} mode={readingMode}
+            branchReviewKey={change ? branchReviewKey : undefined} previousReview={historical && Boolean(change)}
             onRevealInFinder={revealFileInFinder(active, dependency)} onRevealFolderInFinder={dependency ? undefined : revealEntry}
             allowLanguageTools={allowDefinitions} eslintAvailability={eslintAvailability}
             showOutline={outlineOpen} renderOutline={renderOutline} renderDock={renderDock} renderStatus={renderStatus}

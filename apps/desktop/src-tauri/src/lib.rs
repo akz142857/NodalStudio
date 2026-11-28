@@ -2477,6 +2477,7 @@ pub fn run() {
                 code_view::review::pin_code_review_project,
                 code_view::review::remove_code_review_project,
                 code_view::review::refresh_code_review,
+                code_view::review::code_review_git_revision,
                 code_view::review::switch_code_review_worktree,
                 code_view::review::read_code_review_branch_file,
                 code_view::review::update_code_review_baseline,

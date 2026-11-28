@@ -663,6 +663,17 @@ impl Project {
         self.refresh_changes(false)
     }
 
+    fn git_revision(&self) -> Result<String, String> {
+        let directory = self.directory()?;
+        let repo = open_git(&directory, &self.root)?;
+        let head = GitHead::load(&repo).map_err(|_| UNAVAILABLE)?;
+        let index = repo.index().map_err(|_| UNAVAILABLE)?;
+        Ok(review_index_revision(
+            &review_index::revision(&index),
+            &head,
+        ))
+    }
+
     fn refresh_changes(&self, use_current_head: bool) -> Result<Changes, String> {
         let directory = self.directory()?;
         if matches!(self.info.git, GitState::Folder | GitState::Unavailable) {
@@ -1696,6 +1707,17 @@ pub(crate) async fn refresh_code_review(
 ) -> Result<Changes, String> {
     let project = state.project(project_id)?;
     tokio::task::spawn_blocking(move || project.refresh())
+        .await
+        .map_err(|_| UNAVAILABLE)?
+}
+
+#[tauri::command]
+pub(crate) async fn code_review_git_revision(
+    project_id: Uuid,
+    state: State<'_, ReviewState>,
+) -> Result<String, String> {
+    let project = state.project(project_id)?;
+    tokio::task::spawn_blocking(move || project.git_revision())
         .await
         .map_err(|_| UNAVAILABLE)?
 }
@@ -2802,6 +2824,41 @@ mod tests {
         assert!(index_text(&linked_repo, "old.sql").is_none());
         assert!(index_text(&repo, "new.sql").is_none());
         assert_eq!(index_text(&repo, "old.sql").as_deref(), Some("old"));
+    }
+
+    #[test]
+    fn git_revision_tracks_external_staging_and_commits_in_the_active_worktree() {
+        let root = tempfile::tempdir().unwrap();
+        let primary = root.path().join("main");
+        let linked = root.path().join("task");
+        let repo = git2::Repository::init(&primary).unwrap();
+        fs::write(primary.join("file.txt"), "base").unwrap();
+        commit(&repo, &["file.txt"]);
+        repo.worktree("task", &linked, None).unwrap();
+        let linked_repo = git2::Repository::open(&linked).unwrap();
+        let project = Project::open(linked.clone()).unwrap();
+        let primary_project = Project::open(primary).unwrap();
+        let primary_revision = primary_project.git_revision().unwrap();
+        let original = project.refresh().unwrap().git.unwrap().index_revision;
+        assert_eq!(project.git_revision().unwrap(), original);
+
+        fs::write(linked.join("file.txt"), "new").unwrap();
+        let mut index = linked_repo.index().unwrap();
+        index.add_path(Path::new("file.txt")).unwrap();
+        index.write().unwrap();
+        let staged = project.git_revision().unwrap();
+        assert_ne!(staged, original);
+        let snapshot = project.refresh().unwrap();
+        assert_eq!(snapshot.git.unwrap().index_revision, staged);
+        assert_eq!(snapshot.staged.len(), 1);
+
+        commit(&linked_repo, &[]);
+        let committed = project.git_revision().unwrap();
+        assert_ne!(committed, staged);
+        let snapshot = project.refresh().unwrap();
+        assert_eq!(snapshot.git.unwrap().index_revision, committed);
+        assert!(snapshot.staged.is_empty());
+        assert_eq!(primary_project.git_revision().unwrap(), primary_revision);
     }
 
     #[test]

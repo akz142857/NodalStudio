@@ -19,7 +19,7 @@ import type { CheckedFile } from "./use-code-review-checks";
 import { codeFileType, fileExtension, supportsCodeNavigation } from "./code-review-file-types";
 import { createCodeFindPanel } from "./code-review-find";
 import { codeReferenceHighlights } from "./code-review-references";
-import { sourceChangeGutter, sourceChanges, type SourceChange } from "./code-review-source-changes";
+import { sourceChangeDecorations, sourceChanges, type SourceChange } from "./code-review-source-changes";
 import { trackReaderScopes, type ReaderScope } from "./code-review-sticky-scroll";
 import { pythonDebugSourceExtension, type PythonDebugSource } from "./python-debug-source";
 import { isCodeContextMenuKey, useCodeContextMenu } from "./use-code-context-menu";
@@ -100,7 +100,7 @@ const sourceTheme = EditorView.theme({
   ".cm-line": { paddingInline: "10px" },
   ".cm-activeLine": { backgroundColor: "var(--ds-subtle)" },
   ".cm-activeLineGutter": { color: "var(--ds-text)", backgroundColor: "var(--ds-subtle)" },
-  ".cm-inlineChangedLine": { backgroundColor: "var(--ds-positive-soft)" },
+  ".cm-inlineChangedLine, .cm-source-added-line, .cm-source-modified-line": { backgroundColor: "var(--ds-positive-soft)" },
   ".cm-inlineChangedLineGutter": { backgroundColor: "var(--ds-positive)" },
   ".cm-deletedLineGutter": { backgroundColor: "var(--ds-danger)" },
   ".cm-deletedChunk": { backgroundColor: "var(--ds-danger-soft)" },
@@ -423,7 +423,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
 
   useLayoutEffect(() => {
     const view = editor.current;
-    if (view) view.dispatch({ effects: sourceChangesSlot.current.reconfigure(changes.length ? sourceChangeGutter(changes) : []) });
+    if (view) view.dispatch({ effects: sourceChangesSlot.current.reconfigure(changes.length ? sourceChangeDecorations(changes) : []) });
   }, [canNavigate, changes, definitionAt, doc, highlightsAvailable, language, normalizedOriginal, normalizedText, path]);
 
   useLayoutEffect(() => {

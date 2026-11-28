@@ -9,7 +9,7 @@ import { useState } from "react";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { codeShortcutEvent, type CodeShortcut } from "../command-shortcuts";
 import type { CodeDefinitionRequest, CodeDefinitionResult, CodeDocumentHighlightRange, CodeDocumentOutlineRequest, CodeReviewCompactFolders,
-  CodeChangeComparison, CodeDocumentOutlineResult, CodeLanguageStatus, CodeReviewChange, CodeReviewDirectory, CodeReviewPlatform, CodeReviewProject,
+  CodeChangeComparison, CodeDocumentOutlineResult, CodeLanguageStatus, CodeReviewChange, CodeReviewChanges, CodeReviewDirectory, CodeReviewPlatform, CodeReviewProject,
   CodeSavedProject, CodeSavedProjectGroup } from "../../platform/code-review";
 import { CodeReviewWorkspace } from "./CodeReviewWorkspace";
 import { reviewHistory, saveReviewNote } from "./code-review-notes";
@@ -426,6 +426,54 @@ it("remembers when an identical reviewed version moves to the index", async () =
   expect(await screen.findByRole("button", { name: /orders.sql.*Review again/ })).toBeVisible();
 });
 
+it("refreshes external staging and commits while keeping the current Source reader mounted", async () => {
+  const project = { id: "background-refresh", key: "background-refresh", name: "Review", git: "ready", baseline: "base" } as const;
+  const path = "orders.txt";
+  const working: CodeReviewChange = { path, kind: "modified", previousPath: null, evidence: "same-content",
+    comparison: "unstaged", indexOnly: false, staged: false };
+  const staged: CodeReviewChange = { ...working, comparison: "staged", indexOnly: true, staged: true };
+  const git = { branch: "main", baseline: "base", head: "base", baselineChanged: false, indexRevision: "working", worktrees: [] };
+  const original: CodeReviewChanges = { files: [working], staged: [], unstaged: [working], limited: false, git };
+  saveReviewNote(project.key, path, { evidence: working.evidence!, comparison: "unstaged", status: "reviewed",
+    note: "Reviewed in Source", at: "2026-11-28T00:00:00Z" });
+  const changes = vi.fn<CodeReviewPlatform["changes"]>().mockResolvedValue(original);
+  const gitRevision = vi.fn<NonNullable<CodeReviewPlatform["gitRevision"]>>().mockResolvedValue("working");
+  renderWorkspace({
+    current: () => Promise.resolve(project), choose: vi.fn(), changes, gitRevision,
+    file: (_, __, compare, comparison) => Promise.resolve({ before: compare ? { state: "text", text: "before\n" } : null,
+      after: { state: "text", text: "one\ntwo\nthree\n" }, evidence: compare ? working.evidence : null, indexOnly: comparison === "staged" }),
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "Source" }));
+  const editor = await screen.findByRole("textbox", { name: path });
+  const view = EditorView.findFromDOM(editor)!;
+  act(() => view.dispatch({ selection: { anchor: view.state.doc.line(2).from } }));
+  const refresh = screen.getByRole("button", { name: "Refresh changes" });
+  await waitFor(() => expect(gitRevision).toHaveBeenCalledWith(project.id), { timeout: 3_500 });
+  expect(changes).toHaveBeenCalledTimes(1);
+
+  let finishRefresh!: (snapshot: CodeReviewChanges) => void;
+  changes.mockReturnValueOnce(new Promise((resolve) => { finishRefresh = resolve; }));
+  gitRevision.mockResolvedValue("staged");
+  await waitFor(() => expect(changes).toHaveBeenCalledTimes(2), { timeout: 3_500 });
+  expect(screen.getByText("Unstaged", { selector: "summary" })).toBeVisible();
+  expect(refresh).toBeEnabled();
+  expect(screen.getByRole("textbox", { name: path })).toBe(editor);
+  act(() => finishRefresh({ ...original, files: [staged], staged: [staged], unstaged: [], git: { ...git, indexRevision: "staged" } }));
+  expect(await screen.findByText("Staged", { selector: "summary" })).toBeVisible();
+  expect(screen.getByText("1 of 1 files reviewed")).toBeVisible();
+  expect(screen.getByRole("textbox", { name: path })).toBe(editor);
+
+  changes.mockResolvedValue({ ...original, files: [], staged: [], unstaged: [], previousFiles: [staged], previousStaged: [staged],
+    git: { ...git, head: "commit", baselineChanged: true, indexRevision: "committed" } });
+  gitRevision.mockResolvedValue("committed");
+  expect(await screen.findByRole("button", { name: "Continue previous review" }, { timeout: 3_500 })).toBeVisible();
+  expect(screen.getByText("No changes to review.")).toBeVisible();
+  expect(screen.getByRole("textbox", { name: path })).toBe(editor);
+  expect(view.state.selection.main.head).toBe(view.state.doc.line(2).from);
+  expect(refresh).toBeEnabled();
+}, 12_000);
+
 it("uses Code shortcuts for navigation and keeps untitled text out of project file reads", async () => {
   const project = { id: "shortcuts", key: "shortcuts", name: "Keyboard project", git: "folder", baseline: null } as const;
   const file = vi.fn<CodeReviewPlatform["file"]>().mockResolvedValue({
@@ -701,6 +749,8 @@ it("keeps Source intact while marking and navigating the same changes as Diff", 
   const view = EditorView.findFromDOM(screen.getByRole("textbox", { name: path }))!;
   expect(view.state.doc.toString()).toBe(after);
   expect(view.dom.querySelector(".cm-source-modified")).toBeInTheDocument();
+  expect(view.dom.querySelector(".cm-source-modified-line")).toHaveTextContent(/^new$/);
+  expect(view.dom.querySelector(".cm-source-added-line")).toHaveTextContent(/^added$/);
   fireEvent.click(overview.getByRole("button", { name: "Go to added lines 6" }));
   expect(view.state.selection.main.head).toBe(view.state.doc.line(6).from);
   fireEvent.click(screen.getByRole("button", { name: "Previous change" }));

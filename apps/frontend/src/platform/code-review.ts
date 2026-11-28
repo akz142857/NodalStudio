@@ -242,6 +242,7 @@ export interface CodeReviewPlatform {
     addProjects(): Promise<CodePasteResult>;
   };
   changes(projectId: string): Promise<CodeReviewChanges>;
+  gitRevision?(this: void, projectId: string): Promise<string>;
   switchWorktree?(projectId: string, path: string): Promise<CodeReviewProject>;
   branchFile?(projectId: string, path: string): Promise<CodeReviewDocument>;
   updateBaseline?(this: void, projectId: string): Promise<CodeReviewChanges>;
