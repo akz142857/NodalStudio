@@ -8,6 +8,7 @@ import { ActionIcon } from "../ActionIcon";
 import { IconButton } from "../IconButton";
 import { Segmented } from "../Segmented";
 import { codeReviewKeys } from "./code-review-query-keys";
+import { isCodeContextMenuKey, useCodeContextMenu } from "./use-code-context-menu";
 
 interface IndexedCandidate {
   path: string;
@@ -68,7 +69,7 @@ function topFileMatches(candidates: readonly IndexedCandidate[], needle: string,
   return top.map((item) => item.path);
 }
 
-export function CodeContentSearch({ api, projectId, query, onQuery, inPopup = false, autoFocus = false, fieldRef, onHit }: {
+export function CodeContentSearch({ api, projectId, query, onQuery, inPopup = false, autoFocus = false, fieldRef, onHit, onRevealInFinder }: {
   api: CodeReviewPlatform;
   projectId: string;
   query: string;
@@ -77,10 +78,12 @@ export function CodeContentSearch({ api, projectId, query, onQuery, inPopup = fa
   autoFocus?: boolean;
   fieldRef?: RefObject<HTMLInputElement | null>;
   onHit: (path: string, match: CodeSearchMatch) => void;
+  onRevealInFinder?: (path: string) => void;
 }) {
   const { t } = useI18n();
   const listId = useId();
   const results = useRef<HTMLDivElement>(null);
+  const contextMenu = useCodeContextMenu();
   const [submitted, setSubmitted] = useState(query);
   const [selectedHit, setSelectedHit] = useState(0);
 
@@ -134,6 +137,11 @@ export function CodeContentSearch({ api, projectId, query, onQuery, inPopup = fa
       return;
     }
     if (!hits.length) return;
+    if (onRevealInFinder && isCodeContextMenuKey(event)) {
+      const { path } = hits[activeHit];
+      contextMenu.showFinder(event, path, () => onRevealInFinder(path));
+      return;
+    }
     switch (event.key) {
       case "ArrowDown": setSelectedHit((activeHit + 1) % hits.length); break;
       case "ArrowUp": setSelectedHit((activeHit + hits.length - 1) % hits.length); break;
@@ -164,10 +172,12 @@ export function CodeContentSearch({ api, projectId, query, onQuery, inPopup = fa
         aria-activedescendant={activeHit < 0 ? undefined : `${listId}-${activeHit}`}
         maxLength={128} aria-label={t("codeReview.projectContent")} placeholder={t("codeReview.contentPlaceholder")} value={query}
         onChange={(event) => { onQuery(event.target.value); setSelectedHit(0); }} onKeyDown={navigate} />
-      {inPopup && refresh}
+      {inPopup ? refresh : <div role="group" aria-label={t("codeReview.panelActions", { name: t("codeReview.searchResults") })}>{refresh}</div>}
     </div>
     <div ref={results} id={listId} className="code-content-results" role="listbox" aria-label={t("codeReview.projectContent")}>
-      {contentFiles.map(({ path, matches }) => <div key={path} role="group" aria-label={path} className="code-content-group">
+      {contentFiles.map(({ path, matches }) => <div key={path} role="group" aria-label={path} className="code-content-group"
+        tabIndex={onRevealInFinder ? -1 : undefined}
+        onContextMenu={onRevealInFinder ? (event) => contextMenu.showFinder(event, path, () => onRevealInFinder(path)) : undefined}>
         <div className="code-content-path" title={path} aria-hidden="true">
           <ActionIcon name="document" /><span>{inPopup ? path : path.slice(path.lastIndexOf("/") + 1)}</span>
         </div>
@@ -187,18 +197,12 @@ export function CodeContentSearch({ api, projectId, query, onQuery, inPopup = fa
       {contentStatus}
       {limited && <div title={t("codeReview.contentLimited")}>{t(inPopup ? "codeReview.contentLimited" : "codeReview.contentPartial")}</div>}
     </div>
+    {contextMenu.surface}
   </>;
-  const title = t("codeReview.searchResults");
-  return inPopup ? body : <>
-    <header className="code-review-header">
-      <h1>{title}</h1>
-      <div className="code-review-header-actions" role="group" aria-label={t("codeReview.panelActions", { name: title })}>{refresh}</div>
-    </header>
-    <div className="code-content-pane">{body}</div>
-  </>;
+  return inPopup ? body : <div className="code-content-pane">{body}</div>;
 }
 
-export function CodeQuickOpen({ api, projectId, visible, anchor, contentQuery, onContentQuery, recent, untracked, unavailable, onOpen, onHit, onFind, onDismiss }: {
+export function CodeQuickOpen({ api, projectId, visible, anchor, contentQuery, onContentQuery, recent, untracked, unavailable, onOpen, onHit, onFind, onDismiss, onRevealInFinder }: {
   api: CodeReviewPlatform;
   projectId: string;
   visible: boolean;
@@ -212,11 +216,13 @@ export function CodeQuickOpen({ api, projectId, visible, anchor, contentQuery, o
   onHit: (path: string, match: CodeSearchMatch) => void;
   onFind?: () => void;
   onDismiss: () => void;
+  onRevealInFinder?: (path: string) => void;
 }) {
   const { t } = useI18n();
   const listId = useId();
   const field = useRef<HTMLInputElement>(null);
   const popup = useRef<HTMLDivElement>(null);
+  const contextMenu = useCodeContextMenu();
   const [mode, setMode] = useState<"files" | "content">("files");
   const [fileQuery, setFileQuery] = useState("");
   const [selectedFile, setSelectedFile] = useState(0);
@@ -293,6 +299,7 @@ export function CodeQuickOpen({ api, projectId, visible, anchor, contentQuery, o
   const fileListId = `${listId}-files`;
 
   const closePopup = () => {
+    contextMenu.close();
     setFileQuery("");
     setSelectedFile(0);
     onDismiss();
@@ -305,6 +312,11 @@ export function CodeQuickOpen({ api, projectId, visible, anchor, contentQuery, o
 
   function navigateFiles(event: KeyboardEvent<HTMLInputElement>) {
     if (event.nativeEvent.isComposing || !matches.length) return;
+    if (onRevealInFinder && isCodeContextMenuKey(event)) {
+      const path = matches[activeFile];
+      contextMenu.showFinder(event, path, () => onRevealInFinder(path));
+      return;
+    }
     switch (event.key) {
       case "ArrowDown": setSelectedFile((activeFile + 1) % matches.length); break;
       case "ArrowUp": setSelectedFile((activeFile + matches.length - 1) % matches.length); break;
@@ -325,7 +337,7 @@ export function CodeQuickOpen({ api, projectId, visible, anchor, contentQuery, o
             options={[{ value: "files", label: t("codeReview.searchFilesScope") }, { value: "content", label: t("codeReview.projectContent") }]}
             onChange={setMode} />}
           <CodeContentSearch api={api} projectId={projectId} query={contentQuery} onQuery={onContentQuery}
-            inPopup autoFocus fieldRef={field} onHit={(path, match) => { onHit(path, match); closePopup(); }} />
+            inPopup autoFocus fieldRef={field} onRevealInFinder={onRevealInFinder} onHit={(path, match) => { onHit(path, match); closePopup(); }} />
         </> : <>
           <div className="code-quick-open-field">
             <ActionIcon name="search" />
@@ -340,6 +352,8 @@ export function CodeQuickOpen({ api, projectId, visible, anchor, contentQuery, o
             onChange={setMode} />}
           <ul id={fileListId} role="listbox" aria-label={t("codeReview.searchFilesScope")}>
             {matches.map((path, position) => <li key={path} id={`${fileListId}-${position}`} role="option" aria-selected={position === activeFile}
+              tabIndex={onRevealInFinder ? -1 : undefined}
+              onContextMenu={onRevealInFinder ? (event) => contextMenu.showFinder(event, path, () => onRevealInFinder(path)) : undefined}
               onMouseDown={(event) => event.preventDefault()} onClick={() => open(path)}>
               <ActionIcon name="document" />
               <strong>{path.slice(path.lastIndexOf("/") + 1)}</strong>
@@ -355,5 +369,6 @@ export function CodeQuickOpen({ api, projectId, visible, anchor, contentQuery, o
         </>}
       </div>
     </div>
+    {contextMenu.surface}
   </ModalSurface>;
 }

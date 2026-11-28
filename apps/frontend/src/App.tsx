@@ -1675,6 +1675,7 @@ export function App() {
                   : settings.app.privacy.offlineMode ? "eslintOffline" : "enabled"}
                 extensionsMode={runtime.data?.codeExtensions}
                 allowFinder={runtime.data?.codeFinderActions === true}
+                allowFinderReveal={runtime.data?.codeFinderReveal === true || runtime.data?.codeFinderActions === true}
                 extensionsOffline={settings.app.privacy.offlineMode}
                 allowDefinitions={runtime.data?.distribution !== "macAppStore"} />
             </Suspense> : null

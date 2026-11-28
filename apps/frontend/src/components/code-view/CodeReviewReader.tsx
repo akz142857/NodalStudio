@@ -247,7 +247,7 @@ function expandCheckLine(view: EditorView, lineNumber: number) {
   }
 }
 
-export function CodeReviewReader({ path, text, original, sourceBaseline, sourceFileChange, onCopy, viewSwitcher, heading, fallbackCopy, footer, dock, comparison, readPosition, onPosition,
+export function CodeReviewReader({ path, text, original, sourceBaseline, sourceFileChange, onCopy, onRevealInFinder, viewSwitcher, heading, fallbackCopy, footer, dock, comparison, readPosition, onPosition,
   onDefinition, onReferences, onBack, arrival, onArrival, outline, checkResult, projectId = "", extensionsApi, extensions = noExtensions, onSyntaxActivity, readerRef, debugSource, wrap = false }: {
   path: string;
   text: string;
@@ -255,6 +255,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
   sourceBaseline?: string;
   sourceFileChange?: "added" | "deleted";
   onCopy: (text: string) => void;
+  onRevealInFinder?: () => void;
   viewSwitcher?: ReactNode;
   heading: ReactNode;
   fallbackCopy?: string;
@@ -539,6 +540,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
       ...(canNavigate && offset !== null && view.state.wordAt(offset) ? [
         { label: t("codeReview.definition"), run: () => definitionAt(view, offset) },
       ] : []),
+      ...(onRevealInFinder ? [{ label: t("codeReview.files.revealFinder"), separatorBefore: true, run: onRevealInFinder }] : []),
     ], view.contentDOM);
   }
 

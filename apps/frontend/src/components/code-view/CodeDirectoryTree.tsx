@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { Fragment, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useI18n } from "../../i18n";
 import type {
@@ -134,7 +134,11 @@ export function DirectoryTree({ api, project, path, active, focusedKey, onFocusR
         Boolean(compact && onDisk && !directory.isPlaceholderData && !directory.isError));
       const compacted = names.length > 1;
       const menu = entry.directory
-        ? onDisk && onFolderMenu && ((event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => onFolderMenu(event, tail))
+        ? onDisk && onFolderMenu && ((event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => {
+          const folder = event.type === "contextmenu" && event.target instanceof Element
+            ? event.target.closest<HTMLElement>("[data-code-folder-path]")?.dataset.codeFolderPath : undefined;
+          onFolderMenu(event, folder ?? tail);
+        })
         : (event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => onFileMenu(event, entry.path, "tree");
       const tabbable = focusedKey ? key === focusedKey : isRoot && !hasVisibleFocused && (active ? entry.path === active : index === 0)
         ? true : isRoot && index === 0 && !visible.some((item) => !item.directory && item.path === active);
@@ -156,9 +160,11 @@ export function DirectoryTree({ api, project, path, active, focusedKey, onFocusR
           <span className="code-review-disclosure">{entry.directory && <ActionIcon name={isOpen ? "chevronDown" : "chevronRight"} />}</span>
           <ActionIcon className={entry.directory ? "code-review-folder-icon" : undefined} name={entry.directory ? "folder" : "document"} />
           {compacted ? <span className="code-review-compact-name" aria-hidden="true">
-            <span className="code-review-filename code-review-compact-prefix">{names.slice(0, -1).join(" / ")}</span>
+            <span className="code-review-filename code-review-compact-prefix">{names.slice(0, -1).map((name, index) => <Fragment key={paths[index]}>
+              {index ? " / " : ""}<span data-code-folder-path={paths[index]}>{name}</span>
+            </Fragment>)}</span>
             <span className="code-review-compact-separator">/</span>
-            <span className="code-review-filename code-review-compact-tail">{names.at(-1)}</span>
+            <span className="code-review-filename code-review-compact-tail" data-code-folder-path={tail}>{names.at(-1)}</span>
           </span> : <span className="code-review-filename">{entry.name}</span>}
           {kind && (entry.directory ? <span className="code-review-tree-folder-status" aria-hidden="true">{folderStatusMarker[kind]}</span>
             : <span className="code-review-kind code-review-tree-file-status" data-kind={kind} aria-hidden="true">{fileStatusMarker[kind]}</span>)}

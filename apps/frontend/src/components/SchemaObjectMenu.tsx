@@ -42,9 +42,10 @@ function place(menu: HTMLElement, x: number, y: number, alignRight = false, anch
 }
 
 /** Object actions live outside the scrolling sidebar; all coordinates respect UI zoom. */
-export function SchemaObjectMenu({ x = 0, y = 0, anchor, name, actions, onClose, showName = true, className, align = "end" }: MenuPosition & {
+export function SchemaObjectMenu({ x = 0, y = 0, anchor, name, actions, onClose, showName = true, className, align = "end", portalHost }: MenuPosition & {
   name: string; actions: SchemaObjectMenuAction[]; onClose: (restoreFocus: boolean) => void;
   showName?: boolean; className?: string; align?: "start" | "end";
+  portalHost?: HTMLElement;
 }) {
   const { t: bt } = useI18n();
   const surface = useRef<HTMLDivElement>(null);
@@ -172,5 +173,5 @@ export function SchemaObjectMenu({ x = 0, y = 0, anchor, name, actions, onClose,
       role="menu" tabIndex={-1} aria-label={current.label}
       onPointerEnter={() => window.clearTimeout(closeTimer.current)}
       onKeyDown={(event) => navigate(event, true)}>{renderActions(current.children, true)}</div> : null}
-  </div>, document.body);
+  </div>, portalHost ?? document.body);
 }

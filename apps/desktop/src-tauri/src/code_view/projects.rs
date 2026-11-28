@@ -237,6 +237,13 @@ impl ProjectCatalog {
             .ok_or_else(|| PROJECT_UNAVAILABLE.into())
     }
 
+    pub(super) fn review_key(&self, identity: &RootIdentity) -> Option<&str> {
+        self.projects
+            .iter()
+            .find(|entry| &entry.identity == identity)
+            .map(|entry| entry.review_key.as_str())
+    }
+
     pub(super) fn register(
         &mut self,
         root: &Path,

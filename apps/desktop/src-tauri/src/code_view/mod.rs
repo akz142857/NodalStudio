@@ -12,7 +12,7 @@ pub(crate) mod extensions;
     reason = "Also contains file operations for the retired SQL prototype"
 )]
 mod files;
-#[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+#[cfg(target_os = "macos")]
 mod finder;
 mod language_server;
 #[allow(

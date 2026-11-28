@@ -48,7 +48,8 @@ export interface CodeProjectLibrary {
 
 export type CodeFinderTarget =
   | { kind: "project"; id: string }
-  | { kind: "entry"; projectId: string; path: string };
+  | { kind: "entry" | "worktree"; projectId: string; path: string }
+  | { kind: "dependency"; projectId: string; sourceId: string };
 export type CodeFinderAction = "reveal" | "copy" | "paste";
 export interface CodePasteResult {
   added: number;
@@ -69,9 +70,28 @@ export interface CodeReviewChange {
 
 export interface CodeReviewGit {
   branch: string | null;
+  head?: string | null;
   baseline: string | null;
   baselineChanged: boolean;
   indexRevision: string;
+  worktrees?: CodeReviewWorktree[];
+}
+
+export interface CodeReviewWorktree {
+  path: string;
+  name: string;
+  branch: string | null;
+  head: string | null;
+  primary: boolean;
+  current: boolean;
+}
+
+export interface CodeBranchChanges {
+  target: string;
+  base: string;
+  head: string;
+  files: CodeReviewChange[];
+  limited: boolean;
 }
 
 export interface CodeIndexChange {
@@ -84,9 +104,14 @@ export interface CodeIndexChange {
 export interface CodeReviewChanges {
   files: CodeReviewChange[];
   limited: boolean;
+  localLimited?: boolean;
   git?: CodeReviewGit | null;
   staged?: CodeReviewChange[];
   unstaged?: CodeReviewChange[];
+  previousFiles?: CodeReviewChange[] | null;
+  previousStaged?: CodeReviewChange[] | null;
+  previousLimited?: boolean;
+  branchChanges?: CodeBranchChanges | null;
 }
 
 export type CodeReviewCompactFolders = "visible" | "all";
@@ -217,13 +242,15 @@ export interface CodeReviewPlatform {
     addProjects(): Promise<CodePasteResult>;
   };
   changes(projectId: string): Promise<CodeReviewChanges>;
+  switchWorktree?(projectId: string, path: string): Promise<CodeReviewProject>;
+  branchFile?(projectId: string, path: string): Promise<CodeReviewDocument>;
   updateBaseline?(this: void, projectId: string): Promise<CodeReviewChanges>;
   changeIndex?(projectId: string, input: CodeIndexChange): Promise<void>;
   directory(projectId: string, path: string, compact?: CodeReviewCompactFolders): Promise<CodeReviewDirectory>;
   createEntry?(projectId: string, directory: string, name: string, kind: CodeNewEntryKind): Promise<string>;
   paths?(this: void, projectId: string): Promise<{ paths: string[]; limited: boolean }>;
   searchContent?(projectId: string, query: string): Promise<CodeContentSearchResult>;
-  file(projectId: string, path: string, compareFile: boolean, comparison?: CodeChangeComparison): Promise<CodeReviewDocument>;
+  file(projectId: string, path: string, compareFile: boolean, comparison?: CodeChangeComparison, previous?: boolean): Promise<CodeReviewDocument>;
   eslint?: CodeEslintPlatform;
   extensions?: CodeExtensionPlatform;
   pythonDebug?: PythonDebugPlatform;

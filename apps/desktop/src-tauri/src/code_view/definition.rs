@@ -551,6 +551,15 @@ impl Definitions {
             .map(|(_, source)| source.clone())
     }
 
+    #[cfg(target_os = "macos")]
+    pub(super) async fn local_dependency_file(&self, id: Uuid) -> Option<PathBuf> {
+        let path = local_path(&self.dependency(id).await?.uri)?;
+        tokio::task::spawn_blocking(move || path.symlink_metadata().ok()?.is_file().then_some(path))
+            .await
+            .ok()
+            .flatten()
+    }
+
     pub(super) async fn source(
         &self,
         project_root: &Path,

@@ -203,6 +203,7 @@ struct RuntimeInfo {
     local_eslint: bool,
     code_extensions: CodeExtensions,
     code_finder_actions: bool,
+    code_finder_reveal: bool,
     distribution: &'static str,
     kind: &'static str,
     label: &'static str,
@@ -846,6 +847,7 @@ fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
     RuntimeInfo {
         local_eslint: cfg!(all(target_os = "macos", not(feature = "mac-app-store"))),
         code_finder_actions: cfg!(all(target_os = "macos", not(feature = "mac-app-store"))),
+        code_finder_reveal: cfg!(target_os = "macos"),
         code_extensions: if cfg!(all(target_os = "macos", feature = "code-syntax-only")) {
             CodeExtensions::Syntax
         } else if cfg!(all(target_os = "macos", feature = "code-extensions")) {
@@ -2467,7 +2469,7 @@ pub fn run() {
                 code_view::review::get_code_review_project,
                 code_view::review::list_code_review_projects,
                 code_view::review::edit_code_review_project_groups,
-                #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+                #[cfg(target_os = "macos")]
                 code_view::review::code_review_finder_action,
                 #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
                 code_view::review::paste_code_review_projects,
@@ -2475,6 +2477,8 @@ pub fn run() {
                 code_view::review::pin_code_review_project,
                 code_view::review::remove_code_review_project,
                 code_view::review::refresh_code_review,
+                code_view::review::switch_code_review_worktree,
+                code_view::review::read_code_review_branch_file,
                 code_view::review::update_code_review_baseline,
                 code_view::review::change_code_review_index,
                 code_view::review::list_code_review_directory,

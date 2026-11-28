@@ -26,12 +26,13 @@ import { CodeReviewLanguageServices } from "./CodeReviewLanguageServices";
 import { CodeReviewExtensions, type ExtensionActivity } from "./CodeReviewExtensions";
 import { DirectoryTree, FileViewOptions } from "./CodeDirectoryTree";
 import { indexChangedPaths, navigateFiles } from "./code-directory-tree-utils";
-import { FileReview, type RenderDock, type RenderStatus } from "./CodeFileReview";
+import { FileReview, type NoteStatus, type RenderDock, type RenderStatus } from "./CodeFileReview";
 import { normalizeReviewText, type CheckFinding, type EslintAvailability, type ReadingMode } from "./code-review-checks";
 import { useCodeReviewChecks, type CheckedFile } from "./use-code-review-checks";
 import { CodeContentSearch, CodeQuickOpen } from "./CodeQuickOpen";
 import { CodePanelDivider } from "./CodePanelDivider";
 import { CodeNewEntryDialog } from "./CodeNewEntryDialog";
+import { CodeChangesNavigation, CodeWorktreeSwitcher, type CodeChangesView } from "./CodeChangesNavigation";
 import { CodeGitReviewControls, type GitReviewFilter, type GitReviewScope } from "./CodeGitReviewControls";
 import { changesInScope, rememberReviewedComparisons, reviewStatus } from "./code-git-review";
 import { codeReviewKeys } from "./code-review-query-keys";
@@ -43,6 +44,7 @@ const compactFoldersKey = "nodalstudio:code-review:compact-folders";
 const basename = (path: string) => path.split("/").at(-1) ?? path;
 const folderName = (path: string) => path.slice(0, Math.max(0, path.lastIndexOf("/")));
 const noChanges: readonly CodeReviewChange[] = [];
+const projectMutationScope = { id: "code-review-active-project" };
 
 type CodeSidebarProps = { sidebarId: string; sidebarOpen: boolean; setSidebarOpen: (open: boolean) => void };
 type CodeOutlineProps = { outlineId: string; outlineOpen: boolean };
@@ -50,6 +52,7 @@ type CodeSearchProps = { searchAnchor?: RefObject<HTMLButtonElement | null> };
 type ProjectView = "changes" | "files" | "search" | "extensions";
 type NavigatorView = "projects" | ProjectView;
 type FinderMenu = (target: CodeFinderTarget, intoParent?: boolean) => SchemaObjectMenuAction[];
+type RevealInFinder = (target: CodeFinderTarget) => void;
 type Draft = { number: number; text: string };
 
 type ReviewContext = {
@@ -60,6 +63,7 @@ type ReviewContext = {
   view: ProjectView;
   expanded: ReadonlySet<string>;
   modes: ReadonlyMap<string, ReadingMode>;
+  comparisonChoices: ReadonlyMap<string, CodeChangeComparison | null>;
   positions: Map<string, ReadingPosition>;
   recent: string[];
   contentQuery: string;
@@ -111,12 +115,13 @@ function CodeWorkspaceFrame({ layoutStore, sidebarOpen, setSidebarOpen, children
   </div>;
 }
 
-export function CodeReviewWorkspace({ api, allowDefinitions = true, extensionsMode, allowFinder = false, extensionsOffline = false,
+export function CodeReviewWorkspace({ api, allowDefinitions = true, extensionsMode, allowFinder = false, allowFinderReveal = allowFinder, extensionsOffline = false,
   eslintAvailability = "eslintUnavailable", outlineId, outlineOpen, searchAnchor, sidebarId, sidebarOpen, setSidebarOpen }: {
   api: CodeReviewPlatform;
   allowDefinitions?: boolean;
   extensionsMode?: RuntimeInfo["codeExtensions"];
   allowFinder?: boolean;
+  allowFinderReveal?: boolean;
   extensionsOffline?: boolean;
   eslintAvailability?: EslintAvailability;
 } & CodeSidebarProps & CodeOutlineProps & CodeSearchProps) {
@@ -133,9 +138,21 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, extensionsMo
     return extensionsMode === "full" ? api.extensions : undefined;
   }, [api.extensions, extensionsMode]);
   const finder = allowFinder ? api.finder : undefined;
+  const finderReveal = allowFinderReveal ? api.finder : undefined;
   const projects = useQuery({ queryKey: codeReviewKeys.projects, queryFn: () => library?.list() ?? Promise.resolve({ projects: [], groups: [] }),
     enabled: Boolean(library), retry: false, staleTime: Infinity });
   const [showProjects, setShowProjects] = useState(false);
+  const [changesView, setChangesView] = useState<CodeChangesView>("local");
+  const [worktreeFocus, setWorktreeFocus] = useState<string>();
+  const worktreeSwitch = useMutation({
+    networkMode: "always",
+    scope: projectMutationScope,
+    mutationFn: ({ id, path }: { id: string; path: string }) => api.switchWorktree!(id, path),
+    onSuccess: (next) => {
+      setWorktreeFocus(next.id);
+      client.setQueryData(codeReviewKeys.current, next);
+    },
+  });
   const [searchAfterPick, setSearchAfterPick] = useState<string>();
   const [filesAfterSwitch, setFilesAfterSwitch] = useState<string>();
   const [finderNotice, setFinderNotice] = useState<{ text: string; error?: boolean }>();
@@ -151,6 +168,8 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, extensionsMo
     error: true,
   });
   const { mutate: manage, mutateAsync: manageAsync, isPending: managing, error: actionError, variables: action } = useMutation({
+    networkMode: "always",
+    scope: projectMutationScope,
     mutationFn: async (input: ProjectAction) => {
       setFinderNotice(undefined);
       if (input.kind === "add") return api.choose();
@@ -180,35 +199,43 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, extensionsMo
         const showFiles = input.kind === "open" && input.fromFiles;
         setSearchAfterPick(quick ? result?.id : undefined);
         setFilesAfterSwitch(showFiles ? result?.id : undefined);
+        setChangesView("local");
+        setWorktreeFocus(undefined);
+        worktreeSwitch.reset();
         if (library && !quick) setShowProjects(!showFiles);
         client.setQueryData(codeReviewKeys.current, result ?? null);
       }
       if (library) await client.invalidateQueries({ queryKey: codeReviewKeys.projects });
     },
   });
+  const projectBusy = managing || worktreeSwitch.isPending;
   const refreshActiveRef = useRef<(() => void) | undefined>(undefined);
-  const finderMenu: FinderMenu | undefined = finder ? (target, intoParent) => {
-    const run = async (act: CodeFinderAction) => {
-      setFinderNotice(undefined);
-      try {
-        const result = await finder.act(target, act);
-        if (act === "copy") setFinderNotice({ text: t("codeReview.copied") });
-        if (act === "paste") {
-          setFinderNotice(describePaste(result));
-          const active = client.getQueryData<CodeReviewProject | null>(codeReviewKeys.current);
-          const sameProject = target.kind === "entry" ? active?.id === target.projectId : active?.savedProjectId === target.id;
-          if (result.added && sameProject) refreshActiveRef.current?.();
-        }
-      } catch (error) {
-        setFinderNotice(finderError(error));
+  const runFinder = async (target: CodeFinderTarget, action: CodeFinderAction) => {
+    const native = action === "reveal" ? finderReveal : finder;
+    if (!native) return;
+    setFinderNotice(undefined);
+    try {
+      const result = await native.act(target, action);
+      if (action === "copy") setFinderNotice({ text: t("codeReview.copied") });
+      if (action === "paste") {
+        setFinderNotice(describePaste(result));
+        const active = client.getQueryData<CodeReviewProject | null>(codeReviewKeys.current);
+        const sameProject = target.kind === "entry" ? active?.id === target.projectId : target.kind === "project" && active?.savedProjectId === target.id;
+        if (result.added && sameProject) refreshActiveRef.current?.();
       }
-    };
-    return [
-      { label: t("codeReview.files.revealFinder"), separatorBefore: true, run: () => void run("reveal") },
-      { label: t("codeReview.files.copyItem"), run: () => void run("copy") },
-      { label: t(intoParent ? "codeReview.files.pasteIntoFolder" : "codeReview.files.pasteItem"), run: () => void run("paste") },
-    ];
-  } : undefined;
+    } catch (error) {
+      setFinderNotice(finderError(error));
+    }
+  };
+  const revealInFinder: RevealInFinder | undefined = finderReveal ? (target) => { void runFinder(target, "reveal"); } : undefined;
+  const hasFinderMenu = Boolean(finder || finderReveal);
+  const finderMenu: FinderMenu = (target, intoParent) => [
+    ...(finderReveal ? [{ label: t("codeReview.files.revealFinder"), separatorBefore: true, run: () => void runFinder(target, "reveal") }] : []),
+    ...(finder ? [
+      { label: t("codeReview.files.copyItem"), run: () => void runFinder(target, "copy") },
+      { label: t(intoParent ? "codeReview.files.pasteIntoFolder" : "codeReview.files.pasteItem"), run: () => void runFinder(target, "paste") },
+    ] : []),
+  ];
   const catalogEntries = projects.data?.projects;
   const savedProjects = useMemo(() => {
     if (!catalogEntries) return undefined;
@@ -221,7 +248,7 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, extensionsMo
     setSidebarOpen(true);
   };
   useEffect(() => {
-    if (project.isPending || project.data || managing) return;
+    if (project.isPending || project.data || projectBusy) return;
     let frame = 0;
     const focusProjects = () => {
       setSidebarOpen(true);
@@ -239,25 +266,27 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, extensionsMo
       window.removeEventListener("nodalstudio:code-quick-open", open);
       window.removeEventListener("nodalstudio:code-find", focusProjects);
     };
-  }, [project.isPending, project.data, managing, manage, savedProjects, setSidebarOpen]);
+  }, [project.isPending, project.data, projectBusy, manage, savedProjects, setSidebarOpen]);
   const choose = project.data
-    ? <IconButton icon="folderOpen" className="code-review-tool" label={t(library ? "codeReview.projects.manage" : "codeReview.switchProject")} disabled={managing}
+    ? <IconButton icon="folderOpen" className="code-review-tool" label={t(library ? "codeReview.projects.manage" : "codeReview.switchProject")} disabled={projectBusy}
         onClick={library ? openProjectList : () => manage({ kind: "add" })} />
-    : <Button variant="primary" busy={managing} onClick={() => manage({ kind: "add" })}><ActionIcon name="folder" />{t("codeReview.openFolder")}</Button>;
+    : <Button variant="primary" busy={projectBusy} onClick={() => manage({ kind: "add" })}><ActionIcon name="folder" />{t("codeReview.openFolder")}</Button>;
   const missingProject = String(actionError) === "codeReviewSavedProjectUnavailable";
   const panel = library ? <CodeProjectsPanel projects={savedProjects ?? []} groups={projects.data?.groups ?? []} currentId={project.data?.savedProjectId}
     filter={projectFilter} onFilterChange={setProjectFilter} scrollTopRef={projectScrollTopRef}
-    finderActions={finderMenu ? (id) => finderMenu({ kind: "project", id }) : undefined}
-    failedId={missingProject && action?.kind === "open" ? action.id : undefined} busy={managing}
+    finderActions={hasFinderMenu ? (id) => finderMenu({ kind: "project", id }) : undefined}
+    allowPasteProjects={Boolean(finder)}
+    failedId={missingProject && action?.kind === "open" ? action.id : undefined} busy={projectBusy}
     loading={projects.isPending} loadFailed={projects.isError} onRetry={() => { void projects.refetch(); }}
     onAction={manage} onActionAsync={manageAsync} /> : undefined;
   const switcher = library && project.data ? <CodeProjectSwitcher name={project.data.name} currentId={project.data.savedProjectId}
-    projects={savedProjects ?? []} busy={managing} onAction={manage} onManage={openProjectList} /> : undefined;
+    projects={savedProjects ?? []} busy={projectBusy} onAction={manage} onManage={openProjectList} /> : undefined;
   const renderOutline = useCallback((outline?: React.ReactNode) => (
     <CodeOutlinePane layoutStore={layoutStore} outlineId={outlineId} outlineOpen={outlineOpen}>{outline}</CodeOutlinePane>
   ), [layoutStore, outlineId, outlineOpen]);
 
   return <section ref={workspace} className="code-review ds-surface" aria-label={t("codeReview.title")}>
+    {worktreeSwitch.isError && <p className="code-review-notice" role="alert">{t("codeReview.worktrees.failed")}</p>}
     {finderNotice && <p className="code-review-notice" role={finderNotice.error ? "alert" : "status"}>{finderNotice.text}</p>}
     {actionError && <p className="code-review-notice" role="alert">{t(
       missingProject ? "codeReview.projects.unavailable"
@@ -271,7 +300,10 @@ export function CodeReviewWorkspace({ api, allowDefinitions = true, extensionsMo
         layoutStore={layoutStore} refreshRef={refreshActiveRef}
         quickOpenInitially={project.data.id === searchAfterPick}
         filesInitially={project.data.id === filesAfterSwitch} projectSwitcher={switcher}
-        finderMenu={finderMenu}
+        changesView={changesView} onChangesView={setChangesView} worktreeBusy={projectBusy}
+        focusWorktree={project.data.id === worktreeFocus}
+        onSwitchWorktree={api.switchWorktree ? (path) => worktreeSwitch.mutate({ id: project.data!.id, path }) : undefined}
+        finderMenu={hasFinderMenu ? finderMenu : undefined} revealInFinder={revealInFinder}
         projectsPanel={panel} showProjects={showProjects} setShowProjects={setShowProjects}
         extensionsApi={extensionsApi} extensionsOffline={extensionsOffline} syntaxExtensionsOnly={extensionsMode === "syntax"}
         allowDefinitions={allowDefinitions} eslintAvailability={eslintAvailability} outlineOpen={outlineOpen}
@@ -327,8 +359,9 @@ function CodeDockFrame({ layoutStore, dock, dockId, dockLabel, onEscape, childre
   </>;
 }
 
-function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpenInitially, filesInitially, projectSwitcher, finderMenu, allowDefinitions, eslintAvailability, sidebarId, sidebarOpen, setSidebarOpen,
-  outlineOpen, renderOutline, searchAnchor, extensionsApi, extensionsOffline, syntaxExtensionsOnly, projectsPanel, showProjects, setShowProjects }: ProjectProps & CodeSidebarProps & CodeSearchProps & {
+function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpenInitially, filesInitially, projectSwitcher, finderMenu, revealInFinder, allowDefinitions, eslintAvailability, sidebarId, sidebarOpen, setSidebarOpen,
+  outlineOpen, renderOutline, searchAnchor, extensionsApi, extensionsOffline, syntaxExtensionsOnly, projectsPanel, showProjects, setShowProjects,
+  changesView, onChangesView, worktreeBusy, focusWorktree, onSwitchWorktree }: ProjectProps & CodeSidebarProps & CodeSearchProps & {
   choose: React.ReactNode;
   layoutStore: CodeReviewStore;
   refreshRef: RefObject<(() => void) | undefined>;
@@ -336,8 +369,14 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   renderOutline: (outline?: React.ReactNode) => React.ReactNode;
   quickOpenInitially: boolean;
   filesInitially: boolean;
+  changesView: CodeChangesView;
+  onChangesView: (view: CodeChangesView) => void;
+  worktreeBusy: boolean;
+  focusWorktree: boolean;
+  onSwitchWorktree?: (path: string) => void;
   projectSwitcher?: React.ReactNode;
   finderMenu?: FinderMenu;
+  revealInFinder?: RevealInFinder;
   allowDefinitions: boolean;
   eslintAvailability: EslintAvailability;
   extensionsApi?: CodeExtensionPlatform;
@@ -406,10 +445,10 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     networkMode: "always",
     retry: false,
   });
-  const checks = useCodeReviewChecks(api, { ...project, baseline: changes.data?.git ? changes.data.git.baseline : project.baseline }, eslintAvailability);
+  const checks = useCodeReviewChecks(api, { ...project, baseline: changes.data?.git ? changes.data.git.head ?? changes.data.git.baseline : project.baseline }, eslintAvailability);
   const { run: checkRun, verify: verifyCheck, verifyAll: verifyAllChecks } = checks;
   const filesRefreshing = useIsFetching({ queryKey: codeReviewKeys.directories(project.id) }) > 0;
-  const [selectedView, setSelectedView] = useState<ProjectView>(filesInitially ? "files" : remembered?.view ?? (canCompare ? "changes" : "files"));
+  const [selectedView, setSelectedView] = useState<ProjectView>(focusWorktree ? "changes" : filesInitially ? "files" : remembered?.view ?? (canCompare ? "changes" : "files"));
   const projectView = (selectedView === "extensions" && !extensionsApi) || (selectedView === "changes" && !canCompare)
     || (selectedView === "search" && !api.searchContent) ? "files" : selectedView;
   const view = projectsPanel && showProjects ? "projects" : projectView;
@@ -427,8 +466,9 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   const [discardTabs, setDiscardTabs] = useState<readonly string[]>();
   const [filter, setFilter] = useState(remembered?.changesFilter ?? "");
   const [gitScope, setGitScope] = useState<GitReviewScope>("all");
+  const [previousReview, setPreviousReview] = useState(false);
   const [reviewFilter, setReviewFilter] = useState<GitReviewFilter>("all");
-  const [comparisonChoices, setComparisonChoices] = useState<ReadonlyMap<string, CodeChangeComparison | null>>(() => new Map());
+  const [comparisonChoices, setComparisonChoices] = useState<ReadonlyMap<string, CodeChangeComparison | null>>(() => remembered?.comparisonChoices ?? new Map());
   const [contentQuery, setContentQuery] = useState(remembered?.contentQuery ?? "");
   const [notice, setNotice] = useState("");
   const [quickOpen, setQuickOpen] = useState<{ findInFile: boolean } | undefined>(quickOpenInitially ? { findInFile: false } : undefined);
@@ -467,26 +507,46 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   const pendingFocus = useRef<"list" | "filter" | "search" | "tab" | "checks" | "note" | undefined>(undefined);
   const changed = changes.data?.files ?? noChanges;
   const git = changes.data?.git;
-  const scoped = useMemo(() => changesInScope(changes.data, gitScope), [changes.data, gitScope]);
+  const worktrees = git?.worktrees;
+  const modernChanges = Boolean(worktrees);
+  const branch = api.branchFile ? changes.data?.branchChanges : undefined;
+  const branchView = view === "changes" && changesView === "branch" ? branch : undefined;
+  const previousAvailable = Boolean(changes.data?.previousFiles && changes.data.previousStaged);
+  const historical = view === "changes" && previousReview && previousAvailable && !branchView;
+  const branchReviewKey = branchView ? JSON.stringify([project.key, "branch", branchView.target]) : undefined;
+  const localChanges = useMemo(() => changesInScope(changes.data, gitScope), [changes.data, gitScope]);
+  const previousChanges = useMemo(() => changes.data?.previousStaged
+    ? changesInScope({ ...changes.data, staged: changes.data.previousStaged }, "all") : noChanges, [changes.data]);
+  const scoped = branchView?.files ?? (historical ? previousChanges : localChanges);
   const allScoped = useMemo(() => changesInScope(changes.data, "all"), [changes.data]);
-  const checkChanges = gitScope === "all" ? changes.data : changes.data && { ...changes.data, files: scoped };
+  const checkChanges = branchView || historical ? undefined
+    : gitScope === "all" ? changes.data : changes.data && { ...changes.data, files: localChanges };
   const byScope = useMemo(() => ({
-    staged: new Map(changes.data?.staged?.map((entry) => [entry.path, entry] as const)),
+    staged: new Map((historical ? changes.data?.previousStaged : changes.data?.staged)?.map((entry) => [entry.path, entry] as const)),
     unstaged: new Map(changes.data?.unstaged?.map((entry) => [entry.path, entry] as const)),
-  }), [changes.data]);
-  const changedPaths = useMemo(() => indexChangedPaths(changed), [changed]);
-  const firstChange = allScoped[0]?.path;
+  }), [changes.data, historical]);
+  const changedPaths = useMemo(() => indexChangedPaths(modernChanges ? allScoped : changed), [allScoped, changed, modernChanges]);
+  const firstChange = (branchView?.files ?? (historical ? previousChanges : allScoped))[0]?.path;
   const openTabs = useMemo(() => tabs ?? (firstChange ? [firstChange] : []), [firstChange, tabs]);
   const active = selected && openTabs.includes(selected) ? selected : openTabs[0];
   const activeDraft = active ? drafts.get(active) : undefined;
   const selectedComparison = active ? comparisonChoices.get(active) : undefined;
   const stagedVersion = active ? byScope.staged.get(active) : undefined;
   const unstagedVersion = active ? byScope.unstaged.get(active) : undefined;
-  const legacyChange = changed.find((entry) => entry.path === active);
-  const change = selectedComparison === null ? legacyChange
-    : (selectedComparison === "staged" ? stagedVersion ?? unstagedVersion : unstagedVersion ?? stagedVersion) ?? legacyChange;
+  const combinedChange = (historical ? changes.data?.previousFiles : changed)?.find((entry) => entry.path === active);
+  const change = branchView ? branchView.files.find((entry) => entry.path === active)
+    : selectedComparison === null ? combinedChange
+      : (selectedComparison === "staged" ? stagedVersion ?? unstagedVersion : unstagedVersion ?? stagedVersion) ?? combinedChange;
   const readingMode = (active && modes.get(active)) || (change ? "diff" : "source");
   const dependency = active ? externalFiles.get(active) : undefined;
+  const revealEntry = revealInFinder ? (path: string) => revealInFinder({ kind: "entry", projectId: project.id, path }) : undefined;
+  const revealFileInFinder = (path: string, external?: CodeDefinitionTarget) => {
+    if (!external) return revealEntry ? () => revealEntry(path) : undefined;
+    if (revealInFinder && external.sourceId && external.path.startsWith("/")) {
+      const sourceId = external.sourceId;
+      return () => revealInFinder({ kind: "dependency", projectId: project.id, sourceId });
+    }
+  };
   const pythonFile = !dependency && !activeDraft && active?.endsWith(".py") ? active : undefined;
   const pausedFrame = python.paused?.frames.find((frame) => frame.id === python.paused?.selected);
   const pythonLines = pythonFile ? python.breakpoints[pythonFile] : undefined;
@@ -519,6 +579,10 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   }, [filesInitially]);
 
   useLayoutEffect(() => {
+    if (focusWorktree && modernChanges) sidebar.current?.querySelector<HTMLElement>(".code-worktree-switcher > summary")?.focus({ preventScroll: true });
+  }, [focusWorktree, modernChanges]);
+
+  useLayoutEffect(() => {
     let contexts = reviewContexts.get(api);
     if (!contexts) {
       contexts = new Map();
@@ -533,6 +597,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
       view: projectView,
       expanded,
       modes,
+      comparisonChoices,
       positions: positions.current,
       recent: recentFiles,
       contentQuery,
@@ -540,7 +605,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
       showHidden,
       showNote: dock === "note" && Boolean(active),
     });
-  }, [active, api, contentQuery, dock, drafts, expanded, filter, firstChange, modes, project.key, projectView, recentFiles, showHidden, tabs]);
+  }, [active, api, comparisonChoices, contentQuery, dock, drafts, expanded, filter, firstChange, modes, project.key, projectView, recentFiles, showHidden, tabs]);
 
   useEffect(() => {
     const file = checkRun?.files.find((item) => item.target.path === active && item.status === "checked");
@@ -645,6 +710,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     mutationFn: () => api.updateBaseline!(projectId),
     onSuccess: (result) => {
       rememberReviewedComparisons(project.key, result);
+      setPreviousReview(false);
       client.setQueryData(codeReviewKeys.changes(projectId), result);
       void client.invalidateQueries({ queryKey: codeReviewKeys.files(projectId) });
     },
@@ -671,7 +737,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     },
   });
   const gitBusy = changes.isFetching || indexMutation.isPending || baselineMutation.isPending;
-  const indexAllowed = (entry: CodeReviewChange) => Boolean(api.changeIndex && git && !git.baselineChanged && !gitBusy
+  const indexAllowed = (entry: CodeReviewChange) => Boolean(api.changeIndex && git && (modernChanges || !git.baselineChanged) && !historical && !branchView && !gitBusy && !worktreeBusy
     && entry.comparison && entry.evidence && entry.kind !== "conflict");
   function updateIndex(entry: CodeReviewChange) {
     if (!git || !entry.comparison || !entry.evidence || !indexAllowed(entry)) return;
@@ -769,6 +835,10 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     client.setQueryData(codeReviewKeys.file(project.id, target.path, target.mode === "diff", target.evidence, target.comparison), latest.document);
     setArrival({ key: target.path, destination: { check: { ...target, text: latest.text, range: finding.range } } });
     setSelectedFinding(finding);
+    if (branchView || historical) {
+      setPreviousReview(false);
+      onChangesView("local");
+    }
     open(target.path, target.mode, target.comparison ?? null);
   };
 
@@ -1067,7 +1137,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   const query = filter.trim().toLocaleLowerCase();
   const reviewStates = { pending: 0, reviewed: 0, needsChanges: 0, recheck: 0 };
   const scopedStatus = scoped.map((entry) => {
-    const status = reviewStatus(project.key, entry);
+    const status = reviewStatus(branchReviewKey ?? project.key, entry);
     const other = gitScope === "all" && entry.comparison === "unstaged" ? byScope.staged.get(entry.path) : undefined;
     const otherStatus = other ? reviewStatus(project.key, other) : status;
     const combined = (["needsChanges", "recheck", "pending", "reviewed"] as const)
@@ -1082,7 +1152,27 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
   const nextReview = scopedStatus.filter(({ next }) => next !== undefined);
   const activeReview = nextReview.findIndex(({ entry }) => entry.path === active);
   const nextReviewEntry = nextReview.length ? nextReview[(activeReview + 1) % nextReview.length].next : undefined;
-  const clean = canCompare && Boolean(changes.data && !allScoped.length && !changes.data.limited && !changes.isError);
+  const displayedLimited = branchView?.limited ?? (historical ? changes.data?.previousLimited : changes.data?.localLimited ?? changes.data?.limited);
+  const clean = canCompare && Boolean(changes.data && !scoped.length && !displayedLimited && !changes.isError);
+  const grouped = modernChanges && !branchView && !historical;
+  const groups = grouped ? (["staged", "unstaged"] as const).map((scope) => ({
+    scope,
+    entries: [...byScope[scope].values()].filter((entry) => entry.path.toLocaleLowerCase().includes(query))
+      .map((entry) => ({ entry, status: reviewStatus(project.key, entry) }))
+      .filter(({ status }) => reviewFilter === "all" || reviewFilter === status),
+  })) : [];
+  const hasMatches = grouped ? groups.some(({ entries }) => entries.length > 0) : shown.length > 0;
+  const emptyChangesLabel = branchView ? "codeReview.worktrees.noCommitted" : "codeReview.noChanges";
+  function selectChangesView(next: CodeChangesView) {
+    if (!historical && next === changesView) return;
+    setPreviousReview(false);
+    onChangesView(next);
+    setFilter("");
+    setReviewFilter("all");
+    const entries = next === "branch" ? branch?.files ?? noChanges : allScoped;
+    const entry = entries.find((item) => item.path === active) ?? entries[0];
+    if (entry) open(entry.path, "diff", next === "branch" ? undefined : entry.comparison ?? null);
+  }
   function changeScope(scope: GitReviewScope) {
     setGitScope(scope);
     const next = scope !== "all" && active ? byScope[scope].get(active) : undefined;
@@ -1111,10 +1201,15 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
     const draft = drafts.get(key);
     const external = externalFiles.get(key);
     const path = draft ? t("codeReview.draftTitle", { number: draft.number }) : external?.path ?? key;
-    const edited = (comparison ? byScope[comparison].get(key) : undefined) ?? changed.find((entry) => entry.path === key);
+    const edited = branchView ? branchView.files.find((entry) => entry.path === key)
+      : (comparison ? byScope[comparison].get(key) : undefined) ?? (historical ? previousChanges : modernChanges ? allScoped : changed).find((entry) => entry.path === key);
     const tab = source === "tab";
     const right = tab ? openTabs.slice(openTabs.indexOf(key) + 1) : [];
     const trigger = tab ? event.currentTarget.querySelector("button") ?? event.currentTarget : event.currentTarget;
+    const reveal = !draft ? revealFileInFinder(key, external) : undefined;
+    const diskActions = draft || external || edited?.kind === "deleted"
+      ? reveal ? [{ label: t("codeReview.files.revealFinder"), separatorBefore: true, run: reveal }] : []
+      : finderMenu?.({ kind: "entry", projectId: project.id, path: key }, true) ?? [];
     contextMenu.show(event, path, [
       ...(!draft && !external && edited?.kind !== "deleted" ? [{ label: t("codeReview.menu.openSource"), run: () => open(key, "source") }] : []),
       ...(edited ? [{ label: t("codeReview.menu.openDiff"), run: () => open(key, "diff", edited.comparison) }] : []),
@@ -1122,14 +1217,14 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
       ...(source === "tree" && !draft && !external ? createActions(folderName(key)).map((action, index) => ({
         ...action, separatorBefore: index === 0,
       })) : []),
-      ...(edited?.comparison && api.changeIndex ? [{
+      ...(edited?.comparison && api.changeIndex && !historical && !branchView ? [{
         label: t(edited.comparison === "staged" ? "codeReview.gitReview.unstage" : "codeReview.gitReview.stage"),
         disabled: !indexAllowed(edited), run: () => updateIndex(edited),
       }] : []),
       ...(!draft ? [{ label: t(external ? "codeReview.menu.copyPath" : "codeReview.menu.copyRelativePath"),
         separatorBefore: Boolean(edited || !external), run: () => copy(path) }] : []),
       ...(!draft && !external && source !== "tree" ? [{ label: t("codeReview.menu.reveal"), run: () => revealFile(key) }] : []),
-      ...(!draft && !external && edited?.kind !== "deleted" ? finderMenu?.({ kind: "entry", projectId: project.id, path: key }, true) ?? [] : []),
+      ...diskActions,
       ...(tab ? [
         { label: t("codeReview.menu.close"), separatorBefore: !draft, run: () => closeTabs([key]) },
         { label: t("codeReview.menu.closeOthers"), disabled: openTabs.length < 2, run: () => closeTabs(openTabs.filter((item) => item !== key)) },
@@ -1137,6 +1232,31 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
         { label: t("codeReview.menu.closeAll"), run: () => closeTabs(openTabs) },
       ] : []),
     ], trigger);
+  };
+
+  const renderChange = ({ entry, status: review }: { entry: CodeReviewChange; status: NoteStatus }) => {
+    const status = git || review !== "pending" ? review : undefined;
+    const scopeBadges = !grouped && !branchView && gitScope === "all" && entry.comparison ? (["staged", "unstaged"] as const)
+      .filter((comparison) => byScope[comparison].has(entry.path)) : [];
+    const folder = folderName(entry.path);
+    const selected = entry.path === active && (!grouped || entry.comparison === change?.comparison);
+    return <li key={entry.path}><button type="button" className="code-review-change" data-code-row=""
+      aria-haspopup="menu" aria-keyshortcuts="Shift+F10"
+      onContextMenu={(event) => fileMenu(event, entry.path, "changes", entry.comparison)}
+      onKeyDown={(event) => { if (isCodeContextMenuKey(event)) fileMenu(event, entry.path, "changes", entry.comparison); }}
+      aria-current={selected ? "true" : undefined} title={entry.path} onClick={() => open(entry.path, "diff", branchView ? undefined : entry.comparison ?? null)}>
+      <ActionIcon name={entry.path.endsWith(".sql") ? "codeDocument" : "document"} />
+      <span className="code-review-filename">{basename(entry.path)}</span>
+      <span className="code-review-kind" data-kind={entry.kind}>{t(`codeReview.kind.${entry.kind}`)}</span>
+      {(folder || status || scopeBadges.length > 0) && <span className="code-review-change-meta">
+        {folder && <span className="code-review-path">{folder}</span>}
+        {scopeBadges.length > 0 && <span className="code-review-git-badges"
+          aria-label={scopeBadges.length > 1 ? t("codeReview.gitReview.both") : undefined}>
+          {scopeBadges.map((scope) => <span key={scope}>{t(`codeReview.gitReview.${scope}`)}</span>)}
+        </span>}
+        {status && <span className="code-review-disposition" data-status={status}>{t(`codeReview.${status}`)}</span>}
+      </span>}
+    </button></li>;
   };
 
   const quickOpenRecent = useMemo(
@@ -1174,8 +1294,9 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
       detail: checkRun.extensionError,
     });
   }
-  const baselineCommit = git ? git.baseline : project.baseline;
-  const baseline = baselineCommit ? t("codeReview.compareBase", { commit: baselineCommit.slice(0, 10) }) : t(`codeReview.git.${project.git}`);
+  const baselineCommit = git ? modernChanges && !historical ? git.head : git.baseline : project.baseline;
+  const baseline = branchView ? t("codeReview.worktrees.branchRange", { base: branchView.base.slice(0, 10), head: branchView.head.slice(0, 10) })
+    : baselineCommit ? t("codeReview.compareBase", { commit: baselineCommit.slice(0, 10) }) : t(`codeReview.git.${project.git}`);
   const alternateScope = stagedVersion && unstagedVersion;
   const diffControls = git && active && change?.comparison && readingMode === "diff" ? <div className="code-review-git-diff-actions">
     {alternateScope && <Segmented label={t("codeReview.gitReview.fileComparison")} value={change.comparison}
@@ -1183,7 +1304,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
         { value: "unstaged", label: t("codeReview.gitReview.unstaged") },
         { value: "staged", label: t("codeReview.gitReview.staged") },
       ]} onChange={(scope) => selectComparison(active, scope)} />}
-    {api.changeIndex && <Button size="small" disabled={!indexAllowed(change)} onClick={() => updateIndex(change)}>
+    {api.changeIndex && !historical && <Button size="small" disabled={!indexAllowed(change)} onClick={() => updateIndex(change)}>
       {t(change.comparison === "staged" ? "codeReview.gitReview.unstage" : "codeReview.gitReview.stage")}
     </Button>}
   </div> : undefined;
@@ -1224,29 +1345,40 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
                   .sort((a, b) => a.id.localeCompare(b.id)));
             }} />
           : view === "search" ? <CodeContentSearch api={api} projectId={project.id} query={contentQuery}
-            onQuery={setContentQuery} onHit={(path, match) => { void locateSearchHit(path, match); }} />
+            onQuery={setContentQuery} onRevealInFinder={revealEntry} onHit={(path, match) => { void locateSearchHit(path, match); }} />
           : <>
-          <header className="code-review-header">
-            <h1>{viewLabels[view]}</h1>
+          <header className="code-review-header" onContextMenu={view === "files" ? (event) => folderMenu(event, "") : undefined}
+            onKeyDown={view === "files" ? (event) => { if (isCodeContextMenuKey(event)) folderMenu(event, ""); } : undefined}>
+            {view === "files" && <>
+              {projectSwitcher ?? <h2 className="code-review-project-name" title={project.name}>{project.name}</h2>}
+              {!projectSwitcher && choose}
+            </>}
+            {view === "changes" && onSwitchWorktree && worktrees && <CodeWorktreeSwitcher worktrees={worktrees}
+              busy={worktreeBusy || indexMutation.isPending || baselineMutation.isPending} onSwitch={onSwitchWorktree}
+              onRevealInFinder={revealInFinder ? (path) => revealInFinder({ kind: "worktree", projectId: project.id, path }) : undefined} />}
             <div className="code-review-header-actions" role="group" aria-label={t("codeReview.panelActions", { name: viewLabels[view] })}>
               {view === "files" ? <>
                 <IconButton icon="refresh" className="code-review-tool" label={t("codeReview.refreshFiles")}
                   disabled={filesRefreshing || (canCompare && changes.isFetching)} onClick={refreshFiles} />
                 {api.createEntry && <IconButton icon="documentAdd" className="code-review-tool" label={t("codeReview.files.newFile")}
                   onClick={() => setNewEntry({ directory: "", kind: "file" })} />}
+                {sidebarOpen && <FileViewOptions compactFolders={compactFolders} showHidden={showHidden}
+                  toggleCompactFolders={toggleCompactFolders} toggleHidden={() => setShowHidden((visible) => !visible)} />}
               </> : <IconButton icon="refresh" className="code-review-tool" label={t("codeReview.refreshChanges")}
-                disabled={changes.isFetching} onClick={refreshChanges} />}
+                disabled={changes.isFetching || worktreeBusy} onClick={refreshChanges} />}
             </div>
           </header>
-          {view === "files" && <div className="code-review-files-toolbar" onContextMenu={(event) => folderMenu(event, "")}
-            onKeyDown={(event) => { if (isCodeContextMenuKey(event)) folderMenu(event, ""); }}>
-            {projectSwitcher ?? <h2 className="code-review-project-name" title={project.name}>{project.name}</h2>}
-            {!projectSwitcher && choose}
-            {sidebarOpen && <FileViewOptions compactFolders={compactFolders} showHidden={showHidden}
-              toggleCompactFolders={toggleCompactFolders} toggleHidden={() => setShowHidden((visible) => !visible)} />}
-          </div>}
+          {view === "changes" && modernChanges && <CodeChangesNavigation view={branchView ? "branch" : "local"} branch={branch} head={git?.head}
+            localCount={allScoped.length} localLimited={Boolean(changes.data?.localLimited)} previous={historical} onView={selectChangesView} />}
           {view === "changes" && git && <CodeGitReviewControls git={git} scope={gitScope} filter={reviewFilter} counts={reviewStates}
             canAdvance={Boolean(nextReviewEntry)} canUpdateBaseline={Boolean(api.updateBaseline)} busy={gitBusy}
+            showNavigation={!modernChanges} previous={historical} onPrevious={previousAvailable && !branchView ? () => {
+              setPreviousReview(true);
+              setFilter("");
+              setReviewFilter("all");
+              const entry = previousChanges.find((item) => item.path === active) ?? previousChanges[0];
+              if (entry) open(entry.path, "diff", entry.comparison ?? null);
+            } : undefined}
             onScope={changeScope} onFilter={setReviewFilter} onNext={() => {
               if (nextReviewEntry) {
                 setReviewFilter("all");
@@ -1255,7 +1387,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
                 open(nextReviewEntry.path, "diff", nextReviewEntry.comparison);
               }
             }} onUpdateBaseline={() => baselineMutation.mutate()} />}
-          {view === "changes" && allScoped.length > 0 && <div className="code-review-sidebar-controls">
+          {view === "changes" && scoped.length > 0 && <div className="code-review-sidebar-controls">
             <div className="code-review-filter">
               <ActionIcon name="search" />
               <input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t("codeReview.filter")} aria-label={t("codeReview.filter")} />
@@ -1279,32 +1411,15 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
             </>
               : changes.isPending ? <p role="status">{t("codeReview.loadingChanges")}</p>
               : <>
-                {changes.data?.limited && <p role="status">{t("codeReview.limited")}</p>}
-                {shown.length === 0 && !changes.isError && !clean && (git || query) && <p role="status">{t("codeReview.noMatches")}</p>}
-                {clean && active && <p role="status">{t("codeReview.noChanges")}</p>}
-                <ul>{shown.map(({ entry, status: review }) => {
-                  const status = git || review !== "pending" ? review : undefined;
-                  const scopeBadges = gitScope === "all" && entry.comparison ? (["staged", "unstaged"] as const)
-                    .filter((comparison) => byScope[comparison].has(entry.path)) : [];
-                  const folder = folderName(entry.path);
-                  return <li key={entry.path}><button type="button" className="code-review-change" data-code-row=""
-                    aria-haspopup="menu" aria-keyshortcuts="Shift+F10"
-                    onContextMenu={(event) => fileMenu(event, entry.path, "changes", entry.comparison)}
-                    onKeyDown={(event) => { if (isCodeContextMenuKey(event)) fileMenu(event, entry.path, "changes", entry.comparison); }}
-                    aria-current={entry.path === active ? "true" : undefined} title={entry.path} onClick={() => open(entry.path, "diff", entry.comparison)}>
-                    <ActionIcon name={entry.path.endsWith(".sql") ? "codeDocument" : "document"} />
-                    <span className="code-review-filename">{basename(entry.path)}</span>
-                    <span className="code-review-kind" data-kind={entry.kind}>{t(`codeReview.kind.${entry.kind}`)}</span>
-                    {(folder || status || scopeBadges.length > 0) && <span className="code-review-change-meta">
-                      {folder && <span className="code-review-path">{folder}</span>}
-                      {scopeBadges.length > 0 && <span className="code-review-git-badges"
-                        aria-label={scopeBadges.length > 1 ? t("codeReview.gitReview.both") : undefined}>
-                        {scopeBadges.map((scope) => <span key={scope}>{t(`codeReview.gitReview.${scope}`)}</span>)}
-                      </span>}
-                      {status && <span className="code-review-disposition" data-status={status}>{t(`codeReview.${status}`)}</span>}
-                    </span>}
-                  </button></li>;
-                })}</ul>
+                {displayedLimited && <p role="status">{t("codeReview.limited")}</p>}
+                {!hasMatches && !changes.isError && !clean && (git || query) && <p role="status">{t("codeReview.noMatches")}</p>}
+                {clean && active && <p role="status">{t(emptyChangesLabel)}</p>}
+                {grouped ? groups.filter(({ entries }) => entries.length > 0).map(({ scope, entries }) =>
+                  <details key={scope} className="code-changes-group" open>
+                    <summary><ActionIcon name="chevronDown" />{t(`codeReview.gitReview.${scope}`)}</summary>
+                    <ul>{entries.map(renderChange)}</ul>
+                  </details>)
+                  : <ul>{shown.map(renderChange)}</ul>}
               </>}
           </div>
           </>}
@@ -1344,8 +1459,9 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
             wrap={wordWrap}
             text={activeDraft.text} onEdit={(text) => setDrafts((current) => new Map(current).set(active, { ...activeDraft, text }))}
             outline={renderOutline()} dock={renderDock()} footer={renderStatus()} readerRef={readerRef} />
-          : active ? <FileReview key={JSON.stringify([active, change?.evidence, change?.comparison])}
-            api={api} project={project} path={active} dependency={dependency} change={change} mode={readingMode}
+          : active && (!branchView || change) ? <FileReview key={JSON.stringify([active, change?.evidence, change?.comparison, branchReviewKey, historical])}
+            api={api} project={project} path={active} dependency={dependency} change={change} mode={readingMode} branchReviewKey={branchReviewKey} previousReview={historical}
+            onRevealInFinder={revealFileInFinder(active, dependency)} onRevealFolderInFinder={dependency ? undefined : revealEntry}
             allowLanguageTools={allowDefinitions} eslintAvailability={eslintAvailability}
             showOutline={outlineOpen} renderOutline={renderOutline} renderDock={renderDock} renderStatus={renderStatus}
             checkFiles={checkRun?.status === "running" ? undefined : checkRun?.files}
@@ -1357,7 +1473,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
               setArrival({ key: active, destination: { position } });
               setReadingMode(active, "source");
             }}
-            baseline={baseline} gitControls={diffControls} readPosition={readPosition} savePosition={savePosition} onModeChange={(mode) => {
+            baseline={baseline} baselineCommit={baselineCommit} gitControls={diffControls} readPosition={readPosition} savePosition={savePosition} onModeChange={(mode) => {
               definitionVersion.current += 1;
               setDefinitionDialog(undefined);
               setNotice("");
@@ -1376,8 +1492,8 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
             } : undefined} />
             : <><div className="code-review-reader-body">
               <EmptyState className="code-review-placeholder" icon={<ActionIcon name={view === "changes" && clean ? "check" : "codeDocument"} />}
-                title={t(view === "changes" && clean ? "codeReview.noChanges" : "codeReview.selectFile")}
-                description={t(view === "changes" && clean ? "codeReview.cleanHelp" : "codeReview.selectFileHelp")}
+                title={t(view === "changes" && clean ? emptyChangesLabel : "codeReview.selectFile")}
+                description={branchView && clean ? undefined : t(view === "changes" && clean ? "codeReview.cleanHelp" : "codeReview.selectFileHelp")}
                 actions={view === "changes" || !sidebarOpen ? <Button onClick={browseFiles}>{t("codeReview.browseFiles")}</Button> : undefined} />
               {renderOutline()}
             </div>{renderDock()}<div className="code-review-reading-status">{renderStatus()}<span>{baseline}</span></div></>}
@@ -1397,6 +1513,7 @@ function ProjectReview({ api, project, choose, layoutStore, refreshRef, quickOpe
       }} />}
     {(api.paths || api.searchContent) && <CodeQuickOpen api={api} projectId={project.id} visible={Boolean(quickOpen)} anchor={searchAnchor}
       contentQuery={contentQuery} onContentQuery={setContentQuery}
+      onRevealInFinder={revealEntry}
       recent={quickOpenRecent} untracked={quickOpenUntracked} unavailable={quickOpenUnavailable}
       onOpen={(path, position) => {
         if (position) setArrival({ key: path, destination: { position } });

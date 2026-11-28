@@ -22,12 +22,13 @@ vi.mock("./code-review-checks", async (original) => {
   }) };
 });
 
-function renderWorkspace(api: CodeReviewPlatform, client = new QueryClient(), extensionsMode?: Parameters<typeof CodeReviewWorkspace>[0]["extensionsMode"], extensionsOffline = false) {
+function renderWorkspace(api: CodeReviewPlatform, client = new QueryClient(), extensionsMode?: Parameters<typeof CodeReviewWorkspace>[0]["extensionsMode"], extensionsOffline = false, allowFinderReveal = false) {
   function Workspace({ outlineOpen }: { outlineOpen: boolean }) {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     return <QueryClientProvider client={client}>
       <CodeReviewWorkspace api={api} sidebarId="project-sidebar" sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         outlineId="code-outline" outlineOpen={outlineOpen} extensionsMode={extensionsMode} extensionsOffline={extensionsOffline}
+        allowFinderReveal={allowFinderReveal}
         eslintAvailability={api.eslint ? "enabled" : "eslintUnavailable"} />
     </QueryClientProvider>;
   }
@@ -272,6 +273,91 @@ it("shows one file with both Git comparisons, tracks each review, and guards sta
   fireEvent.click(screen.getByRole("button", { name: "Use current HEAD" }));
   await waitFor(() => expect(updateBaseline).toHaveBeenCalledExactlyOnceWith(project.id));
   await waitFor(() => expect(screen.queryByText(/still reviewing the previous base/)).toBeNull());
+});
+
+it("switches the viewed worktree, preserves local review and staging, and shows committed diffs separately", async () => {
+  const task = { id: "task-view", key: "task-review", name: "order-import", git: "ready", baseline: "task-head" } as const;
+  const main = { id: "main-view", key: "main-review", name: "demo", git: "ready", baseline: "main-head" } as const;
+  const worktrees = [
+    { name: main.name, path: "/demo", branch: "main", head: main.baseline, primary: true },
+    { name: task.name, path: "/order-import", branch: "codex/order-import", head: task.baseline, primary: false },
+  ];
+  const staged: CodeReviewChange = { path: "staged.sql", previousPath: null, kind: "modified", staged: true, indexOnly: true,
+    comparison: "staged", evidence: "staged-reviewed" };
+  const unstaged: CodeReviewChange = { ...staged, path: "working.sql", staged: false, indexOnly: false,
+    comparison: "unstaged", evidence: "working-edit" };
+  const committed: CodeReviewChange = { ...unstaged, path: "committed.sql", comparison: undefined, evidence: "committed-version" };
+  saveReviewNote(task.key, staged.path, { evidence: staged.evidence!, comparison: "staged", note: "Checked", status: "reviewed", at: "2026-11-28" });
+  const changes: CodeReviewPlatform["changes"] = (id) => {
+    const project = id === task.id ? task : main;
+    return Promise.resolve({
+      git: { branch: id === task.id ? "codex/order-import" : "main", baseline: project.baseline, head: project.baseline,
+        indexRevision: project.id, baselineChanged: false, worktrees: worktrees.map((worktree) => ({ ...worktree, current: worktree.name === project.name })) },
+      limited: false, files: id === task.id ? [staged, unstaged] : [], staged: id === task.id ? [staged] : [], unstaged: id === task.id ? [unstaged] : [],
+      branchChanges: { target: "origin/main", base: main.baseline, head: project.baseline, files: id === task.id ? [committed] : [], limited: false },
+    });
+  };
+  const diff = (entry: CodeReviewChange) => ({ before: { state: "text", text: "base" } as const,
+    after: { state: "text", text: entry.path } as const, evidence: entry.evidence, indexOnly: entry.indexOnly });
+  const file = vi.fn<CodeReviewPlatform["file"]>().mockImplementation((_, path) => Promise.resolve(diff(path === staged.path ? staged : unstaged)));
+  const branchFile = vi.fn().mockResolvedValue(diff(committed));
+  const switchWorktree = vi.fn().mockImplementation((_, path) => Promise.resolve(path === "/demo" ? main : task));
+  const changeIndex = vi.fn().mockResolvedValue(undefined);
+  renderWorkspace({ current: () => Promise.resolve(task), choose: vi.fn(), changes, file, branchFile, switchWorktree, changeIndex,
+    directory: () => Promise.resolve({ entries: [], limited: false }) });
+
+  expect(await screen.findByText("1 of 2 files reviewed")).toBeVisible();
+  expect(screen.queryByRole("heading", { name: "Changes" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /working\.sql/ }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Stage file" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Stage file" }));
+  await waitFor(() => expect(changeIndex).toHaveBeenCalledWith(task.id, { path: unstaged.path,
+    comparison: "unstaged", evidence: unstaged.evidence, indexRevision: task.id }));
+
+  fireEvent.change(screen.getByRole("combobox", { name: "Review status" }), { target: { value: "reviewed" } });
+  expect(screen.queryByRole("button", { name: /working\.sql.*Pending review/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Against origin\/main/ }));
+  await waitFor(() => expect(branchFile).toHaveBeenCalledWith(task.id, committed.path));
+  expect(screen.getByRole("button", { name: /committed\.sql.*Pending review/ })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Stage file" })).toBeNull();
+  const pick = (label: RegExp, path: RegExp) => {
+    fireEvent.click(screen.getByLabelText(label));
+    fireEvent.click(screen.getByRole("button", { name: path }));
+  };
+  pick(/Switch worktree · order-import/, /Main worktree.*\/demo/);
+  expect(await screen.findAllByText("No committed changes against the main branch.")).not.toHaveLength(0);
+  expect(screen.getByRole("button", { name: /Against origin\/main/ })).toHaveAttribute("aria-pressed", "true");
+  pick(/Switch worktree · demo/, /order-import.*\/order-import/);
+  await screen.findByLabelText(/Switch worktree · order-import/);
+  fireEvent.click(screen.getByRole("button", { name: /Local Changes/ }));
+  expect(await screen.findByText("1 of 2 files reviewed")).toBeVisible();
+  expect(switchWorktree.mock.calls).toEqual([[task.id, "/demo"], [main.id, "/order-import"]]);
+  expect(changeIndex).toHaveBeenCalledTimes(1);
+});
+
+it("checks the full local diff of a partially staged file in the worktree view", async () => {
+  const project = { id: "full-check", key: "full-check", name: "Partial staging", git: "ready", baseline: "old-head" } as const;
+  const path = "README.md";
+  const combined: CodeReviewChange = { path, previousPath: null, kind: "modified", staged: true, indexOnly: false, evidence: "full-diff" };
+  const staged: CodeReviewChange = { ...combined, comparison: "staged", indexOnly: true, evidence: "index-diff" };
+  const unstaged: CodeReviewChange = { ...combined, comparison: "unstaged", staged: false, evidence: "working-diff" };
+  const file = vi.fn<CodeReviewPlatform["file"]>().mockImplementation((_, requested, _compare, scope) => Promise.resolve(requested !== path
+    ? { before: null, after: { state: "missing" }, evidence: null, indexOnly: false }
+    : { before: { state: "text", text: "# Base\n" }, after: { state: "text", text: "# Base\n\nChanges.\n" },
+      evidence: scope === "unstaged" ? unstaged.evidence : combined.evidence, indexOnly: false }));
+  renderWorkspace({
+    current: () => Promise.resolve(project), choose: vi.fn(), file, directory: () => Promise.resolve({ entries: [], limited: false }),
+    changes: () => Promise.resolve({
+      files: [combined], staged: [staged], unstaged: [unstaged], limited: false,
+      git: { branch: "main", head: "current-head", baseline: project.baseline, indexRevision: "index", baselineChanged: true, worktrees: [] },
+    }),
+  });
+  await screen.findByRole("button", { name: /Local Changes/ });
+  fireEvent.click(screen.getByRole("button", { name: /^Show Checks/ }));
+  file.mockClear();
+  fireEvent.click(screen.getByRole("button", { name: "Check Changed Files" }));
+  await waitFor(() => expect(file).toHaveBeenCalledWith(project.id, path, true));
+  await screen.findByText(/markdownlint 0.42.2/);
 });
 
 it("rejects a changed Diff response and runs batch Checks on the selected Git scope", async () => {
@@ -870,6 +956,45 @@ it("provides a clear clean-tree action and accessible folder navigation", async 
   expect(source).toHaveFocus();
   fireEvent.click(source);
   expect(await screen.findByRole("textbox", { name: "src/example.go" })).toHaveTextContent("package main");
+});
+
+it("reveals Code files and folders in Finder, including compact folders, search results and Quick Open", async () => {
+  const project = { id: "finder-review", key: "finder-review", name: "Finder project", git: "folder", baseline: null } as const;
+  const path = "src/reports/total.go";
+  const reveal = vi.fn().mockResolvedValue({ added: 0, skipped: 0 });
+  renderWorkspace({
+    current: () => Promise.resolve(project), choose: vi.fn(), changes: vi.fn(),
+    directory: (_, folder) => Promise.resolve({ limited: false, entries: folder
+      ? [{ name: "total.go", path, directory: false }]
+      : [{ name: "src", path: "src", directory: true, compactSegments: ["reports"] }] }),
+    file: () => Promise.resolve({ before: null, after: { state: "text", text: "package total\n" }, evidence: null, indexOnly: false }),
+    finder: { act: reveal, addProjects: vi.fn() },
+    paths: () => Promise.resolve({ limited: false, paths: [path] }),
+    searchContent: () => Promise.resolve({ limited: false, files: [{ path, matches: [{ line: 0, character: 8, matched: "total", before: "package ", after: "" }] }] }),
+  }, new QueryClient(), undefined, false, true);
+  const pick = (element: HTMLElement, target: string) => {
+    fireEvent.contextMenu(element);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reveal in Finder" }));
+    expect(reveal).toHaveBeenLastCalledWith({ kind: "entry", projectId: project.id, path: target }, "reveal");
+  };
+  const compacted = await screen.findByRole("button", { name: "src / reports" });
+  pick(within(compacted).getByText("src"), "src");
+  pick(within(compacted).getByText("reports"), "src/reports");
+  fireEvent.click(compacted);
+  const file = await screen.findByRole("button", { name: "total.go" });
+  pick(file, path);
+  fireEvent.click(file);
+  pick(await screen.findByRole("textbox", { name: path }), path);
+
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Search" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Project Content" }), { target: { value: "total" } });
+  pick(await screen.findByRole("option", { name: /package total/ }), path);
+
+  act(() => { window.dispatchEvent(new Event("nodalstudio:code-quick-open")); });
+  const dialog = within(await screen.findByRole("dialog"));
+  fireEvent.contextMenu(await dialog.findByRole("option", { name: /total\.go/ }));
+  fireEvent.click(dialog.getByRole("menuitem", { name: "Reveal in Finder" }));
+  expect(reveal).toHaveBeenLastCalledWith({ kind: "entry", projectId: project.id, path }, "reveal");
 });
 
 it("opens source from Files and Quick Open while Changes opens a diff", async () => {

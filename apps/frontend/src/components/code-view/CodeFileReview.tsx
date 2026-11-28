@@ -19,6 +19,7 @@ import { reviewHistory, reviewNoteDraft, saveReviewDraft, saveReviewNote, type R
 import { versionReviewStatus } from "./code-git-review";
 import { codeReviewKeys } from "./code-review-query-keys";
 import type { PythonDebugSource } from "./python-debug-source";
+import { isCodeContextMenuKey, useCodeContextMenu } from "./use-code-context-menu";
 
 const textFor = (version: CodeReviewVersion | null | undefined) => version?.state === "text" ? version.text : undefined;
 
@@ -26,9 +27,9 @@ export type NoteStatus = ReviewNote["status"] | "recheck" | "pending";
 export type RenderDock = (current?: DisplayedCheckTarget, note?: { path: string; status: NoteStatus; body: ReactNode }) => ReactNode;
 export type RenderStatus = (status?: NoteStatus) => ReactNode;
 
-export function FileReview({ api, project, path, dependency, change, mode, baseline, readPosition, savePosition, onModeChange, onSaved, onRefresh, onCopy, gitControls,
+export function FileReview({ api, project, path, dependency, change, mode, baseline, baselineCommit, readPosition, savePosition, onModeChange, onSaved, onRefresh, onCopy, onRevealInFinder, onRevealFolderInFinder, gitControls,
   onDefinition, allowLanguageTools, eslintAvailability, onBack, arrival, onArrival, showOutline, locateOutline, renderOutline, renderDock, renderStatus,
-  checkFiles, extensionsApi, extensions, onSyntaxActivity, readerRef, debugSource, wrap }: {
+  checkFiles, extensionsApi, extensions, onSyntaxActivity, readerRef, debugSource, wrap, branchReviewKey, previousReview }: {
   api: CodeReviewPlatform;
   project: CodeReviewProject;
   path: string;
@@ -36,6 +37,9 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   change?: CodeReviewChange;
   mode: ReadingMode;
   baseline: string;
+  baselineCommit?: string | null;
+  branchReviewKey?: string;
+  previousReview?: boolean;
   gitControls?: ReactNode;
   readPosition: (key: string) => ReadingPosition | undefined;
   savePosition: (key: string, position: ReadingPosition) => void;
@@ -43,6 +47,8 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   onSaved: () => void;
   onRefresh: () => void;
   onCopy: (text: string) => void;
+  onRevealInFinder?: () => void;
+  onRevealFolderInFinder?: (path: string) => void;
   onDefinition?: (gesture: DefinitionGesture, mode: ReadingMode) => void;
   allowLanguageTools: boolean;
   eslintAvailability: EslintAvailability;
@@ -64,23 +70,26 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
 }) {
   const { t } = useI18n();
   const client = useQueryClient();
+  const contextMenu = useCodeContextMenu();
   const compare = Boolean(change);
   const scope = change?.comparison;
+  const readComparison = () => branchReviewKey && api.branchFile ? api.branchFile(project.id, path)
+    : previousReview && compare ? api.file(project.id, path, compare, scope, true)
+      : scope ? api.file(project.id, path, compare, scope) : api.file(project.id, path, compare);
   const file = useQuery({
-    queryKey: codeReviewKeys.file(project.id, path, compare, change?.evidence, scope),
+    queryKey: [...codeReviewKeys.file(project.id, path, compare, change?.evidence, scope), ...(branchReviewKey ? [branchReviewKey] : previousReview ? ["previous"] : [])],
     queryFn: async (): Promise<CodeReviewDocument> => {
       if (dependency?.sourceId && api.definitionSource) {
         return { before: null, after: { state: "text", text: await api.definitionSource(project.id, dependency.sourceId) }, evidence: null, indexOnly: false };
       }
-      if (!scope) return api.file(project.id, path, compare);
-      const current = await api.file(project.id, path, compare, scope);
-      if (current.evidence !== change.evidence) throw new Error("codeReviewStale");
+      const current = await readComparison();
+      if ((scope || branchReviewKey) && current.evidence !== change?.evidence) throw new Error("codeReviewStale");
       return current;
     },
     retry: false,
     gcTime: 30_000,
   });
-  const readWorkingTree = mode === "source" && compare;
+  const readWorkingTree = mode === "source" && compare && !branchReviewKey;
   const workingTree = useQuery({
     queryKey: codeReviewKeys.file(project.id, path, false),
     queryFn: () => api.file(project.id, path, false),
@@ -117,16 +126,26 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   const displayPath = dependency?.path ?? path;
   const parts = displayPath.replaceAll("\\", "/").split("/").filter(Boolean);
   const filename = parts.pop() ?? displayPath;
-  const positionKey = JSON.stringify([path, diff ? scope ?? "diff" : "source"]);
+  const positionKey = JSON.stringify([path, diff ? scope ?? "diff" : "source", ...(branchReviewKey ? [branchReviewKey] : previousReview && diff ? ["previous"] : [])]);
+  const finderMenu = (name: string, reveal?: () => void) => reveal ? {
+    tabIndex: 0,
+    "aria-haspopup": "menu" as const,
+    "aria-keyshortcuts": "Shift+F10",
+    onContextMenu: (event: React.MouseEvent<HTMLLIElement>) => contextMenu.showFinder(event, name, reveal),
+    onKeyDown: (event: React.KeyboardEvent<HTMLLIElement>) => {
+      if (isCodeContextMenuKey(event)) contextMenu.showFinder(event, name, reveal);
+    },
+  } : {};
   const heading = <div className="code-review-document-heading">
     <nav className="code-review-document-path" aria-label={t("codeReview.filePath")} title={displayPath}>
       <ol role="list">
         {parts.length > 1 && <li className="code-review-document-overflow" aria-hidden="true">…</li>}
-        {parts.map((part, index) => <li key={index} className="code-review-document-folder">
+        {parts.map((part, index) => <li key={index} className="code-review-document-folder"
+          {...finderMenu(part, onRevealFolderInFinder && (() => onRevealFolderInFinder(parts.slice(0, index + 1).join("/"))))}>
           {index > 0 && <ActionIcon name="chevronRight" />}
           <span>{part}</span>
         </li>)}
-        <li className="code-review-document-file" aria-current="page">
+        <li className="code-review-document-file" aria-current="page" {...finderMenu(filename, onRevealInFinder)}>
           {parts.length > 0 && <ActionIcon name="chevronRight" />}
           <CodeFileIcon path={displayPath} />
           <h2>{filename}</h2>
@@ -135,20 +154,25 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
     </nav>
     {gitControls}
   </div>;
-  const noteHistory = change && evidence ? reviewHistory(project.key, path) : undefined;
+  const reviewKey = branchReviewKey ?? project.key;
+  const noteHistory = change && evidence ? reviewHistory(reviewKey, path) : undefined;
   const noteStatus = noteHistory && evidence ? versionReviewStatus(noteHistory, evidence, scope) : undefined;
+  const noteTarget = t(indexOnly ? "codeReview.index" : "codeReview.worktree");
+  const noteComparison = branchReviewKey ? baseline
+    : scope ? t(scope === "staged" ? "codeReview.gitReview.stagedDiff" : "codeReview.gitReview.unstagedDiff")
+      : baselineCommit ? `${baselineCommit.slice(0, 10)} → ${noteTarget}` : noteTarget;
   const note = noteHistory && noteStatus ? {
     path,
     status: noteStatus,
-    body: <ReviewNotes key={evidence} api={api} project={project} path={path} document={document}
-      history={noteHistory} scope={scope} base={baseline} onSaved={onSaved} />,
+    body: <ReviewNotes key={evidence} reviewKey={reviewKey} path={path} document={document} readComparison={readComparison}
+      history={noteHistory} scope={scope} comparison={noteComparison} onSaved={onSaved} />,
   } : undefined;
   const comparison = dependency ? t("codeReview.definitionDependency")
     : diff && scope ? t(scope === "staged" ? "codeReview.gitReview.stagedDiff" : "codeReview.gitReview.unstagedDiff")
     : diff && indexOnly ? t("codeReview.index")
     : !diff && showingOriginal ? t("codeReview.originalVersion") : diff && change?.staged ? t("codeReview.hasStaged") : baseline;
   const readerText = diff ? (revised ?? "") : (fullText ?? "");
-  const liveSource = !showingOriginal && !(diff && indexOnly);
+  const liveSource = !branchReviewKey && !showingOriginal && !(diff && indexOnly);
   const origin = dependency?.sourceId ? { kind: "dependency" as const, id: dependency.sourceId } : { kind: "workspace" as const, path };
   const outline = showOutline && allowLanguageTools && liveSource && fullText !== undefined && api.documentOutline && supportsCodeNavigation(displayPath)
     ? <CodeReviewOutline locate={locateOutline} onRefresh={onRefresh}
@@ -168,7 +192,7 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   const checkResult = !checkProblem ? checkFiles?.find((item) => item.status === "checked" && matchesCheck(item.target)) : undefined;
   const safeArrival = arrival && "check" in arrival && !matchesCheck({ ...arrival.check, path }) ? undefined : arrival;
   const inspector = renderOutline(outline);
-  const dock = renderDock({ target: checkTarget, text: readerText, problem: checkProblem }, note);
+  const dock = renderDock(branchReviewKey || previousReview ? undefined : { target: checkTarget, text: readerText, problem: checkProblem }, note);
   const status = renderStatus(noteStatus);
   return <>
     {change?.previousPath && <p className="code-review-status">{t("codeReview.renamedFrom", { path: change.previousPath })}</p>}
@@ -178,13 +202,13 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
     {diff || fullText !== undefined ? <CodeReviewReader path={displayPath} original={diff ? (original ?? "") : undefined}
       sourceBaseline={!diff && change && !showingOriginal ? original : undefined}
       sourceFileChange={!diff && change ? showingOriginal ? "deleted" : before?.state === "missing" ? "added" : undefined : undefined}
-      text={readerText} onCopy={onCopy} viewSwitcher={viewSwitcher} heading={heading}
+      text={readerText} onCopy={onCopy} onRevealInFinder={onRevealInFinder} viewSwitcher={viewSwitcher} heading={heading}
       fallbackCopy={after.state === "missing" && diff ? original : undefined} footer={status} dock={dock} comparison={comparison}
       readPosition={() => readPosition(positionKey)} onPosition={(position) => savePosition(positionKey, position)}
       onDefinition={onDefinition && liveSource ? (gesture) => onDefinition(gesture, diff ? "diff" : "source") : undefined}
       onReferences={allowLanguageTools && liveSource && api.documentHighlights ? (position, text) => api.documentHighlights?.(project.id, { origin, position, text }) ?? Promise.resolve([]) : undefined}
       outline={inspector} checkResult={checkResult} readerRef={readerRef}
-      debugSource={!diff && !showingOriginal ? debugSource : undefined}
+      debugSource={liveSource && !diff ? debugSource : undefined}
       wrap={wrap}
       extensionsApi={dependency ? undefined : extensionsApi} extensions={extensions} projectId={project.id} onSyntaxActivity={onSyntaxActivity}
       onBack={onBack} arrival={safeArrival} onArrival={onArrival} />
@@ -193,35 +217,32 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
         {inspector}
       </div>{dock}<div className="code-review-reading-status">{status}</div></>}
     {change && !diffAvailable && fullText !== undefined && <p className="code-review-status" role="status">{t("codeReview.diffUnavailable")}</p>}
+    {contextMenu.surface}
   </>;
 }
 
-function ReviewNotes({ api, project, path, document, history, scope, base, onSaved }: {
-  api: CodeReviewPlatform;
-  project: CodeReviewProject;
+function ReviewNotes({ reviewKey, path, document, history, scope, comparison, onSaved, readComparison }: {
+  reviewKey: string;
   path: string;
   document: CodeReviewDocument;
   history: ReviewNote[];
   scope?: CodeChangeComparison;
-  base: string;
+  comparison: string;
+  readComparison: () => Promise<CodeReviewDocument>;
   onSaved: () => void;
 }) {
   const { t, formatDate } = useI18n();
   const noteId = useId();
   const comparisonId = `${noteId}-comparison`;
-  const target = t(document.indexOnly ? "codeReview.index" : "codeReview.worktree");
-  const comparison = scope === "unstaged" ? t("codeReview.gitReview.unstagedDiff")
-    : scope === "staged" ? `${base} → ${target}`
-      : project.baseline ? `${project.baseline.slice(0, 10)} → ${target}` : target;
   const current = history.find((entry) => entry.evidence === document.evidence);
   const older = history.filter((entry) => entry.evidence !== document.evidence);
-  const [note, setNote] = useState(() => reviewNoteDraft(project.key, path, document.evidence) ?? current?.note ?? "");
+  const [note, setNote] = useState(() => reviewNoteDraft(reviewKey, path, document.evidence) ?? current?.note ?? "");
   const save = useMutation({
     mutationFn: async (status: ReviewNote["status"]) => {
-      const latest = await (scope ? api.file(project.id, path, true, scope) : api.file(project.id, path, true));
+      const latest = await readComparison();
       if (!latest.evidence || latest.evidence !== document.evidence) throw new Error("codeReviewStale");
-      saveReviewNote(project.key, path, { evidence: latest.evidence, comparison: scope, status, note, at: new Date().toISOString() });
-      saveReviewDraft(project.key, path, latest.evidence, "");
+      saveReviewNote(reviewKey, path, { evidence: latest.evidence, comparison: scope, status, note, at: new Date().toISOString() });
+      saveReviewDraft(reviewKey, path, latest.evidence, "");
     },
     onSuccess: onSaved,
   });
@@ -231,7 +252,7 @@ function ReviewNotes({ api, project, path, document, history, scope, base, onSav
       <textarea id={noteId} aria-describedby={comparisonId} rows={2} maxLength={2000} value={note} readOnly={save.isPending}
         onChange={(event) => {
           setNote(event.target.value);
-          saveReviewDraft(project.key, path, document.evidence, event.target.value, current?.note ?? "");
+          saveReviewDraft(reviewKey, path, document.evidence, event.target.value, current?.note ?? "");
         }} placeholder={t("codeReview.notePlaceholder")} />
       <div className="code-review-note-footer">
         <span id={comparisonId} className="code-review-note-comparison" title={comparison}>{comparison}</span>

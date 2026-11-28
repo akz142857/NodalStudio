@@ -1,19 +1,30 @@
 use std::{
-    collections::HashSet,
-    ffi::{OsStr, OsString},
-    io::{self, ErrorKind},
+    io::ErrorKind,
     path::{Path, PathBuf},
 };
 
+#[cfg(not(feature = "mac-app-store"))]
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
+#[cfg(not(feature = "mac-app-store"))]
 use cap_std::{
     ambient_authority,
     fs::{Dir, OpenOptions, OpenOptionsExt, PermissionsExt},
 };
+#[cfg(not(feature = "mac-app-store"))]
 use objc2::runtime::ProtocolObject;
-use objc2_app_kit::{NSPasteboard, NSWorkspace};
-use objc2_foundation::{NSArray, NSString, NSURL, ns_string};
+#[cfg(not(feature = "mac-app-store"))]
+use objc2_app_kit::NSPasteboard;
+use objc2_app_kit::NSWorkspace;
+#[cfg(not(feature = "mac-app-store"))]
+use objc2_foundation::ns_string;
+use objc2_foundation::{NSArray, NSString, NSURL};
 use serde::{Deserialize, Serialize};
+#[cfg(not(feature = "mac-app-store"))]
+use std::{
+    collections::HashSet,
+    ffi::{OsStr, OsString},
+    io,
+};
 use tauri::AppHandle;
 use tokio::sync::oneshot;
 use uuid::Uuid;
@@ -21,7 +32,9 @@ use uuid::Uuid;
 use super::files::{Repository, open_nested_directory, review_relative_path};
 
 const UNAVAILABLE: &str = "codeReviewFileActionUnavailable";
+#[cfg(not(feature = "mac-app-store"))]
 pub(super) const CLIPBOARD_EMPTY: &str = "codeReviewClipboardEmpty";
+#[cfg(not(feature = "mac-app-store"))]
 const MAX_PASTE_ITEMS: usize = 64;
 
 #[derive(Deserialize)]
@@ -33,13 +46,17 @@ const MAX_PASTE_ITEMS: usize = 64;
 pub(crate) enum FinderTarget {
     Project { id: Uuid },
     Entry { project_id: Uuid, path: String },
+    Worktree { project_id: Uuid, path: String },
+    Dependency { project_id: Uuid, source_id: Uuid },
 }
 
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum FinderAction {
     Reveal,
+    #[cfg(not(feature = "mac-app-store"))]
     Copy,
+    #[cfg(not(feature = "mac-app-store"))]
     Paste,
 }
 
@@ -61,19 +78,30 @@ impl LocatedItem {
         root: PathBuf,
         directory: Repository,
         relative: &str,
+        action: FinderAction,
     ) -> Result<Self, String> {
-        let relative = review_relative_path(relative, true).map_err(|_| UNAVAILABLE)?;
-        let is_directory = if let (Some(parent), Some(name)) =
-            (relative.parent(), relative.file_name())
-        {
-            let folder = open_nested_directory(&directory.dir, parent).map_err(|_| UNAVAILABLE)?;
-            let metadata = folder.symlink_metadata(name).map_err(|_| UNAVAILABLE)?;
-            if !(metadata.is_file() || metadata.is_dir()) {
-                return Err(UNAVAILABLE.into());
+        let mut relative = review_relative_path(relative, true).map_err(|_| UNAVAILABLE)?;
+        let mut fallback = false;
+        let is_directory = loop {
+            let (Some(parent), Some(name)) = (relative.parent(), relative.file_name()) else {
+                break true;
+            };
+            match open_nested_directory(&directory.dir, parent)
+                .and_then(|folder| folder.symlink_metadata(name))
+            {
+                Ok(metadata) if metadata.is_dir() => break true,
+                Ok(metadata) if metadata.is_file() && !fallback => break false,
+                Err(error)
+                    if matches!(action, FinderAction::Reveal)
+                        && matches!(
+                            error.kind(),
+                            ErrorKind::NotFound | ErrorKind::NotADirectory
+                        ) => {}
+                Ok(_) if fallback => {}
+                _ => return Err(UNAVAILABLE.into()),
             }
-            metadata.is_dir()
-        } else {
-            true
+            relative.pop();
+            fallback = true;
         };
         Ok(Self {
             root,
@@ -89,7 +117,13 @@ impl LocatedItem {
         action: FinderAction,
     ) -> Result<PasteResult, String> {
         match action {
-            FinderAction::Copy | FinderAction::Reveal => {
+            FinderAction::Reveal => {
+                let result = reveal(app, &self.root.join(&self.relative), self.is_directory).await;
+                drop(self.directory);
+                result
+            }
+            #[cfg(not(feature = "mac-app-store"))]
+            FinderAction::Copy => {
                 let path = self
                     .root
                     .join(&self.relative)
@@ -101,23 +135,17 @@ impl LocatedItem {
                         &NSString::from_str(&path),
                         self.is_directory,
                     );
-                    match action {
-                        FinderAction::Reveal => NSWorkspace::sharedWorkspace()
-                            .activateFileViewerSelectingURLs(&NSArray::from_slice(&[&*url])),
-                        FinderAction::Copy => {
-                            let clipboard = NSPasteboard::generalPasteboard();
-                            clipboard.clearContents();
-                            let object = ProtocolObject::from_ref(&*url);
-                            if !clipboard.writeObjects(&NSArray::from_slice(&[object])) {
-                                return Err(UNAVAILABLE.into());
-                            }
-                        }
-                        FinderAction::Paste => unreachable!(),
+                    let clipboard = NSPasteboard::generalPasteboard();
+                    clipboard.clearContents();
+                    let object = ProtocolObject::from_ref(&*url);
+                    if !clipboard.writeObjects(&NSArray::from_slice(&[object])) {
+                        return Err(UNAVAILABLE.into());
                     }
                     Ok(PasteResult::default())
                 })
                 .await
             }
+            #[cfg(not(feature = "mac-app-store"))]
             FinderAction::Paste => {
                 let sources = clipboard_paths(app).await?;
                 tokio::task::spawn_blocking(move || self.paste(sources))
@@ -127,6 +155,7 @@ impl LocatedItem {
         }
     }
 
+    #[cfg(not(feature = "mac-app-store"))]
     fn paste(&self, sources: Vec<PathBuf>) -> Result<PasteResult, String> {
         let relative = if self.is_directory {
             &self.relative
@@ -152,6 +181,21 @@ impl LocatedItem {
     }
 }
 
+pub(super) async fn reveal(
+    app: &AppHandle,
+    path: &Path,
+    is_directory: bool,
+) -> Result<PasteResult, String> {
+    let path = path.to_str().ok_or(UNAVAILABLE)?.to_owned();
+    on_main_thread(app, move || {
+        let url = NSURL::fileURLWithPath_isDirectory(&NSString::from_str(&path), is_directory);
+        NSWorkspace::sharedWorkspace()
+            .activateFileViewerSelectingURLs(&NSArray::from_slice(&[&*url]));
+        Ok(PasteResult::default())
+    })
+    .await
+}
+
 async fn on_main_thread<T: Send + 'static>(
     app: &AppHandle,
     operation: impl FnOnce() -> Result<T, String> + Send + 'static,
@@ -164,6 +208,7 @@ async fn on_main_thread<T: Send + 'static>(
     result.await.map_err(|_| UNAVAILABLE)?
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 pub(super) async fn clipboard_paths(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
     on_main_thread(app, || {
         let clipboard = NSPasteboard::generalPasteboard();
@@ -189,6 +234,7 @@ pub(super) async fn clipboard_paths(app: &AppHandle) -> Result<Vec<PathBuf>, Str
     .await
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 fn clipboard_path(value: &NSString) -> Option<PathBuf> {
     let url = NSURL::URLWithString(value)?;
     if !url.isFileURL() {
@@ -199,14 +245,18 @@ fn clipboard_path(value: &NSString) -> Option<PathBuf> {
     path.is_absolute().then_some(path)
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 const MAX_PASTE_ENTRIES: usize = 10_000;
+#[cfg(not(feature = "mac-app-store"))]
 const MAX_PASTE_BYTES: u64 = 512 * 1024 * 1024;
 
+#[cfg(not(feature = "mac-app-store"))]
 struct CopyQuota {
     remaining_entries: usize,
     remaining_bytes: u64,
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 fn copy_into(source: &Path, destination: &Dir, destination_path: &Path) -> io::Result<()> {
     let name = source.file_name().ok_or(ErrorKind::InvalidInput)?;
     let parent = Dir::open_ambient_dir(
@@ -248,6 +298,7 @@ fn copy_into(source: &Path, destination: &Dir, destination_path: &Path) -> io::R
     result
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 fn copy_entry(
     source: &Dir,
     destination: &Dir,
@@ -304,6 +355,7 @@ fn copy_entry(
     Ok(())
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 fn copy_name(name: &OsStr, directory: bool, attempt: usize) -> OsString {
     if attempt == 0 {
         return name.to_owned();
@@ -327,10 +379,30 @@ fn copy_name(name: &OsStr, directory: bool, attempt: usize) -> OsString {
     result
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "mac-app-store")))]
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn reveals_local_entries_and_uses_the_containing_folder_for_missing_files() {
+        let sandbox = tempfile::tempdir().unwrap();
+        let root = sandbox.path().canonicalize().unwrap();
+        fs::create_dir(root.join("src")).unwrap();
+        fs::write(root.join("src/report.go"), "package report").unwrap();
+        let locate = |path, action| {
+            let (directory, _) = Repository::open_directory(&root, None).unwrap();
+            LocatedItem::locate(root.clone(), directory, path, action)
+        };
+        let file = locate("src/report.go", FinderAction::Reveal).unwrap();
+        assert_eq!(file.relative, Path::new("src/report.go"));
+        assert!(!file.is_directory);
+        let folder = locate("src/old/report.go", FinderAction::Reveal).unwrap();
+        assert_eq!(folder.relative, Path::new("src"));
+        assert!(folder.is_directory);
+        assert!(locate("src/old/report.go", FinderAction::Copy).is_err());
+        assert!(locate("../somewhere", FinderAction::Reveal).is_err());
+    }
 
     #[test]
     fn resolves_native_file_references_from_the_clipboard() {

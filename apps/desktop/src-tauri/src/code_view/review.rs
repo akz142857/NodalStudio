@@ -30,7 +30,9 @@ use super::files::{
     open_nested_directory, read_nested, review_relative_path,
 };
 #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
-use super::finder::{FinderAction, FinderTarget, LocatedItem, PasteResult, clipboard_paths};
+use super::finder::clipboard_paths;
+#[cfg(target_os = "macos")]
+use super::finder::{FinderAction, FinderTarget, LocatedItem, PasteResult};
 use super::projects::{
     PROJECT_UNAVAILABLE, ProjectCatalog, ProjectCatalogInfo, ProjectGroupAction, SavedProject,
 };
@@ -61,6 +63,7 @@ pub(crate) fn close_on_exit(app: &AppHandle) {
 pub(crate) async fn reset_local_data(app: &AppHandle, review: &ReviewState) {
     if let Ok(mut session) = review.0.lock() {
         session.close_project();
+        session.worktree_baselines.clear();
         session.language_grants.clear();
     }
     let Ok(file) = app
@@ -87,6 +90,7 @@ pub(crate) async fn reset_local_data(app: &AppHandle, review: &ReviewState) {
 #[derive(Default)]
 struct ReviewSession {
     project: Option<Arc<Project>>,
+    worktree_baselines: HashMap<(PathBuf, RootIdentity), (String, GitHead)>,
     language_grants: HashMap<(PathBuf, RootIdentity), Arc<AtomicBool>>,
 }
 
@@ -228,18 +232,29 @@ impl GitHead {
 #[derive(Default)]
 struct ReviewChanges {
     baseline: GitHead,
+    index_head: GitHead,
     files: BTreeMap<String, Change>,
     staged: BTreeMap<String, Change>,
     unstaged: BTreeMap<String, Change>,
+    previous: Option<PreviousReview>,
+    committed: Option<CommittedReview>,
+}
+
+struct PreviousReview {
+    files: ChangeMap,
+    staged: ChangeMap,
+    limited: bool,
 }
 
 impl ReviewChanges {
-    fn get(&self, path: &str, comparison: Option<Comparison>) -> Option<&Change> {
-        match comparison {
-            Some(Comparison::Staged) => self.staged.get(path),
-            Some(Comparison::Unstaged) => self.unstaged.get(path),
-            None => self.files.get(path),
-        }
+    fn get(&self, path: &str, comparison: Option<Comparison>, previous: bool) -> Option<&Change> {
+        let historical = self.previous.as_ref().filter(|_| previous);
+        let changes = match comparison {
+            Some(Comparison::Staged) => historical.map_or(&self.staged, |review| &review.staged),
+            Some(Comparison::Unstaged) => &self.unstaged,
+            None => historical.map_or(&self.files, |review| &review.files),
+        };
+        changes.get(path)
     }
 }
 
@@ -247,9 +262,39 @@ impl ReviewChanges {
 #[serde(rename_all = "camelCase")]
 struct GitComparison {
     branch: Option<String>,
+    head: Option<String>,
     baseline: Option<String>,
     baseline_changed: bool,
     index_revision: String,
+    worktrees: Vec<ReviewWorktree>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReviewWorktree {
+    path: String,
+    name: String,
+    branch: Option<String>,
+    head: Option<String>,
+    primary: bool,
+    current: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BranchChanges {
+    target: String,
+    base: String,
+    head: String,
+    files: Vec<Change>,
+    limited: bool,
+}
+
+struct CommittedReview {
+    head: Oid,
+    base: Oid,
+    target: String,
+    files: ChangeMap,
 }
 
 #[derive(Serialize)]
@@ -257,9 +302,15 @@ struct GitComparison {
 pub(crate) struct Changes {
     files: Vec<Change>,
     limited: bool,
+    local_limited: bool,
     git: Option<GitComparison>,
     staged: Vec<Change>,
     unstaged: Vec<Change>,
+    previous_files: Option<Vec<Change>>,
+    previous_staged: Option<Vec<Change>>,
+    previous_limited: bool,
+    #[serde(rename = "branchChanges")]
+    branch: Option<BranchChanges>,
 }
 
 #[derive(Deserialize)]
@@ -338,6 +389,42 @@ impl ReviewState {
 }
 
 impl ReviewSession {
+    fn switch_worktree(
+        &mut self,
+        current: &Project,
+        mut next: Project,
+    ) -> Result<Arc<Project>, String> {
+        if self
+            .project
+            .as_ref()
+            .is_none_or(|project| project.info.id != current.info.id)
+        {
+            return Err(STALE.into());
+        }
+        let baseline = current
+            .changes
+            .lock()
+            .map_err(|_| UNAVAILABLE)?
+            .baseline
+            .clone();
+        let current_root = current.root.canonicalize().map_err(|_| UNAVAILABLE)?;
+        self.worktree_baselines.insert(
+            (current_root, current.identity.clone()),
+            (current.info.key.clone(), baseline),
+        );
+        next.info.saved_project_id = current.info.saved_project_id;
+        if let Some((key, baseline)) = self
+            .worktree_baselines
+            .remove(&(next.root.clone(), next.identity.clone()))
+        {
+            let changes = next.changes.get_mut().map_err(|_| UNAVAILABLE)?;
+            next.info.key = key;
+            next.info.baseline = baseline.commit.map(|id| id.to_string());
+            changes.baseline = baseline;
+        }
+        Ok(self.activate(next))
+    }
+
     fn activate(&mut self, mut project: Project) -> Arc<Project> {
         self.close_project();
         if let Some(root) = &project.language_root {
@@ -582,9 +669,14 @@ impl Project {
             return Ok(Changes {
                 files: Vec::new(),
                 limited: false,
+                local_limited: false,
                 git: None,
                 staged: Vec::new(),
                 unstaged: Vec::new(),
+                previous_files: None,
+                previous_staged: None,
+                previous_limited: false,
+                branch: None,
             });
         }
         let repo = open_git(&directory, &self.root)?;
@@ -597,33 +689,55 @@ impl Project {
         };
         let index = repo.index().map_err(|_| UNAVAILABLE)?;
         let (mut staged, mut unstaged, scoped_limited) =
-            collect_comparisons(&repo, &index, baseline.commit).map_err(|_| UNAVAILABLE)?;
+            collect_comparisons(&repo, &index, head.commit).map_err(|_| UNAVAILABLE)?;
         for change in staged.values_mut().chain(unstaged.values_mut()) {
             change.evidence = compare_scoped(&directory, &repo, change).evidence;
         }
-        let (mut files, limited) =
-            collect_changes(&repo, baseline.commit).map_err(|_| UNAVAILABLE)?;
-        for change in files.values_mut() {
-            change.evidence = compare(&directory, &repo, change).evidence;
-        }
+        let (files, limited) =
+            collect_combined(&directory, &repo, head.commit).map_err(|_| UNAVAILABLE)?;
+        let historical = if baseline == head {
+            None
+        } else {
+            collect_previous_review(&directory, &repo, &index, baseline.commit).ok()
+        };
         let git = GitComparison {
             branch: head.branch(),
+            head: head.commit.map(|commit| commit.to_string()),
             baseline: baseline.commit.map(|id| id.to_string()),
             baseline_changed: baseline != head,
-            index_revision: review_index::revision(&index),
+            index_revision: review_index_revision(&review_index::revision(&index), &head),
+            worktrees: review_worktrees(&repo),
         };
+        let branch = head
+            .commit
+            .and_then(|id| collect_branch_changes(&repo, id).ok().flatten());
+        let (branch, committed) = branch.unzip();
         let result = Changes {
             files: files.values().cloned().collect(),
             staged: staged.values().cloned().collect(),
             unstaged: unstaged.values().cloned().collect(),
             limited: scoped_limited || limited,
+            local_limited: scoped_limited,
             git: Some(git),
+            previous_files: historical
+                .as_ref()
+                .map(|review| review.files.values().cloned().collect()),
+            previous_staged: historical
+                .as_ref()
+                .map(|review| review.staged.values().cloned().collect()),
+            previous_limited: historical
+                .as_ref()
+                .is_some_and(|review| review.limited || scoped_limited),
+            branch,
         };
         *previous = ReviewChanges {
             baseline,
+            index_head: head,
             files,
             staged,
             unstaged,
+            previous: historical,
+            committed,
         };
         Ok(result)
     }
@@ -635,9 +749,9 @@ impl Project {
         let (baseline, change) = {
             let state = self.changes.lock().map_err(|_| UNAVAILABLE)?;
             (
-                state.baseline.clone(),
+                state.index_head.clone(),
                 state
-                    .get(&input.path, Some(input.comparison))
+                    .get(&input.path, Some(input.comparison), false)
                     .cloned()
                     .ok_or(STALE)?,
             )
@@ -654,10 +768,15 @@ impl Project {
             }
             Ok(())
         };
+        let index = repo.index().map_err(|_| STALE)?;
+        let revision = review_index::revision(&index);
+        if review_index_revision(&revision, &baseline) != input.index_revision {
+            return Err(STALE.into());
+        }
         review_index::update(
             &repo,
             &directory,
-            &input.index_revision,
+            &revision,
             |index| {
                 require_current_head()?;
                 if !index_matches(index, &relative, &change) {
@@ -709,28 +828,82 @@ impl Project {
         )
     }
 
+    fn read_branch_file(&self, path: &str) -> Result<Document, String> {
+        let directory = self.directory()?;
+        let repo = open_git(&directory, &self.root)?;
+        let state = self.changes.lock().map_err(|_| UNAVAILABLE)?;
+        let review = state.committed.as_ref().ok_or(STALE)?;
+        let head = GitHead::load(&repo)
+            .map_err(|_| STALE)?
+            .commit
+            .ok_or(STALE)?;
+        if head != review.head
+            || branch_base(&repo, head).as_ref() != Some(&(review.target.clone(), review.base))
+        {
+            return Err(STALE.into());
+        }
+        let change = review.files.get(path).cloned().ok_or(STALE)?;
+        drop(state);
+        let executable_changed_to = match (
+            change.before.map(|blob| blob.mode),
+            change.index.map(|blob| blob.mode),
+        ) {
+            (Some(FileMode::Blob), Some(FileMode::BlobExecutable)) => Some(true),
+            (Some(FileMode::BlobExecutable), Some(FileMode::Blob)) => Some(false),
+            _ => None,
+        };
+        Ok(Document {
+            before: Some(read_blob(&repo, change.before)),
+            after: read_blob(&repo, change.index),
+            evidence: change.evidence,
+            index_only: false,
+            executable_changed_to,
+            worktree_mode: None,
+        })
+    }
+
     #[cfg(all(test, not(feature = "mac-app-store")))]
     fn read(&self, path: &str, compare_file: bool) -> Result<Document, String> {
         self.read_comparison(path, compare_file, None)
     }
 
+    #[cfg(all(not(feature = "mac-app-store"), any(target_os = "macos", test)))]
     pub(super) fn read_comparison(
         &self,
         path: &str,
         compare_file: bool,
         comparison: Option<Comparison>,
     ) -> Result<Document, String> {
+        self.read_review_file(path, compare_file, comparison, false)
+    }
+
+    fn read_review_file(
+        &self,
+        path: &str,
+        compare_file: bool,
+        comparison: Option<Comparison>,
+        previous: bool,
+    ) -> Result<Document, String> {
         let relative = review_relative_path(path, false).map_err(|_| UNAVAILABLE)?;
         let directory = self.directory()?;
         if compare_file {
-            let change = self
-                .changes
-                .lock()
-                .map_err(|_| UNAVAILABLE)?
-                .get(path, comparison)
-                .cloned()
-                .ok_or(STALE)?;
+            let (change, head) = {
+                let changes = self.changes.lock().map_err(|_| UNAVAILABLE)?;
+                if previous && changes.previous.is_none() {
+                    return Err(STALE.into());
+                }
+                (
+                    changes
+                        .get(path, comparison, previous)
+                        .cloned()
+                        .ok_or(STALE)?,
+                    changes.index_head.clone(),
+                )
+            };
             let repo = open_git(&directory, &self.root)?;
+            if !previous && GitHead::load(&repo).as_ref().ok() != Some(&head) {
+                return Err(STALE.into());
+            }
             let document = if comparison.is_some() {
                 let index = repo.index().map_err(|_| STALE)?;
                 if !index_matches(&index, &relative, &change) {
@@ -793,11 +966,171 @@ pub(super) fn open_git(directory: &Repository, root: &Path) -> Result<git2::Repo
 
 type ChangeMap = BTreeMap<String, Change>;
 
-fn collect_comparisons(
+fn review_index_revision(index_revision: &str, head: &GitHead) -> String {
+    format!(
+        "{}:{}:{}",
+        index_revision,
+        head.branch_ref.as_deref().unwrap_or_default(),
+        head.commit.map(|id| id.to_string()).unwrap_or_default()
+    )
+}
+
+fn review_worktrees(repo: &git2::Repository) -> Vec<ReviewWorktree> {
+    let Some(current) = repo.workdir().and_then(|path| path.canonicalize().ok()) else {
+        return Vec::new();
+    };
+    let Some(common) = repo.commondir().canonicalize().ok() else {
+        return Vec::new();
+    };
+    let item = |candidate: &git2::Repository| -> Option<ReviewWorktree> {
+        let path = candidate.workdir()?.canonicalize().ok()?;
+        if candidate.commondir().canonicalize().ok()? != common {
+            return None;
+        }
+        let head = GitHead::load(candidate).ok()?;
+        Some(ReviewWorktree {
+            path: path.to_str()?.to_owned(),
+            name: path.file_name()?.to_string_lossy().into_owned(),
+            branch: head.branch(),
+            head: head.commit.map(|id| id.to_string()),
+            primary: !candidate.is_worktree(),
+            current: path == current,
+        })
+    };
+    let mut entries = item(repo).into_iter().collect::<Vec<_>>();
+    let other = |root: &Path| -> Option<ReviewWorktree> {
+        let root = root.canonicalize().ok()?;
+        if root == current {
+            return None;
+        }
+        let (directory, _) = Repository::open_directory(&root, None).ok()?;
+        item(&open_git(&directory, &root).ok()?)
+    };
+    if repo.is_worktree()
+        && let Ok(primary) = git2::Repository::open(&common)
+        && let Some(entry) = primary.workdir().and_then(other)
+    {
+        entries.push(entry);
+    }
+    if let Ok(names) = repo.worktrees() {
+        for name in names.iter().filter_map(|name| name.ok().flatten()) {
+            if let Ok(worktree) = repo.find_worktree(name)
+                && worktree.validate().is_ok()
+                && let Some(entry) = other(worktree.path())
+            {
+                entries.push(entry);
+            }
+        }
+    }
+    entries.sort_by(|left, right| {
+        right
+            .primary
+            .cmp(&left.primary)
+            .then_with(|| left.name.cmp(&right.name))
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    entries.dedup_by(|left, right| left.path == right.path);
+    entries
+}
+
+fn branch_base(repo: &git2::Repository, head: Oid) -> Option<(String, Oid)> {
+    let default = repo.find_reference("refs/remotes/origin/HEAD").ok();
+    let target = default
+        .as_ref()
+        .and_then(|reference| reference.symbolic_target().ok().flatten());
+    let resolve = |name: &str| {
+        repo.find_reference(name)
+            .ok()?
+            .peel_to_commit()
+            .ok()
+            .map(|commit| (name.to_owned(), commit.id()))
+    };
+    let unambiguous = |prefix: &str| match (
+        resolve(&format!("{prefix}main")),
+        resolve(&format!("{prefix}master")),
+    ) {
+        (Some(branch), None) | (None, Some(branch)) => Some(branch),
+        _ => None,
+    };
+    let (reference, target_commit) = if let Some(target) = target {
+        resolve(target).or_else(|| {
+            let branch = target.strip_prefix("refs/remotes/origin/")?;
+            resolve(&format!("refs/heads/{branch}"))
+        })?
+    } else {
+        unambiguous("refs/remotes/origin/").or_else(|| unambiguous("refs/heads/"))?
+    };
+    let target = reference
+        .strip_prefix("refs/remotes/")
+        .or_else(|| reference.strip_prefix("refs/heads/"))?;
+    Some((
+        target.to_owned(),
+        repo.merge_base(head, target_commit).ok()?,
+    ))
+}
+
+fn collect_branch_changes(
+    repo: &git2::Repository,
+    head: Oid,
+) -> Result<Option<(BranchChanges, CommittedReview)>, git2::Error> {
+    let Some((target, base)) = branch_base(repo, head) else {
+        return Ok(None);
+    };
+    let before = repo.find_commit(base)?.tree()?;
+    let after = repo.find_commit(head)?.tree()?;
+    let mut diff = repo.diff_tree_to_tree(
+        Some(&before),
+        Some(&after),
+        Some(
+            DiffOptions::new()
+                .ignore_submodules(true)
+                .skip_binary_check(true),
+        ),
+    )?;
+    if diff.deltas().len() <= MAX_CHANGES {
+        diff.find_similar(Some(DiffFindOptions::new().renames(true).rename_limit(100)))?;
+    }
+    let (mut files, limited) = change_list(&diff, true);
+    for change in files.values_mut() {
+        change.staged = false;
+        change.index_only = false;
+        let stamp = |blob: Option<BlobVersion>| {
+            blob.map(|blob| (blob.id.to_string(), u32::from(blob.mode)))
+        };
+        let mut hash = Sha256::new();
+        hash.update(format!(
+            "{:?}",
+            (
+                &change.path,
+                &change.previous_path,
+                stamp(change.before),
+                stamp(change.index)
+            )
+        ));
+        change.evidence = Some(format!("{:x}", hash.finalize()));
+    }
+    Ok(Some((
+        BranchChanges {
+            target: target.clone(),
+            base: base.to_string(),
+            head: head.to_string(),
+            files: files.values().cloned().collect(),
+            limited,
+        },
+        CommittedReview {
+            head,
+            base,
+            target,
+            files,
+        },
+    )))
+}
+
+fn collect_staged(
     repo: &git2::Repository,
     index: &git2::Index,
     baseline: Option<Oid>,
-) -> Result<(ChangeMap, ChangeMap, bool), git2::Error> {
+) -> Result<(ChangeMap, bool), git2::Error> {
     let tree = baseline
         .map(|id| repo.find_commit(id).and_then(|commit| commit.tree()))
         .transpose()?;
@@ -807,15 +1140,26 @@ fn collect_comparisons(
     if staged.deltas().len() <= MAX_CHANGES {
         staged.find_similar(Some(DiffFindOptions::new().renames(true).rename_limit(100)))?;
     }
+    let (mut staged, limited) = change_list(&staged, true);
+    for change in staged.values_mut() {
+        change.comparison = Some(Comparison::Staged);
+    }
+    Ok((staged, limited))
+}
+
+fn collect_comparisons(
+    repo: &git2::Repository,
+    index: &git2::Index,
+    baseline: Option<Oid>,
+) -> Result<(ChangeMap, ChangeMap, bool), git2::Error> {
+    let (staged, staged_limited) = collect_staged(repo, index, baseline)?;
+    let mut options = DiffOptions::new();
+    options.ignore_submodules(true).skip_binary_check(true);
     let unstaged = repo.diff_index_to_workdir(
         Some(index),
         Some(options.include_untracked(true).recurse_untracked_dirs(true)),
     )?;
-    let (mut staged, staged_limited) = change_list(&staged, true);
     let (mut unstaged, unstaged_limited) = change_list(&unstaged, false);
-    for change in staged.values_mut() {
-        change.comparison = Some(Comparison::Staged);
-    }
     for change in unstaged.values_mut() {
         change.comparison = Some(Comparison::Unstaged);
     }
@@ -937,6 +1281,36 @@ fn collect_changes(
         }
     }
     Ok((files, limited))
+}
+
+fn collect_combined(
+    directory: &Repository,
+    repo: &git2::Repository,
+    base: Option<Oid>,
+) -> Result<(ChangeMap, bool), git2::Error> {
+    let (mut files, limited) = collect_changes(repo, base)?;
+    for change in files.values_mut() {
+        change.evidence = compare(directory, repo, change).evidence;
+    }
+    Ok((files, limited))
+}
+
+fn collect_previous_review(
+    directory: &Repository,
+    repo: &git2::Repository,
+    index: &git2::Index,
+    base: Option<Oid>,
+) -> Result<PreviousReview, git2::Error> {
+    let (files, limited) = collect_combined(directory, repo, base)?;
+    let (mut staged, staged_limited) = collect_staged(repo, index, base)?;
+    for change in staged.values_mut() {
+        change.evidence = compare_scoped(directory, repo, change).evidence;
+    }
+    Ok(PreviousReview {
+        files,
+        staged,
+        limited: limited || staged_limited,
+    })
 }
 
 fn change_list(diff: &Diff<'_>, index_only: bool) -> (BTreeMap<String, Change>, bool) {
@@ -1155,7 +1529,7 @@ pub(crate) async fn edit_code_review_project_groups(
     .await
 }
 
-#[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub(crate) async fn code_review_finder_action(
     app: AppHandle,
@@ -1168,18 +1542,61 @@ pub(crate) async fn code_review_finder_action(
                 let saved = catalog.get(id)?;
                 let (directory, _) = Repository::open_directory(&saved.root, Some(&saved.identity))
                     .map_err(|_| PROJECT_UNAVAILABLE)?;
-                LocatedItem::locate(saved.root.clone(), directory, "")
+                LocatedItem::locate(saved.root.clone(), directory, "", action)
             })
             .await?
         }
         FinderTarget::Entry { project_id, path } => {
             let project = app.state::<ReviewState>().project(project_id)?;
             tokio::task::spawn_blocking(move || {
-                LocatedItem::locate(project.root.clone(), project.directory()?, &path)
+                LocatedItem::locate(project.root.clone(), project.directory()?, &path, action)
             })
             .await
             .map_err(|_| UNAVAILABLE)??
         }
+        FinderTarget::Worktree { project_id, path } if matches!(action, FinderAction::Reveal) => {
+            let project = app.state::<ReviewState>().project(project_id)?;
+            tokio::task::spawn_blocking(move || {
+                let directory = project.directory()?;
+                let repo = open_git(&directory, &project.root)?;
+                let authorized = review_worktrees(&repo)
+                    .into_iter()
+                    .find(|worktree| worktree.path == path)
+                    .ok_or(UNAVAILABLE)?;
+                let root = PathBuf::from(authorized.path);
+                let (directory, _) = Repository::open_directory(&root, None)?;
+                let candidate = open_git(&directory, &root)?;
+                if candidate
+                    .commondir()
+                    .canonicalize()
+                    .map_err(|_| UNAVAILABLE)?
+                    != repo.commondir().canonicalize().map_err(|_| UNAVAILABLE)?
+                {
+                    return Err(UNAVAILABLE.into());
+                }
+                LocatedItem::locate(root, directory, "", action)
+            })
+            .await
+            .map_err(|_| UNAVAILABLE)??
+        }
+        FinderTarget::Dependency {
+            project_id,
+            source_id,
+        } if matches!(action, FinderAction::Reveal) => {
+            let project = app.state::<ReviewState>().project(project_id)?;
+            let state = app.state::<AppState>();
+            let services = project
+                .language_access(&state.store, Some(state.subscribe_offline()), false)
+                .await?
+                .ok_or(LANGUAGE_OFFLINE)?;
+            let path = services
+                .while_running(services.local_dependency_file(source_id))
+                .await
+                .flatten()
+                .ok_or(UNAVAILABLE)?;
+            return super::finder::reveal(&app, &path, false).await;
+        }
+        _ => return Err(UNAVAILABLE.into()),
     };
     item.act(&app, action).await
 }
@@ -1212,13 +1629,12 @@ pub(crate) async fn open_saved_code_review_project(
     id: Uuid,
 ) -> Result<ProjectInfo, String> {
     let project = with_project_catalog(app.clone(), move |state, file, mut catalog| {
-        if let Some(current) = state
-            .current()?
-            .filter(|project| project.info.saved_project_id == Some(id))
-        {
+        let saved = catalog.get(id)?.clone();
+        if let Some(current) = state.current()?.filter(|project| {
+            project.info.saved_project_id == Some(id) && project.root == saved.root
+        }) {
             return Ok(current);
         }
-        let saved = catalog.get(id)?.clone();
         let project = Project::open_directory(saved.root.clone(), Some(&saved.identity))
             .map_err(|_| PROJECT_UNAVAILABLE)?;
         catalog.select(id)?;
@@ -1280,6 +1696,60 @@ pub(crate) async fn refresh_code_review(
 ) -> Result<Changes, String> {
     let project = state.project(project_id)?;
     tokio::task::spawn_blocking(move || project.refresh())
+        .await
+        .map_err(|_| UNAVAILABLE)?
+}
+
+#[tauri::command]
+pub(crate) async fn switch_code_review_worktree(
+    app: AppHandle,
+    project_id: Uuid,
+    path: String,
+) -> Result<ProjectInfo, String> {
+    let project = with_project_catalog(app.clone(), move |state, _, catalog| {
+        let current = state.project(project_id)?;
+        let current_directory = current.directory()?;
+        let repo = open_git(&current_directory, &current.root)?;
+        let worktree = review_worktrees(&repo)
+            .into_iter()
+            .find(|worktree| worktree.path == path)
+            .ok_or(UNAVAILABLE)?;
+        if worktree.current {
+            return Ok(current);
+        }
+        let mut next = Project::open(PathBuf::from(worktree.path))?;
+        let directory = next.directory()?;
+        let candidate = open_git(&directory, &next.root)?;
+        if candidate
+            .commondir()
+            .canonicalize()
+            .map_err(|_| UNAVAILABLE)?
+            != repo.commondir().canonicalize().map_err(|_| UNAVAILABLE)?
+        {
+            return Err(UNAVAILABLE.into());
+        }
+        if let Some(key) = catalog.review_key(&next.identity) {
+            key.clone_into(&mut next.info.key);
+        }
+        state
+            .0
+            .lock()
+            .map_err(|_| UNAVAILABLE)?
+            .switch_worktree(&current, next)
+    })
+    .await?;
+    project.resume_language_services(&app);
+    Ok(project.info.clone())
+}
+
+#[tauri::command]
+pub(crate) async fn read_code_review_branch_file(
+    project_id: Uuid,
+    path: String,
+    state: State<'_, ReviewState>,
+) -> Result<Document, String> {
+    let project = state.project(project_id)?;
+    tokio::task::spawn_blocking(move || project.read_branch_file(&path))
         .await
         .map_err(|_| UNAVAILABLE)?
 }
@@ -1571,12 +2041,20 @@ pub(crate) async fn read_code_review_file(
     path: String,
     compare_file: bool,
     comparison: Option<Comparison>,
+    previous: Option<bool>,
     state: State<'_, ReviewState>,
 ) -> Result<Document, String> {
     let project = state.project(project_id)?;
-    tokio::task::spawn_blocking(move || project.read_comparison(&path, compare_file, comparison))
-        .await
-        .map_err(|_| UNAVAILABLE)?
+    tokio::task::spawn_blocking(move || {
+        project.read_review_file(
+            &path,
+            compare_file,
+            comparison,
+            previous.unwrap_or_default(),
+        )
+    })
+    .await
+    .map_err(|_| UNAVAILABLE)?
 }
 
 async fn open_language_context(project: &Arc<Project>) -> Result<(Repository, PathBuf), String> {
@@ -1967,8 +2445,15 @@ mod tests {
         let newer = commit(&repo, &["service.go", "models/orders.sql"]);
         assert_ne!(newer, base);
         project.refresh().unwrap();
+        assert_eq!(
+            project.read("service.go", true).err().as_deref(),
+            Some(STALE)
+        );
+        let previous = project
+            .read_review_file("service.go", true, None, true)
+            .unwrap();
         assert!(
-            matches!(project.read("service.go", true).unwrap().before, Some(FileVersion::Text(text)) if text == "package old\n")
+            matches!(previous.before, Some(FileVersion::Text(text)) if text == "package old\n")
         );
     }
 
@@ -2186,6 +2671,111 @@ mod tests {
         assert!(!current.baseline_changed);
         assert_eq!(current.baseline.unwrap(), new_head.to_string());
         assert_eq!(index_text(&repo, "other").as_deref(), Some("external"));
+    }
+
+    #[test]
+    fn switches_registered_worktrees_and_keeps_commit_diffs_separate_from_the_index() {
+        let root = tempfile::tempdir().unwrap();
+        let primary = root.path().join("main");
+        let linked = root.path().join("task");
+        let repo = git2::Repository::init(&primary).unwrap();
+        fs::write(primary.join("base.txt"), "base").unwrap();
+        let base = commit(&repo, &["base.txt"]);
+        repo.worktree("task", &linked, None).unwrap();
+        let linked_repo = git2::Repository::open(&linked).unwrap();
+        fs::write(primary.join("upstream.txt"), "upstream").unwrap();
+        let upstream = commit(&repo, &["upstream.txt"]);
+        repo.reference("refs/remotes/origin/main", upstream, false, "fixture")
+            .unwrap();
+        repo.reference_symbolic(
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+            false,
+            "fixture",
+        )
+        .unwrap();
+
+        let mut session = ReviewSession::default();
+        let main = session.activate(Project::open(primary.clone()).unwrap());
+        let task = session
+            .switch_worktree(
+                &main,
+                Project::open(linked.canonicalize().unwrap()).unwrap(),
+            )
+            .unwrap();
+        fs::write(linked.join("base.txt"), "committed").unwrap();
+        let head = commit(&linked_repo, &["base.txt"]);
+        fs::write(linked.join("base.txt"), "working").unwrap();
+        let main_index = fs::read(repo.path().join("index")).unwrap();
+        let snapshot = task.refresh().unwrap();
+        let worktrees = &snapshot.git.as_ref().unwrap().worktrees;
+        assert_eq!(worktrees.len(), 2);
+        assert!(worktrees[0].primary && !worktrees[0].current);
+        assert!(worktrees[1].current && !worktrees[1].primary);
+        assert_eq!(worktrees[1].branch.as_deref(), Some("task"));
+        let branch = snapshot.branch.as_ref().unwrap();
+        assert_eq!(branch.target, "origin/main");
+        assert_eq!(branch.base, base.to_string());
+        assert_eq!(branch.head, head.to_string());
+        assert_eq!(branch.files.len(), 1);
+        let document = task.read_branch_file("base.txt").unwrap();
+        assert!(matches!(document.before, Some(FileVersion::Text(text)) if text == "base"));
+        assert!(matches!(document.after, FileVersion::Text(text) if text == "committed"));
+        assert!(snapshot.staged.is_empty());
+        assert_eq!(snapshot.previous_staged.as_ref().unwrap().len(), 1);
+        let local = task.read("base.txt", true).unwrap();
+        assert!(matches!(local.before, Some(FileVersion::Text(text)) if text == "committed"));
+        assert!(matches!(local.after, FileVersion::Text(text) if text == "working"));
+
+        task.change_index(&index_request(&snapshot, Comparison::Unstaged, "base.txt"))
+            .unwrap();
+        let linked_index = fs::read(linked_repo.path().join("index")).unwrap();
+        let main_again = session
+            .switch_worktree(
+                &task,
+                Project::open(primary.canonicalize().unwrap()).unwrap(),
+            )
+            .unwrap();
+        let task_again = session
+            .switch_worktree(
+                &main_again,
+                Project::open(linked.canonicalize().unwrap()).unwrap(),
+            )
+            .unwrap();
+        let returned = task_again.refresh().unwrap();
+        assert_eq!(
+            returned.git.unwrap().baseline.as_deref(),
+            Some(base.to_string().as_str())
+        );
+        assert_eq!(returned.staged.len(), 1);
+        assert!(returned.unstaged.is_empty());
+        assert_eq!(main_index, fs::read(repo.path().join("index")).unwrap());
+        assert_eq!(
+            linked_index,
+            fs::read(linked_repo.path().join("index")).unwrap()
+        );
+        assert_eq!(repo.head().unwrap().target(), Some(upstream));
+        assert_eq!(linked_repo.head().unwrap().target(), Some(head));
+
+        task_again.changes.lock().unwrap().baseline.commit = Some(Oid::ZERO_SHA1);
+        let without_previous_base = task_again.refresh().unwrap();
+        assert!(without_previous_base.previous_files.is_none());
+        assert!(without_previous_base.previous_staged.is_none());
+        assert_eq!(without_previous_base.staged.len(), 1);
+        assert!(without_previous_base.branch.is_some());
+
+        repo.reference("refs/heads/trunk", upstream, false, "fixture")
+            .unwrap();
+        repo.reference_symbolic(
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/trunk",
+            true,
+            "fixture",
+        )
+        .unwrap();
+        let branch = task_again.refresh().unwrap().branch.unwrap();
+        assert_eq!(branch.target, "trunk");
+        assert_eq!(branch.base, base.to_string());
     }
 
     #[test]

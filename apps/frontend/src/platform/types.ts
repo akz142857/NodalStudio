@@ -20,6 +20,7 @@ export interface RuntimeInfo {
   localEslint?: boolean;
   codeExtensions?: "disabled" | "syntax" | "full";
   codeFinderActions?: boolean;
+  codeFinderReveal?: boolean;
   distribution?: "community" | "macAppStore";
   kind: "desktop" | "web";
   label: string;

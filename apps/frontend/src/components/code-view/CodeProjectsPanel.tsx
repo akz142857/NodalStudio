@@ -73,7 +73,7 @@ export function CodeProjectSwitcher({ projects, currentId, name, busy, onAction,
   </h2>;
 }
 
-export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy, loading, loadFailed, finderActions, onRetry, onAction, onActionAsync,
+export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy, loading, loadFailed, finderActions, allowPasteProjects, onRetry, onAction, onActionAsync,
   filter, onFilterChange, scrollTopRef }: {
   projects: readonly CodeSavedProject[];
   groups: readonly CodeSavedProjectGroup[];
@@ -83,6 +83,7 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
   loading: boolean;
   loadFailed: boolean;
   finderActions?: (id: string) => SchemaObjectMenuAction[];
+  allowPasteProjects?: boolean;
   onRetry: () => void;
   onAction: (action: ProjectAction) => void;
   onActionAsync?: (action: ProjectAction) => Promise<unknown>;
@@ -109,7 +110,7 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
   };
   const panelActions: SchemaObjectMenuAction[] = [
     { label: t("codeReview.projects.newGroup"), run: () => setEditing({ value: "" }) },
-    ...(finderActions ? [{ label: t("codeReview.projects.pasteFolders"), run: () => onAction({ kind: "pasteProjects" }) }] : []),
+    ...(allowPasteProjects ? [{ label: t("codeReview.projects.pasteFolders"), run: () => onAction({ kind: "pasteProjects" }) }] : []),
   ];
   const rowActions = (project: CodeSavedProject): SchemaObjectMenuAction[] => [
     { label: t(project.pinned ? "codeReview.projects.unpin" : "codeReview.projects.pin"),
@@ -187,12 +188,13 @@ export function CodeProjectsPanel({ projects, groups, currentId, failedId, busy,
   const matchingGroup = groups.some((group) => group.name.toLocaleLowerCase().includes(query));
   return <>
     <header className="code-review-header">
-      <h1>{t("codeReview.projects.title")}</h1>
-      <IconButton className="code-review-tool" icon="add" label={addLabel} disabled={busy || loadFailed}
-        onClick={() => onAction({ kind: "add" })} />
-      <IconButton className="code-review-tool" icon="more" label={t("codeReview.projects.panelActions")} aria-haspopup="menu"
-        aria-expanded={Boolean(menu?.panel)} disabled={busy || loadFailed}
-        onClick={(event) => toggleMenu(event.currentTarget, t("codeReview.projects.title"), panelActions, { panel: true })} />
+      <div className="code-review-header-actions" role="group" aria-label={t("codeReview.panelActions", { name: t("codeReview.projects.title") })}>
+        <IconButton className="code-review-tool" icon="add" label={addLabel} disabled={busy || loadFailed}
+          onClick={() => onAction({ kind: "add" })} />
+        <IconButton className="code-review-tool" icon="more" label={t("codeReview.projects.panelActions")} aria-haspopup="menu"
+          aria-expanded={Boolean(menu?.panel)} disabled={busy || loadFailed}
+          onClick={(event) => toggleMenu(event.currentTarget, t("codeReview.projects.title"), panelActions, { panel: true })} />
+      </div>
     </header>
     {(projects.length > 0 || groups.length > 0) && <div className="code-review-sidebar-controls">
       <div className="code-review-filter">
