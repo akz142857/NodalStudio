@@ -1,4 +1,4 @@
-import { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from "react";
 import { sql } from "@codemirror/lang-sql";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { Compartment, EditorState, Text, type Extension } from "@codemirror/state";
@@ -65,6 +65,27 @@ const languages: Record<string, () => Promise<Extension>> = {
   yaml: () => import("@codemirror/lang-yaml").then(({ yaml }) => yaml()),
   sql: () => Promise.resolve(sql()),
 };
+const plainText: Extension = [];
+
+function useReaderLanguage(extension: string): Extension | undefined {
+  const alias = extension === "yml" ? "yaml"
+    : ["pyw", "pyi"].includes(extension) ? "py"
+    : ["cjs", "mjs"].includes(extension) ? "js"
+    : ["cts", "mts"].includes(extension) ? "ts"
+    : extension === "phtml" ? "php" : extension === "markdown" ? "md" : extension;
+  const load = Object.hasOwn(languages, alias) ? languages[alias] : undefined;
+  const [language, setLanguage] = useState<{ load: typeof load; support: Extension }>();
+  useEffect(() => {
+    if (!load) return;
+    let active = true;
+    void load().catch(() => plainText).then((support) => {
+      if (active) setLanguage({ load, support });
+    });
+    return () => { active = false; };
+  }, [load]);
+  if (!load) return plainText;
+  return language?.load === load ? language.support : undefined;
+}
 
 const sourceTheme = EditorView.theme({
   "&": { height: "100%", color: "var(--ds-text)", background: "var(--ds-surface)" },
@@ -275,7 +296,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
     [doc, sourceBaseline, sourceFileChange]);
   const syntax = useExtensionSyntax(extensionsApi, extensions, projectId, path, normalizedText, onSyntaxActivity);
   const tokens = syntax?.tokens;
-  const extension = fileExtension(path);
+  const language = useReaderLanguage(fileExtension(path));
   const highlightsAvailable = Boolean(onReferences);
   const canNavigate = Boolean(onDefinition && supportsCodeNavigation(path));
   useLayoutEffect(() => {
@@ -300,8 +321,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
   }, []);
 
   useLayoutEffect(() => {
-    if (!host.current) return;
-    const language = new Compartment();
+    if (!host.current || language === undefined) return;
     const phrasesSlot = phrases.current;
     const syntaxSlot = contributedSyntax.current;
     const { readPosition: restore, onPosition: remember } = location.current;
@@ -358,7 +378,8 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
           ]),
           ...(canNavigate ? [codeDefinitionLinks(definitionAt)] : []),
           sourceTheme,
-          language.of([]),
+          // CodeMirror caches deleted-line widgets when the merge view is created.
+          language,
           syntaxSlot.of([]),
           syntaxHighlighting(sqlHighlightStyle),
           ...(normalizedOriginal === undefined ? [] : unifiedMergeView({
@@ -372,14 +393,6 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
     });
     editor.current = view;
     updateCursor(view.state);
-    const alias = extension === "yml" ? "yaml"
-      : ["pyw", "pyi"].includes(extension) ? "py"
-      : ["cjs", "mjs"].includes(extension) ? "js"
-      : ["cts", "mts"].includes(extension) ? "ts"
-      : extension === "phtml" ? "php" : extension === "markdown" ? "md" : extension;
-    if (Object.hasOwn(languages, alias)) void languages[alias]().then((support) => {
-      if (active) view.dispatch({ effects: language.reconfigure(support) });
-    }).catch(() => { /* The document remains readable as plain text. */ });
     return () => {
       active = false;
       setScopes([]);
@@ -388,7 +401,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
       editor.current = null;
       view.destroy();
     };
-  }, [canNavigate, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+  }, [canNavigate, definitionAt, doc, highlightsAvailable, language, normalizedOriginal, normalizedText, path]);
 
   useLayoutEffect(() => {
     editor.current?.dispatch({ effects: phrases.current.reconfigure(readerPhrases(t)) });
@@ -402,22 +415,22 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
       return mark ? [mark.range(from, to)] : [];
     });
     view.dispatch({ effects: contributedSyntax.current.reconfigure(ranges.length ? EditorView.decorations.of(Decoration.set(ranges, true)) : []) });
-  }, [canNavigate, definitionAt, extension, highlightsAvailable, normalizedOriginal, normalizedText, path, tokens]);
+  }, [canNavigate, definitionAt, highlightsAvailable, language, normalizedOriginal, normalizedText, path, tokens]);
 
   useLayoutEffect(() => {
     const view = editor.current;
     if (view) view.dispatch({ effects: sourceChangesSlot.current.reconfigure(changes.length ? sourceChangeGutter(changes) : []) });
-  }, [canNavigate, changes, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+  }, [canNavigate, changes, definitionAt, doc, highlightsAvailable, language, normalizedOriginal, normalizedText, path]);
 
   useLayoutEffect(() => {
     const view = editor.current;
     if (view) view.dispatch({ effects: debuggerSlot.current.reconfigure(debugSource ? pythonDebugSourceExtension(view.state, debugSource) : []) });
-  }, [canNavigate, debugSource, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+  }, [canNavigate, debugSource, definitionAt, doc, highlightsAvailable, language, normalizedOriginal, normalizedText, path]);
 
   useLayoutEffect(() => {
     const view = editor.current;
     if (view) view.dispatch({ effects: wrapping.current.reconfigure(wrap ? EditorView.lineWrapping : []) });
-  }, [canNavigate, definitionAt, doc, extension, highlightsAvailable, normalizedOriginal, normalizedText, path, wrap]);
+  }, [canNavigate, definitionAt, doc, highlightsAvailable, language, normalizedOriginal, normalizedText, path, wrap]);
 
   useLayoutEffect(() => {
     const view = editor.current;
@@ -438,7 +451,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
       active = false;
       if (applied && editor.current === view) view.dispatch(setDiagnostics(view.state, []));
     };
-  }, [checkResult, canNavigate, extension, highlightsAvailable, normalizedOriginal, normalizedText, path]);
+  }, [checkResult, canNavigate, highlightsAvailable, language, normalizedOriginal, normalizedText, path]);
 
   useLayoutEffect(() => {
     const view = editor.current;
@@ -471,7 +484,7 @@ export function CodeReviewReader({ path, text, original, sourceBaseline, sourceF
     }
     view.focus();
     onArrival();
-  }, [arrival, changes, normalizedText, onArrival]);
+  }, [arrival, changes, language, normalizedText, onArrival]);
 
   function goToReaderLine(line: number, y: "center" | "start") {
     const view = editor.current;

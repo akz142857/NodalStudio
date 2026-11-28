@@ -1,4 +1,6 @@
 import { EditorView } from "@codemirror/view";
+import { highlightingFor } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import { webcrypto } from "node:crypto";
 import { lint } from "markdownlint/sync";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -19,12 +21,12 @@ vi.mock("./code-review-checks", async (original) => {
   }) };
 });
 
-function renderWorkspace(api: CodeReviewPlatform, client = new QueryClient(), extensionsMode?: Parameters<typeof CodeReviewWorkspace>[0]["extensionsMode"]) {
+function renderWorkspace(api: CodeReviewPlatform, client = new QueryClient(), extensionsMode?: Parameters<typeof CodeReviewWorkspace>[0]["extensionsMode"], extensionsOffline = false) {
   function Workspace({ outlineOpen }: { outlineOpen: boolean }) {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     return <QueryClientProvider client={client}>
       <CodeReviewWorkspace api={api} sidebarId="project-sidebar" sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
-        outlineId="code-outline" outlineOpen={outlineOpen} extensionsMode={extensionsMode}
+        outlineId="code-outline" outlineOpen={outlineOpen} extensionsMode={extensionsMode} extensionsOffline={extensionsOffline}
         eslintAvailability={api.eslint ? "enabled" : "eslintUnavailable"} />
     </QueryClientProvider>;
   }
@@ -77,6 +79,47 @@ it("downloads only a catalog grammar in the App Store edition", async () => {
   expect(install).not.toHaveBeenCalled();
   expect(search).not.toHaveBeenCalled();
   expect(debug).not.toHaveBeenCalled();
+});
+
+it.each([
+  { path: "analysis.rs", before: 'fn title() -> \'static str { "before" }', after: 'fn title() -> \'static str { "after" }' },
+  { path: "main.go", before: 'func title() string { return "before" }', after: 'func title() string { return "after" }' },
+])("syntax-highlights deleted lines in the offline $path Diff", async ({ path, before, after }) => {
+  const project = { id: path, key: path, name: "Offline project", git: "ready", baseline: "abc" } as const;
+  const change: CodeReviewChange = { path, previousPath: null, kind: "modified", staged: false, indexOnly: false, evidence: "evidence" };
+  const { container } = renderWorkspace({
+    current: () => Promise.resolve(project), choose: vi.fn(),
+    changes: () => Promise.resolve({ files: [change], limited: false }),
+    file: () => Promise.resolve({ before: { state: "text", text: before }, after: { state: "text", text: after },
+      evidence: change.evidence, indexOnly: false }),
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+  }, new QueryClient(), undefined, true);
+  await waitFor(() => {
+    const editor = container.querySelector<HTMLElement>(".cm-editor");
+    const view = editor && EditorView.findFromDOM(editor);
+    const stringClass = view && highlightingFor(view.state, [tags.string])?.split(" ")[0];
+    expect(stringClass).toBeTruthy();
+    const deleted = editor?.querySelector(".cm-deletedChunk .cm-deletedLine");
+    const strings = Array.from(deleted?.querySelectorAll(`.${stringClass}`) ?? [], (part) => part.textContent).join("");
+    expect(strings).toBe('"before"');
+  });
+});
+
+it("keeps the expanded Code sidebar at least 280 pixels wide", async () => {
+  const project = { id: "sidebar-width", key: "sidebar-width", name: "Sidebar width", git: "ready", baseline: "abc" } as const;
+  renderWorkspace({
+    current: () => Promise.resolve(project), choose: vi.fn(),
+    changes: () => Promise.resolve({ files: [], limited: false }), file: vi.fn(),
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+  });
+  const divider = await screen.findByRole("separator", { name: "Resize left sidebar" });
+  expect(divider).toHaveAttribute("aria-valuenow", "280");
+  fireEvent.keyDown(divider, { key: "ArrowLeft" });
+  expect(divider).toHaveAttribute("aria-valuenow", "280");
+  fireEvent.keyDown(divider, { key: "ArrowRight" });
+  expect(Number(divider.getAttribute("aria-valuenow"))).toBeGreaterThan(280);
+  fireEvent.keyDown(divider, { key: "Home" });
+  expect(divider).toHaveAttribute("aria-valuenow", "280");
 });
 
 it("uses Code shortcuts for navigation and keeps untitled text out of project file reads", async () => {
@@ -395,10 +438,12 @@ it("shows native language progress in the bottom dock and keeps Checks accessibl
 it("checks the displayed index diff, expands a folded result and rejects a stale jump", async () => {
   vi.stubGlobal("crypto", webcrypto);
   const digest = webcrypto.subtle.digest.bind(webcrypto.subtle);
-  const digests: Promise<ArrayBuffer>[] = [];
+  const config = '{"default":false,"MD009":"warning"}';
+  let trackVerification = false;
+  let verificationDigest: Promise<ArrayBuffer> | undefined;
   const trackDigest = vi.spyOn(webcrypto.subtle, "digest").mockImplementation((...args) => {
     const result = digest(...args);
-    digests.push(result);
+    if (trackVerification && new TextDecoder().decode(args[1]) === config) verificationDigest = result;
     return result;
   });
   try {
@@ -416,7 +461,7 @@ it("checks the displayed index diff, expands a folded result and rejects a stale
         await new Promise<void>((resolve) => { finishVerification = resolve; });
       }
       return name === ".markdownlint.json"
-        ? { before: null, after: { state: "text", text: '{"default":false,"MD009":"warning"}' }, evidence: null, indexOnly: false }
+        ? { before: null, after: { state: "text", text: config }, evidence: null, indexOnly: false }
         : compare ? { before: { state: "text", text: before }, after: { state: "text", text: after }, evidence, indexOnly: true }
           : { before: null, after: { state: "text", text: "# Working tree\n" }, evidence: null, indexOnly: false };
     };
@@ -449,14 +494,14 @@ it("checks the displayed index diff, expands a folded result and rejects a stale
     expect(workspace.container).toHaveTextContent("Legacy line");
     await waitFor(() => expect(workspace.container.querySelector(".cm-lintRange-warning")).toBeTruthy());
 
-    const digestsBeforeJump = digests.length;
     deferCompare = true;
     fireEvent.click(screen.getByRole("button", { name: /MD009.*Line 3/ }));
     await waitFor(() => expect(finishVerification).toBeDefined());
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
+    trackVerification = true;
     act(() => { finishVerification?.(); });
-    await waitFor(() => expect(digests).toHaveLength(digestsBeforeJump + 2));
-    await act(async () => { await Promise.all(digests.slice(digestsBeforeJump)); });
+    await waitFor(() => expect(verificationDigest).toBeDefined());
+    await act(async () => { await verificationDigest; });
     expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute("aria-pressed", "true");
 
     evidence = "index-2";
