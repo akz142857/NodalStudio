@@ -153,8 +153,10 @@ export function CodeContentSearch({ api, projectId, query, onQuery, inPopup = fa
     : t("codeReview.contentEmpty");
 
   const limited = content.data?.limited && query === submitted && !content.isFetching;
+  const refresh = <IconButton icon="refresh" className="code-review-tool" label={t("codeReview.refreshSearch")}
+    onClick={refreshContent} disabled={!query.trim() || content.isFetching} aria-busy={content.isFetching || undefined} />;
 
-  return <>
+  const body = <>
     <div className="code-quick-open-field">
       <ActionIcon name="search" />
       <input ref={fieldRef} data-modal-focus={autoFocus || undefined} data-code-content-field role="combobox"
@@ -162,8 +164,7 @@ export function CodeContentSearch({ api, projectId, query, onQuery, inPopup = fa
         aria-activedescendant={activeHit < 0 ? undefined : `${listId}-${activeHit}`}
         maxLength={128} aria-label={t("codeReview.projectContent")} placeholder={t("codeReview.contentPlaceholder")} value={query}
         onChange={(event) => { onQuery(event.target.value); setSelectedHit(0); }} onKeyDown={navigate} />
-      <IconButton icon="refresh" className="code-review-tool" label={t("codeReview.refreshSearch")} onClick={refreshContent}
-        disabled={!query.trim() || content.isFetching} />
+      {inPopup && refresh}
     </div>
     <div ref={results} id={listId} className="code-content-results" role="listbox" aria-label={t("codeReview.projectContent")}>
       {contentFiles.map(({ path, matches }) => <div key={path} role="group" aria-label={path} className="code-content-group">
@@ -186,6 +187,14 @@ export function CodeContentSearch({ api, projectId, query, onQuery, inPopup = fa
       {contentStatus}
       {limited && <div title={t("codeReview.contentLimited")}>{t(inPopup ? "codeReview.contentLimited" : "codeReview.contentPartial")}</div>}
     </div>
+  </>;
+  const title = t("codeReview.searchResults");
+  return inPopup ? body : <>
+    <header className="code-review-header">
+      <h1>{title}</h1>
+      <div className="code-review-header-actions" role="group" aria-label={t("codeReview.panelActions", { name: title })}>{refresh}</div>
+    </header>
+    <div className="code-content-pane">{body}</div>
   </>;
 }
 

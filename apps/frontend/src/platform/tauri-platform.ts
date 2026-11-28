@@ -93,10 +93,13 @@ export class TauriPlatform implements NodalStudioPlatform {
       addProjects: () => invoke("paste_code_review_projects"),
     },
     changes: (projectId) => invoke("refresh_code_review", { projectId }),
+    updateBaseline: (projectId) => invoke("update_code_review_baseline", { projectId }),
+    changeIndex: (projectId, input) => invoke("change_code_review_index", { projectId, input }),
     directory: (projectId, path, compact) => invoke("list_code_review_directory", { projectId, path, compact }),
+    createEntry: (projectId, directory, name, kind) => invoke("create_code_review_entry", { projectId, directory, name, kind }),
     paths: (projectId) => invoke("list_code_review_paths", { projectId }),
     searchContent: (projectId, query) => invoke("search_code_review_content", { projectId, query }),
-    file: (projectId, path, compareFile) => invoke("read_code_review_file", { projectId, path, compareFile }),
+    file: (projectId, path, compareFile, comparison) => invoke("read_code_review_file", { projectId, path, compareFile, comparison }),
     extensions: {
       list: (projectId) => invoke("list_code_extensions", { projectId }),
       install: (projectId) => invoke("install_code_extension", { projectId }),
@@ -104,7 +107,7 @@ export class TauriPlatform implements NodalStudioPlatform {
       prepare: (projectId, id, sha256, language) => invoke("prepare_code_extension", { projectId, id, sha256, language }),
       syntaxCatalog: {
         list: () => invoke("list_code_syntax_catalog"),
-        import: (projectId, id) => invoke("import_code_syntax", { projectId, id }),
+        enable: (projectId, id) => invoke("enable_bundled_code_syntax", { projectId, id }),
       },
       openVsx: {
         search: (projectId, query, offset) => invoke("search_code_open_vsx", { projectId, query, offset }),

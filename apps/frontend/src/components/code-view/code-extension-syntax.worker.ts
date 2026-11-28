@@ -27,12 +27,18 @@ function tokenStyle(scopes: string[]): SyntaxToken["style"] | undefined {
     if (/^constant\.numeric\b/.test(scope)) return "number";
     if (/^(keyword|storage)\b/.test(scope)) return "keyword";
     if (/^variable\b/.test(scope)) return "variable";
+    if (/^entity\.name\.tag\b/.test(scope)) return "tag";
+    if (/^(entity\.other\.attribute-name|support\.(type|variable)\.property-name)\b/.test(scope)) return "property";
+    if (/^(entity\.name\.function|support\.function)\b/.test(scope)) return "function";
     if (/^(entity\.name\.type|support\.type)\b/.test(scope)) return "type";
   }
 }
 
-async function getGrammar(scopeName: string, rawGrammar: string): Promise<IGrammar> {
-  const key = `${scopeName}\0${rawGrammar.length}\0${rawGrammar.slice(0, 64)}\0${rawGrammar.slice(-64)}`;
+type SyntaxSource = Extract<ExtensionWorkerRequest["source"], { capability: "syntax" }>;
+
+async function getGrammar({ scopeName, grammar: rawGrammar, dependencies = [] }: SyntaxSource): Promise<IGrammar> {
+  const dependencyScopes = dependencies.map((item) => item.scopeName).join("\0");
+  const key = `${scopeName}\0${rawGrammar.length}\0${rawGrammar.slice(0, 64)}\0${rawGrammar.slice(-64)}\0${dependencyScopes}`;
   const cached = grammarCache.get(key);
   if (cached) {
     grammarCache.delete(key);
@@ -41,7 +47,10 @@ async function getGrammar(scopeName: string, rawGrammar: string): Promise<IGramm
   }
   const registry = new Registry({
     onigLib: Promise.resolve({ createOnigScanner, createOnigString }),
-    loadGrammar: (scope) => Promise.resolve(scope === scopeName ? parseRawGrammar(rawGrammar, "syntax.json") : null),
+    loadGrammar: (scope) => {
+      const raw = scope === scopeName ? rawGrammar : dependencies.find((item) => item.scopeName === scope)?.grammar;
+      return Promise.resolve(raw ? parseRawGrammar(raw, "syntax.json") : null);
+    },
   });
   const grammar = await registry.loadGrammar(scopeName);
   if (!grammar) {
@@ -59,9 +68,9 @@ async function getGrammar(scopeName: string, rawGrammar: string): Promise<IGramm
   return grammar;
 }
 
-async function syntax(source: Extract<ExtensionWorkerRequest["source"], { capability: "syntax" }>, text: string): Promise<ExtensionWorkerResponse> {
+async function syntax(source: SyntaxSource, text: string): Promise<ExtensionWorkerResponse> {
   await ensureOniguruma();
-  const grammar = await getGrammar(source.scopeName, source.grammar);
+  const grammar = await getGrammar(source);
   let state = INITIAL;
   let offset = 0;
   const tokens: SyntaxToken[] = [];

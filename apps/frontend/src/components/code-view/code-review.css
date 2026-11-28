@@ -1684,6 +1684,49 @@
 .python-debug-inspect :is(dt, dd) { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .python-debug-output pre { margin: 0; white-space: pre-wrap; }
 
+.code-review-git-controls {
+  display: grid;
+  min-width: 0;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-2) var(--ds-space-3);
+  border-bottom: 1px solid var(--ds-border);
+}
+
+.code-review-git-base,
+.code-review-git-progress,
+.code-review-git-notice,
+.code-review-git-diff-actions {
+  display: flex;
+  gap: var(--ds-space-2);
+  align-items: center;
+  min-width: 0;
+}
+
+.code-review-git-base,
+.code-review-git-progress {
+  justify-content: space-between;
+  font-size: var(--ds-text-caption);
+  color: var(--ds-secondary);
+}
+
+.code-review-git-base strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ds-text);
+  white-space: nowrap;
+}
+
+.code-review-git-base > span { white-space: nowrap; }
+
+.code-review-git-notice {
+  flex-wrap: wrap;
+  color: var(--ds-secondary);
+  font-size: var(--ds-text-caption);
+}
+
+.code-review-git-notice p { margin: 0; }
+
 .code-review-git-scopes > button { flex: 1 1 auto; }
 
 .code-review-git-scopes > button,
@@ -1696,5 +1739,26 @@
 
 .code-review-git-progress > button {
   flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.code-review-git-controls .ds-select { width: 100%; }
+
+.code-review-git-diff-actions {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+
+.code-review-git-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.code-review-git-badges > span {
+  padding: 0 4px;
+  border-radius: var(--ds-radius-small);
+  background: var(--ds-subtle);
+  color: var(--ds-secondary);
   white-space: nowrap;
 }

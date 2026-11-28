@@ -4,7 +4,7 @@ mod definition;
 pub(crate) mod eslint;
 #[cfg(all(
     target_os = "macos",
-    any(feature = "code-extensions", feature = "mac-app-store")
+    any(feature = "code-extensions", feature = "code-syntax-only")
 ))]
 pub(crate) mod extensions;
 #[allow(
@@ -28,6 +28,7 @@ mod projects;
 ))]
 pub(crate) mod python_debug;
 pub(crate) mod review;
+mod review_index;
 pub(crate) mod search;
 
 pub(crate) use legacy_sql::{QueryHandoff, validate_query_handoff};

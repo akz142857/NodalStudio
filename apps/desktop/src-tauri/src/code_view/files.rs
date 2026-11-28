@@ -295,6 +295,50 @@ pub(super) fn open_nested_directory(root: &Dir, path: &Path) -> io::Result<Dir> 
     Ok(directory)
 }
 
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum NewEntryKind {
+    File,
+    Folder,
+}
+
+pub(super) fn create_review_entry(
+    root: &Dir,
+    directory: &str,
+    name: &str,
+    kind: NewEntryKind,
+) -> Result<String, String> {
+    const INVALID_NAME: &str = "codeReviewEntryInvalidName";
+    if name.contains('/') || name.trim().is_empty() || name.len() > 255 {
+        return Err(INVALID_NAME.into());
+    }
+    let relative = if directory.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{directory}/{name}")
+    };
+    let path = review_relative_path(&relative, false).map_err(|_| INVALID_NAME)?;
+    let parent = open_nested_directory(root, path.parent().ok_or(INVALID_NAME)?)
+        .map_err(|_| "codeReviewEntryCreateFailed")?;
+    let result = match kind {
+        NewEntryKind::File => parent
+            .open_with(
+                name,
+                OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .follow(FollowSymlinks::No),
+            )
+            .map(drop),
+        NewEntryKind::Folder => parent.create_dir(name),
+    };
+    result.map_err(|error| match error.kind() {
+        ErrorKind::AlreadyExists => "codeReviewEntryExists",
+        _ => "codeReviewEntryCreateFailed",
+    })?;
+    Ok(relative)
+}
+
 pub(super) fn read_nested(root: &Dir, path: &Path, limit: u64) -> io::Result<String> {
     let parent = path.parent().ok_or_else(denied)?;
     let dir = open_nested_directory(root, parent)?;
@@ -518,13 +562,70 @@ mod tests {
         let sandbox = tempfile::tempdir().unwrap();
         let target = sandbox.path().join("project");
         std::fs::create_dir(&target).unwrap();
-        let (_, identity) = Repository::open_directory(&target, None).unwrap();
-        assert!(Repository::open_directory(&target, Some(&identity)).is_ok());
+        assert!(open_directory_nofollow(&target).is_ok());
+        #[cfg(not(feature = "mac-app-store"))]
+        {
+            let (_, identity) = Repository::open_directory(&target, None).unwrap();
+            assert!(Repository::open_directory(&target, Some(&identity)).is_ok());
+        }
+        // The App Store test binary cannot obtain a bookmark through the system picker.
+        #[cfg(feature = "mac-app-store")]
+        assert!(Repository::open_directory(&target, None).is_err());
         #[cfg(unix)]
         {
             let link = sandbox.path().join("project-link");
             std::os::unix::fs::symlink(&target, &link).unwrap();
-            assert!(Repository::open_directory(&link, None).is_err());
+            assert!(open_directory_nofollow(&link).is_err());
         }
+    }
+}
+
+#[cfg(test)]
+mod creation_tests {
+    use super::*;
+
+    #[test]
+    fn creates_entries_without_overwriting_or_accepting_nested_names() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = Dir::open_ambient_dir(root.path(), cap_std::ambient_authority()).unwrap();
+        assert_eq!(
+            create_review_entry(&dir, "", "src", NewEntryKind::Folder).unwrap(),
+            "src"
+        );
+        assert_eq!(
+            create_review_entry(&dir, "src", "main.py", NewEntryKind::File).unwrap(),
+            "src/main.py"
+        );
+        std::fs::write(root.path().join("src/main.py"), "keep").unwrap();
+        assert_eq!(
+            create_review_entry(&dir, "src", "main.py", NewEntryKind::File).unwrap_err(),
+            "codeReviewEntryExists"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("src/main.py")).unwrap(),
+            "keep"
+        );
+        for (directory, name) in [
+            ("", "src/other.py"),
+            ("..", "outside"),
+            (".git", "config"),
+            ("", ".git"),
+        ] {
+            assert_eq!(
+                create_review_entry(&dir, directory, name, NewEntryKind::File).unwrap_err(),
+                "codeReviewEntryInvalidName"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_symlink_directories() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.path().join("link")).unwrap();
+        let dir = Dir::open_ambient_dir(root.path(), cap_std::ambient_authority()).unwrap();
+        assert!(create_review_entry(&dir, "link", "outside", NewEntryKind::Folder).is_err());
+        assert!(!outside.path().join("outside").exists());
     }
 }

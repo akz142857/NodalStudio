@@ -141,16 +141,21 @@ NO_PROXY=localhost,127.0.0.1,::1 cargo test -p nodalstudio-desktop -p snapshot-s
 
 Code extensions by release channel
 - GitHub macOS: use pnpm release:macos. The script applies tauri.macos-release.conf.json
-  to the production identity and enables code-extensions. Check that Code shows Open VSX
-  search and that the supported Python Debugger can be installed, enabled and used to
+  to the production identity and enables code-extensions. Check that Code recommends
+  matching project languages, shows Open VSX search and that the supported Python
+  Debugger can be installed, enabled and used to
   stop at a breakpoint and inspect variables. The release updater archive must include
   the same extension host as the DMG.
-- Mac App Store: use pnpm release:macos:appstore. In Code, open Extensions, download a
-  grammar from Syntax from Open VSX, and check that its highlighting applies. The
-  catalog pins the resource URL, version, and SHA-256 for each grammar. The native
-  build has no VSIX installer or extension runtime. Cargo rejects combining
-  mac-app-store with code-extensions. Tell App Review that the app downloads only
-  TextMate JSON for the built-in tokenizer, and provide the steps above for review.
+- Mac App Store: use pnpm release:macos:appstore. In Code, open Extensions with a
+  project containing a Dockerfile, Makefile, and a source file such as Swift or
+  Kotlin. With networking disabled, enable each recommended bundled syntax pack
+  independently and confirm that highlighting applies to the matching files.
+  Explain in the review notes that the shipped TextMate definitions are tokenizer
+  data and that activation is local. The mac-app-store feature selects code-syntax-only
+  and Cargo rejects combining it with code-extensions. The syntax-only backend exposes
+  bundled syntax IDs and excludes Open VSX search, VSIX installation and the debugger.
+  Local native UI previews can use code-syntax-only under a separate bundle ID,
+  without the App Store purchase dependency.
 - Windows uses the shared production identity overlay. It does not enable the
   macOS extension host.
 

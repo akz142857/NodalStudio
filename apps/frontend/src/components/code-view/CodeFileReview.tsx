@@ -4,7 +4,7 @@ import { Button } from "../../design-system/Button";
 import { EmptyState } from "../../design-system/EmptyState";
 import { useI18n } from "../../i18n";
 import type {
-  CodeDefinitionPosition, CodeDefinitionTarget, CodeExtension, CodeExtensionPlatform,
+  CodeChangeComparison, CodeDefinitionPosition, CodeDefinitionTarget, CodeExtension, CodeExtensionPlatform,
   CodeReviewChange, CodeReviewDocument, CodeReviewPlatform, CodeReviewProject, CodeReviewVersion,
 } from "../../platform/code-review";
 import { ActionIcon } from "../ActionIcon";
@@ -16,6 +16,7 @@ import { checkTargetProblem, isEslintSource, normalizeReviewText, type EslintAva
 import type { CheckedFile, DisplayedCheckTarget } from "./use-code-review-checks";
 import { supportsCodeNavigation } from "./code-review-file-types";
 import { reviewHistory, reviewNoteDraft, saveReviewDraft, saveReviewNote, type ReviewNote } from "./code-review-notes";
+import { versionReviewStatus } from "./code-git-review";
 import { codeReviewKeys } from "./code-review-query-keys";
 import type { PythonDebugSource } from "./python-debug-source";
 
@@ -25,11 +26,7 @@ export type NoteStatus = ReviewNote["status"] | "recheck" | "pending";
 export type RenderDock = (current?: DisplayedCheckTarget, note?: { path: string; status: NoteStatus; body: ReactNode }) => ReactNode;
 export type RenderStatus = (status?: NoteStatus) => ReactNode;
 
-function fileReviewStatus(history: ReviewNote[], evidence: string): NoteStatus {
-  return history.find((entry) => entry.evidence === evidence)?.status ?? (history.length ? "recheck" : "pending");
-}
-
-export function FileReview({ api, project, path, dependency, change, mode, baseline, readPosition, savePosition, onModeChange, onSaved, onRefresh, onCopy,
+export function FileReview({ api, project, path, dependency, change, mode, baseline, readPosition, savePosition, onModeChange, onSaved, onRefresh, onCopy, gitControls,
   onDefinition, allowLanguageTools, eslintAvailability, onBack, arrival, onArrival, showOutline, locateOutline, renderOutline, renderDock, renderStatus,
   checkFiles, extensionsApi, extensions, onSyntaxActivity, readerRef, debugSource, wrap }: {
   api: CodeReviewPlatform;
@@ -39,6 +36,7 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   change?: CodeReviewChange;
   mode: ReadingMode;
   baseline: string;
+  gitControls?: ReactNode;
   readPosition: (key: string) => ReadingPosition | undefined;
   savePosition: (key: string, position: ReadingPosition) => void;
   onModeChange: (mode: ReadingMode) => void;
@@ -67,11 +65,18 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   const { t } = useI18n();
   const client = useQueryClient();
   const compare = Boolean(change);
+  const scope = change?.comparison;
   const file = useQuery({
-    queryKey: codeReviewKeys.file(project.id, path, compare, change?.evidence),
-    queryFn: async (): Promise<CodeReviewDocument> => dependency?.sourceId && api.definitionSource
-      ? { before: null, after: { state: "text", text: await api.definitionSource(project.id, dependency.sourceId) }, evidence: null, indexOnly: false }
-      : api.file(project.id, path, compare),
+    queryKey: codeReviewKeys.file(project.id, path, compare, change?.evidence, scope),
+    queryFn: async (): Promise<CodeReviewDocument> => {
+      if (dependency?.sourceId && api.definitionSource) {
+        return { before: null, after: { state: "text", text: await api.definitionSource(project.id, dependency.sourceId) }, evidence: null, indexOnly: false };
+      }
+      if (!scope) return api.file(project.id, path, compare);
+      const current = await api.file(project.id, path, compare, scope);
+      if (current.evidence !== change.evidence) throw new Error("codeReviewStale");
+      return current;
+    },
     retry: false,
     gcTime: 30_000,
   });
@@ -88,9 +93,10 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
     {renderOutline()}
   </div>{renderDock()}<div className="code-review-reading-status">{renderStatus()}</div></>;
   const document = (file.isError ? undefined : file.data) ?? (readWorkingTree ? workingTree.data : undefined);
+  const stale = (file.error instanceof Error ? file.error.message : String(file.error)) === "codeReviewStale";
   if (!document || (readWorkingTree && workingTree.isError)) return <><div className="code-review-reader-body">
     <div className="code-review-status code-review-placeholder" role="alert">
-      <p>{t(dependency ? "codeReview.definitionSourceUnavailable" : String(file.error) === "codeReviewStale" ? "codeReview.stale" : "codeReview.fileFailed")}</p>
+      <p>{t(dependency ? "codeReview.definitionSourceUnavailable" : stale ? "codeReview.stale" : "codeReview.fileFailed")}</p>
       <Button size="small" onClick={onRefresh}>{t("codeReview.refresh")}</Button>
     </div>
     {renderOutline()}
@@ -111,7 +117,7 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   const displayPath = dependency?.path ?? path;
   const parts = displayPath.replaceAll("\\", "/").split("/").filter(Boolean);
   const filename = parts.pop() ?? displayPath;
-  const positionKey = JSON.stringify([path, diff ? "diff" : "source"]);
+  const positionKey = JSON.stringify([path, diff ? scope ?? "diff" : "source"]);
   const heading = <div className="code-review-document-heading">
     <nav className="code-review-document-path" aria-label={t("codeReview.filePath")} title={displayPath}>
       <ol role="list">
@@ -127,16 +133,19 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
         </li>
       </ol>
     </nav>
+    {gitControls}
   </div>;
   const noteHistory = change && evidence ? reviewHistory(project.key, path) : undefined;
-  const noteStatus = noteHistory && evidence ? fileReviewStatus(noteHistory, evidence) : undefined;
+  const noteStatus = noteHistory && evidence ? versionReviewStatus(noteHistory, evidence, scope) : undefined;
   const note = noteHistory && noteStatus ? {
     path,
     status: noteStatus,
     body: <ReviewNotes key={evidence} api={api} project={project} path={path} document={document}
-      history={noteHistory} onSaved={onSaved} />,
+      history={noteHistory} scope={scope} base={baseline} onSaved={onSaved} />,
   } : undefined;
-  const comparison = dependency ? t("codeReview.definitionDependency") : diff && indexOnly ? t("codeReview.index")
+  const comparison = dependency ? t("codeReview.definitionDependency")
+    : diff && scope ? t(scope === "staged" ? "codeReview.gitReview.stagedDiff" : "codeReview.gitReview.unstagedDiff")
+    : diff && indexOnly ? t("codeReview.index")
     : !diff && showingOriginal ? t("codeReview.originalVersion") : diff && change?.staged ? t("codeReview.hasStaged") : baseline;
   const readerText = diff ? (revised ?? "") : (fullText ?? "");
   const liveSource = !showingOriginal && !(diff && indexOnly);
@@ -150,11 +159,12 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
         return result ?? { state: "unavailable" };
       }} />
     : undefined;
-  const checkTarget = { path, mode: diff ? "diff" as const : "source" as const, evidence: diff ? evidence : null, indexOnly: diff && indexOnly };
+  const checkTarget = { path, mode: diff ? "diff" as const : "source" as const, evidence: diff ? evidence : null, indexOnly: diff && indexOnly,
+    ...(diff && scope ? { comparison: scope } : {}) };
   const checkProblem = checkTargetProblem(checkTarget, diff ? after : source, Boolean(dependency))
     ?? (isEslintSource(path) && eslintAvailability !== "enabled" ? eslintAvailability : undefined);
   const matchesCheck = (target: DisplayedCheckTarget["target"]) => target.path === path && target.mode === checkTarget.mode
-    && target.evidence === checkTarget.evidence && target.indexOnly === checkTarget.indexOnly;
+    && target.evidence === checkTarget.evidence && target.indexOnly === checkTarget.indexOnly && target.comparison === checkTarget.comparison;
   const checkResult = !checkProblem ? checkFiles?.find((item) => item.status === "checked" && matchesCheck(item.target)) : undefined;
   const safeArrival = arrival && "check" in arrival && !matchesCheck({ ...arrival.check, path }) ? undefined : arrival;
   const inspector = renderOutline(outline);
@@ -162,13 +172,16 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   const status = renderStatus(noteStatus);
   return <>
     {change?.previousPath && <p className="code-review-status">{t("codeReview.renamedFrom", { path: change.previousPath })}</p>}
+    {mode === "diff" && document.executableChangedTo !== undefined && <p className="code-review-status" role="status">
+      {t(document.executableChangedTo ? "codeReview.gitReview.executable" : "codeReview.gitReview.nonExecutable")}
+    </p>}
     {diff || fullText !== undefined ? <CodeReviewReader path={displayPath} original={diff ? (original ?? "") : undefined}
       sourceBaseline={!diff && change && !showingOriginal ? original : undefined}
       sourceFileChange={!diff && change ? showingOriginal ? "deleted" : before?.state === "missing" ? "added" : undefined : undefined}
       text={readerText} onCopy={onCopy} viewSwitcher={viewSwitcher} heading={heading}
       fallbackCopy={after.state === "missing" && diff ? original : undefined} footer={status} dock={dock} comparison={comparison}
       readPosition={() => readPosition(positionKey)} onPosition={(position) => savePosition(positionKey, position)}
-      onDefinition={onDefinition && !showingOriginal ? (gesture) => onDefinition(gesture, diff ? "diff" : "source") : undefined}
+      onDefinition={onDefinition && liveSource ? (gesture) => onDefinition(gesture, diff ? "diff" : "source") : undefined}
       onReferences={allowLanguageTools && liveSource && api.documentHighlights ? (position, text) => api.documentHighlights?.(project.id, { origin, position, text }) ?? Promise.resolve([]) : undefined}
       outline={inspector} checkResult={checkResult} readerRef={readerRef}
       debugSource={!diff && !showingOriginal ? debugSource : undefined}
@@ -183,27 +196,31 @@ export function FileReview({ api, project, path, dependency, change, mode, basel
   </>;
 }
 
-function ReviewNotes({ api, project, path, document, history, onSaved }: {
+function ReviewNotes({ api, project, path, document, history, scope, base, onSaved }: {
   api: CodeReviewPlatform;
   project: CodeReviewProject;
   path: string;
   document: CodeReviewDocument;
   history: ReviewNote[];
+  scope?: CodeChangeComparison;
+  base: string;
   onSaved: () => void;
 }) {
   const { t, formatDate } = useI18n();
   const noteId = useId();
   const comparisonId = `${noteId}-comparison`;
   const target = t(document.indexOnly ? "codeReview.index" : "codeReview.worktree");
-  const comparison = project.baseline ? `${project.baseline.slice(0, 10)} → ${target}` : target;
+  const comparison = scope === "unstaged" ? t("codeReview.gitReview.unstagedDiff")
+    : scope === "staged" ? `${base} → ${target}`
+      : project.baseline ? `${project.baseline.slice(0, 10)} → ${target}` : target;
   const current = history.find((entry) => entry.evidence === document.evidence);
   const older = history.filter((entry) => entry.evidence !== document.evidence);
   const [note, setNote] = useState(() => reviewNoteDraft(project.key, path, document.evidence) ?? current?.note ?? "");
   const save = useMutation({
     mutationFn: async (status: ReviewNote["status"]) => {
-      const latest = await api.file(project.id, path, true);
+      const latest = await (scope ? api.file(project.id, path, true, scope) : api.file(project.id, path, true));
       if (!latest.evidence || latest.evidence !== document.evidence) throw new Error("codeReviewStale");
-      saveReviewNote(project.key, path, { evidence: latest.evidence, status, note, at: new Date().toISOString() });
+      saveReviewNote(project.key, path, { evidence: latest.evidence, comparison: scope, status, note, at: new Date().toISOString() });
       saveReviewDraft(project.key, path, latest.evidence, "");
     },
     onSuccess: onSaved,

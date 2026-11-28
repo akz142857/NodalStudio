@@ -518,9 +518,10 @@ pub(crate) async fn detail_code_open_vsx(
     state.project(project_id)?;
     let (record, compatibility) = while_online(&app, async {
         let client = client()?;
-        let record = release(&client, &id, version.as_deref())
-            .await?
-            .ok_or(UNAVAILABLE)?;
+        let version = version
+            .as_deref()
+            .or((id == ESLINT_ID).then_some(ESLINT_VERSION));
+        let record = release(&client, &id, version).await?.ok_or(UNAVAILABLE)?;
         let compatibility = declared_compatibility(&client, &record).await?;
         Ok((record, compatibility))
     })
@@ -562,6 +563,7 @@ pub(crate) async fn check_code_open_vsx_updates(
         Ok(installed_paths(root)?
             .into_iter()
             .filter_map(|path| installation(&path, key).ok())
+            .filter(|item| !matches!(item.receipt.source, PackageSource::BundledSyntax))
             .collect::<Vec<_>>())
     })
     .await?;

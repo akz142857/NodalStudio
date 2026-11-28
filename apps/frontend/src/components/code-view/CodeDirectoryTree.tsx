@@ -144,7 +144,7 @@ export function DirectoryTree({ api, project, path, active, focusedKey, onFocusR
           aria-current={!entry.directory && entry.path === active ? "true" : undefined}
           data-folder-change={entry.directory ? kind : undefined}
           data-has-status={status ? "true" : undefined}
-          ref={!entry.directory && entry.path === reveal?.path ? revealRow : undefined}
+          ref={reveal && (entry.path === reveal.path || tail === reveal.path) ? revealRow : undefined}
           aria-haspopup={menu ? "menu" : undefined} aria-keyshortcuts={menu ? "Shift+F10" : undefined}
           onFocus={() => onFocusRow?.(key)}
           onContextMenu={menu || undefined}

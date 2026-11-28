@@ -505,6 +505,7 @@ pub(crate) struct EslintInput {
     request_id: Uuid,
     path: String,
     compare: bool,
+    comparison: Option<super::review::Comparison>,
     evidence: Option<String>,
     digest: String,
     context: String,
@@ -517,7 +518,7 @@ fn capture(
     project: &Project,
     input: &EslintInput,
 ) -> Result<(Tool, String), String> {
-    let doc = project.read(&input.path, input.compare)?;
+    let doc = project.read_comparison(&input.path, input.compare, input.comparison)?;
     if doc.index_only {
         return Err("eslintIndex".into());
     }
