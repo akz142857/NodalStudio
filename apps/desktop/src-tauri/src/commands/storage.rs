@@ -212,7 +212,7 @@ pub(crate) async fn factory_reset(
     code_view::review::reset_local_data(&app, &review).await;
     #[cfg(all(
         target_os = "macos",
-        any(feature = "code-extensions", feature = "mac-app-store")
+        any(feature = "code-extensions", feature = "code-syntax-only")
     ))]
     code_view::extensions::remove_all_storage(&app).await;
     let affected = state

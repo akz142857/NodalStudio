@@ -1,0 +1,1043 @@
+{
+  "fileTypes": [
+    "tf"
+  ],
+  "name": "Terraform",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "begin": "\\b(terraform)([\\w\\-\\\"$])?(?:\\s+)?({)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.declaration.$1.tf"
+        },
+        "2": {
+          "name": "invalid.illegal.keyword.$1.tf"
+        },
+        "3": {
+          "name": "punctuation.declaration.block.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.declaration.block.end.tf"
+        }
+      },
+      "name": "meta.terraform.tf",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#version"
+        },
+        {
+          "captures": {
+            "2": {
+              "name": "keyword.operator.assignment.tf"
+            },
+            "3": {
+              "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+            },
+            "4": {
+              "name": "string.quoted.double.tf"
+            },
+            "5": {
+              "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+            }
+          },
+          "match": "\\b(required_version)(?:\\s+)?(=)(?:\\s+)?(\")([^$\"]+)?(\")",
+          "name": "meta.terraform.required_version.tf"
+        },
+        {
+          "begin": "\\b(required_providers)([\\w\\-\\\"$])?(?:\\s+)?({)",
+          "beginCaptures": {
+            "2": {
+              "name": "invalid.illegal.keyword.$1.tf"
+            },
+            "3": {
+              "name": "punctuation.definition.block.begin.tf"
+            }
+          },
+          "end": "}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.block.end.tf"
+            }
+          },
+          "name": "meta.terraform.required_providers.tf",
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "captures": {
+                "1": {
+                  "name": "entity.name.provider.tf"
+                },
+                "2": {
+                  "name": "keyword.operator.assignment.tf"
+                },
+                "3": {
+                  "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+                },
+                "4": {
+                  "name": "string.quoted.double.tf"
+                },
+                "5": {
+                  "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+                }
+              },
+              "match": "\\b([\\-\\w]+)(?:\\s+)?(=)(?:\\s+)?(\")([^$\"]+)?(\")"
+            }
+          ]
+        },
+        {
+          "begin": "\\b(backend)(?:\\s+)?(\")([^$\"]+)?(\")(?:\\s+)?({)",
+          "beginCaptures": {
+            "2": {
+              "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+            },
+            "3": {
+              "name": "string.quoted.double.tf",
+              "patterns": [
+                {
+                  "match": "(?\u003c=\")([^a-z]+)",
+                  "name": "invalid.illegal.tf"
+                }
+              ]
+            },
+            "4": {
+              "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+            },
+            "5": {
+              "name": "punctuation.definition.block.begin.tf"
+            }
+          },
+          "end": "}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.block.end.tf"
+            }
+          },
+          "name": "meta.terraform.backend.tf",
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "captures": {
+                "1": {
+                  "name": "support.backend.attribute.tf"
+                },
+                "2": {
+                  "name": "keyword.operator.assignment.tf"
+                },
+                "3": {
+                  "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+                },
+                "4": {
+                  "name": "string.quoted.double.tf"
+                },
+                "5": {
+                  "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+                }
+              },
+              "match": "\\b([\\-\\w]+)(?:\\s+)?(=)(?:\\s+)?"
+            },
+            {
+              "include": "#definition-right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "begin": "\\b(locals)([\\w\\-\\\"$])?(?:\\s+)?({)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.declaration.$1.tf"
+        },
+        "2": {
+          "name": "invalid.illegal.keyword.$1.tf"
+        },
+        "3": {
+          "name": "punctuation.declaration.block.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.declaration.block.end.tf"
+        }
+      },
+      "name": "meta.locals.tf",
+      "patterns": [
+        {
+          "captures": {
+            "1": {
+              "name": "variable.other.readwrite.tf"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.tf"
+            }
+          },
+          "match": "\\b([\\-\\w]+)(?:\\s+)?(=)(?!=|\u003e|\u003c)"
+        },
+        {
+          "include": "#definition-right"
+        }
+      ]
+    },
+    {
+      "begin": "\\b(module)([\\w\\-\\\"$])?(?:\\s+)?(\")?([^\\\"\\n]+)?(\")?(?:\\s+)?({)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.declaration.$1.tf"
+        },
+        "2": {
+          "name": "invalid.illegal.keyword.$1.tf"
+        },
+        "3": {
+          "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+        },
+        "4": {
+          "name": "string.quoted.double.tf entity.name.module.tf"
+        },
+        "5": {
+          "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+        },
+        "6": {
+          "name": "punctuation.declaration.block.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.declaration.block.end.tf"
+        }
+      },
+      "name": "meta.module.tf",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#version"
+        },
+        {
+          "captures": {
+            "1": {
+              "name": "support.module.attribute.tf"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.tf"
+            }
+          },
+          "match": "\\b([\\-\\w]+)(?:\\s+)?(=)(?:\\s+)?"
+        },
+        {
+          "include": "#definition-right"
+        }
+      ]
+    },
+    {
+      "begin": "\\b(provider)([\\w\\-\\\"$])?(?:\\s+)?(\")?([^\\\"\\n]+)?(\")?(?:\\s+)?({)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.declaration.$1.tf"
+        },
+        "2": {
+          "name": "invalid.illegal.keyword.$1.tf"
+        },
+        "3": {
+          "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+        },
+        "4": {
+          "name": "string.quoted.double.tf entity.name.provider.tf"
+        },
+        "5": {
+          "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+        },
+        "6": {
+          "name": "punctuation.declaration.block.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.declaration.block.end.tf"
+        }
+      },
+      "name": "meta.provider.tf",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#version"
+        },
+        {
+          "captures": {
+            "1": {
+              "name": "support.provider.attribute.tf"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.tf"
+            }
+          },
+          "match": "\\b([\\-\\w]+)(?:\\s+)?(=)(?:\\s+)?"
+        },
+        {
+          "include": "#definition-right"
+        }
+      ]
+    },
+    {
+      "begin": "\\b(variable)([\\w\\-\\\"$])?(?:\\s+)?(\")?([^\\\"\\n]+)?(\")?(?:\\s+)?({)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.declaration.$1.tf"
+        },
+        "2": {
+          "name": "invalid.illegal.keyword.$1.tf"
+        },
+        "3": {
+          "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+        },
+        "4": {
+          "name": "string.quoted.double.tf entity.name.$1.tf"
+        },
+        "5": {
+          "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+        },
+        "6": {
+          "name": "punctuation.declaration.block.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.declaration.block.end.tf"
+        }
+      },
+      "name": "meta.variable.tf",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "captures": {
+            "1": {
+              "name": "meta.keyword.$1.tf"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.tf"
+            }
+          },
+          "match": "\\b(type|default|description|validation)(?:\\s+)?(=)?(?:\\s+)?"
+        },
+        {
+          "captures": {
+            "1": {
+              "name": "meta.keyword.$1.tf"
+            }
+          },
+          "match": "\\b(string|number|bool|list|map|set|object|touple|any)\\b"
+        },
+        {
+          "include": "#definition-right"
+        },
+        {
+          "match": "\\S",
+          "name": "invalid.illegal.keyword.variable.tf"
+        }
+      ]
+    },
+    {
+      "begin": "\\b(output)([\\w\\-\\\"$])?(?:\\s+)?(\")?([^\\\"\\n]+)?(\")?(?:\\s+)?({)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.declaration.$1.tf"
+        },
+        "2": {
+          "name": "invalid.illegal.keyword.$1.tf"
+        },
+        "3": {
+          "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+        },
+        "4": {
+          "name": "string.quoted.double.tf entity.name.$1.tf"
+        },
+        "5": {
+          "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+        },
+        "6": {
+          "name": "punctuation.declaration.block.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.declaration.block.end.tf"
+        }
+      },
+      "name": "meta.output.tf",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "captures": {
+            "1": {
+              "name": "support.output.attribute.tf"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.tf"
+            }
+          },
+          "match": "\\b(name|value|description|sensitive|depends_on)(?:\\s+)?(=)(?:\\s+)?"
+        },
+        {
+          "include": "#definition-right"
+        }
+      ]
+    },
+    {
+      "begin": "\\b(data)([\\w\\-\\\"$])?(?:\\s+)?(\")?([^\\\"\\n]+)?(\")?(?:\\s+)?(\")?([^\\\"\\n]+)?(\")?(?:\\s+)?({)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.declaration.$1.tf"
+        },
+        "2": {
+          "name": "invalid.illegal.keyword.$1.tf"
+        },
+        "3": {
+          "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+        },
+        "4": {
+          "name": "string.quoted.double.tf entity.type.$1.tf"
+        },
+        "5": {
+          "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+        },
+        "6": {
+          "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+        },
+        "7": {
+          "name": "string.quoted.double.tf entity.name.$1.tf"
+        },
+        "8": {
+          "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+        },
+        "9": {
+          "name": "punctuation.declaration.block.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.declaration.block.end.tf"
+        }
+      },
+      "name": "meta.data.tf",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "captures": {
+            "1": {
+              "name": "support.data.attribute.tf"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.tf"
+            }
+          },
+          "match": "\\b([\\-\\w]+)(?:\\s+)?(=)(?:\\s+)?"
+        },
+        {
+          "include": "#definition-right"
+        }
+      ]
+    },
+    {
+      "begin": "\\b(resource)([\\w\\-\\\"$])?(?:\\s+)?(\")?([^\\\"\\n]+)?(\")?(?:\\s+)?(\")?([^\\\"\\n]+)?(\")?(?:\\s+)?({)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.declaration.$1.tf"
+        },
+        "2": {
+          "name": "invalid.illegal.keyword.$1.tf"
+        },
+        "3": {
+          "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+        },
+        "4": {
+          "name": "string.quoted.double.tf entity.type.$1.tf"
+        },
+        "5": {
+          "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+        },
+        "6": {
+          "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+        },
+        "7": {
+          "name": "string.quoted.double.tf entity.name.$1.tf"
+        },
+        "8": {
+          "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+        },
+        "9": {
+          "name": "punctuation.declaration.block.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.declaration.block.end.tf"
+        }
+      },
+      "name": "meta.resource.tf",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "captures": {
+            "1": {
+              "name": "support.resource.attribute.tf"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.tf"
+            }
+          },
+          "match": "\\b([\\-\\w]+)(?:\\s+)?(=)(?:\\s+)?"
+        },
+        {
+          "include": "#definition-right"
+        }
+      ]
+    },
+    {
+      "include": "#invalid"
+    }
+  ],
+  "repository": {
+    "blocks": {
+      "begin": "{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.block.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.block.end.tf"
+        }
+      },
+      "name": "meta.block.tf",
+      "patterns": [
+        {
+          "include": "#definition-right"
+        },
+        {
+          "include": "#blocks"
+        }
+      ]
+    },
+    "braces-round": {
+      "match": "\\(|\\)",
+      "name": "meta.brace.round.tf"
+    },
+    "braces-square": {
+      "match": "\\[|\\]",
+      "name": "meta.brace.square.tf"
+    },
+    "comment-block": {
+      "begin": "/\\*",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.begin.tf"
+        }
+      },
+      "end": "\\*/",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.end.tf"
+        }
+      },
+      "name": "comment.block.tf"
+    },
+    "comment-line-double-slash": {
+      "begin": "//",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.tf"
+        }
+      },
+      "end": "$",
+      "name": "comment.line.double-slash.tf"
+    },
+    "comment-line-number-sign": {
+      "begin": "#",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.tf"
+        }
+      },
+      "end": "$",
+      "name": "comment.line.number-sign.tf"
+    },
+    "comments": {
+      "patterns": [
+        {
+          "include": "#comment-line-number-sign"
+        },
+        {
+          "include": "#comment-line-double-slash"
+        },
+        {
+          "include": "#comment-block"
+        }
+      ]
+    },
+    "constants-boolean": {
+      "match": "\\b(true|false)\\b",
+      "name": "constant.language.boolean.$1.js"
+    },
+    "constants-decimal": {
+      "captures": {
+        "1": {
+          "name": "meta.delimiter.decimal.period.js"
+        }
+      },
+      "match": "\\b\\d+(\\.)?(\\d+)?",
+      "name": "constant.numeric.decimal.tf"
+    },
+    "constants-language": {
+      "match": "\\b(null)\\b",
+      "name": "constant.language.$1.js"
+    },
+    "definition-right": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#support-path"
+        },
+        {
+          "include": "#support-self"
+        },
+        {
+          "include": "#support-count-index"
+        },
+        {
+          "include": "#support-variable"
+        },
+        {
+          "include": "#support-local"
+        },
+        {
+          "include": "#support-module"
+        },
+        {
+          "include": "#support-terraform"
+        },
+        {
+          "include": "#support-data"
+        },
+        {
+          "include": "#support-function-numeric"
+        },
+        {
+          "include": "#support-function-string"
+        },
+        {
+          "include": "#support-function-collection"
+        },
+        {
+          "include": "#support-function-encoding"
+        },
+        {
+          "include": "#support-function-filesystem"
+        },
+        {
+          "include": "#support-function-datetime"
+        },
+        {
+          "include": "#support-function-crypto"
+        },
+        {
+          "include": "#support-function-network"
+        },
+        {
+          "include": "#support-function-conversion"
+        },
+        {
+          "include": "#constants-decimal"
+        },
+        {
+          "include": "#constants-boolean"
+        },
+        {
+          "include": "#constants-language"
+        },
+        {
+          "include": "#punctuation-comma"
+        },
+        {
+          "include": "#punctuation-accessor"
+        },
+        {
+          "include": "#keyword-ternary"
+        },
+        {
+          "include": "#keyword-comparison"
+        },
+        {
+          "include": "#keyword-conditional"
+        },
+        {
+          "include": "#keyword-loop"
+        },
+        {
+          "include": "#braces-round"
+        },
+        {
+          "include": "#braces-square"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#heredoc"
+        },
+        {
+          "include": "#blocks"
+        }
+      ]
+    },
+    "escape-char": {
+      "match": "\\\\\\\"",
+      "name": "constant.character.escape.tf"
+    },
+    "heredoc": {
+      "begin": "\u003c\u003c[\\-]?(\\w+)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.begin.$1.tf"
+        }
+      },
+      "end": "\\1",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.end.tf"
+        }
+      },
+      "name": "string.unquoted.here-doc.tf",
+      "patterns": [
+        {
+          "match": "\\$\\${"
+        },
+        {
+          "include": "#string-interpolation"
+        },
+        {
+          "match": "%%{"
+        },
+        {
+          "include": "#string-templates"
+        }
+      ]
+    },
+    "invalid": {
+      "match": "\\S",
+      "name": "invalid.illegal.tf"
+    },
+    "keyword-comparison": {
+      "match": "~\u003e|\u003e=|\u003c=|==|!=|[^\u003c]\u003c[^\u003c]|[^\u003e]\u003e[^\u003e]",
+      "name": "keyword.operator.comparison.tf"
+    },
+    "keyword-conditional": {
+      "match": "\\b(if|else|endif)\\b",
+      "name": "keyword.control.conditional.tf"
+    },
+    "keyword-loop": {
+      "match": "\\b(for|in|endfor)\\b",
+      "name": "keyword.control.loop.tf"
+    },
+    "keyword-ternary": {
+      "match": "\\?|:",
+      "name": "keyword.operator.ternary.tf"
+    },
+    "punctuation-accessor": {
+      "match": "(?\u003c=\\w)\\.(?=\\w)",
+      "name": "punctuation.accessor.tf"
+    },
+    "punctuation-comma": {
+      "match": ",",
+      "name": "punctuation.separator.comma.js"
+    },
+    "string-interpolation": {
+      "begin": "\\${",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.end.tf"
+        }
+      },
+      "name": "meta.template.expression.tf meta.embedded.line.tf",
+      "patterns": [
+        {
+          "include": "#definition-right"
+        }
+      ]
+    },
+    "string-templates": {
+      "begin": "%{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.begin.tf"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.end.tf"
+        }
+      },
+      "name": "meta.template.expression.tf meta.embedded.line.tf",
+      "patterns": [
+        {
+          "include": "#definition-right"
+        }
+      ]
+    },
+    "strings": {
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.begin.tf"
+        }
+      },
+      "end": "\"",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.end.tf"
+        }
+      },
+      "name": "string.template.tf",
+      "patterns": [
+        {
+          "include": "#escape-char"
+        },
+        {
+          "match": "\\$\\${"
+        },
+        {
+          "include": "#string-interpolation"
+        },
+        {
+          "match": "%%{"
+        },
+        {
+          "include": "#string-templates"
+        }
+      ]
+    },
+    "support-count-index": {
+      "captures": {
+        "1": {
+          "name": "support.class.count.tf"
+        },
+        "2": {
+          "name": "punctuation.accessor.tf"
+        },
+        "3": {
+          "name": "support.variable.index.tf"
+        }
+      },
+      "match": "(?\u003c!\\.)\\b(count)(\\.)(index)\\b"
+    },
+    "support-data": {
+      "captures": {
+        "1": {
+          "name": "support.class.data.tf"
+        },
+        "2": {
+          "name": "punctuation.accessor.tf"
+        },
+        "3": {
+          "name": "support.data.$3.tf"
+        },
+        "4": {
+          "name": "punctuation.accessor.tf"
+        },
+        "5": {
+          "name": "support.data.$3.attribute.tf"
+        }
+      },
+      "match": "(?\u003c!\\.)\\b(data)(\\.)(\\w+)(\\.)?(\\w+)?\\b"
+    },
+    "support-function-collection": {
+      "match": "(?\u003c!\\.)\\b(chunklist|coalescelist|coalesce|compact|concat|contains|distinct|element|flatten|index|keys|length|list|lookup|map|matchkeys|merge|range|reverse|setintersection|setproduct|setunion|slice|sort|transpose|values|zipmap)\\b(?=\\()",
+      "name": "support.function.builtin.collection.tf"
+    },
+    "support-function-conversion": {
+      "match": "(?\u003c!\\.)\\b(tobool|tolist|tomap|tonumber|toset|tostring)\\b(?=\\()",
+      "name": "support.function.builtin.conversion.tf"
+    },
+    "support-function-crypto": {
+      "match": "(?\u003c!\\.)\\b(base64sha256|base64sha512|bcrypt|filebase64sha256|filebase64sha512|filemd5|filesha1|filesha256|filesha512|md5|rsadecrypt|sha1|sha256|sha512|uuidv5|uuid)\\b(?=\\()",
+      "name": "support.function.builtin.crypto.tf"
+    },
+    "support-function-datetime": {
+      "match": "(?\u003c!\\.)\\b(formatdate|timeadd|timestamp)\\b(?=\\()",
+      "name": "support.function.builtin.datetime.tf"
+    },
+    "support-function-encoding": {
+      "match": "(?\u003c!\\.)\\b(base64decode|base64encode|base64gzip|csvdecode|jsondecode|jsonencode|urlencode|yamldecode|yamlencode)\\b(?=\\()",
+      "name": "support.function.builtin.encoding.tf"
+    },
+    "support-function-filesystem": {
+      "match": "(?\u003c!\\.)\\b(abspath|dirname|pathexpand|basename|fileexists|filebase64|fileset|templatefile|file)\\b(?=\\()",
+      "name": "support.function.builtin.filesystem.tf"
+    },
+    "support-function-network": {
+      "match": "(?\u003c!\\.)\\b(cidrhost|cidrnetmask|cidrsubnets|cidrsubnet)\\b(?=\\()",
+      "name": "support.function.builtin.network.tf"
+    },
+    "support-function-numeric": {
+      "match": "(?\u003c!\\.)\\b(abs|ceil|floor|log|max|min|pow|signum|parseint)\\b(?=\\()",
+      "name": "support.function.builtin.numeric.tf"
+    },
+    "support-function-string": {
+      "match": "(?\u003c!\\.)\\b(chomp|formatlist|format|indent|join|lower|regexall|regex|replace|split|strrev|substr|title|trimspace|trimprefix|trimsuffix|trim|upper)\\b(?=\\()",
+      "name": "support.function.builtin.string.tf"
+    },
+    "support-local": {
+      "captures": {
+        "1": {
+          "name": "support.class.local.tf"
+        },
+        "2": {
+          "name": "punctuation.accessor.tf"
+        },
+        "3": {
+          "name": "support.local.$3.tf"
+        }
+      },
+      "match": "(?\u003c!\\.)\\b(local)(\\.)(\\w+)\\b"
+    },
+    "support-module": {
+      "captures": {
+        "1": {
+          "name": "support.class.module.tf"
+        },
+        "2": {
+          "name": "punctuation.accessor.tf"
+        },
+        "3": {
+          "name": "support.module.$3.tf"
+        },
+        "4": {
+          "name": "punctuation.accessor.tf"
+        },
+        "5": {
+          "name": "support.module.$3.attribute.tf"
+        }
+      },
+      "match": "(?\u003c!\\.)\\b(module)(\\.)(\\w+)(\\.)?(\\w+)?\\b"
+    },
+    "support-path": {
+      "captures": {
+        "1": {
+          "name": "support.class.path.tf"
+        },
+        "2": {
+          "name": "punctuation.accessor.tf"
+        },
+        "3": {
+          "name": "support.path.$3.tf"
+        }
+      },
+      "match": "(?\u003c!\\.)\\b(path)(\\.)(\\w+)\\b"
+    },
+    "support-self": {
+      "captures": {
+        "1": {
+          "name": "support.class.self.tf"
+        },
+        "2": {
+          "name": "punctuation.accessor.tf"
+        },
+        "3": {
+          "name": "support.self.$3.tf"
+        }
+      },
+      "match": "(?\u003c!\\.)\\b(self)(\\.)(\\w+)\\b"
+    },
+    "support-terraform": {
+      "captures": {
+        "1": {
+          "name": "support.class.terraform.tf"
+        },
+        "2": {
+          "name": "punctuation.accessor.tf"
+        },
+        "3": {
+          "name": "support.terraform.$3.tf"
+        }
+      },
+      "match": "(?\u003c!\\.)\\b(terraform)(\\.)(\\w+)\\b"
+    },
+    "support-variable": {
+      "captures": {
+        "1": {
+          "name": "support.class.variable.tf"
+        },
+        "2": {
+          "name": "punctuation.accessor.tf"
+        },
+        "3": {
+          "name": "support.variable.$3.tf"
+        }
+      },
+      "match": "(?\u003c!\\.)\\b(var)(\\.)(\\w+)\\b"
+    },
+    "version": {
+      "captures": {
+        "1": {
+          "name": "storage.modifier.version.tf"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.tf"
+        },
+        "3": {
+          "name": "string.quoted.double.tf punctuation.definition.string.begin.tf"
+        },
+        "4": {
+          "name": "string.quoted.double.tf"
+        },
+        "5": {
+          "name": "string.quoted.double.tf punctuation.definition.string.end.tf"
+        }
+      },
+      "match": "\\b(version)(?:\\s+)?(=)(?:\\s+)?(\")([^$\"]+)?(\")",
+      "name": "meta.version.tf"
+    }
+  },
+  "scopeName": "source.tf",
+  "uuid": "20a13a67-f65e-4e41-ae19-f18395d3312e"
+}

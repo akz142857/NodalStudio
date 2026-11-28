@@ -1,7 +1,7 @@
 import { Chunk, type DiffConfig } from "@codemirror/merge";
 import { Text } from "@codemirror/state";
 import type { Configuration, LintError } from "markdownlint";
-import type { CodeEslintFinding, CodeExtension, CodeReviewDocument, CodeReviewPlatform, CodeReviewVersion } from "../../platform/code-review";
+import type { CodeChangeComparison, CodeEslintFinding, CodeExtension, CodeReviewDocument, CodeReviewPlatform, CodeReviewVersion } from "../../platform/code-review";
 import type { ExtensionDiagnostic } from "./code-extension-runtime";
 
 export const reviewDiffConfig: DiffConfig = { scanLimit: 500 };
@@ -18,7 +18,7 @@ export const eslintExtensionSha = (extension?: CodeExtension) => extension?.capa
 export type EslintAvailability = "enabled" | "eslintOffline" | "eslintUnavailable";
 
 export type ReadingMode = "diff" | "source";
-export type CheckTarget = { path: string; mode: ReadingMode; evidence: string | null; indexOnly: boolean };
+export type CheckTarget = { path: string; mode: ReadingMode; evidence: string | null; indexOnly: boolean; comparison?: CodeChangeComparison };
 export type CheckRange = { line: number; column?: number; length?: number; endLine?: number; endColumn?: number };
 export type CheckFinding = {
   rule: string;

@@ -9,9 +9,10 @@ import { useState } from "react";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { codeShortcutEvent, type CodeShortcut } from "../command-shortcuts";
 import type { CodeDefinitionRequest, CodeDefinitionResult, CodeDocumentHighlightRange, CodeDocumentOutlineRequest, CodeReviewCompactFolders,
-  CodeDocumentOutlineResult, CodeLanguageStatus, CodeReviewChange, CodeReviewDirectory, CodeReviewPlatform, CodeReviewProject,
+  CodeChangeComparison, CodeDocumentOutlineResult, CodeLanguageStatus, CodeReviewChange, CodeReviewDirectory, CodeReviewPlatform, CodeReviewProject,
   CodeSavedProject, CodeSavedProjectGroup } from "../../platform/code-review";
 import { CodeReviewWorkspace } from "./CodeReviewWorkspace";
+import { reviewHistory, saveReviewNote } from "./code-review-notes";
 
 vi.mock("./code-review-checks", async (original) => {
   const module = await original<typeof import("./code-review-checks")>();
@@ -46,39 +47,102 @@ afterAll(() => {
   Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
 });
 
-it("downloads only a catalog grammar in the App Store edition", async () => {
+it("recommends and enables only bundled syntax while offline in the App Store edition", async () => {
   const install = vi.fn().mockResolvedValue(null);
-  const syntax = { id: "tamasfe.even-better-toml", name: "TOML", version: "0.21.2" };
-  const download = vi.fn().mockResolvedValue({
+  const syntax = { id: "tamasfe.even-better-toml", name: "TOML", version: "0.21.2", extensions: [".toml"] };
+  const enable = vi.fn().mockResolvedValue({
     ...syntax, description: "", publisher: "tamasfe", fileName: "toml.tmLanguage.json",
-    sha256: "fixture", engine: "*", capability: "syntax", enabled: true, source: "openVsxSyntax", languages: [],
+    sha256: "fixture", engine: "*", capability: "syntax", enabled: true, source: "bundledSyntax", languages: [],
   });
   const search = vi.fn();
   const debug = vi.fn();
+  const choose = vi.fn().mockResolvedValue(null);
+  const changes = vi.fn().mockResolvedValue({ files: [], limited: false });
+  const installed = vi.fn().mockResolvedValue([]);
+  const listSyntax = vi.fn().mockResolvedValue([syntax]);
   renderWorkspace({
     current: () => Promise.resolve({ id: "store-project", key: "store-project", name: "Store project", git: "folder", baseline: null }),
-    choose: () => Promise.resolve(null),
-    changes: () => Promise.resolve({ files: [], limited: false }),
+    choose, changes,
     directory: () => Promise.resolve({ entries: [], limited: false }),
+    paths: () => Promise.resolve({ paths: ["docs.toml", "app.py", "main.js"], limited: false }),
     file: vi.fn(),
     extensions: {
-      list: () => Promise.resolve([]), install, change: vi.fn(), prepare: vi.fn(),
-      syntaxCatalog: { list: () => Promise.resolve([syntax]), import: download },
+      list: installed, install, change: vi.fn(), prepare: vi.fn(),
+      syntaxCatalog: { list: listSyntax, enable },
       openVsx: { search, detail: vi.fn(), updates: vi.fn(), install: vi.fn() },
     },
     pythonDebug: { prepare: debug, start: vi.fn(), control: vi.fn(), stop: vi.fn() },
-  }, new QueryClient(), "syntax");
+  }, new QueryClient(), "syntax", true);
 
   fireEvent.click(await screen.findByRole("button", { name: "Extensions" }));
   expect(screen.queryByRole("searchbox", { name: "Search Open VSX" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Python Debugger" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Extension actions" })).toBeNull();
-  fireEvent.click(await screen.findByRole("button", { name: "Download TOML syntax" }));
-  expect(await screen.findByRole("button", { name: "TOML syntax imported" })).toBeDisabled();
-  expect(download).toHaveBeenCalledExactlyOnceWith("store-project", syntax.id);
+  await screen.findByRole("button", { name: "Enable TOML syntax" });
+  const toolbar = within(screen.getByRole("group", { name: "Extensions actions" }));
+  const refresh = toolbar.getByRole("button", { name: "Refresh extensions" });
+  await waitFor(() => expect(refresh).toBeEnabled());
+  fireEvent.click(refresh);
+  await waitFor(() => expect(installed).toHaveBeenCalledTimes(2));
+  expect(listSyntax).toHaveBeenCalledTimes(2);
+  expect(changes).toHaveBeenCalledOnce();
+  const installSyntax = toolbar.getByRole("button", { name: "Enable bundled syntax…" });
+  await waitFor(() => expect(installSyntax).toBeEnabled());
+  fireEvent.click(installSyntax);
+  fireEvent.click(screen.getByRole("menuitem", { name: "Enable TOML syntax" }));
+  expect(await screen.findByRole("button", { name: "Manage TOML" })).toBeVisible();
+  expect(installSyntax).toBeDisabled();
+  expect(enable).toHaveBeenCalledExactlyOnceWith("store-project", syntax.id);
   expect(install).not.toHaveBeenCalled();
+  expect(choose).not.toHaveBeenCalled();
   expect(search).not.toHaveBeenCalled();
   expect(debug).not.toHaveBeenCalled();
+});
+
+it("routes each sidebar toolbar to the active Files, Search, or Changes panel", { timeout: 15_000 }, async () => {
+  const project = { id: "toolbars", key: "toolbars", name: "Toolbar project", git: "ready", baseline: "abc123" } as const;
+  const choose = vi.fn().mockResolvedValue(null);
+  const changes = vi.fn().mockResolvedValue({ files: [], limited: false });
+  const directory = vi.fn().mockResolvedValue({ entries: [{ name: "report.py", path: "report.py", directory: false }], limited: false });
+  const searchContent = vi.fn().mockResolvedValue({ files: [], limited: false });
+  const createEntry = vi.fn().mockResolvedValue("new.py");
+  renderWorkspace({ current: () => Promise.resolve(project), choose, changes, directory, searchContent, createEntry, file: vi.fn() });
+
+  const changeActions = within(await screen.findByRole("group", { name: "Changes actions" }));
+  const refreshChanges = changeActions.getByRole("button", { name: "Refresh changes" });
+  await waitFor(() => expect(refreshChanges).toBeEnabled());
+  fireEvent.click(refreshChanges);
+  await waitFor(() => expect(changes).toHaveBeenCalledTimes(2));
+  expect(directory).not.toHaveBeenCalled();
+
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Files" }));
+  await screen.findByRole("button", { name: "report.py" });
+  const fileActions = within(screen.getByRole("group", { name: "Files actions" }));
+  fireEvent.click(fileActions.getByRole("button", { name: "Refresh files" }));
+  await waitFor(() => expect(directory).toHaveBeenCalledTimes(2));
+  expect(changes).toHaveBeenCalledTimes(3);
+  const newFile = fileActions.getByRole("button", { name: "New File…" });
+  newFile.focus();
+  fireEvent.click(newFile);
+  const dialog = screen.getByRole("dialog", { name: "New File…" });
+  expect(within(dialog).getByRole("textbox", { name: "Name" })).toHaveFocus();
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(newFile).toHaveFocus();
+  expect(createEntry).not.toHaveBeenCalled();
+
+  fireEvent.click(projectNavigator().getByRole("button", { name: "Search" }));
+  const searchActions = within(screen.getByRole("group", { name: "Search actions" }));
+  const refreshSearch = searchActions.getByRole("button", { name: "Refresh search results" });
+  expect(refreshSearch).toBeDisabled();
+  fireEvent.change(screen.getByRole("combobox", { name: "Project Content" }), { target: { value: "total" } });
+  await waitFor(() => expect(searchContent).toHaveBeenCalledOnce());
+  await waitFor(() => expect(refreshSearch).toBeEnabled());
+  fireEvent.click(refreshSearch);
+  await waitFor(() => expect(searchContent).toHaveBeenCalledTimes(2));
+  expect(searchContent).toHaveBeenLastCalledWith(project.id, "total");
+  expect(changes).toHaveBeenCalledTimes(3);
+  expect(directory).toHaveBeenCalledTimes(2);
+  expect(choose).not.toHaveBeenCalled();
 });
 
 it.each([
@@ -120,6 +184,160 @@ it("keeps the expanded Code sidebar at least 280 pixels wide", async () => {
   expect(Number(divider.getAttribute("aria-valuenow"))).toBeGreaterThan(280);
   fireEvent.keyDown(divider, { key: "Home" });
   expect(divider).toHaveAttribute("aria-valuenow", "280");
+});
+
+it("creates entries through the Files toolbar and file or folder context menus", async () => {
+  const project = { id: "create", key: "create", name: "Create project", git: "folder", baseline: null } as const;
+  const createEntry = vi.fn<NonNullable<CodeReviewPlatform["createEntry"]>>()
+    .mockRejectedValueOnce("codeReviewEntryExists").mockResolvedValueOnce("new.txt")
+    .mockResolvedValueOnce("src/folder").mockResolvedValueOnce("src/nested.txt");
+  const file = vi.fn<CodeReviewPlatform["file"]>().mockResolvedValue({
+    before: null, after: { state: "text", text: "" }, evidence: null, indexOnly: false,
+  });
+  renderWorkspace({
+    current: () => Promise.resolve(project), choose: vi.fn(), changes: vi.fn(), createEntry, file,
+    directory: (_, path) => Promise.resolve({ entries: path
+      ? [{ name: "main.py", path: "src/main.py", directory: false }]
+      : [{ name: "src", path: "src", directory: true }], limited: false }),
+  });
+
+  const create = (title: string, name: string) => {
+    const dialog = within(screen.getByRole("dialog", { name: title }));
+    fireEvent.change(dialog.getByRole("textbox", { name: "Name" }), { target: { value: name } });
+    fireEvent.submit(dialog.getByRole("button", { name: "Create" }).closest("form")!);
+  };
+  fireEvent.click(await screen.findByRole("button", { name: "New File…" }));
+  create("New File…", "taken.txt");
+  expect(await screen.findByText("A file or folder with this name already exists.")).toBeVisible();
+  create("New File…", "new.txt");
+  await waitFor(() => expect(file).toHaveBeenCalledWith(project.id, "new.txt", false));
+  expect(createEntry).toHaveBeenNthCalledWith(2, project.id, "", "new.txt", "file");
+
+  fireEvent.contextMenu(screen.getByRole("button", { name: "src" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "New Folder…" }));
+  create("New Folder…", "folder");
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(createEntry).toHaveBeenNthCalledWith(3, project.id, "src", "folder", "folder");
+
+  fireEvent.contextMenu(await screen.findByRole("button", { name: "main.py" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "New File…" }));
+  create("New File…", "nested.txt");
+  await waitFor(() => expect(file).toHaveBeenCalledWith(project.id, "src/nested.txt", false));
+  expect(createEntry).toHaveBeenNthCalledWith(4, project.id, "src", "nested.txt", "file");
+});
+
+it("shows one file with both Git comparisons, tracks each review, and guards staging by revision", async () => {
+  const project = { id: "git-review", key: "git-review", name: "Git review project", git: "ready", baseline: "abc123" } as const;
+  const git = { branch: "ai/orders", baseline: "abc123", baselineChanged: false, indexRevision: "index-a" };
+  const file = (path: string, comparison: CodeChangeComparison, evidence: string): CodeReviewChange => ({
+    path, previousPath: null, kind: "modified", evidence, comparison, staged: comparison === "staged", indexOnly: comparison === "staged",
+  });
+  const staged = file("orders.sql", "staged", "reviewed-index");
+  const unstaged = file("orders.sql", "unstaged", "working-file");
+  const other = file("readme.md", "unstaged", "other");
+  saveReviewNote(project.key, staged.path, { evidence: staged.evidence!, comparison: "staged", status: "reviewed", note: "checked the index", at: "2026-11-28" });
+  const original = { files: [staged, other], git, staged: [staged], unstaged: [unstaged, other], limited: false };
+  const changes = vi.fn().mockResolvedValue(original);
+  const changeIndex = vi.fn().mockRejectedValue("codeReviewStale");
+  const updateBaseline = vi.fn().mockResolvedValue({ ...original, git: { ...git, baseline: "def456" } });
+  const readFile = vi.fn<CodeReviewPlatform["file"]>().mockImplementation((_, path, compare, scope) => {
+    const entry = path === "readme.md" ? other : scope === "staged" ? staged : unstaged;
+    return Promise.resolve({ before: compare ? { state: "text", text: "base\n" } : null, after: { state: "text", text: entry.evidence! },
+      evidence: compare ? entry.evidence : null, indexOnly: scope === "staged" });
+  });
+  renderWorkspace({
+    current: () => Promise.resolve(project), choose: vi.fn(), changes, changeIndex, updateBaseline, file: readFile,
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+  });
+  expect(await screen.findByText("ai/orders")).toBeVisible();
+  const scope = within(screen.getByRole("group", { name: "Git change scope" }));
+  expect(screen.getAllByLabelText("Staged and unstaged")).toHaveLength(1);
+  const editorScope = within(await screen.findByRole("group", { name: "File comparison" }));
+  fireEvent.click(editorScope.getByRole("button", { name: "Staged" }));
+  await waitFor(() => expect(readFile).toHaveBeenLastCalledWith(project.id, "orders.sql", true, "staged"));
+  fireEvent.click(scope.getByRole("button", { name: "Staged" }));
+  expect(screen.getByText("1 of 1 files reviewed")).toBeVisible();
+  fireEvent.click(scope.getByRole("button", { name: "Unstaged" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Stage file" }));
+  await waitFor(() => expect(changeIndex).toHaveBeenCalledWith(project.id, {
+    path: unstaged.path, comparison: "unstaged", evidence: unstaged.evidence, indexRevision: git.indexRevision,
+  }));
+  expect(await screen.findByText(/Git or the file changed/)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Next to review" }));
+  await waitFor(() => expect(readFile).toHaveBeenCalledWith(project.id, other.path, true, "unstaged"));
+
+  changes.mockResolvedValue({ ...original, git: { ...git, baselineChanged: true } });
+  fireEvent.click(screen.getByRole("button", { name: "Refresh changes" }));
+  expect(await screen.findByText(/still reviewing the previous base/)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Use current HEAD" }));
+  await waitFor(() => expect(updateBaseline).toHaveBeenCalledExactlyOnceWith(project.id));
+  await waitFor(() => expect(screen.queryByText(/still reviewing the previous base/)).toBeNull());
+});
+
+it("rejects a changed Diff response and runs batch Checks on the selected Git scope", async () => {
+  const project = { id: "scoped-checks", key: "scoped-checks", name: "Scoped checks", git: "ready", baseline: "abc" } as const;
+  const git = { branch: "main", baseline: "abc", baselineChanged: false, indexRevision: "index-a" };
+  const staged: CodeReviewChange = {
+    path: "README.md", kind: "modified", previousPath: null, evidence: "readme-stage", comparison: "staged", indexOnly: true, staged: true,
+  };
+  const other: CodeReviewChange = {
+    ...staged, path: "z-other.md", evidence: "other-worktree", comparison: "unstaged", indexOnly: false, staged: false,
+  };
+  const versions = { files: [staged, other], staged: [staged], unstaged: [other], limited: false, git };
+  const document = { before: { state: "text", text: "# Base\n" }, after: { state: "text", text: "# Staged\n\nChanged.\n" },
+    evidence: staged.evidence, indexOnly: true, executableChangedTo: true } as const;
+  const readFile = vi.fn<CodeReviewPlatform["file"]>().mockResolvedValueOnce({ ...document, evidence: "readme-newer" })
+    .mockImplementation((_, path) => Promise.resolve(path === ".markdownlint.json"
+      ? { before: null, after: { state: "missing" }, evidence: null, indexOnly: false } : document));
+  renderWorkspace({
+    current: () => Promise.resolve(project), choose: vi.fn(), changes: () => Promise.resolve(versions), file: readFile,
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+  });
+  expect(await screen.findByText("This file changed. Refresh to review the latest version.")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Refresh changes" }));
+  expect(await screen.findByText("File mode changed to executable (100755).")).toBeVisible();
+  const scope = within(screen.getByRole("group", { name: "Git change scope" }));
+  fireEvent.click(scope.getByRole("button", { name: "Staged" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Show Checks/ }));
+  readFile.mockClear();
+  fireEvent.click(screen.getByRole("button", { name: "Check Changed Files" }));
+  await waitFor(() => expect(readFile).toHaveBeenCalledWith(project.id, "README.md", true, "staged"));
+  await screen.findByText(/markdownlint 0.42.2/);
+  expect(readFile.mock.calls.some(([, path]) => path === "z-other.md")).toBe(false);
+});
+
+it("remembers when an identical reviewed version moves to the index", async () => {
+  const project = { id: "staging-review", key: "staging-review", name: "Staging review", git: "ready", baseline: "abc" } as const;
+  const git = { branch: "main", baseline: "abc", baselineChanged: false, indexRevision: "original-index" };
+  const working: CodeReviewChange = { path: "orders.sql", kind: "modified", previousPath: null, evidence: "verified-version",
+    comparison: "unstaged", indexOnly: false, staged: false };
+  const staged: CodeReviewChange = { ...working, comparison: "staged", indexOnly: true, staged: true };
+  saveReviewNote(project.key, working.path, { evidence: working.evidence!, comparison: "unstaged", status: "reviewed", note: "Approved",
+    at: "2026-11-28T00:00:00Z" });
+  const changes = vi.fn().mockResolvedValue({ files: [working], staged: [], unstaged: [working], limited: false, git });
+  const changeIndex = vi.fn().mockImplementation(() => {
+    changes.mockResolvedValue({ files: [staged], staged: [staged], unstaged: [], limited: false, git: { ...git, indexRevision: "updated-index" } });
+    return Promise.resolve();
+  });
+  const readFile = vi.fn<CodeReviewPlatform["file"]>().mockImplementation((_, __, ___, comparison) => Promise.resolve({
+    before: { state: "text", text: "original" }, after: { state: "text", text: "approved" },
+    evidence: working.evidence, indexOnly: comparison === "staged",
+  }));
+  renderWorkspace({
+    current: () => Promise.resolve(project), choose: vi.fn(), changes, changeIndex, file: readFile,
+    directory: () => Promise.resolve({ entries: [], limited: false }),
+  });
+
+  fireEvent.click(await screen.findByRole("button", { name: "Stage file" }));
+  await waitFor(() => expect(reviewHistory(project.key, working.path)[0]).toMatchObject({
+    note: "Approved", comparisons: ["unstaged", "staged"],
+  }));
+  const externallyChanged = { ...staged, evidence: "another-index-version" };
+  changes.mockResolvedValue({ files: [externallyChanged], staged: [externallyChanged], unstaged: [], limited: false, git: { ...git, indexRevision: "external" } });
+  readFile.mockResolvedValue({ before: { state: "text", text: "original" }, after: { state: "text", text: "new index" },
+    evidence: externallyChanged.evidence, indexOnly: true });
+  fireEvent.click(screen.getByRole("button", { name: "Refresh changes" }));
+  expect(await screen.findByRole("button", { name: /orders.sql.*Review again/ })).toBeVisible();
 });
 
 it("uses Code shortcuts for navigation and keeps untitled text out of project file reads", async () => {
@@ -583,7 +801,7 @@ it("reviews Go and SQL diffs and preserves earlier notes after the target change
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   renderWorkspace(api, queryClient);
 
-  const sidebar = within(await screen.findByRole("complementary", { name: "Project files" }));
+  const sidebar = within(await screen.findByRole("complementary", { name: "Changes" }));
   expect(await screen.findByRole("textbox", { name: modelPath })).toHaveAttribute("aria-readonly", "true");
   expect(screen.getByRole("textbox", { name: modelPath })).toHaveTextContent("SELECT ordered_at FROM orders");
   fireEvent.click(sidebar.getByRole("button", { name: /orders\.go/ }));
@@ -615,7 +833,7 @@ it("reviews Go and SQL diffs and preserves earlier notes after the target change
   field = "settled_at";
   fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("This file changed");
-  fireEvent.click(screen.getByRole("button", { name: "Refresh project" }));
+  fireEvent.click(screen.getByRole("button", { name: "Refresh changes" }));
   await waitFor(() => expect(screen.getByRole("textbox", { name: modelPath })).toHaveTextContent("SELECT settled_at FROM orders;"));
   expect(sidebar.getByRole("button", { name: /orders\.sql.*Review again/i })).toBeVisible();
   fireEvent.click(screen.getByText("Notes on earlier versions"));
@@ -673,7 +891,7 @@ it("opens source from Files and Quick Open while Changes opens a diff", async ()
     }),
   };
   renderWorkspace(api);
-  const sidebar = within(await screen.findByRole("complementary", { name: "Project files" }));
+  const sidebar = within(await screen.findByRole("complementary", { name: "Changes" }));
   expect(await screen.findByRole("textbox", { name: path })).toHaveTextContent("ordered_at");
   const viewSwitcher = screen.getByRole("group", { name: "File view" });
   const breadcrumbs = screen.getByRole("navigation", { name: "File path" });
@@ -756,7 +974,7 @@ it("targets individual files in the tree, tabs and reader without changing the r
   Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
   try {
     renderWorkspace(api);
-    const sidebar = within(await screen.findByRole("complementary", { name: "Project files" }));
+    const sidebar = within(await screen.findByRole("complementary", { name: "Changes" }));
     const tabs = within(screen.getByRole("navigation", { name: "Open files" }));
     await screen.findByRole("textbox", { name: path });
 
@@ -838,7 +1056,7 @@ it("groups project content hits and opens the exact working-tree match even when
   expect(editor?.state.sliceDoc(editor.state.selection.main.from, editor.state.selection.main.to)).toBe("total");
   expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  const sidebar = within(screen.getByRole("complementary", { name: "Project files" }));
+  const sidebar = within(screen.getByRole("complementary", { name: "Search" }));
   expect(sidebar.getByRole("combobox", { name: "Project Content" })).toHaveValue("total");
   expect(sidebar.getByText("3 matching lines · 2 files")).toBeVisible();
   fireEvent.click(within(sidebar.getByRole("group", { name: first })).getByRole("option"));
@@ -854,7 +1072,7 @@ it("groups project content hits and opens the exact working-tree match even when
   fireEvent.click(search);
   expect(search).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(search);
-  expect(screen.queryByRole("complementary", { name: "Project files" })).toBeNull();
+  expect(screen.queryByRole("complementary", { name: "Search" })).toBeNull();
   expect(search).toBeVisible();
   fireEvent.click(search);
   expect(sidebar.getByRole("combobox", { name: "Project Content" })).toHaveValue("total");
@@ -901,7 +1119,7 @@ it("marks collapsed ancestors from Changes and keeps deleted files reachable aft
     }),
   };
   renderWorkspace(api);
-  const sidebar = within(await screen.findByRole("complementary", { name: "Project files" }));
+  const sidebar = within(await screen.findByRole("complementary", { name: "Changes" }));
   expect(await sidebar.findByRole("button", { name: /summary\.go.*Modified/ })).toBeVisible();
   expect(sidebar.getByRole("button", { name: /report\.py.*Renamed/ })).toBeVisible();
   expect(sidebar.getByRole("button", { name: /old\.sql.*Deleted/ })).toBeVisible();
@@ -941,14 +1159,14 @@ it("marks collapsed ancestors from Changes and keeps deleted files reachable aft
     { path: "tools/old.ts", kind: "deleted", previousPath: null, staged: false, indexOnly: false, evidence: null },
     { path: "services/reporting/conflict.go", kind: "conflict", previousPath: null, staged: false, indexOnly: false, evidence: null },
   ];
-  fireEvent.click(sidebar.getByRole("button", { name: "Refresh project" }));
+  fireEvent.click(sidebar.getByRole("button", { name: "Refresh files" }));
   await waitFor(() => expect(services).toHaveAccessibleDescription("Contains files with conflicts"));
   expect(services).toHaveAttribute("data-folder-change", "conflict");
   expect(tools).toHaveAccessibleDescription("Contains changed files");
   expect(tools).toHaveAttribute("data-folder-change", "modified");
 
   changes = [];
-  fireEvent.click(sidebar.getByRole("button", { name: "Refresh project" }));
+  fireEvent.click(sidebar.getByRole("button", { name: "Refresh files" }));
   expect(await projectNavigator().findByRole("button", { name: "Changes (0)" })).toBeVisible();
   expect(services).not.toHaveAttribute("aria-description");
   expect(sidebar.queryByRole("button", { name: "legacy" })).not.toBeInTheDocument();
@@ -989,8 +1207,8 @@ it("compacts single-folder paths while keeping real file paths, visible siblings
     current: () => Promise.resolve(project), choose: () => Promise.resolve(null),
     changes: () => Promise.resolve({ files: changes, limited: false }), directory, file: document,
   });
+  fireEvent.click(await screen.findByRole("button", { name: "Files" }));
   const sidebar = within(await screen.findByRole("complementary", { name: "Project files" }));
-  fireEvent.click(projectNavigator().getByRole("button", { name: "Files" }));
   fireEvent.click(await sidebar.findByRole("button", { name: "src" }));
   fireEvent.click(await sidebar.findByRole("button", { name: "test" }));
   const row = await sidebar.findByRole("button", { name: "java / com / wahool / erp / web", expanded: false });
@@ -1045,7 +1263,7 @@ it("compacts single-folder paths while keeping real file paths, visible siblings
   await sidebar.findByRole("button", { name: "java / com / wahool / erp / web" });
 
   changes = [...changes, { path: deleted, previousPath: null, kind: "deleted", staged: false, indexOnly: false, evidence: null }];
-  fireEvent.click(sidebar.getByRole("button", { name: "Refresh project" }));
+  fireEvent.click(sidebar.getByRole("button", { name: "Refresh files" }));
   expect(await sidebar.findByRole("button", { name: "java / com", expanded: true })).toHaveAccessibleDescription("Contains changed files");
   expect(await sidebar.findByRole("button", { name: "Removed.java" })).toHaveAccessibleDescription("Deleted");
 });

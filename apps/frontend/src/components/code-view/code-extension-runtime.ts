@@ -1,4 +1,5 @@
 import type { CodeDefinitionPosition, CodeExtension, CodeExtensionLanguage, PreparedCodeExtension } from "../../platform/code-review";
+import { matchesCodeSyntaxFile } from "./code-review-file-types";
 
 export type ExtensionDiagnostic = {
   rule: string;
@@ -7,7 +8,7 @@ export type ExtensionDiagnostic = {
   start?: CodeDefinitionPosition;
   end?: CodeDefinitionPosition;
 };
-export type SyntaxToken = { from: number; to: number; style: "keyword" | "string" | "comment" | "number" | "variable" | "type" };
+export type SyntaxToken = { from: number; to: number; style: "keyword" | "string" | "comment" | "number" | "variable" | "type" | "tag" | "property" | "function" };
 type DiagnosticsResult = { findings: ExtensionDiagnostic[]; total: number };
 type SyntaxResult = { tokens: SyntaxToken[] };
 
@@ -99,13 +100,9 @@ export type ExtensionSyntax = { extension: CodeExtension; language: CodeExtensio
 
 export function findExtensionSyntax(extensions: CodeExtension[], path: string): ExtensionSyntax | undefined {
   const filename = path.split("/").at(-1) ?? path;
-  const lower = filename.toLowerCase();
   for (const extension of extensions) {
     if (!extension.enabled || extension.capability !== "syntax") continue;
-    const language = extension.languages.find((candidate) => candidate.filenames.includes(filename)
-      || candidate.extensions.some((suffix) => lower.endsWith(suffix.toLowerCase()))
-      || candidate.filenamePatterns.some((pattern) => pattern.endsWith("*") && !pattern.slice(0, -1).includes("*")
-        && filename.startsWith(pattern.slice(0, -1))));
+    const language = extension.languages.find((candidate) => matchesCodeSyntaxFile(filename, candidate));
     if (language) return { extension, language };
   }
 }

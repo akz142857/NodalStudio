@@ -1,7 +1,10 @@
 import { z } from "zod";
 
+const comparisonSchema = z.enum(["staged", "unstaged"]);
 const noteSchema = z.object({
   evidence: z.string(),
+  comparison: comparisonSchema.optional(),
+  comparisons: z.array(comparisonSchema).optional(),
   status: z.enum(["reviewed", "needsChanges"]),
   note: z.string(),
   at: z.string(),
@@ -34,7 +37,13 @@ export function reviewHistory(projectKey: string, path: string): ReviewNote[] {
 
 export function saveReviewNote(projectKey: string, path: string, note: ReviewNote) {
   const key = storageKey(projectKey, path);
-  const next = [...reviewHistory(projectKey, path).filter((entry) => entry.evidence !== note.evidence), note];
+  const history = reviewHistory(projectKey, path);
+  const previous = history.find((entry) => entry.evidence === note.evidence);
+  const comparisons = new Set([...(previous?.comparisons ?? []), ...(note.comparisons ?? [])]);
+  if (previous?.comparison) comparisons.add(previous.comparison);
+  if (note.comparison) comparisons.add(note.comparison);
+  const saved = comparisons.size > 1 ? { ...note, comparisons: [...comparisons] } : note;
+  const next = [...history.filter((entry) => entry.evidence !== note.evidence), saved];
   const raw = JSON.stringify(next);
   localStorage.setItem(key, raw);
   historyCache.set(key, { raw, data: next });

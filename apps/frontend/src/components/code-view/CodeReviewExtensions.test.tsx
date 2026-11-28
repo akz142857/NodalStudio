@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import type { CodeExtension, CodeExtensionPlatform, CodeOpenVsxDetail, CodeOpenVsxPlatform } from "../../platform/code-review";
+import type { CodeExtension, CodeExtensionPlatform, CodeOpenVsxDetail, CodeOpenVsxPlatform, CodeSyntaxSource } from "../../platform/code-review";
 import { CodeOpenVsxDetails } from "./CodeOpenVsxExtensions";
 import { CodeReviewExtensions } from "./CodeReviewExtensions";
+import { recommendCodeExtensions } from "./code-extension-recommendations";
+import { findExtensionSyntax } from "./code-extension-runtime";
 
 it("opens a package from its row and runs management actions from the focused menu", async () => {
   const item: CodeExtension = {
@@ -43,14 +45,15 @@ it("opens a package from its row and runs management actions from the focused me
   expect(change).toHaveBeenCalledExactlyOnceWith("project", item.id, "disable");
 });
 
-it("loads the Open VSX featured list by default and restores it when search is cleared", async () => {
-  const featured = { id: "example.featured", name: "Featured extension", description: "Example", publisher: "example",
+it("recommends compatible extensions locally and preserves Open VSX search", async () => {
+  const matched = { id: "example.linter", name: "Example Linter", description: "Example", publisher: "example",
     version: "1.0.0", verified: true, deprecated: false };
-  const matched = { ...featured, id: "example.linter", name: "Example Linter" };
+  const loadPaths = vi.fn().mockResolvedValue({ paths: ["src/main.py", "src/second.PY"], limited: false });
   const search = vi.fn<CodeOpenVsxPlatform["search"]>((_, query, offset) => Promise.resolve(
-    query && offset === 0 ? { items: [], nextOffset: 20 } : { items: [query ? matched : featured], nextOffset: null },
+    offset === 0 ? { items: [], nextOffset: 20 } : { items: query ? [matched] : [], nextOffset: null },
   ));
   const install = vi.fn<CodeExtensionPlatform["install"]>().mockResolvedValue(null);
+  const refreshInstalled = vi.fn();
   const detail = vi.fn<CodeOpenVsxPlatform["detail"]>().mockResolvedValue({
     ...matched, versions: [matched.version], capability: "syntax", downloadable: true, canUpdate: false,
     license: null, engine: null, incompatibility: null,
@@ -61,21 +64,27 @@ it("loads the Open VSX featured list by default and restores it when search is c
   };
   const client = new QueryClient();
   const renderPanel = (offline: boolean) => <QueryClientProvider client={client}><CodeReviewExtensions
-    api={api} projectId="project" items={[]} loading={false} loadError={false} retry={vi.fn()}
-    activities={[]} onUpdate={vi.fn()} offline={offline} /></QueryClientProvider>;
+    api={api} projectId="project" items={[]} loading={false} loadError={false} retry={refreshInstalled}
+    activities={[]} loadPaths={loadPaths} onUpdate={vi.fn()} offline={offline} /></QueryClientProvider>;
   const { rerender } = render(renderPanel(true));
   expect(screen.getByText("Open VSX is unavailable in offline mode.")).toBeVisible();
   expect(search).not.toHaveBeenCalled();
 
   rerender(renderPanel(false));
-  const featuredGroup = screen.getByRole("region", { name: "Recommended from Open VSX" });
-  expect(await within(featuredGroup).findByRole("button", { name: featured.name })).toBeVisible();
-  expect(search).toHaveBeenCalledExactlyOnceWith("project", "", 0);
+  const recommended = screen.getByRole("region", { name: "Recommended for This Project" });
+  expect(await within(recommended).findByRole("button", { name: "View Python Debugger details" })).toBeEnabled();
+  expect(within(recommended).getByText("Matches 2 project files")).toBeVisible();
+  expect(within(recommended).queryByText("ESLint")).toBeNull();
+  expect(search).not.toHaveBeenCalled();
   const installed = screen.getByRole("region", { name: "Installed" });
   expect(within(installed).getByText("No extensions installed.")).toBeVisible();
   expect(within(installed).queryByRole("button", { name: "Install from VSIX…" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Extension actions" }));
-  fireEvent.click(screen.getByRole("menuitem", { name: "Install from VSIX…" }));
+  const actions = within(screen.getByRole("group", { name: "Extensions actions" }));
+  fireEvent.click(actions.getByRole("button", { name: "Refresh extensions" }));
+  await waitFor(() => expect(loadPaths).toHaveBeenCalledTimes(2));
+  expect(search).not.toHaveBeenCalled();
+  expect(refreshInstalled).toHaveBeenCalledOnce();
+  fireEvent.click(actions.getByRole("button", { name: "Install from VSIX…" }));
   await waitFor(() => expect(install).toHaveBeenCalledExactlyOnceWith("project"));
 
   const disclosure = within(installed).getByRole("button", { name: "Installed (0)" });
@@ -97,9 +106,9 @@ it("loads the Open VSX featured list by default and restores it when search is c
   fireEvent.click(dialog.getByRole("button", { name: "Close" }));
   fireEvent.click(screen.getByRole("button", { name: "Clear extension search" }));
   expect(input).toHaveFocus();
-  expect(screen.getByRole("button", { name: featured.name })).toBeVisible();
+  expect(await screen.findByRole("button", { name: "View Python Debugger details" })).toBeVisible();
   expect(screen.getByRole("button", { name: "Installed (0)" })).toHaveAttribute("aria-expanded", "false");
-  expect(search).toHaveBeenCalledTimes(3);
+  expect(search).toHaveBeenCalledTimes(2);
 });
 
 it("explains why a downloadable debugger cannot be installed in Code", async () => {
@@ -122,4 +131,33 @@ it("explains why a downloadable debugger cannot be installed in Code", async () 
   expect(installButton).toBeDisabled();
   fireEvent.click(installButton);
   expect(install).not.toHaveBeenCalled();
+});
+
+it("recommends and applies offline syntax by extension, exact filename, or filename prefix", () => {
+  const docker: CodeSyntaxSource = {
+    id: "vscode.docker", name: "Dockerfile", version: "1.95.3",
+    extensions: [".dockerfile"], filenames: ["Dockerfile"], filenamePatterns: ["Dockerfile.*"],
+  };
+  const kotlin: CodeSyntaxSource = {
+    id: "fwcd.kotlin", name: "Kotlin", version: "0.2.36", extensions: [".kt", ".kts"],
+  };
+  const paths = ["docker/Dockerfile", "docker/Dockerfile.dev.dockerfile", "android/build.gradle.kts", "DockerfileNotes"];
+  const languages = [{
+    id: "dockerfile", aliases: ["Dockerfile"], extensions: [".dockerfile"],
+    filenames: ["Dockerfile"], filenamePatterns: ["Dockerfile.*"],
+  }];
+  const active: CodeExtension = {
+    ...docker, source: "bundledSyntax", publisher: "vscode", description: "", fileName: "grammar.json",
+    sha256: "fixture", engine: "*", capability: "syntax", enabled: true, languages,
+  };
+
+  expect(recommendCodeExtensions(paths, [docker, kotlin], [], false)).toMatchObject([
+    { id: docker.id, count: 2 }, { id: kotlin.id, count: 1 },
+  ]);
+  expect(findExtensionSyntax([active], paths[0])?.language.id).toBe("dockerfile");
+  expect(findExtensionSyntax([active], paths[1])?.language.id).toBe("dockerfile");
+  expect(findExtensionSyntax([active], paths[3])).toBeUndefined();
+  // The same language may already be covered by a different installed package.
+  expect(recommendCodeExtensions(paths, [docker, kotlin], [{ ...active, id: "other.docker" }], false))
+    .toMatchObject([{ id: kotlin.id, count: 1 }]);
 });

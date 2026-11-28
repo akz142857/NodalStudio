@@ -101,6 +101,8 @@ def main(check=False):
             missing.append(f'No top-level license text: {ecosystem}:{name}@{version} ({license_id})')
         for filename, body in notices:
             lines.append(filename+'\n'+body)
+    lines.append('\n' + '='*72 + '\n' + 'Bundled TextMate grammars')
+    lines.append((ROOT / 'docs/legal/BUNDLED_SYNTAX_NOTICES.txt').read_text().rstrip())
     outputs = {OUT: '\n\n'.join(lines)+'\n', ROOT/'docs/legal/NOTICE_INVENTORY_GAPS.txt': '\n'.join(sorted(set(missing)))+'\n'}
     for path, content in outputs.items():
         if check:

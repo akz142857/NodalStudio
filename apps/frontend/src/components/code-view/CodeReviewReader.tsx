@@ -39,6 +39,9 @@ const vsixMarks: Record<string, Decoration> = {
   number: Decoration.mark({ class: "cm-vsix-number" }),
   variable: Decoration.mark({ class: "cm-vsix-variable" }),
   type: Decoration.mark({ class: "cm-vsix-type" }),
+  tag: Decoration.mark({ class: "cm-vsix-keyword" }),
+  property: Decoration.mark({ class: "cm-vsix-variable" }),
+  function: Decoration.mark({ class: "cm-vsix-variable" }),
 };
 const readerSearchKeys: readonly KeyBinding[] = [
   { key: "Ctrl-g", scope: "editor search-panel", run: openLinePrompt },

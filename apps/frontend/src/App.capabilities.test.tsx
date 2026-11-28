@@ -72,7 +72,7 @@ describe("App capability integration", () => {
       expect(paths).toHaveBeenCalledWith(project.id);
       fireEvent.keyDown(quickOpen, { key: "Escape" });
       expect(search).toHaveFocus();
-      expect(screen.queryByRole("button", { name: "Open File Quickly" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Open File Quickly" })).not.toBeInTheDocument();
       expect(await screen.findByRole("heading", { name: "review-fixture" })).toBeVisible();
       expect(current).toHaveBeenCalledOnce();
       expect(choose).toHaveBeenCalledOnce();

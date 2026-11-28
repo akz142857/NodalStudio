@@ -1,5 +1,5 @@
-#[cfg(all(feature = "mac-app-store", feature = "code-extensions"))]
-compile_error!("Mac App Store builds support syntax data only and cannot enable code-extensions.");
+#[cfg(all(feature = "code-syntax-only", feature = "code-extensions"))]
+compile_error!("Syntax-only builds cannot enable the full Code extension host.");
 #[cfg(all(not(target_os = "macos"), feature = "code-extensions"))]
 compile_error!("The full Code extension host is supported only on macOS.");
 
@@ -846,7 +846,7 @@ fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
     RuntimeInfo {
         local_eslint: cfg!(all(target_os = "macos", not(feature = "mac-app-store"))),
         code_finder_actions: cfg!(all(target_os = "macos", not(feature = "mac-app-store"))),
-        code_extensions: if cfg!(all(target_os = "macos", feature = "mac-app-store")) {
+        code_extensions: if cfg!(all(target_os = "macos", feature = "code-syntax-only")) {
             CodeExtensions::Syntax
         } else if cfg!(all(target_os = "macos", feature = "code-extensions")) {
             CodeExtensions::Full
@@ -2475,7 +2475,10 @@ pub fn run() {
                 code_view::review::pin_code_review_project,
                 code_view::review::remove_code_review_project,
                 code_view::review::refresh_code_review,
+                code_view::review::update_code_review_baseline,
+                code_view::review::change_code_review_index,
                 code_view::review::list_code_review_directory,
+                code_view::review::create_code_review_entry,
                 code_view::review::list_code_review_paths,
                 code_view::search::search_code_review_content,
                 code_view::review::read_code_review_file,
@@ -2505,23 +2508,29 @@ pub fn run() {
                 code_view::python_debug::stop_python_debug,
                 #[cfg(all(
                     target_os = "macos",
-                    any(feature = "code-extensions", feature = "mac-app-store")
+                    any(feature = "code-extensions", feature = "code-syntax-only")
                 ))]
                 code_view::extensions::list_code_extensions,
                 #[cfg(all(target_os = "macos", feature = "code-extensions"))]
                 code_view::extensions::install_code_extension,
-                #[cfg(all(target_os = "macos", feature = "mac-app-store"))]
-                code_view::extensions::syntax_catalog::list_code_syntax_catalog,
-                #[cfg(all(target_os = "macos", feature = "mac-app-store"))]
-                code_view::extensions::syntax_catalog::import_code_syntax,
                 #[cfg(all(
                     target_os = "macos",
-                    any(feature = "code-extensions", feature = "mac-app-store")
+                    any(feature = "code-extensions", feature = "code-syntax-only")
+                ))]
+                code_view::extensions::syntax_catalog::list_code_syntax_catalog,
+                #[cfg(all(
+                    target_os = "macos",
+                    any(feature = "code-extensions", feature = "code-syntax-only")
+                ))]
+                code_view::extensions::syntax_catalog::enable_bundled_code_syntax,
+                #[cfg(all(
+                    target_os = "macos",
+                    any(feature = "code-extensions", feature = "code-syntax-only")
                 ))]
                 code_view::extensions::change_code_extension,
                 #[cfg(all(
                     target_os = "macos",
-                    any(feature = "code-extensions", feature = "mac-app-store")
+                    any(feature = "code-extensions", feature = "code-syntax-only")
                 ))]
                 code_view::extensions::prepare_code_extension,
                 #[cfg(all(

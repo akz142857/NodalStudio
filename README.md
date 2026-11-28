@@ -123,6 +123,7 @@ and writes a SHA-256 checksum.
 
 The GitHub macOS package enables the Code extension host, including Open VSX
 search, install and updates, plus the supported Python Debugger integration.
+Both macOS packages recommend language support based on files in the current project.
 See the [release channel rules](docs/UPDATES.txt) for the build and acceptance steps.
 
 Create the private local configuration:
@@ -172,9 +173,18 @@ purchase** for explicit purchase recovery. It does not implement an In-App
 Purchase product or a NodalStudio account/license server. A free App Store app
 would need a separate IAP entitlement implementation before selling Pro unlocks.
 
-In Code, the App Store package downloads pinned TextMate JSON files from Open VSX
-and applies them per project with the built-in tokenizer. Its native build omits
-VSIX installation, the full Open VSX marketplace, and extension code execution.
+In Code, both macOS packages include 20 optional TextMate syntax packs. They can
+be enabled per project without a network connection.
+
+- C, C++, C#, Groovy, Kotlin, Lua, Ruby, and Swift
+- CSS, HTML, Less, SCSS, and XML
+- Dockerfile, INI / Properties, Makefile, PowerShell, Shell Script, Terraform, and TOML
+
+Core editor highlighting for Java, JavaScript, TypeScript, Python, Go, Rust, PHP,
+JSON, Markdown, YAML, and SQL is available immediately. The GitHub macOS package
+also provides Open VSX and executable extension support. The
+[bundled grammar notices](docs/legal/BUNDLED_SYNTAX_NOTICES.txt) document
+upstream sources and licenses.
 
 The MAS channel does not register the GitHub updater plugin; update commands are
 also rejected at the native boundary. Community builds retain their existing

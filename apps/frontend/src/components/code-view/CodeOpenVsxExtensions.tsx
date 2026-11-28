@@ -6,8 +6,7 @@ import { useI18n } from "../../i18n";
 import type { CodeExtension, CodeOpenVsxPlatform } from "../../platform/code-review";
 import { CodeExtensionRow } from "./CodeExtensionRow";
 import { extensionErrorMessage } from "./code-extension-errors";
-
-const catalogKey = (projectId: string) => ["code-review", projectId, "open-vsx"] as const;
+import { codeReviewKeys } from "./code-review-query-keys";
 
 export function CodeOpenVsxResults({ market, projectId, items, offline, active, query, pendingQuery, openDetails }: {
   market: CodeOpenVsxPlatform;
@@ -21,7 +20,7 @@ export function CodeOpenVsxResults({ market, projectId, items, offline, active, 
 }) {
   const { t } = useI18n();
   const search = useInfiniteQuery({
-    queryKey: [...catalogKey(projectId), "search", query],
+    queryKey: codeReviewKeys.openVsxSearch(projectId, query),
     queryFn: ({ pageParam }) => market.search(projectId, query, pageParam),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
@@ -68,7 +67,7 @@ export function CodeOpenVsxDetails({ market, projectId, id, initialVersion, inst
   const { t } = useI18n();
   const [version, setVersion] = useState(initialVersion);
   const detail = useQuery({
-    queryKey: [...catalogKey(projectId), "detail", id, version, installed?.sha256],
+    queryKey: [...codeReviewKeys.openVsx(projectId), "detail", id, version, installed?.sha256],
     queryFn: () => market.detail(projectId, id, version),
     enabled: !offline,
     placeholderData: keepPreviousData,

@@ -1,34 +1,34 @@
 //! Extension storage and capability checks for the macOS Code workspace.
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 pub(crate) mod open_vsx;
-#[cfg(feature = "mac-app-store")]
 pub(crate) mod syntax_catalog;
 
 use std::{
     fs::{self, File},
-    future::Future,
     io::{self, Read},
     path::{Component, Path, PathBuf},
     sync::RwLock,
 };
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 use rustix::fs::{CWD, RenameFlags, renameat_with};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 use {
     std::{fs::OpenOptions, io::Write},
     zip::ZipArchive,
 };
 
 use super::review::ReviewState;
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 use crate::file_access::{SelectionKind, pick_workspace_path_from};
+#[cfg(feature = "code-extensions")]
 use crate::{AppState, effective_settings};
 
+#[cfg(feature = "code-extensions")]
 const OFFLINE: &str = "openVsxOffline";
 const INVALID: &str = "extensionInvalid";
 const LIMIT: &str = "extensionLimit";
@@ -36,39 +36,39 @@ const STORAGE: &str = "extensionStorage";
 const DISABLED: &str = "extensionDisabled";
 const UNSUPPORTED: &str = "extensionUnsupported";
 const CHANGED: &str = "extensionChanged";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const MAX_ARCHIVE: u64 = 32 * 1024 * 1024;
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const MAX_UNPACKED: u64 = 64 * 1024 * 1024;
 const MAX_ENTRY: u64 = 2 * 1024 * 1024;
 const MAX_INSTALLED: usize = 32;
 static STORAGE_LOCK: RwLock<()> = RwLock::new(());
-#[cfg(feature = "mac-app-store")]
+#[cfg(feature = "code-syntax-only")]
 const STORAGE_DIRECTORY: &str = "code-syntax-extensions";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const STORAGE_DIRECTORY: &str = "code-extensions-preview";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const ESLINT_ID: &str = "dbaeumer.vscode-eslint";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const ESLINT_VERSION: &str = "3.0.34";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const ESLINT_ARCHIVE_SHA256: &str =
     "ca5334d46f6a39079e751ef4601bfc9f86bc3a46483e87291ec609239d161308";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const ESLINT_SERVER: &str = "server/out/eslintServer.js";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const ESLINT_SERVER_SHA256: &str =
     "baf39a57d3e04d63140a1d606b76042ccca304309846b2b0374c60d1caacbdb2";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const PYTHON_DEBUGGER_ID: &str = "ms-python.debugpy";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const PYTHON_DEBUGGER_VERSION: &str = "2026.6.0";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const PYTHON_DEBUGGER_SHA256: &str =
     "a5b8169877cbc836b997d7066e8dac164484c976df1c76cd6c0b0ef66a0163a2";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const PYTHON_DEBUGGER_ARCHIVE: &str = "debugpy.vsix";
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 const PYTHON_ADAPTER: &str = "extension/bundled/libs/debugpy/adapter";
 
 #[derive(Deserialize)]
@@ -130,11 +130,11 @@ struct Grammar {
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 enum Capability {
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     Diagnostics,
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     Eslint,
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     PythonDebugger,
     Syntax,
     Unsupported,
@@ -154,10 +154,11 @@ struct Receipt {
 enum PackageSource {
     #[default]
     Local,
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     OpenVsx,
-    #[cfg(feature = "mac-app-store")]
+    #[cfg(feature = "code-syntax-only")]
     OpenVsxSyntax,
+    BundledSyntax,
 }
 
 #[derive(Serialize)]
@@ -177,12 +178,23 @@ pub(crate) struct Extension {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GrammarDependency {
+    scope_name: &'static str,
+    grammar: &'static str,
+}
+
+#[derive(Serialize)]
 #[serde(tag = "capability", rename_all = "camelCase")]
 pub(crate) enum Prepared {
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     Diagnostics { script: String },
     #[serde(rename_all = "camelCase")]
-    Syntax { grammar: String, scope_name: String },
+    Syntax {
+        grammar: String,
+        scope_name: String,
+        dependencies: &'static [GrammarDependency],
+    },
 }
 
 #[derive(Deserialize)]
@@ -288,7 +300,7 @@ fn usable_grammar<'a>(
 }
 
 fn capabilities(manifest: &Manifest, root: Option<&Path>) -> (Capability, Vec<Language>) {
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     if manifest.version == PYTHON_DEBUGGER_VERSION
         && package_id(&manifest.publisher, &manifest.name).is_ok_and(|id| id == PYTHON_DEBUGGER_ID)
         && manifest
@@ -306,7 +318,7 @@ fn capabilities(manifest: &Manifest, root: Option<&Path>) -> (Capability, Vec<La
     if !manifest.extension_dependencies.is_empty() {
         return (Capability::Unsupported, Vec::new());
     }
-    #[cfg(feature = "mac-app-store")]
+    #[cfg(feature = "code-syntax-only")]
     if !manifest.activation_events.is_empty()
         || !(manifest.contributes.debuggers.is_null()
             || manifest
@@ -321,14 +333,14 @@ fn capabilities(manifest: &Manifest, root: Option<&Path>) -> (Capability, Vec<La
         Some(path) => package_asset(path, file, suffixes).is_some(),
         None => asset_path(file, suffixes).is_some(),
     };
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     if manifest.version == ESLINT_VERSION
         && package_id(&manifest.publisher, &manifest.name).is_ok_and(|id| id == ESLINT_ID)
         && asset_exists(ESLINT_SERVER, &["js"])
     {
         return (Capability::Eslint, Vec::new());
     }
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     if manifest
         .browser
         .as_deref()
@@ -366,7 +378,7 @@ fn installation(path: &Path, project_key: &str) -> Result<Extension, String> {
     let receipt: Receipt =
         serde_json::from_slice(&bounded_file(&path.join("installation.json"), 16 * 1024)?)
             .map_err(|_| STORAGE)?;
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     let capability = match capability {
         Capability::Eslint if receipt.sha256 != ESLINT_ARCHIVE_SHA256 => Capability::Unsupported,
         Capability::PythonDebugger
@@ -393,12 +405,12 @@ fn installation(path: &Path, project_key: &str) -> Result<Extension, String> {
     })
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 fn unpack(source: &[u8], target: &Path) -> Result<(), String> {
     unpack_prefix(source, target, Path::new("extension"))
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 fn unpack_prefix(source: &[u8], target: &Path, prefix: &Path) -> Result<(), String> {
     let mut archive = ZipArchive::new(io::Cursor::new(source)).map_err(|_| INVALID)?;
     if archive.len() > 2048 {
@@ -440,7 +452,7 @@ fn unpack_prefix(source: &[u8], target: &Path, prefix: &Path) -> Result<(), Stri
     Ok(())
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 pub(super) fn python_adapter(app: &AppHandle, key: &str, target: &Path) -> Result<PathBuf, String> {
     let archive = {
         let _lock = STORAGE_LOCK.read().map_err(|_| STORAGE)?;
@@ -489,14 +501,14 @@ pub(crate) async fn remove_all_storage(app: &AppHandle) {
     .await;
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 pub(super) struct EslintServer {
     pub(super) entry: PathBuf,
     pub(super) script: Vec<u8>,
     pub(super) version: String,
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 pub(super) fn eslint_server(
     app: &AppHandle,
     key: &str,
@@ -537,7 +549,7 @@ fn installed_paths(root: &Path) -> Result<Vec<PathBuf>, String> {
         .collect()
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 fn install(root: &Path, archive_path: &Path, project_key: &str) -> Result<Extension, String> {
     if archive_path
         .extension()
@@ -563,7 +575,7 @@ fn install(root: &Path, archive_path: &Path, project_key: &str) -> Result<Extens
     Ok(extension)
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 fn stage_package(
     root: &Path,
     source: &[u8],
@@ -613,7 +625,7 @@ fn install_staged(
     Ok(extension)
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 fn newer(version: &str, previous: &str) -> bool {
     let (Ok(version), Ok(previous)) = (
         semver::Version::parse(version),
@@ -624,13 +636,13 @@ fn newer(version: &str, previous: &str) -> bool {
     version.cmp_precedence(&previous).is_gt()
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 fn compatible_update(current: Capability, incoming: Capability) -> bool {
     incoming != Capability::Unsupported
         && (current == Capability::Unsupported || current == incoming)
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 fn replace_staged(
     stage: &Path,
     destination: &Path,
@@ -714,7 +726,7 @@ pub(crate) async fn list_code_extensions(
     .await
 }
 
-#[cfg(not(feature = "mac-app-store"))]
+#[cfg(feature = "code-extensions")]
 #[tauri::command]
 pub(crate) async fn install_code_extension(
     app: AppHandle,
@@ -748,18 +760,18 @@ pub(crate) async fn change_code_extension(
     if !has_valid_id(&id) {
         return Err(INVALID.into());
     }
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     let project = state.project(project_id)?;
     with_storage_write(app, &state, project_id, move |root, key| {
         let path = root.join(&id);
         if matches!(action, ExtensionAction::Uninstall) {
-            #[cfg(not(feature = "mac-app-store"))]
+            #[cfg(feature = "code-extensions")]
             let parsed = installation(&path, key).ok();
             if path.exists() {
                 let temp = tempfile::tempdir_in(root).map_err(|_| STORAGE)?;
                 fs::rename(&path, temp.path().join("removed")).map_err(|_| STORAGE)?;
             }
-            #[cfg(not(feature = "mac-app-store"))]
+            #[cfg(feature = "code-extensions")]
             if id == ESLINT_ID
                 || parsed
                     .as_ref()
@@ -767,7 +779,7 @@ pub(crate) async fn change_code_extension(
             {
                 project.eslint.revoke_extension();
             }
-            #[cfg(not(feature = "mac-app-store"))]
+            #[cfg(feature = "code-extensions")]
             if id == PYTHON_DEBUGGER_ID {
                 project.debugger.stop(None);
             }
@@ -789,11 +801,11 @@ pub(crate) async fn change_code_extension(
                 {
                     return Err(STORAGE.into());
                 }
-                #[cfg(not(feature = "mac-app-store"))]
+                #[cfg(feature = "code-extensions")]
                 if item.capability == Capability::Eslint {
                     project.eslint.revoke_extension();
                 }
-                #[cfg(not(feature = "mac-app-store"))]
+                #[cfg(feature = "code-extensions")]
                 if item.capability == Capability::PythonDebugger {
                     project.debugger.stop(None);
                 }
@@ -832,7 +844,7 @@ pub(crate) async fn prepare_code_extension(
             String::from_utf8(bounded_file(path, MAX_ENTRY)?).map_err(|_| INVALID.to_owned())
         };
         match item.capability {
-            #[cfg(not(feature = "mac-app-store"))]
+            #[cfg(feature = "code-extensions")]
             Capability::Diagnostics if language == "markdown" => {
                 let entry = manifest
                     .browser
@@ -847,8 +859,13 @@ pub(crate) async fn prepare_code_extension(
                 let (grammar, entry) =
                     usable_grammar(&manifest, &root, &language).ok_or(UNSUPPORTED)?;
                 let source = read_asset(&entry)?;
-                #[cfg(feature = "mac-app-store")]
-                if matches!(item.receipt.source, PackageSource::OpenVsxSyntax)
+                let verify_grammar = match item.receipt.source {
+                    PackageSource::BundledSyntax => true,
+                    #[cfg(feature = "code-syntax-only")]
+                    PackageSource::OpenVsxSyntax => true,
+                    _ => false,
+                };
+                if verify_grammar
                     && format!("{:x}", Sha256::digest(source.as_bytes())) != item.receipt.sha256
                 {
                     return Err(CHANGED.into());
@@ -856,6 +873,11 @@ pub(crate) async fn prepare_code_extension(
                 Ok(Prepared::Syntax {
                     grammar: source,
                     scope_name: grammar.scope_name.clone(),
+                    dependencies: if matches!(item.receipt.source, PackageSource::BundledSyntax) {
+                        syntax_catalog::grammar_dependencies(&item.id, &item.receipt.sha256)
+                    } else {
+                        &[]
+                    },
                 })
             }
             _ => Err(UNSUPPORTED.into()),
@@ -864,6 +886,7 @@ pub(crate) async fn prepare_code_extension(
     .await
 }
 
+#[cfg(feature = "code-extensions")]
 async fn online(app: &AppState) -> Result<(), String> {
     if effective_settings(&app.store, None)
         .await?
@@ -877,9 +900,10 @@ async fn online(app: &AppState) -> Result<(), String> {
     }
 }
 
+#[cfg(feature = "code-extensions")]
 async fn while_online<T>(
     app: &AppState,
-    request: impl Future<Output = Result<T, String>>,
+    request: impl std::future::Future<Output = Result<T, String>>,
 ) -> Result<T, String> {
     online(app).await?;
     let mut offline_rx = app.subscribe_offline();
@@ -897,7 +921,7 @@ async fn while_online<T>(
     }
 }
 
-#[cfg(all(test, not(feature = "mac-app-store")))]
+#[cfg(all(test, feature = "code-extensions"))]
 mod tests {
     use super::*;
 
@@ -926,7 +950,7 @@ mod tests {
         archive.finish().unwrap().into_inner()
     }
 
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     fn syntax_package(root: &Path, version: &str, sha256: &str) -> (tempfile::TempDir, Extension) {
         stage_package(
             root,
@@ -960,7 +984,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     fn update_rechecks_the_installed_package_and_preserves_project_enablement() {
         let root = tempfile::tempdir().unwrap();
         let destination = root.path().join("example.sample");
@@ -1008,7 +1032,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "mac-app-store"))]
+    #[cfg(feature = "code-extensions")]
     fn python_debugger_capability_requires_pinned_version_source_and_digest() {
         let mut archive = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
         let options = zip::write::SimpleFileOptions::default();

@@ -19,3 +19,16 @@ export function supportsCodeNavigation(path: string) {
   const extension = fileExtension(path);
   return Object.hasOwn(fileTypes, extension) && !nonProgrammingFiles.has(extension);
 }
+
+
+export function matchesCodeSyntaxFile(filename: string, matchers: {
+  extensions: readonly string[];
+  filenames?: readonly string[];
+  filenamePatterns?: readonly string[];
+}): boolean {
+  const lower = filename.toLowerCase();
+  return Boolean(matchers.filenames?.includes(filename)
+    || matchers.extensions.some((suffix) => lower.endsWith(suffix.toLowerCase()))
+    || matchers.filenamePatterns?.some((pattern) => pattern.endsWith("*") && !pattern.slice(0, -1).includes("*")
+      && filename.startsWith(pattern.slice(0, -1))));
+}

@@ -55,6 +55,8 @@ export interface CodePasteResult {
   skipped: number;
 }
 
+export type CodeChangeComparison = "staged" | "unstaged";
+
 export interface CodeReviewChange {
   path: string;
   previousPath: string | null;
@@ -62,11 +64,29 @@ export interface CodeReviewChange {
   staged: boolean;
   indexOnly: boolean;
   evidence: string | null;
+  comparison?: CodeChangeComparison;
+}
+
+export interface CodeReviewGit {
+  branch: string | null;
+  baseline: string | null;
+  baselineChanged: boolean;
+  indexRevision: string;
+}
+
+export interface CodeIndexChange {
+  path: string;
+  comparison: CodeChangeComparison;
+  evidence: string;
+  indexRevision: string;
 }
 
 export interface CodeReviewChanges {
   files: CodeReviewChange[];
   limited: boolean;
+  git?: CodeReviewGit | null;
+  staged?: CodeReviewChange[];
+  unstaged?: CodeReviewChange[];
 }
 
 export type CodeReviewCompactFolders = "visible" | "all";
@@ -84,6 +104,7 @@ export interface CodeReviewDocument {
   after: CodeReviewVersion;
   evidence: string | null;
   indexOnly: boolean;
+  executableChangedTo?: boolean;
 }
 
 export interface CodeDefinitionPosition {
@@ -174,6 +195,7 @@ export interface CodeEslintPlatform {
     requestId: string;
     path: string;
     compare: boolean;
+    comparison?: CodeChangeComparison;
     evidence: string | null;
     digest: string;
     context: string;
@@ -184,6 +206,8 @@ export interface CodeEslintPlatform {
   revoke(projectId: string): Promise<void>;
 }
 
+export type CodeNewEntryKind = "file" | "folder";
+
 export interface CodeReviewPlatform {
   current(): Promise<CodeReviewProject | null>;
   choose(): Promise<CodeReviewProject | null>;
@@ -193,10 +217,13 @@ export interface CodeReviewPlatform {
     addProjects(): Promise<CodePasteResult>;
   };
   changes(projectId: string): Promise<CodeReviewChanges>;
+  updateBaseline?(this: void, projectId: string): Promise<CodeReviewChanges>;
+  changeIndex?(projectId: string, input: CodeIndexChange): Promise<void>;
   directory(projectId: string, path: string, compact?: CodeReviewCompactFolders): Promise<CodeReviewDirectory>;
-  paths?(projectId: string): Promise<{ paths: string[]; limited: boolean }>;
+  createEntry?(projectId: string, directory: string, name: string, kind: CodeNewEntryKind): Promise<string>;
+  paths?(this: void, projectId: string): Promise<{ paths: string[]; limited: boolean }>;
   searchContent?(projectId: string, query: string): Promise<CodeContentSearchResult>;
-  file(projectId: string, path: string, compareFile: boolean): Promise<CodeReviewDocument>;
+  file(projectId: string, path: string, compareFile: boolean, comparison?: CodeChangeComparison): Promise<CodeReviewDocument>;
   eslint?: CodeEslintPlatform;
   extensions?: CodeExtensionPlatform;
   pythonDebug?: PythonDebugPlatform;
@@ -267,7 +294,7 @@ export interface CodeExtension {
   description: string;
   fileName: string;
   sha256: string;
-  source: "local" | "openVsx" | "openVsxSyntax";
+  source: "local" | "openVsx" | "openVsxSyntax" | "bundledSyntax";
   engine: string;
   capability: CodeExtensionCapability;
   enabled: boolean;
@@ -278,7 +305,7 @@ export type CodeExtensionAction = "enable" | "disable" | "uninstall";
 
 export type PreparedCodeExtension =
   | { capability: "diagnostics"; script: string }
-  | { capability: "syntax"; grammar: string; scopeName: string };
+  | { capability: "syntax"; grammar: string; scopeName: string; dependencies?: { grammar: string; scopeName: string }[] };
 
 export interface CodeExtensionPlatform {
   list(projectId: string): Promise<CodeExtension[]>;
@@ -288,7 +315,7 @@ export interface CodeExtensionPlatform {
   openVsx?: CodeOpenVsxPlatform;
   syntaxCatalog?: {
     list(): Promise<CodeSyntaxSource[]>;
-    import(projectId: string, id: string): Promise<CodeExtension>;
+    enable(projectId: string, id: string): Promise<CodeExtension>;
   };
 }
 
@@ -296,6 +323,9 @@ export interface CodeSyntaxSource {
   id: string;
   name: string;
   version: string;
+  extensions: readonly string[];
+  filenames?: readonly string[];
+  filenamePatterns?: readonly string[];
 }
 
 export interface CodeOpenVsxItem {

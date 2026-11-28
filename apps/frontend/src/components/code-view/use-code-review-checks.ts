@@ -56,7 +56,10 @@ function eslintError(error: unknown): CheckError {
 }
 
 async function readTarget(api: CodeReviewPlatform, projectId: string, target: CheckTarget, resolveIndex = false) {
-  const document = await api.file(projectId, target.path, target.mode === "diff").catch((error: unknown) => {
+  const request = target.comparison
+    ? api.file(projectId, target.path, true, target.comparison)
+    : api.file(projectId, target.path, target.mode === "diff");
+  const document = await request.catch((error: unknown) => {
     throw new CheckError(String(error).includes("codeReviewStale") ? "stale" : "unreadable");
   });
   const resolved = resolveIndex ? { ...target, indexOnly: document.indexOnly } : target;
@@ -207,7 +210,7 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
             controller.signal.addEventListener("abort", cancelRequest, { once: true });
             try {
               const result = await eslint.lint(projectId, {
-                requestId, path, compare: input.target.mode === "diff", evidence: input.target.evidence,
+                requestId, path, compare: input.target.mode === "diff", comparison: input.target.comparison, evidence: input.target.evidence,
                 digest, context: tool.context, limit, extensionSha256,
               }).catch((error: unknown) => { throw eslintError(error); });
               if (result.ignored) throw new CheckError("eslintIgnored");
@@ -273,7 +276,8 @@ export function useCodeReviewChecks(api: CodeReviewPlatform, { id: projectId, ba
 
   const changedFiles = (changes: CodeReviewChanges) => {
     const files = changes.files.map((change): CheckedFile => {
-      const file = pending({ path: change.path, mode: "diff", evidence: change.evidence, indexOnly: change.indexOnly });
+      const file = pending({ path: change.path, mode: "diff", evidence: change.evidence, indexOnly: change.indexOnly,
+        ...(change.comparison ? { comparison: change.comparison } : {}) });
       const reason = change.kind === "deleted" ? "deleted" : !isMarkdown(change.path)
         ? !isEslintSource(change.path) || !api.eslint ? "unsupported" : !eslint && availability !== "enabled" ? availability : undefined
         : undefined;

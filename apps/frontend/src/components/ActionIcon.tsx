@@ -45,6 +45,7 @@ const paths = {
   folder: <path d="M3.5 8V6.5A1.5 1.5 0 0 1 5 5h4l2 2h8A1.5 1.5 0 0 1 20.5 8.5V18A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18Z" />,
   folderOpen: <path d="M3.5 18V6.5A1.5 1.5 0 0 1 5 5h4l2 2h7a1.5 1.5 0 0 1 1.5 1.5V11M3.5 18l2.6-6.1a1.5 1.5 0 0 1 1.4-.9h13a1 1 0 0 1 .9 1.4l-2.6 6.2a1.5 1.5 0 0 1-1.4.9H5A1.5 1.5 0 0 1 3.5 18Z" />,
   document: documentOutline,
+  documentAdd: <>{documentOutline}<path d="M9 14h6m-3-3v6" /></>,
   documents: <><path d="M3.5 7v11.5a2 2 0 0 0 2 2h10" /><path d="M14.5 3.5H8A1.5 1.5 0 0 0 6.5 5v11A1.5 1.5 0 0 0 8 17.5h11a1.5 1.5 0 0 0 1.5-1.5V9.5Zm0 0v6h6" /></>,
   diff: <path d="M4.5 7.5h7m-3.5-3.5v7m4.5 6h7" />,
   codeDocument: <>{documentOutline}<path d="m10.25 11.5-2.5 2.5 2.5 2.5m3.5-5 2.5 2.5-2.5 2.5" /></>,
