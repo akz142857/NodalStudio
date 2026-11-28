@@ -17,6 +17,7 @@ import {
   useReactFlow,
   useOnViewportChange,
   useStore,
+  useStoreApi,
   type Connection,
   type NodeChange,
   type NodeTypes,
@@ -48,6 +49,7 @@ import { DiagramExportActions } from "./DiagramExportActions";
 import { DiagramSelectionActions } from "./DiagramSelectionActions";
 import { DatabaseSnapshotHeader } from "./DatabaseSnapshotHeader";
 import { ActionIcon } from "./ActionIcon";
+import { usesAppleKeyboard } from "./command-shortcuts";
 import { SavedViewsToolbar, type SavedViewControls } from "./SavedViewsToolbar";
 import { DiagramLayoutActions } from "./DiagramLayoutActions";
 import { arrangeTables, tableArrangementLabels, type TableArrangement } from "../graph/arrange-tables";
@@ -96,7 +98,6 @@ const sharedEdgeTypes = { comparison: SharedEdge, default: SharedEdge, smoothste
 // Painting one SVG per relationship is expensive even for diagrams with relatively few tables.
 const SHARED_EDGE_THRESHOLD = 400;
 const multiSelectionKeys = ["Shift", "Meta", "Control"];
-const zoomActivationKeys = ["Meta", "Control"];
 const emptyDomainGroups: DomainGroup[] = [];
 
 function SelectionSaveToolbar({ nodeIds, children }: { nodeIds: string[]; children: ReactNode }) {
@@ -234,8 +235,11 @@ function SchemaCanvasInner({
   if (locateKey && previousLocate !== locateKey) { setPreviousLocate(locateKey); setFocusNodeId(undefined); }
   const [boxSelectMode, setBoxSelectMode] = useState(false);
   const spacePanMode = useKeyPress("Space");
+  const appleKeyboard = usesAppleKeyboard();
+  const controlPressed = useKeyPress(appleKeyboard ? null : "Control", { preventDefault: false });
   const theme = useResolvedTheme();
-  const { fitView, getNodes, getViewport, setViewport } = useReactFlow<TableNodeType, FieldEdge>();
+  const { fitView, getNodes, getViewport, setViewport, zoomIn, zoomOut } = useReactFlow<TableNodeType, FieldEdge>();
+  const flowStore = useStoreApi<TableNodeType, FieldEdge>();
   const nodesInitialized = useNodesInitialized();
   const handledLocate = useRef<string | undefined>(undefined);
   const flowRef = useRef<HTMLDivElement>(null);
@@ -364,6 +368,24 @@ function SchemaCanvasInner({
   const historyScope = useMemo(() => JSON.stringify([layoutScope, graph.nodes.map((node) => node.id).sort()]), [layoutScope, graph.nodes]);
   const layoutHistory = useRef(new DiagramLayoutHistory());
   const viewportGestureScope = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const flow = flowRef.current;
+    if (!flow || exportRendering || interactionPaused) return;
+    const zoomOnWheel = (event: WheelEvent) => {
+      // Pinch can send a Control-modified wheel event without a physical key press.
+      const shortcut = appleKeyboard ? event.metaKey : event.ctrlKey && controlPressed;
+      if (!shortcut || event.deltaY === 0 || (event.target instanceof Element && event.target.closest(".nowheel"))) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const { minZoom, maxZoom, transform: [, , zoom], userSelectionActive } = flowStore.getState();
+      const zoomingIn = event.deltaY < 0;
+      if (userSelectionActive || (zoomingIn ? zoom >= maxZoom : zoom <= minZoom)) return;
+      viewportGestureScope.current = layoutScope;
+      void (zoomingIn ? zoomIn() : zoomOut());
+    };
+    flow.addEventListener("wheel", zoomOnWheel, { capture: true, passive: false });
+    return () => flow.removeEventListener("wheel", zoomOnWheel, true);
+  }, [appleKeyboard, controlPressed, exportRendering, flowStore, interactionPaused, layoutScope, zoomIn, zoomOut]);
   const gesture = useRef<{ scope: string; before: LayoutFrame; label: string } | undefined>(undefined);
   const [historyActions, setHistoryActions] = useState<{ scope: string; undo?: string; redo?: string }>({ scope: historyScope });
   if (historyActions.scope !== historyScope) setHistoryActions({ scope: historyScope });
@@ -1066,7 +1088,7 @@ function SchemaCanvasInner({
         panOnScrollSpeed={1}
         zoomOnScroll={false}
         zoomOnPinch
-        zoomActivationKeyCode={zoomActivationKeys}
+        zoomActivationKeyCode={null}
         zoomOnDoubleClick={false}
         edgesFocusable
         edgesReconnectable={false}

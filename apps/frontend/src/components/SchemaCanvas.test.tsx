@@ -156,6 +156,26 @@ describe("SchemaCanvas table selection", () => {
     expect(save.mock.calls[0][1]?.zoom).toBeGreaterThan(0.5);
   });
 
+  it.each([["MacIntel", "metaKey"], ["Win32", "ctrlKey"]])("uses %s modifier-wheel input as the zoom buttons", async (platform, modifier) => {
+    vi.spyOn(navigator, "platform", "get").mockReturnValue(platform);
+    const save = vi.fn<NonNullable<SchemaCanvasProps["onSaveLayout"]>>().mockResolvedValue(undefined);
+    const semantics = { ...positionedSemantics, layout: { ...positionedSemantics.layout, viewport: { x: 40, y: 50, zoom: 0.5 } } };
+    const { container } = render(<CanvasHarness semantics={semantics} onSaveLayout={save} />);
+    await waitFor(() => expect(canvasToolButton("Auto layout")).toBeEnabled());
+    const pane = container.querySelector(".react-flow__pane")!;
+    const viewport = container.querySelector<HTMLElement>(".react-flow__viewport")!;
+    const wheel = (deltaY: number) => fireEvent.wheel(pane, { deltaY, deltaMode: 1, [modifier]: true });
+    if (modifier === "ctrlKey") fireEvent.keyDown(document, { key: "Control", code: "ControlLeft", ctrlKey: true });
+
+    expect(wheel(-1)).toBe(false);
+    await waitFor(() => expect(viewport.style.transform).toContain("scale(0.6)"));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save.mock.calls[0][1]?.zoom).toBeCloseTo(0.6);
+    expect(wheel(1)).toBe(false);
+    await waitFor(() => expect(viewport.style.transform).toContain("scale(0.5)"));
+    if (modifier === "ctrlKey") fireEvent.keyUp(document, { key: "Control", code: "ControlLeft" });
+  });
+
   it("keeps collapse and tool disclosures presentation-only, preserving selection, geometry and viewport", async () => {
     const save = vi.fn<NonNullable<SchemaCanvasProps["onSaveLayout"]>>().mockResolvedValue(undefined);
     const { container } = render(<CanvasHarness semantics={positionedSemantics} onSaveLayout={save} />);
