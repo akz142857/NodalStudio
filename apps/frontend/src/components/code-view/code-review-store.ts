@@ -3,6 +3,8 @@ import { useStore } from "zustand";
 
 export type ReviewDock = "checks" | "note" | "languages" | "debug";
 
+export const codeReviewSidebarMinWidth = 280;
+
 export interface CodeReviewLayoutState {
   sidebarWidth: number;
   outlineWidth: number;
@@ -14,7 +16,7 @@ export interface CodeReviewLayoutState {
 
 export function createCodeReviewStore() {
   return createStore<CodeReviewLayoutState>((set) => ({
-    sidebarWidth: 226,
+    sidebarWidth: codeReviewSidebarMinWidth,
     outlineWidth: 224,
     dockSizes: { checks: 300, note: 270, languages: 225, debug: 330 },
     setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),

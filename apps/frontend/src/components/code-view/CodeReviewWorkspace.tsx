@@ -32,7 +32,7 @@ import { CodeContentSearch, CodeQuickOpen } from "./CodeQuickOpen";
 import { CodePanelDivider } from "./CodePanelDivider";
 import { reviewHistory } from "./code-review-notes";
 import { codeReviewKeys } from "./code-review-query-keys";
-import { createCodeReviewStore, useCodeReviewLayout, type CodeReviewStore, type ReviewDock } from "./code-review-store";
+import { codeReviewSidebarMinWidth, createCodeReviewStore, useCodeReviewLayout, type CodeReviewStore, type ReviewDock } from "./code-review-store";
 import { isCodeContextMenuKey, useCodeContextMenu } from "./use-code-context-menu";
 import "./code-review.css";
 
@@ -102,8 +102,8 @@ function CodeWorkspaceFrame({ layoutStore, sidebarOpen, setSidebarOpen, children
   const sidebarWidth = useCodeReviewLayout(layoutStore, (state) => state.sidebarWidth);
   const setSidebarWidth = useCodeReviewLayout(layoutStore, (state) => state.setSidebarWidth);
   return <div className="code-review-workspace" data-sidebar={sidebarOpen ? "open" : "closed"}
-    style={{ "--code-sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}>
-    {children(sidebarOpen ? <SidebarRail side="left" expanded width={sidebarWidth} minWidth={176} maxWidth={420}
+    style={{ "--code-sidebar-width": `${sidebarWidth}px`, "--code-sidebar-min-width": `${codeReviewSidebarMinWidth}px` } as React.CSSProperties}>
+    {children(sidebarOpen ? <SidebarRail side="left" expanded width={sidebarWidth} minWidth={codeReviewSidebarMinWidth} maxWidth={420}
       onResize={setSidebarWidth} onToggle={() => setSidebarOpen(false)} /> : null)}
   </div>;
 }
